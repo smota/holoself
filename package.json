@@ -4,8 +4,13 @@
   "description": "A local, reviewable self-context layer for AI tools",
   "type": "module",
   "bin": { "holoself": "bin/holoself.mjs" },
-  "files": ["bin", "src", "skills", "contribs", "README.md", "PRIVACY.md", "LICENSE"],
+  "files": ["bin", "src", "skills", "contribs", "docs", "README.md", "PRIVACY.md", "LICENSE"],
   "engines": { "node": ">=20" },
-  "scripts": { "test": "node --test tests/*.test.mjs", "start": "node bin/holoself.mjs" },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "start": "node bin/holoself.mjs",
+    "audit:package": "node scripts/package-audit.mjs",
+    "prepack": "npm run audit:package"
+  },
   "license": "MIT"
 }

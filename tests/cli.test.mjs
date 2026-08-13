@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile, mkdir, symlink, lstat } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, mkdir, symlink, lstat, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { run } from '../src/cli.mjs'
@@ -31,5 +31,17 @@ test('migrate copies personal source without deleting it', async()=>{
 })
 
 test('link and unlink only manage symlink', async()=>{
-  const root=await temp(), project=await temp(); await run(['init','--root',root]); await run(['link','--root',root,'--target',project]); assert.equal((await lstat(join(project,'.holoself'))).isSymbolicLink(),true); await run(['unlink','--target',project]); assert.rejects(lstat(join(project,'.holoself')))
+  const root=await temp(), project=await temp(); await run(['init','--root',root]); await run(['link','--root',root,'--target',project]); assert.equal((await lstat(join(project,'.holoself'))).isSymbolicLink(),true); await run(['unlink','--root',root,'--target',project]); await assert.rejects(lstat(join(project,'.holoself')))
+})
+
+test('selection rejects unknown contrib and upgrade removes deselected defaults', async()=>{
+  const root=await temp(); await assert.rejects(run(['init','--root',root,'--contribs','missing']),/unknown public contrib/)
+  await run(['init','--root',root]); await access(join(root,'contribs','default','communication.md'))
+  await run(['init','--root',root,'--exclude-contrib','communication']); await assert.rejects(access(join(root,'contribs','default','communication.md')))
+})
+
+test('export copies only markdown context and refuses non-link unlink', async()=>{
+  const root=await temp(), project=await temp(); await run(['init','--root',root]); await writeFile(join(root,'profile','private.txt'),'not exported')
+  await run(['export','--root',root,'--target',project]); await assert.rejects(access(join(project,'.holoself','profile','private.txt')))
+  const other=await temp(); await mkdir(join(other,'.holoself')); await assert.rejects(run(['unlink','--root',root,'--target',other]),/not a Holoself link/)
 })
