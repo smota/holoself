@@ -1,0 +1,11 @@
+{
+  "name": "holoself-ai",
+  "version": "0.1.0",
+  "description": "A local, reviewable self-context layer for AI tools",
+  "type": "module",
+  "bin": { "holoself": "bin/holoself.mjs" },
+  "files": ["bin", "src", "skills", "contribs", "README.md", "PRIVACY.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test tests/*.test.mjs", "start": "node bin/holoself.mjs" },
+  "license": "MIT"
+}
