@@ -1,16 +1,16 @@
 # Holoself usage
 
-Holoself stores private Markdown under `~/.holoself` (override with `HOLOSELF_DATA_ROOT` or `--root`). Public defaults in the npm package are copied only into `contribs/default`; personal profile, context, topics, and local contribs never ship.
+Holoself stores private Markdown under `~/.holoself` (override with `HOLOSELF_HOME` or `--data-dir`). Public defaults in the npm package are copied only into `contribs/default`; personal profile, context, topics, and local contribs never ship.
 
-## skills.sh integration
+## skills.sh integration — first option
 
-[skills.sh](https://skills.sh/) is an existing skill installer and registry, separate from Holoself. Holoself does not call it, require it, or publish to it. Install the public instruction manually when wanted:
+[skills.sh](https://skills.sh/) is the native skill distribution path. It installs Holoself's declarative instructions into supported agents; it does not import your data or run Holoself code.
 
 ```bash
 npx skills add smota/holoself --skill holoself
 ```
 
-Review any installer changes before accepting them. This command may alter the current tool's skill directory; it does not import your Holoself data.
+Install the skill before initializing the CLI. Review installer changes before accepting them. The CLI is optional and only manages your local data root when explicitly requested.
 
 ## Contrib selection
 
