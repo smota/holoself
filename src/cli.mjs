@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 
-export const VERSION = '0.2.0'
+export const VERSION = '0.5.0'
 const START = '<!-- holoself-export-start -->'
 const END = '<!-- holoself-export-end -->'
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
