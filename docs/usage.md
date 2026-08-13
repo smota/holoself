@@ -1,6 +1,6 @@
 # Holoself usage
 
-Holoself stores private Markdown under `~/.holoself` (override with `HOLOSELF_HOME` or `--data-dir`). Public defaults in the npm package are copied only into `contribs/default`; personal profile, context, topics, and local contribs never ship.
+Holoself stores private Markdown under `~/.holoself` (override with `HOLOSELF_HOME=<path>` or `--data-dir <path>`; the CLI option wins). `--root` remains a compatibility alias. Public defaults in the npm package are copied only into `contribs/default`; personal profile, context, topics, and local contribs never ship.
 
 ## skills.sh integration — first option
 

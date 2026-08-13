@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile, mkdir, symlink, lstat, access, readdir } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, mkdir, symlink, lstat, access, readdir, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { run } from '../src/cli.mjs'
@@ -62,4 +62,25 @@ test('export copies only markdown context and refuses non-link unlink', async()=
   const root=await temp(), project=await temp(); await run(['init','--root',root]); await writeFile(join(root,'profile','private.txt'),'not exported')
   await run(['export','--root',root,'--target',project]); await assert.rejects(access(join(project,'.holoself','profile','private.txt')))
   const other=await temp(); await mkdir(join(other,'.holoself')); await assert.rejects(run(['unlink','--root',root,'--target',other]),/not a Holoself link/)
+})
+
+test('packet formatting uses real newlines and data-dir overrides HOLOSELF_HOME', async()=>{
+  const root=await temp(), project=await temp(), envRoot=await temp(); const previous=process.env.HOLOSELF_HOME
+  process.env.HOLOSELF_HOME=envRoot
+  try {
+    await run(['init','--data-dir',root]); await run(['export','--data-dir',root,'--target',project,'--packet-only'])
+    const packet=await readFile(join(project,'.holoself','context-packet.md'),'utf8')
+    assert.doesNotMatch(packet,/\\\\n/); assert.match(packet,/^---$/m); assert.ok(packet.includes('## profile/identity.md'))
+  } finally { if(previous===undefined) delete process.env.HOLOSELF_HOME; else process.env.HOLOSELF_HOME=previous }
+})
+
+test('migration dry-run does not create or mutate destination', async()=>{
+  const source=await temp(), root=join(await temp(),'new-root'); await mkdir(join(source,'profile'),{recursive:true}); await writeFile(join(source,'profile','identity.md'),'private')
+  await run(['migrate','--data-dir',root,'--from',source,'--yes','--dry-run'])
+  await assert.rejects(stat(root)); assert.equal(await readFile(join(source,'profile','identity.md'),'utf8'),'private')
+})
+
+test('root setup refuses malformed markers and remains idempotent', async()=>{
+  const root=await temp(), project=await temp(); await run(['init','--data-dir',root]); await writeFile(join(project,'AGENTS.md'),'<!-- holoself-export-start -->\n')
+  await assert.rejects(run(['export','--data-dir',root,'--target',project,'--root-setup','--yes']),/malformed Holoself markers/)
 })

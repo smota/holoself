@@ -32,7 +32,7 @@ const CONTEXT_FILES = {
   'technical.md': '# Technical\n\nKeep technical context, constraints, and preferences.\n',
   'publishing.md': '# Publishing\n\nKeep publishing goals, audiences, and format preferences.\n'
 }
-function defaultRoot(){ return process.env.HOLOSELF_DATA_ROOT || join(homedir(), '.holoself') }
+function defaultRoot(){ return process.env.HOLOSELF_HOME || join(homedir(), '.holoself') }
 function requiredValue(args, i, flag){
   const value = args[i + 1]
   if (!value || value.startsWith('--')) throw new Error(`${flag} requires a value`)
@@ -42,7 +42,7 @@ function parse(args){
   const o={rootSetup:false}; const positional=[]
   for(let i=0;i<args.length;i++){
     const a=args[i]
-    if(a==='--root'||a==='--data-root') o.root=resolve(requiredValue(args,i++,a))
+    if(a==='--root'||a==='--data-root'||a==='--data-dir') o.root=resolve(requiredValue(args,i++,a))
     else if(a==='--target') o.target=resolve(requiredValue(args,i++,a))
     else if(a==='--from') o.from=resolve(requiredValue(args,i++,a))
     else if(a==='--contribs') o.contribs=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean)
@@ -88,6 +88,14 @@ function readConfig(root){
   if(!existsSync(configPath(root))) return null
   try { return JSON.parse(readFileSync(configPath(root),'utf8')) } catch { return null }
 }
+function markerError(p){
+  if(!existsSync(p)) return null
+  if(lstatSync(p).isSymbolicLink() || !lstatSync(p).isFile()) return `${basename(p)} is not a regular file`
+  const text=readFileSync(p,'utf8')
+  const starts=(text.match(new RegExp(START,'g'))||[]).length
+  const ends=(text.match(new RegExp(END,'g'))||[]).length
+  return starts===ends && starts<=1 ? null : `${basename(p)} has malformed Holoself markers`
+}
 function packet(root, packetOnly=false){
   const files=[]
   for(const d of ['profile','context']){
@@ -96,19 +104,27 @@ function packet(root, packetOnly=false){
     walk(dir)
   }
   files.sort()
-  const body=packetOnly ? files.map(f=>`\\n---\\n\\n## ${f}\\n\\n${readFileSync(join(root,f),'utf8').trim()}\\n`).join('') : files.map(f=>`- [${f}](${f})`).join('\\n')
+  const body=packetOnly
+    ? files.map(f=>`---\n\n## ${f}\n\n${readFileSync(join(root,f),'utf8').trim()}\n`).join('\n')
+    : files.map(f=>`- [${f}](${f})`).join('\n')
   const note=packetOnly ? 'This packet is self-contained; no project-local fallback files are required.' : 'It is generated from local files under this project .holoself directory.'
-  return `# Holoself context packet\\n\\nRead this packet first. ${note}\\n\\n${body}\\n`
+  return `# Holoself context packet\n\nRead this packet first. ${note}\n\n${body}\n`
 }
 function rootSection(packetOnly=false){return packetOnly
   ? `${START}\n## Holoself context\n\nLoad .holoself/context-packet.md first. This packet is self-contained.\nDo not write durable context silently: propose changes and ask approval.\n${END}\n`
   : `${START}\n## Holoself context\n\nLoad .holoself/context-packet.md first.\nIf needed, read relevant files under .holoself/profile/ and .holoself/context/.\nDo not write durable context silently: propose changes and ask approval.\n${END}\n`}
 function inject(target,file,dryRun,packetOnly=false){
-  const p=join(target,file); const existed=existsSync(p); const old=existed?readFileSync(p,'utf8'):''; const section=rootSection(packetOnly)
+  const p=join(target,file); const existed=existsSync(p)
+  if(existed && lstatSync(p).isSymbolicLink()) throw new Error(`${p} is a symlink; refusing to modify`)
+  if(existed && !lstatSync(p).isFile()) throw new Error(`${p} is not a file; refusing to modify`)
+  const old=existed?readFileSync(p,'utf8'):''; const section=rootSection(packetOnly)
+  const starts=(old.match(new RegExp(START,'g'))||[]).length
+  const ends=(old.match(new RegExp(END,'g'))||[]).length
+  if(starts!==ends || starts>1) throw new Error(`${p} has malformed Holoself markers; refusing to modify`)
   const re=new RegExp(`${START}[\\s\\S]*?${END}\\n?`)
-  const found=re.test(old); const next=found?old.replace(re,section):(old.trimEnd()?old.trimEnd()+'\\n\\n':'')+section
-  if(!dryRun) atomicWrite(p,next)
-  return found?'updated':(existed?'appended':'created')
+  const found=starts===1; const next=found?old.replace(re,section):(old.trimEnd()?old.trimEnd()+'\\n\\n':'')+section
+  if(!dryRun && next!==old) atomicWrite(p,next)
+  return next===old?'unchanged':(found?'updated':(existed?'appended':'created'))
 }
 function copyTree(source,dest,force=false){
   const stat=lstatSync(source)
@@ -160,7 +176,7 @@ function syncPublicDefaults(root, ids, dryRun=false){
     else if(!dryRun && existsSync(p)) rmSync(p,{force:true})
   }
 }
-function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCommands:\n  data-root                 Print private data root\n  init [--contribs a,b]     Create private data root and starter files\n  doctor                    Check installation and data root\n  validate                 Validate private data root and generated markers\n  migrate --from <dir>      Import PersonalOS data without publishing it\n  export --target <dir>     Export reviewable packet to a project\n  link --target <dir>       Link project .holoself to data root\n  unlink --target <dir>     Remove only a Holoself-managed link\n  upgrade                   Refresh selected public defaults\n\nOptions: --root <dir> --target <dir> --yes --dry-run --force\n`)}
+function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCommands:\n  data-root                 Print private data root\n  init [--contribs a,b]     Create private data root and starter files\n  doctor                    Check installation and data root\n  validate                 Validate private data root and generated markers\n  migrate --from <dir>     Import PersonalOS data without publishing it\n  export --target <dir>    Export reviewable packet to a project\n  link --target <dir>      Link project .holoself to data root\n  unlink --target <dir>    Remove only a Holoself-managed link\n  upgrade                  Refresh selected public defaults\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nOptions: --data-dir <dir> --target <dir> --yes --dry-run --force\n`) }
 async function confirm(o,message){if(o.yes)return true; if(!input.isTTY||!output.isTTY) throw new Error(`${message} Re-run with --yes to confirm.`); const rl=createInterface({input,output}); try { const answer=await rl.question(`${message} Type "yes" to continue: `); return answer.trim().toLowerCase()==='yes' } finally { rl.close() }}
 export async function run(argv){
   const o=parse(argv); if(o.help||!o.command){help();return}
@@ -183,8 +199,15 @@ export async function run(argv){
   }
   if(o.command==='validate'){
     const errors=[]; if(!existsSync(root))errors.push('data root does not exist')
-    const c=readConfig(root); if(c){if(c.schemaVersion!==1)errors.push('unsupported config schema'); if(!Array.isArray(c.selectedContribs))errors.push('selectedContribs must be an array'); else {for(const id of c.selectedContribs)if(!availableContribs().includes(id))errors.push(`unknown selected contrib: ${id}`)}} else errors.push(existsSync(configPath(root))?'config.json is invalid JSON':'config.json missing')
+    const c=readConfig(root); if(c){
+      if(c.schemaVersion!==1)errors.push('unsupported config schema')
+      if(c.product!=='holoself')errors.push('config product must be holoself')
+      if(!Array.isArray(c.selectedContribs))errors.push('selectedContribs must be an array')
+      else for(const id of c.selectedContribs)if(!availableContribs().includes(id))errors.push(`unknown selected contrib: ${id}`)
+    } else errors.push(existsSync(configPath(root))?'config.json is invalid JSON':'config.json missing')
     for(const name of Object.keys(PROFILE_FILES))if(!existsSync(join(root,'profile',name)))errors.push(`missing profile/${name}`)
+    for(const name of Object.keys(CONTEXT_FILES))if(!existsSync(join(root,'context',name)))errors.push(`missing context/${name}`)
+    for(const file of ['AGENTS.md','CLAUDE.md','CODEX.md']) { const error=markerError(join(root,file)); if(error)errors.push(error) }
     for(const e of errors)console.error(`[!!] ${e}`); if(errors.length){process.exitCode=1}else console.log(`[ok] ${root} is valid`); return
   }
   if(o.command==='migrate'){
@@ -192,8 +215,8 @@ export async function run(argv){
     const source=existsSync(join(o.from,'personal'))?join(o.from,'personal'):o.from
     if(!existsSync(source))throw new Error(`source not found: ${source}`)
     // Existing PersonalOS layout is intentionally mapped into private namespaces.
-    if(!o.dryRun) ensureDir(root)
     if(!await confirm(o,`Copy personal data from ${source} to ${root}?`)){console.log('Cancelled.');return}
+    if(!o.dryRun) ensureDir(root)
     if(!o.dryRun){copyData(source,root,o.force); if(source!==o.from && existsSync(join(o.from,'topics'))) copyTree(join(o.from,'topics'),join(root,'topics'),o.force); const c=readConfig(root); if(c) json(configPath(root),c)} console.log(`${o.dryRun?'[dry-run] ':'[ok] '}migrated private data; nothing was published`); return
   }
   if(o.command==='export'){
@@ -212,7 +235,7 @@ export async function run(argv){
     if(o.rootSetup){if(!await confirm(o,'Modify project instruction files with a bounded Holoself section? This changes project files.'))return; for(const f of ['AGENTS.md','CLAUDE.md','CODEX.md'])console.log(` - ${f}: ${inject(o.target,f,o.dryRun,o.packetOnly)}`)} return
   }
   if(o.command==='link'){
-    if(!o.target)throw new Error('link requires --target <project>'); if(!existsSync(root))throw new Error('data root missing; run init first'); ensureDir(o.target); const p=join(o.target,'.holoself')
+    if(!o.target)throw new Error('link requires --target <project>'); if(!existsSync(root))throw new Error('data root missing; run init first'); if(!o.dryRun) ensureDir(o.target); const p=join(o.target,'.holoself')
     if(pathExists(p)){if(!isHoloselfLink(p,root))throw new Error(`${p} exists and is not a Holoself link; refusing to replace`); if(!o.force)throw new Error(`${p} exists; use --force only to replace it`); if(!await confirm(o,`WARNING: replace existing Holoself link ${p}?`))return}
     else if(!await confirm(o,`WARNING: create link ${p} -> ${root}. This exposes private context to project tools.`))return
     if(!o.dryRun){if(pathExists(p))unlinkSync(p);symlinkSync(root,p,process.platform==='win32'?'junction':'dir')} console.log(`${o.dryRun?'[dry-run] ':'[ok] '}linked ${p} -> ${root}`);return

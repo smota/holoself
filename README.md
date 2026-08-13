@@ -40,7 +40,7 @@ When `holoself-ai` is published, the equivalent package command will be:
 npx holoself-ai init
 ```
 
-Find or override storage with `holoself data-root` or `--root <path>`. Public contrib defaults ship with Holoself and are available by default. Select or exclude them explicitly:
+Find storage with `holoself data-root`. Default is `~/.holoself`; override with `HOLOSELF_HOME=<path>` or `--data-dir <path>` (CLI option wins). `--root` is retained as a compatibility alias. Public contrib defaults ship with Holoself and are available by default. Select or exclude them explicitly:
 
 ```bash
 holoself init --contribs communication
