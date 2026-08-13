@@ -22,6 +22,7 @@ Install the skill before initializing the CLI. Review installer changes before a
 - Writes use temporary files followed by rename, avoiding partial JSON, packet, or instruction files.
 - `export` copies profile/context into a project-local `.holoself`; review it before sharing or committing.
 - `export --root-setup` separately confirms bounded marker edits in `AGENTS.md`, `CLAUDE.md`, and `CODEX.md`.
+- `link --root-setup` offers the same separately confirmed bounded marker edits while linking `.holoself`; `--dry-run` previews link and instruction changes without writing.
 - `link` creates a junction on Windows or directory symlink elsewhere. Existing non-Holoself paths are never replaced. `unlink` removes only a link pointing at the selected data root.
 
 No command sends network requests, publishes npm, or deploys a website.

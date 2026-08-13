@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile, mkdir, symlink, lstat, access, readdir, stat } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, mkdir, symlink, lstat, access, readdir, stat, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { run } from '../src/cli.mjs'
@@ -37,6 +37,24 @@ test('link and unlink only manage symlink with explicit confirmation', async()=>
   await run(['link','--root',root,'--target',project,'--yes']); assert.equal((await lstat(join(project,'.holoself'))).isSymbolicLink(),true)
   await assert.rejects(run(['unlink','--root',root,'--target',project]),/Re-run with --yes/)
   await run(['unlink','--root',root,'--target',project,'--yes']); await assert.rejects(lstat(join(project,'.holoself')))
+})
+
+test('link root setup injects bounded instructions, preserves text, and is idempotent', async()=>{
+  const root=await temp(), project=await temp(); await run(['init','--root',root]); await writeFile(join(project,'CLAUDE.md'),'# Project instructions\n\nKeep this text.\n')
+  await assert.rejects(run(['link','--root',root,'--target',project,'--root-setup']),/Re-run with --yes/)
+  await run(['link','--root',root,'--target',project,'--root-setup','--yes']);
+  const first=await readFile(join(project,'CLAUDE.md'),'utf8'); assert.match(first,/Keep this text/); assert.match(first,/holoself-export-start/); assert.equal((first.match(/holoself-export-start/g)||[]).length,1)
+  await run(['link','--root',root,'--target',project,'--root-setup','--yes','--force']);
+  const second=await readFile(join(project,'CLAUDE.md'),'utf8'); assert.equal((second.match(/holoself-export-start/g)||[]).length,1); assert.match(second,/Keep this text/)
+})
+
+test('link root setup dry-run and safety checks do not edit instructions', async()=>{
+  const root=await temp(), project=await temp(); await run(['init','--root',root]);
+  await writeFile(join(project,'AGENTS.md'),'before\n'); await run(['link','--root',root,'--target',project,'--root-setup','--yes','--dry-run']);
+  assert.equal(await readFile(join(project,'AGENTS.md'),'utf8'),'before\n'); await assert.rejects(lstat(join(project,'.holoself')))
+  await writeFile(join(project,'CLAUDE.md'),'<!-- holoself-export-start -->\n'); await assert.rejects(run(['link','--root',root,'--target',project,'--root-setup','--yes','--force']),/malformed Holoself markers/)
+  const file=join(project,'CODEX.md'); await writeFile(file,'external\n'); const instructionLink=join(project,'AGENTS.md'); await rm(instructionLink); await symlink(file,instructionLink); await assert.rejects(run(['link','--root',root,'--target',project,'--root-setup','--yes','--force']),/symlink; refusing to modify/)
+  await rm(instructionLink); await mkdir(instructionLink); await assert.rejects(run(['link','--root',root,'--target',project,'--root-setup','--yes','--force']),/not a file; refusing to modify/)
 })
 
 test('init creates private architecture directories and catalog defaults', async()=>{

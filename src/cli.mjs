@@ -114,7 +114,7 @@ function rootSection(packetOnly=false){return packetOnly
   ? `${START}\n## Holoself context\n\nLoad .holoself/context-packet.md first. This packet is self-contained.\nDo not write durable context silently: propose changes and ask approval.\n${END}\n`
   : `${START}\n## Holoself context\n\nLoad .holoself/context-packet.md first.\nIf needed, read relevant files under .holoself/profile/ and .holoself/context/.\nDo not write durable context silently: propose changes and ask approval.\n${END}\n`}
 function inject(target,file,dryRun,packetOnly=false){
-  const p=join(target,file); const existed=existsSync(p)
+  const p=join(target,file); const existed=pathExists(p)
   if(existed && lstatSync(p).isSymbolicLink()) throw new Error(`${p} is a symlink; refusing to modify`)
   if(existed && !lstatSync(p).isFile()) throw new Error(`${p} is not a file; refusing to modify`)
   const old=existed?readFileSync(p,'utf8'):''; const section=rootSection(packetOnly)
@@ -253,7 +253,7 @@ function syncPublicDefaults(root, ids, dryRun=false){
     else if(!dryRun && existsSync(p)) rmSync(p,{force:true})
   }
 }
-function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCommands:\n  data-root                 Print private data root\n  init [--contribs a,b]     Create private data root and starter files\n  doctor                    Check installation and data root\n  validate                 Validate private data root and generated markers\n  migrate --from <dir>     Import PersonalOS data without publishing it\n  export --target <dir>    Export reviewable packet to a project\n  link --target <dir>      Link project .holoself to data root\n  unlink --target <dir>    Remove only a Holoself-managed link\n  upgrade                  Refresh selected public defaults\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nOptions: --data-dir <dir> --target <dir> --yes --dry-run --force\n`) }
+function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCommands:\n  data-root                 Print private data root\n  init [--contribs a,b]     Create private data root and starter files\n  doctor                    Check installation and data root\n  validate                 Validate private data root and generated markers\n  migrate --from <dir>     Import PersonalOS data without publishing it\n  export --target <dir>    Export reviewable packet to a project\n  link --target <dir>      Link project .holoself to data root\n                            Add --root-setup to inject bounded loading instructions\n  unlink --target <dir>    Remove only a Holoself-managed link\n  upgrade                  Refresh selected public defaults\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nOptions: --data-dir <dir> --target <dir> --yes --dry-run --force\n`) }
 async function confirm(o,message){if(o.yes)return true; if(!input.isTTY||!output.isTTY) throw new Error(`${message} Re-run with --yes to confirm.`); const rl=createInterface({input,output}); try { const answer=await rl.question(`${message} Type "yes" to continue: `); return answer.trim().toLowerCase()==='yes' } finally { rl.close() }}
 export async function run(argv){
   const o=parse(argv); if(o.help||!o.command){help();return}
@@ -323,10 +323,15 @@ export async function run(argv){
     if(o.rootSetup){if(!await confirm(o,'Modify project instruction files with a bounded Holoself section? This changes project files.'))return; for(const f of ['AGENTS.md','CLAUDE.md','CODEX.md'])console.log(` - ${f}: ${inject(o.target,f,o.dryRun,o.packetOnly)}`)} return
   }
   if(o.command==='link'){
-    if(!o.target)throw new Error('link requires --target <project>'); if(!existsSync(root))throw new Error('data root missing; run init first'); if(!o.dryRun) ensureDir(o.target); const p=join(o.target,'.holoself')
+    if(!o.target)throw new Error('link requires --target <project>'); if(!existsSync(root))throw new Error('data root missing; run init first')
+    // Validate every instruction file before changing the link, so malformed or
+    // unsafe project files cannot leave a partially-applied root setup.
+    if(o.rootSetup) for(const f of ['AGENTS.md','CLAUDE.md','CODEX.md']) inject(o.target,f,true)
+    if(!o.dryRun) ensureDir(o.target); const p=join(o.target,'.holoself')
     if(pathExists(p)){if(!isHoloselfLink(p,root))throw new Error(`${p} exists and is not a Holoself link; refusing to replace`); if(!o.force)throw new Error(`${p} exists; use --force only to replace it`); if(!await confirm(o,`WARNING: replace existing Holoself link ${p}?`))return}
     else if(!await confirm(o,`WARNING: create link ${p} -> ${root}. This exposes private context to project tools.`))return
-    if(!o.dryRun){if(pathExists(p))unlinkSync(p);symlinkSync(root,p,process.platform==='win32'?'junction':'dir')} console.log(`${o.dryRun?'[dry-run] ':'[ok] '}linked ${p} -> ${root}`);return
+    if(!o.dryRun){if(pathExists(p))unlinkSync(p);symlinkSync(root,p,process.platform==='win32'?'junction':'dir')} console.log(`${o.dryRun?'[dry-run] ':'[ok] '}linked ${p} -> ${root}`)
+    if(o.rootSetup){if(!await confirm(o,'Modify project instruction files with a bounded Holoself section? This changes project files.'))return; for(const f of ['AGENTS.md','CLAUDE.md','CODEX.md'])console.log(` - ${f}: ${inject(o.target,f,o.dryRun)}`)} return
   }
   if(o.command==='unlink'){
     if(!o.target)throw new Error('unlink requires --target <project>'); const p=join(o.target,'.holoself'); if(!pathExists(p)){console.log('[ok] no link found');return} if(!isHoloselfLink(p,root))throw new Error(`${p} is not a Holoself link; refusing to remove`); if(!await confirm(o,`WARNING: remove Holoself link ${p}?`))return; if(!o.dryRun)unlinkSync(p); console.log(`${o.dryRun?'[dry-run] ':''}[ok] unlinked ${p}`);return

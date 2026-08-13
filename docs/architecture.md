@@ -25,7 +25,7 @@ Holoself is a local-first, Markdown-first self-context layer. Public code and co
 
 - **User-owned/private:** `profile/`, `context/`, `topics/`, `reference/`, `me/`, `contribs/local/`.
 - **Holoself-managed:** `config.json`, `contribs/default/`, and generated `exports/`.
-- **Project-owned after review:** project instruction files. `export --root-setup` changes only bounded Holoself markers and asks for confirmation.
+- **Project-owned after review:** project instruction files. `export --root-setup` and `link --root-setup` change only bounded Holoself markers and ask for confirmation.
 - **Public/package-owned:** `contribs/default/`, its catalog/manifest, `skills/`, `docs/`, and source code. No profile, context, topic, or private reference data ships.
 
 Private contribs must be placed under `<data-root>/contribs/local/`. They are not discovered as public contribs, copied into this repository, or included in npm package paths.

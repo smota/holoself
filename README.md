@@ -54,7 +54,7 @@ Private contribs belong only in `<data-root>/contribs/local/` and are never copi
 - `init`, `doctor`, `validate`: create and check local data.
 - `migrate --from <PersonalOS>`: preview or copy personal data after confirmation; source remains untouched. Add `--dry-run` for a path/count report; apply writes `migration-manifest.json`. Existing user files are preserved unless `--force`.
 - `export --target <project>`: write a project packet. Add `--root-setup` for explicit confirmation before bounded marker injection.
-- `link` / `unlink`: manage a clearly-owned `.holoself` junction or symlink.
+- `link` / `unlink`: manage a clearly-owned `.holoself` junction or symlink. Add `link --root-setup` to separately confirm bounded loading instructions in project `AGENTS.md`, `CLAUDE.md`, and `CODEX.md`; add `--dry-run` to preview both operations.
 - `upgrade`: refresh shipped public defaults without touching profile/context.
 
 Exported `.holoself` content is private by default. Review before committing. No command sends data, publishes npm, or deploys a site.
