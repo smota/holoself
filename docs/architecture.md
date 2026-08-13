@@ -17,7 +17,7 @@ Holoself is a local-first, Markdown-first self-context layer. Public code and co
 └── exports/                    # generated, reviewable export staging/output
 ```
 
-`<project>/.holoself/` is a generated project packet, not a second source of truth. It contains a bounded snapshot of profile/context and `context-packet.md`.
+`<project>/.holoself/` is a generated project packet or link, not a second source of truth. It contains a bounded snapshot of profile/context and `context-packet.md`, or links directly to the data root for live use. Agents may open a data root directly; direct-root detection takes precedence over project `.holoself`.
 
 ## Schema and ownership
 
@@ -30,14 +30,11 @@ Holoself is a local-first, Markdown-first self-context layer. Public code and co
 
 Private contribs must be placed under `<data-root>/contribs/local/`. They are not discovered as public contribs, copied into this repository, or included in npm package paths.
 
-## Loading order
+## Root detection and loading order
 
-1. Load the generated project packet (`.holoself/context-packet.md`) when present.
-2. Load profile files in stable order: identity, work-context, preferences, voice, thinking, change.
-3. Load relevant context files: projects, people, decisions, story-bank, career, admin, leadership, technical, publishing.
-4. Load active topic context selected by `topics/.current`.
-5. Apply explicitly selected public defaults from `contribs/default/`, then local contribs from `contribs/local/`.
-6. Load private reference material only when relevant and explicitly permitted.
+Agents resolve roots deterministically: (1) current/opened directory itself when it has Holoself `config.json` plus `profile/` and `context/`; (2) an ancestor's `.holoself/` directory link; (3) `HOLOSELF_HOME`; (4) `~/.holoself`. Invalid or ambiguous roots require asking the user. Direct data roots always win over project links.
+
+After root resolution, load root `AGENTS.md` instructions, then profile files in stable order: identity, work-context, preferences, voice, thinking, change; relevant context files: projects, people, decisions, story-bank, career, admin, leadership, technical, publishing; active topic selected by `topics/.current`; explicitly selected public defaults from `contribs/default/`, then local contribs from `contribs/local/`; and private reference material only when relevant and explicitly permitted. For linked projects, load generated `.holoself/context-packet.md` first when present.
 
 A packet can be made self-contained with `export --packet-only`; it then embeds the selected profile/context text rather than relying on fallback paths.
 

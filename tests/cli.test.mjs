@@ -59,6 +59,7 @@ test('link root setup dry-run and safety checks do not edit instructions', async
 
 test('init creates private architecture directories and catalog defaults', async()=>{
   const root=await temp(); await run(['init','--root',root]);
+  const agents=await readFile(join(root,'AGENTS.md'),'utf8'); assert.match(agents,/holoself-root-start/); assert.match(agents,/Loading order/);
   for (const name of ['reference','me','exports','contribs/local']) await access(join(root,name));
   const config=JSON.parse(await readFile(join(root,'config.json'),'utf8'));
   assert.equal(config.schemaVersion,1); assert.ok(config.selectedContribs.includes('minto-pyramid'));
@@ -110,4 +111,10 @@ test('migration preserves conflicts, supports force, and writes manifest', async
 test('root setup refuses malformed markers and remains idempotent', async()=>{
   const root=await temp(), project=await temp(); await run(['init','--data-dir',root]); await writeFile(join(project,'AGENTS.md'),'<!-- holoself-export-start -->\n')
   await assert.rejects(run(['export','--data-dir',root,'--target',project,'--root-setup','--yes']),/malformed Holoself markers/)
+})
+
+test('init preserves user AGENTS text and bounded root guidance', async()=>{
+  const root=await temp(); await writeFile(join(root,'AGENTS.md'),'# User rules\n\nKeep this.\n'); await run(['init','--data-dir',root]);
+  const first=await readFile(join(root,'AGENTS.md'),'utf8'); assert.match(first,/Keep this/); assert.match(first,/holoself-root-start/); assert.equal((first.match(/holoself-root-start/g)||[]).length,1)
+  await run(['init','--data-dir',root]); const second=await readFile(join(root,'AGENTS.md'),'utf8'); assert.equal((second.match(/holoself-root-start/g)||[]).length,1); assert.match(second,/Keep this/)
 })

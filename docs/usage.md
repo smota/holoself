@@ -1,6 +1,6 @@
 # Holoself usage
 
-Holoself stores private Markdown under `~/.holoself` (override with `HOLOSELF_HOME=<path>` or `--data-dir <path>`; the CLI option wins). `--root` remains a compatibility alias. Public defaults in the npm package are copied only into `contribs/default`; personal profile, context, topics, and local contribs never ship.
+Holoself stores private Markdown under `~/.holoself` (override with `HOLOSELF_HOME=<path>` or `--data-dir <path>`; the CLI option wins). `--root` remains a compatibility alias. `holoself init` also creates bounded root-level `AGENTS.md` guidance. Open this data root directly in Pi/agents for live loading; linked projects use `.holoself` and never become a second source of truth. Public defaults in the npm package are copied only into `contribs/default`; personal profile, context, topics, and local contribs never ship.
 
 ## skills.sh integration — first option
 
