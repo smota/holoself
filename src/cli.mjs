@@ -11,7 +11,7 @@ import { stdin as input, stdout as output } from 'node:process'
 export const VERSION = '0.1.0'
 const START = '<!-- holoself-export-start -->'
 const END = '<!-- holoself-export-end -->'
-const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)), '..')
+const PACKAGE_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const DEFAULT_CONTRIBS = ['communication']
 const PROFILE_FILES = {
   'identity.md': '# Identity\n\nWrite a short description of who you are.\n',
@@ -22,7 +22,7 @@ const PROFILE_FILES = {
 }
 function defaultRoot(){ return process.env.HOLOSELF_DATA_ROOT || join(homedir(), '.holoself') }
 function parse(args){
-  const o={}; const positional=[]
+  const o={rootSetup:false}; const positional=[]
   for(let i=0;i<args.length;i++){
     const a=args[i]
     if(a==='--root'||a==='--data-root') o.root=resolve(args[++i] || '')
@@ -31,6 +31,7 @@ function parse(args){
     else if(a==='--contribs') o.contribs=(args[++i]||'').split(',').map(x=>x.trim()).filter(Boolean)
     else if(a==='--exclude-contrib') o.exclude=(args[++i]||'').split(',').map(x=>x.trim()).filter(Boolean)
     else if(a==='--yes'||a==='--confirm') o.yes=true
+    else if(a==='--root-setup') o.rootSetup=true
     else if(a==='--force') o.force=true
     else if(a==='--dry-run') o.dryRun=true
     else if(a==='--help'||a==='-h') o.help=true
@@ -98,7 +99,7 @@ export async function run(argv){
   if(o.command==='export'){
     if(!o.target)throw new Error('export requires --target <project>'); if(!existsSync(root))throw new Error('data root missing; run init first')
     ensureDir(o.target); const out=join(o.target,'.holoself'); if(!o.dryRun){ensureDir(out);writeFileSync(join(out,'context-packet.md'),packet(root));writeFileSync(join(out,'README.md'),'# Holoself project context\n\nThis folder is generated locally. Do not commit it unless reviewed.\n')} console.log(`${o.dryRun?'[dry-run] ':''}[ok] exported packet to ${out}`)
-    if(o.args.includes('--root-setup')){if(!await confirm(o,'Modify project instruction files with a bounded Holoself section?'))return; for(const f of ['AGENTS.md','CLAUDE.md','CODEX.md'])console.log(` - ${f}: ${inject(o.target,f,o.dryRun)}`)} return
+    if(o.rootSetup){if(!await confirm(o,'Modify project instruction files with a bounded Holoself section?'))return; for(const f of ['AGENTS.md','CLAUDE.md','CODEX.md'])console.log(` - ${f}: ${inject(o.target,f,o.dryRun)}`)} return
   }
   if(o.command==='link'){
     if(!o.target)throw new Error('link requires --target <project>'); ensureDir(o.target); const p=join(o.target,'.holoself'); if(existsSync(p)&&!o.force)throw new Error(`${p} exists; use --force only to replace it`); if(!o.dryRun){rmSync(p,{recursive:true,force:true});symlinkSync(root,p,process.platform==='win32'?'junction':'dir')} console.log(`${o.dryRun?'[dry-run] ':'[ok] '}linked ${p} -> ${root}`);return
