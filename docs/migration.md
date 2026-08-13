@@ -4,7 +4,7 @@ Holoself is a separate local package. PersonalOS remains a valid source and is n
 
 1. Install Holoself from this workspace, or from npm after a release.
 2. Run `holoself init --root <private-path>`.
-3. Run `holoself migrate --root <private-path> --from C:\\Code\\PersonalOS --yes`.
+3. Run `holoself migrate --root <private-path> --from <PersonalOS-directory> --yes` (replace the placeholder with your local source path).
 4. Review `holoself validate` output and private files.
 5. Export to each project with `holoself export --root <private-path> --target <project>`.
 
