@@ -74,10 +74,19 @@ test('packet formatting uses real newlines and data-dir overrides HOLOSELF_HOME'
   } finally { if(previous===undefined) delete process.env.HOLOSELF_HOME; else process.env.HOLOSELF_HOME=previous }
 })
 
-test('migration dry-run does not create or mutate destination', async()=>{
-  const source=await temp(), root=join(await temp(),'new-root'); await mkdir(join(source,'profile'),{recursive:true}); await writeFile(join(source,'profile','identity.md'),'private')
-  await run(['migrate','--data-dir',root,'--from',source,'--yes','--dry-run'])
-  await assert.rejects(stat(root)); assert.equal(await readFile(join(source,'profile','identity.md'),'utf8'),'private')
+test('migration dry-run reports mappings without destination mutation or private contents', async()=>{
+  const source=await temp(), root=join(await temp(),'new-root'); await mkdir(join(source,'profile'),{recursive:true}); await mkdir(join(source,'reference'),{recursive:true}); await writeFile(join(source,'profile','identity.md'),'private identity'); await writeFile(join(source,'reference','secret.md'),'private secret')
+  const output=await capture(()=>run(['migrate','--data-dir',root,'--from',source,'--yes','--dry-run']))
+  assert.match(output,/source root:/); assert.match(output,/target root:/); assert.match(output,/detected files: 2/); assert.match(output,/mapping: profile[\\/]identity\.md -> profile[\\/]identity\.md/); assert.match(output,/sensitive: 1/); assert.doesNotMatch(output,/private identity|private secret/)
+  await assert.rejects(stat(root)); assert.equal(await readFile(join(source,'profile','identity.md'),'utf8'),'private identity')
+})
+
+test('migration preserves conflicts, supports force, and writes manifest', async()=>{
+  const source=await temp(), root=await temp(); await mkdir(join(source,'profile'),{recursive:true}); await writeFile(join(source,'profile','identity.md'),'from source'); await run(['init','--data-dir',root]); await writeFile(join(root,'profile','identity.md'),'user authored')
+  const output=await capture(()=>run(['migrate','--data-dir',root,'--from',source,'--yes'])); assert.match(output,/preserved: 1/); assert.match(output,/conflicts: 1/); assert.equal(await readFile(join(root,'profile','identity.md'),'utf8'),'user authored')
+  const manifest=JSON.parse(await readFile(join(root,'migration-manifest.json'),'utf8')); assert.equal(manifest.schemaVersion,1); assert.equal(manifest.tool,'holoself'); assert.equal(manifest.sourceRoot,source); assert.equal(manifest.targetRoot,root); assert.ok(manifest.timestamp); assert.deepEqual(manifest.files.conflicts,['profile/identity.md'])
+  await run(['migrate','--data-dir',root,'--from',source,'--yes','--force']); assert.equal(await readFile(join(root,'profile','identity.md'),'utf8'),'from source')
+  assert.equal(await readFile(join(source,'profile','identity.md'),'utf8'),'from source')
 })
 
 test('root setup refuses malformed markers and remains idempotent', async()=>{

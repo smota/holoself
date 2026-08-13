@@ -52,7 +52,7 @@ Private contribs belong only in `<data-root>/contribs/local/` and are never copi
 ## Commands
 
 - `init`, `doctor`, `validate`: create and check local data.
-- `migrate --from <PersonalOS>`: copy personal data after confirmation; source remains untouched.
+- `migrate --from <PersonalOS>`: preview or copy personal data after confirmation; source remains untouched. Add `--dry-run` for a path/count report; apply writes `migration-manifest.json`. Existing user files are preserved unless `--force`.
 - `export --target <project>`: write a project packet. Add `--root-setup` for explicit confirmation before bounded marker injection.
 - `link` / `unlink`: manage a clearly-owned `.holoself` junction or symlink.
 - `upgrade`: refresh shipped public defaults without touching profile/context.
@@ -64,6 +64,7 @@ Exported `.holoself` content is private by default. Review before committing. No
 ```bash
 npm test
 node bin/holoself.mjs --help
+node bin/holoself.mjs migrate --from <PersonalOS-directory> --data-dir <private-path> --dry-run
 ```
 
 See [PRIVACY.md](PRIVACY.md), [docs/architecture.md](docs/architecture.md), and [docs/migration.md](docs/migration.md). Public contribs are catalogued in [`contribs/catalog.json`](contribs/catalog.json); shipped defaults are synthetic/public only. Private reference, me extensions, profile, context, topics, and notes stay in the local data root.

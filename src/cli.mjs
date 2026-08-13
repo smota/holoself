@@ -159,9 +159,86 @@ function backupExport(out,target){
   renameSync(out,backup)
   return backup
 }
-function copyData(from,to,force=false){
-  // PersonalOS paths map into private Holoself paths; reference and me never become public contribs.
-  for(const name of ['profile','context','topics','reference','me']) if(existsSync(join(from,name))) copyTree(join(from,name),join(to,name),force)
+const MIGRATION_ROOTS = new Set(['profile','context','topics','reference','me'])
+const SENSITIVE_ROOTS = new Set(['reference','me'])
+const GENERATED_ROOTS = new Set(['exports'])
+function migrationRelative(root, file){ return relative(root,file).replaceAll('\\','/') }
+function migrationFiles(root, prefix='', output=[]){
+  if(!existsSync(root)) return output
+  const walk=(dir)=>{ for(const entry of readdirSync(dir,{withFileTypes:true})){
+    const path=join(dir,entry.name); const rel=prefix ? `${prefix}/${migrationRelative(root,path)}` : migrationRelative(root,path)
+    if(entry.isSymbolicLink()) throw new Error(`refusing symlink in source: ${path}`)
+    if(entry.isDirectory()) walk(path)
+    else if(entry.isFile()) output.push({path,relative:rel})
+  }}
+  walk(root); return output
+}
+function migrationPlan(source, target, sourceInput, force=false){
+  const detected=migrationFiles(source)
+  // A full PersonalOS checkout stores topics beside personal/; include it without
+  // treating package or repository files as private data.
+  if(sourceInput!==source && existsSync(join(sourceInput,'topics'))){
+    for(const item of migrationFiles(join(sourceInput,'topics'))) { item.relative=`topics/${item.relative}`; detected.push(item) }
+  }
+  const report={
+    sourceRoot:source, sourceInput, targetRoot:target, dryRun:false,
+    detectedFiles:detected.map(x=>x.relative).sort(), destinationMappings:[],
+    copied:[], preserved:[], conflicts:[], skipped:[], sensitive:[], generated:[], _detected:detected
+  }
+  for(const item of detected){
+    const top=item.relative.split('/')[0]
+    if(SENSITIVE_ROOTS.has(top)) report.sensitive.push(item.relative)
+    if(GENERATED_ROOTS.has(top) || item.relative==='config.json' || item.relative==='migration-manifest.json'){
+      report.generated.push(item.relative); report.skipped.push(item.relative); continue
+    }
+    if(!MIGRATION_ROOTS.has(top)){ report.skipped.push(item.relative); continue }
+    const destination=item.relative
+    report.destinationMappings.push({source:item.relative,destination})
+    const dest=join(target,destination)
+    if(!existsSync(dest)){ report.copied.push(destination); continue }
+    const destStat=lstatSync(dest)
+    if(destStat.isSymbolicLink()) throw new Error(`refusing symlink destination: ${dest}`)
+    if(force || (destStat.isFile() && Object.values({...PROFILE_FILES,...CONTEXT_FILES}).includes(readFileSync(dest,'utf8')))) report.copied.push(destination)
+    else { report.preserved.push(destination); report.conflicts.push(destination) }
+  }
+  report.detectedFiles.sort(); report.destinationMappings.sort((a,b)=>a.destination.localeCompare(b.destination))
+  for(const key of ['copied','preserved','conflicts','skipped','sensitive','generated']) report[key].sort()
+  report.detectedCount=report.detectedFiles.length
+  report.summary={detected:report.detectedCount,mapped:report.destinationMappings.length,copied:report.copied.length,preserved:report.preserved.length,conflicts:report.conflicts.length,skipped:report.skipped.length,sensitive:report.sensitive.length,generated:report.generated.length}
+  report.files={detected:report.detectedFiles,copied:report.copied,preserved:report.preserved,conflicts:report.conflicts,skipped:report.skipped,sensitive:report.sensitive,generated:report.generated}
+  return {report,detected}
+}
+function applyMigration(plan, target){
+  for(const mapping of plan.destinationMappings){
+    if(!plan.copied.includes(mapping.destination)) continue
+    const item=plan._detected.find(x=>x.relative===mapping.source); const dest=join(target,mapping.destination)
+    atomicWrite(dest,readFileSync(item.path))
+  }
+}
+function migrationManifest(report){
+  const {dryRun:_,_detected:__,...manifestReport}=report
+  return {schemaVersion:1,tool:'holoself',toolVersion:VERSION,timestamp:new Date().toISOString(),source:report.sourceRoot,target:report.targetRoot,...manifestReport}
+}
+function assertMigrationTarget(source,target){
+  const from=resolve(source), to=resolve(target)
+  if(to===from || to.startsWith(`${from}${'\\'}`) || to.startsWith(`${from}/`)) throw new Error('migration target must not be inside source; source must remain unchanged')
+}
+function assertDestinationParents(target, destination){
+  let current=dirname(join(target,destination)); const boundary=resolve(target)
+  while(resolve(current).startsWith(boundary) && resolve(current)!==boundary){
+    if(existsSync(current) && lstatSync(current).isSymbolicLink()) throw new Error(`refusing symlink destination: ${current}`)
+    current=dirname(current)
+  }
+}
+function printMigrationReport(report, manifestPath=null){
+  console.log(`[${report.dryRun?'dry-run':'ok'}] migration report`)
+  console.log(`source root: ${report.sourceRoot}`)
+  console.log(`target root: ${report.targetRoot}`)
+  console.log(`detected files: ${report.detectedCount}`)
+  for(const mapping of report.destinationMappings) console.log(`mapping: ${mapping.source} -> ${mapping.destination}`)
+  for(const key of ['copied','preserved','conflicts','skipped','sensitive','generated']) console.log(`${key}: ${report[key].length}${report[key].length?` (${report[key].join(', ')})`:''}`)
+  console.log(`summary: ${JSON.stringify(report.summary)}`)
+  if(manifestPath) console.log(`manifest: ${manifestPath}`)
 }
 function isHoloselfLink(p, root){
   if(!lstatSync(p).isSymbolicLink()) return false
@@ -214,10 +291,21 @@ export async function run(argv){
     if(!o.from)throw new Error('migrate requires --from <PersonalOS directory>')
     const source=existsSync(join(o.from,'personal'))?join(o.from,'personal'):o.from
     if(!existsSync(source))throw new Error(`source not found: ${source}`)
-    // Existing PersonalOS layout is intentionally mapped into private namespaces.
-    if(!await confirm(o,`Copy personal data from ${source} to ${root}?`)){console.log('Cancelled.');return}
-    if(!o.dryRun) ensureDir(root)
-    if(!o.dryRun){copyData(source,root,o.force); if(source!==o.from && existsSync(join(o.from,'topics'))) copyTree(join(o.from,'topics'),join(root,'topics'),o.force); const c=readConfig(root); if(c) json(configPath(root),c)} console.log(`${o.dryRun?'[dry-run] ':'[ok] '}migrated private data; nothing was published`); return
+    assertMigrationTarget(source,root)
+    const {report}=migrationPlan(source,root,o.from,o.force)
+    report.dryRun=Boolean(o.dryRun)
+    if(!await confirm(o,`${o.dryRun?'Preview':'Copy'} personal data from ${source} to ${root}?`)){console.log('Cancelled.');return}
+    const manifestPath=join(root,'migration-manifest.json')
+    if(!o.dryRun){
+      ensureDir(root)
+      for(const mapping of report.destinationMappings) assertDestinationParents(root,mapping.destination)
+      applyMigration(report,root)
+      if(source!==o.from && existsSync(join(o.from,'topics'))) ensureDir(join(root,'topics'))
+      const c=readConfig(root); if(c) json(configPath(root),c)
+      atomicWrite(manifestPath,JSON.stringify(migrationManifest(report),null,2)+'\n')
+    }
+    printMigrationReport(report,o.dryRun?null:manifestPath)
+    return
   }
   if(o.command==='export'){
     if(!o.target)throw new Error('export requires --target <project>'); if(!existsSync(root))throw new Error('data root missing; run init first')
