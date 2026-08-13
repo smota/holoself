@@ -1,3 +1,8 @@
+---
+name: holoself
+description: Load and apply a user's local, reviewable Holoself context across AI tools.
+---
+
 # Holoself
 
 Holoself is a local self-context layer. Load `.holoself/context-packet.md` first, then only the relevant files under `.holoself/profile/` and `.holoself/context/`. See [architecture](../../docs/architecture.md) for schema, ownership, and loading order.
