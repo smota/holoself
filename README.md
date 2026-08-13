@@ -16,13 +16,17 @@ The skill is instruction-only: it explains how agents load your Holoself context
 
 The npm package is not published yet. Run it directly from this repository:
 
+Use the repository directly by cloning it (GitHub git specs do not reliably expose npm `bin` commands through `npx`):
+
 ```bash
-npx --yes github:smota/holoself init
-npx --yes github:smota/holoself doctor
-npx --yes github:smota/holoself validate
+git clone https://github.com/smota/holoself.git
+cd holoself
+node bin/holoself.mjs init
+node bin/holoself.mjs doctor
+node bin/holoself.mjs validate
 ```
 
-Or clone the repository and run the executable locally:
+Or run the executable locally from an existing clone:
 
 ```bash
 git clone https://github.com/smota/holoself.git
