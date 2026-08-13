@@ -37,4 +37,4 @@ npm test
 node bin/holoself.mjs --help
 ```
 
-See [PRIVACY.md](PRIVACY.md) and [docs/migration.md](docs/migration.md).
+See [PRIVACY.md](PRIVACY.md), [docs/architecture.md](docs/architecture.md), and [docs/migration.md](docs/migration.md). Public contribs are catalogued in [`contribs/catalog.json`](contribs/catalog.json); shipped defaults are synthetic/public only. Private reference, me extensions, profile, context, topics, and notes stay in the local data root.

@@ -1,6 +1,6 @@
 # Holoself
 
-Holoself is a local self-context layer. Load `.holoself/context-packet.md` first, then only the relevant files under `.holoself/profile/` and `.holoself/context/`.
+Holoself is a local self-context layer. Load `.holoself/context-packet.md` first, then only the relevant files under `.holoself/profile/` and `.holoself/context/`. See [architecture](../../docs/architecture.md) for schema, ownership, and loading order.
 
 ## Safety
 
@@ -8,6 +8,8 @@ Holoself is a local self-context layer. Load `.holoself/context-packet.md` first
 - Do not write durable context silently. Propose the change, name its file, and request approval.
 - Do not infer sensitive identity or preferences as facts.
 - Keep public skill instructions separate from private data.
+- Public contribs are optional reference methods selected in `config.json`; private contribs belong only under the data root's `contribs/local/`.
+- Never save durable profile, context, topic, reference, or notes changes without proposing the target file and getting approval.
 
 ## Modes
 

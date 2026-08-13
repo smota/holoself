@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "product": "holoself",
+  "contribs": [
+    {"id":"abt-framework","title":"And-But-Therefore Framework","domain":"communication","type":"framework","path":"default/abt-framework.md","default":true},
+    {"id":"communication","title":"Communication defaults","domain":"communication","type":"overlay","path":"default/communication.md","default":true},
+    {"id":"enneagram","title":"Enneagram","domain":"coaching","type":"framework","path":"default/enneagram.md","default":true},
+    {"id":"feynman-clarity","title":"Feynman Clarity","domain":"communication","type":"framework","path":"default/feynman-clarity.md","default":true},
+    {"id":"framework-orchestration","title":"Framework Orchestration","domain":"communication","type":"overlay","path":"default/framework-orchestration.md","default":true},
+    {"id":"grow-model","title":"GROW Model","domain":"coaching","type":"framework","path":"default/grow-model.md","default":true},
+    {"id":"ifs","title":"Internal Family Systems","domain":"coaching","type":"framework","path":"default/ifs.md","default":true},
+    {"id":"immunity-to-change","title":"Immunity to Change","domain":"coaching","type":"framework","path":"default/immunity-to-change.md","default":true},
+    {"id":"minto-pyramid","title":"Minto Pyramid","domain":"communication","type":"framework","path":"default/minto-pyramid.md","default":true},
+    {"id":"minto-scqa","title":"Minto SCQA","domain":"communication","type":"framework","path":"default/minto-scqa.md","default":true},
+    {"id":"nvc","title":"Nonviolent Communication","domain":"coaching","type":"framework","path":"default/nvc.md","default":true},
+    {"id":"quarterly-reflection","title":"Quarterly Reflection","domain":"structures","type":"session-structure","path":"default/quarterly-reflection.md","default":true},
+    {"id":"socratic-inquiry","title":"Socratic Inquiry","domain":"communication","type":"framework","path":"default/socratic-inquiry.md","default":true},
+    {"id":"stoic-frame","title":"Stoic Frame","domain":"communication","type":"overlay","path":"default/stoic-frame.md","default":true},
+    {"id":"systems-thinking-overlay","title":"Systems Thinking Overlay","domain":"communication","type":"overlay","path":"default/systems-thinking-overlay.md","default":true},
+    {"id":"weekly-review","title":"Weekly Review","domain":"structures","type":"session-structure","path":"default/weekly-review.md","default":true}
+  ]
+}

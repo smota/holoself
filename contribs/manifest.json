@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "product": "holoself",
+  "catalog": "catalog.json",
+  "defaultSelection": "all",
+  "selection": {
+    "includeFlag": "--contribs",
+    "excludeFlag": "--exclude-contrib",
+    "unknownIds": "error",
+    "privatePath": "<data-root>/contribs/local"
+  }
+}

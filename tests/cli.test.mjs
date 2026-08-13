@@ -9,7 +9,7 @@ async function temp(){return mkdtemp(join(tmpdir(),'holoself-'))}
 async function capture(fn){const old=console.log;let out='';console.log=(...x)=>{out+=x.join(' ')+'\n'};try{await fn()}finally{console.log=old}return out}
 
 test('init and validate create private root', async()=>{
-  const root=await temp(); await run(['init','--root',root,'--exclude-contrib','communication']);
+  const root=await temp(); await run(['init','--root',root,'--contribs','communication','--exclude-contrib','communication']);
   const config=JSON.parse(await readFile(join(root,'config.json'),'utf8')); assert.deepEqual(config.selectedContribs,[])
   assert.match(await capture(()=>run(['validate','--root',root])),/is valid/)
 })
@@ -25,10 +25,10 @@ test('export packet and explicit root setup marker', async()=>{
   const backups=(await readdir(project)).filter(name=>name.startsWith('.holoself-backup-')); assert.equal(backups.length,2)
 })
 
-test('migrate copies personal source without deleting it', async()=>{
-  const source=await temp(), root=await temp(); await mkdir(join(source,'personal','profile'),{recursive:true}); await writeFile(join(source,'personal','profile','identity.md'),'private note')
+test('migrate maps private reference and me without deleting source', async()=>{
+  const source=await temp(), root=await temp(); await mkdir(join(source,'personal','profile'),{recursive:true}); await mkdir(join(source,'personal','reference'),{recursive:true}); await mkdir(join(source,'personal','me'),{recursive:true}); await writeFile(join(source,'personal','profile','identity.md'),'private note'); await writeFile(join(source,'personal','reference','private.md'),'private reference'); await writeFile(join(source,'personal','me','private.md'),'private me')
   await run(['init','--root',root]); await run(['migrate','--root',root,'--from',source,'--yes']);
-  assert.equal(await readFile(join(root,'profile','identity.md'),'utf8'),'private note'); assert.equal(await readFile(join(source,'personal','profile','identity.md'),'utf8'),'private note')
+  assert.equal(await readFile(join(root,'profile','identity.md'),'utf8'),'private note'); assert.equal(await readFile(join(root,'reference','private.md'),'utf8'),'private reference'); assert.equal(await readFile(join(root,'me','private.md'),'utf8'),'private me'); assert.equal(await readFile(join(source,'personal','profile','identity.md'),'utf8'),'private note')
 })
 
 test('link and unlink only manage symlink with explicit confirmation', async()=>{
@@ -37,6 +37,14 @@ test('link and unlink only manage symlink with explicit confirmation', async()=>
   await run(['link','--root',root,'--target',project,'--yes']); assert.equal((await lstat(join(project,'.holoself'))).isSymbolicLink(),true)
   await assert.rejects(run(['unlink','--root',root,'--target',project]),/Re-run with --yes/)
   await run(['unlink','--root',root,'--target',project,'--yes']); await assert.rejects(lstat(join(project,'.holoself')))
+})
+
+test('init creates private architecture directories and catalog defaults', async()=>{
+  const root=await temp(); await run(['init','--root',root]);
+  for (const name of ['reference','me','exports','contribs/local']) await access(join(root,name));
+  const config=JSON.parse(await readFile(join(root,'config.json'),'utf8'));
+  assert.equal(config.schemaVersion,1); assert.ok(config.selectedContribs.includes('minto-pyramid'));
+  assert.match(await readFile(join(root,'me','contribs.md'),'utf8'),/Local self-model/);
 })
 
 test('selection rejects unknown contrib and upgrade removes deselected defaults', async()=>{

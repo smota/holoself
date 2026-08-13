@@ -12,8 +12,8 @@ export const VERSION = '0.2.0'
 const START = '<!-- holoself-export-start -->'
 const END = '<!-- holoself-export-end -->'
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
-const DEFAULT_CONTRIBS = ['communication']
 const PROFILE_FILES = {
+
   'identity.md': '# Identity\n\nWrite a short description of who you are.\n',
   'preferences.md': '# Preferences\n\nDescribe how you prefer to work with AI tools.\n',
   'voice.md': '# Voice\n\nDescribe your writing voice.\n',
@@ -69,9 +69,14 @@ function atomicWrite(p, content){
 function json(p,v){ atomicWrite(p,JSON.stringify(v,null,2)+'\n') }
 function configPath(root){return join(root,'config.json')}
 function availableContribs(){
-  const dir=join(PACKAGE_ROOT,'contribs','default')
-  return existsSync(dir) ? readdirSync(dir).filter(name=>name.endsWith('.md')).map(name=>basename(name,'.md')).sort() : []
+  const catalog=join(PACKAGE_ROOT,'contribs','catalog.json')
+  try {
+    const data=JSON.parse(readFileSync(catalog,'utf8'))
+    if(data.schemaVersion!==1 || !Array.isArray(data.contribs)) return []
+    return data.contribs.map(entry=>entry.id).filter(id=>existsSync(join(PACKAGE_ROOT,'contribs','default',`${id}.md`))).sort()
+  } catch { return [] }
 }
+const DEFAULT_CONTRIBS = availableContribs()
 function selectedContribs(o, existing){
   const selected = o.contribs || existing || DEFAULT_CONTRIBS
   const exclude = new Set(o.exclude || [])
@@ -139,7 +144,8 @@ function backupExport(out,target){
   return backup
 }
 function copyData(from,to,force=false){
-  for(const name of ['profile','context','topics']) if(existsSync(join(from,name))) copyTree(join(from,name),join(to,name),force)
+  // PersonalOS paths map into private Holoself paths; reference and me never become public contribs.
+  for(const name of ['profile','context','topics','reference','me']) if(existsSync(join(from,name))) copyTree(join(from,name),join(to,name),force)
 }
 function isHoloselfLink(p, root){
   if(!lstatSync(p).isSymbolicLink()) return false
@@ -161,7 +167,10 @@ export async function run(argv){
   const root=o.root
   if(o.command==='data-root'){console.log(root);return}
   if(o.command==='init'){
-    ensureDir(root); ensureDir(join(root,'context')); ensureDir(join(root,'topics')); ensureDir(join(root,'contribs','local')); ensureDir(join(root,'profile'))
+    ensureDir(root); for(const name of ['context','topics','reference','me','exports']) ensureDir(join(root,name)); ensureDir(join(root,'contribs','local')); ensureDir(join(root,'profile'))
+    if(!existsSync(join(root,'topics','.current'))) atomicWrite(join(root,'topics','.current'),'')
+    if(!existsSync(join(root,'reference','README.md'))) atomicWrite(join(root,'reference','README.md'),'# Private reference\n\nKeep private reference material here. It is never published as a public contrib.\n')
+    if(!existsSync(join(root,'me','contribs.md'))) atomicWrite(join(root,'me','contribs.md'),'# Local self-model extensions\n\nList private contrib paths here when needed.\n')
     for(const [name,body] of Object.entries(PROFILE_FILES)){const p=join(root,'profile',name); if(!existsSync(p))atomicWrite(p,body)}
     for(const [name,body] of Object.entries(CONTEXT_FILES)){const p=join(root,'context',name); if(!existsSync(p))atomicWrite(p,body)}
     const old=readConfig(root); const contribs=selectedContribs(o, old?.selectedContribs)
@@ -182,8 +191,10 @@ export async function run(argv){
     if(!o.from)throw new Error('migrate requires --from <PersonalOS directory>')
     const source=existsSync(join(o.from,'personal'))?join(o.from,'personal'):o.from
     if(!existsSync(source))throw new Error(`source not found: ${source}`)
+    // Existing PersonalOS layout is intentionally mapped into private namespaces.
+    if(!o.dryRun) ensureDir(root)
     if(!await confirm(o,`Copy personal data from ${source} to ${root}?`)){console.log('Cancelled.');return}
-    if(!o.dryRun){ensureDir(root);copyData(source,root,o.force)} console.log(`${o.dryRun?'[dry-run] ':'[ok] '}migrated private data; nothing was published`); return
+    if(!o.dryRun){copyData(source,root,o.force); if(source!==o.from && existsSync(join(o.from,'topics'))) copyTree(join(o.from,'topics'),join(root,'topics'),o.force); const c=readConfig(root); if(c) json(configPath(root),c)} console.log(`${o.dryRun?'[dry-run] ':'[ok] '}migrated private data; nothing was published`); return
   }
   if(o.command==='export'){
     if(!o.target)throw new Error('export requires --target <project>'); if(!existsSync(root))throw new Error('data root missing; run init first')
