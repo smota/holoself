@@ -1,6 +1,6 @@
 # Holoself architecture
 
-Holoself is a local-first, Markdown-first self-context layer. Public code and contribs are shipped in this repository; a user's profile and context live only in their private data root.
+Holoself is a local-first, Markdown-first whole-person context protocol. Public code and contribs ship in this repository; a user's profile and context live only in private data root. See [documentation map](README.md), [whole-person context](concepts/whole-person-context.md), [ownership](concepts/ownership.md), and [filesystem reference](reference/filesystem-layout.md).
 
 ## Data-root layout
 
@@ -17,7 +17,7 @@ Holoself is a local-first, Markdown-first self-context layer. Public code and co
 └── exports/                    # generated, reviewable export staging/output
 ```
 
-`<project>/.holoself/` is a generated project packet or link, not a second source of truth. It contains a bounded snapshot of profile/context and `context-packet.md`, or links directly to the data root for live use. Agents may open a data root directly; direct-root detection takes precedence over project `.holoself`.
+`<project>/.holoself/` supports three explicit modes: legacy generated packet, legacy live directory link, or activated linked-ecosystem metadata directory. Metadata mode contains `link.yaml`, platform-neutral `BOOTSTRAP.md`, activation `runtime.json`, local rebuildable `index/`, reviewable `proposals/`, and non-mutating `reports/`; it never copies canonical self files. Bounded sections in detected agent instructions point to bootstrap without exposing absolute self path. Agents may open a data root directly; direct-root detection takes precedence over project `.holoself`. See [linked ecosystem contract](linked-ecosystem.md).
 
 ## Schema and ownership
 
@@ -25,7 +25,8 @@ Holoself is a local-first, Markdown-first self-context layer. Public code and co
 
 - **User-owned/private:** `profile/`, `context/`, `topics/`, `reference/`, `me/`, `contribs/local/`.
 - **Holoself-managed:** `config.json`, `contribs/default/`, and generated `exports/`.
-- **Project-owned after review:** project instruction files. `export --root-setup` and `link --root-setup` change only bounded Holoself markers and ask for confirmation.
+- **Project-owned after review:** project instruction files and linked-project `.holoself/BOOTSTRAP.md`, `runtime.json`, `index`, `proposals`, and `reports`. `export --root-setup` and legacy `link --root-setup` change only bounded Holoself markers and ask for confirmation.
+- **Self-owned after review:** approved reusable knowledge accepted through proposal workflow, with evidence and provenance.
 - **Public/package-owned:** `contribs/default/`, its catalog/manifest, `skills/`, `docs/`, and source code. No profile, context, topic, or private reference data ships.
 
 Private contribs must be placed under `<data-root>/contribs/local/`. They are not discovered as public contribs, copied into this repository, or included in npm package paths.

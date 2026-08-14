@@ -1,28 +1,12 @@
 # Holoself usage
 
-Holoself stores private Markdown under `~/.holoself` (override with `HOLOSELF_HOME=<path>` or `--data-dir <path>`; the CLI option wins). `--root` remains a compatibility alias. `holoself init` also creates bounded root-level `AGENTS.md` guidance. Open this data root directly in Pi/agents for live loading; linked projects use `.holoself` and never become a second source of truth. Public defaults in the npm package are copied only into `contribs/default`; personal profile, context, topics, and local contribs never ship.
+This compatibility entry point remains for existing links. Current task-oriented documentation:
 
-## skills.sh integration — first option
+- [Quickstart](start/quickstart.md)
+- [First linked project](start/first-linked-project.md)
+- [CLI reference](reference/cli.md)
+- [Link, mount, or export?](guides/link-or-export.md)
+- [Indexing and search](guides/indexing-and-search.md)
+- [Proposal review](concepts/proposal-review.md)
 
-[skills.sh](https://skills.sh/) is the native skill distribution path. It installs Holoself's declarative instructions into supported agents; it does not import your data or run Holoself code.
-
-```bash
-npx skills add smota/holoself --skill holoself
-```
-
-Install the skill before initializing the CLI. Review installer changes before accepting them. The CLI is optional and only manages your local data root when explicitly requested.
-
-## Contrib selection
-
-`init` defaults to all shipped public contribs. `--contribs a,b` selects an explicit allow-list; `--exclude-contrib a,b` removes names from that set. Unknown names fail rather than silently changing behavior. Re-running `init` preserves `createdAt`, updates selection, and removes deselected shipped defaults; files under `contribs/local` remain untouched. `upgrade` refreshes selected public defaults only.
-
-## Safety
-
-- `migrate` confirms in interactive terminals and requires `--yes` in automation. It copies `personal/` (or the supplied source) and never deletes source.
-- Writes use temporary files followed by rename, avoiding partial JSON, packet, or instruction files.
-- `export` copies profile/context into a project-local `.holoself`; review it before sharing or committing.
-- `export --root-setup` separately confirms bounded marker edits in `AGENTS.md`, `CLAUDE.md`, and `CODEX.md`.
-- `link --root-setup` offers the same separately confirmed bounded marker edits while linking `.holoself`; `--dry-run` previews link and instruction changes without writing.
-- `link` creates a junction on Windows or directory symlink elsewhere. Existing non-Holoself paths are never replaced. `unlink` removes only a link pointing at the selected data root.
-
-No command sends network requests, publishes npm, or deploys a website.
+Holoself stores private Markdown under selected data root (`HOLOSELF_HOME`, `--data-dir`, or default `~/.holoself`). Linked projects should normally use metadata `link add`. Legacy `link --target` is a full filesystem mount and exposes more context. No command performs network requests or publication.

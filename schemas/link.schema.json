@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/link.schema.json",
+  "title": "Holoself activated project link",
+  "type": "object",
+  "required": ["self_context"],
+  "additionalProperties": false,
+  "properties": {
+    "self_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "access", "proposals", "index", "default_lens"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "access": { "const": "read" },
+        "proposals": { "enum": ["enabled", "disabled"] },
+        "index": { "const": "local" },
+        "default_lens": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] },
+        "secondary_lenses": { "type": "array", "items": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] }, "uniqueItems": true }
+      }
+    },
+    "project_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "include": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "exclude": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    }
+  }
+}

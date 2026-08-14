@@ -1,7 +1,21 @@
 # Privacy
 
-Holoself is local-first. Profile, context, topics, and local contribs are written under the data root selected by `HOLOSELF_HOME` or `--data-dir` (`--root` remains a compatibility alias). The CLI option wins when both are supplied. They are not included in the package source and no network operation is performed by the CLI.
+Holoself is local-first. CLI performs no network requests, creates no hosted account, and does not publish data.
 
-Treat project exports as private. Review `.holoself/` before committing. `migrate` copies files only after confirmation and never deletes the source. `link` creates a local filesystem link; `unlink` refuses to remove a non-link. `export --root-setup` and `link --root-setup` ask for explicit confirmation before modifying AGENTS.md, CLAUDE.md, or CODEX.md and update only Holoself marker content. Use `--dry-run` to preview changes without writing.
+Private profile, context, topics, reference material, proposals, and local contribs live under data root selected by `HOLOSELF_HOME` or `--data-dir` (`--root` remains compatibility alias). CLI option wins. Personal data is not included in package source.
 
-Public skills and defaults must not contain personal profile or context. Keep private contribs in `<data-root>/contribs/local/`.
+## Linked projects
+
+Recommended `link add --project --self` creates project-local metadata with `access: read`; it does not copy canonical self files. Lenses and visibility metadata filter resolved context. Project proposals cannot change canonical context without explicit approval.
+
+Legacy `link --target` creates filesystem symlink/junction to complete data root. It exposes more private context to project tools and should be used only when full live mounting is intended. `unlink` removes only managed link.
+
+## Generated data
+
+Exports, packets, indexes, reports, and project `.holoself/` content are private by default. Review before committing or sharing. Indexing skips recognized secret-like filenames/content and redacts policy metadata, but pattern detection cannot guarantee finding every secret.
+
+## Mutations
+
+Migration copies only after confirmation and never deletes source. Proposal approval shows evidence, target, affected files, and diff, then requires confirmation. Root setup edits only bounded Holoself markers in instruction files. `--dry-run` previews supported operations; automation uses explicit `--yes`.
+
+See [threat model](docs/trust/threat-model.md) and [safety guarantees](docs/trust/safety-guarantees.md).

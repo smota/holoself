@@ -1,0 +1,64 @@
+# CLI reference
+
+Run from repository checkout as `node bin/holoself.mjs`; after future package installation, executable name is `holoself`.
+
+```text
+holoself <command> [options]
+```
+
+## Core
+
+| Command | Purpose |
+|---|---|
+| `data-root` | Print selected private data root |
+| `init` | Create private data root and starter files |
+| `doctor` | Check runtime and required layout |
+| `validate` | Validate root, links, proposals, visibility, provenance, references, and markers |
+| `migrate --from <dir>` | Copy supported PersonalOS data after confirmation |
+| `export --target <dir>` | Create reviewable project packet snapshot |
+| `upgrade` | Refresh selected public defaults |
+
+Core options: `--data-dir <dir>` (`--root` and `--data-root` aliases), `--contribs a,b`, `--exclude-contrib a,b`, `--yes`, `--force`, `--dry-run`, `--packet-only`, `--root-setup`.
+
+## Linked ecosystem
+
+```text
+link add --project <dir> --self <dir> [--lens general] [--secondary-lenses a,b]
+         [--activate auto|all|<list>] [--platform <id>] [--instructions <file>]
+         [--install-skill auto|project|none] [--no-activate] [--yes]
+link status|activate|deactivate|repair|doctor --project <dir> [--yes]
+link remove --project <dir> --yes
+link setup --project <dir> [--self <dir> --yes]
+context [--project <dir>] [--self <dir>] [--lens <lens>] [--task <text>]
+        [--json | --format packet] [--adapter pi|claude|codex|generic|obsidian]
+        [--snapshot | --output <project-contained-path>] [--yes]
+analyze overlap|conflicts|stale|all --project <dir>
+propose --project <dir> [--claim <text>] [--evidence <text>]
+        [--source-file <relative-path>] [--target-file <relative-path>]
+        [--proposal-type <type>] [--confidence <value>] [--visibility <value>]
+proposals list --project <dir>
+proposals show|approve|reject|defer <id> --project <dir> [--yes]
+index [status|rebuild] --project <dir> [--changed]
+search <query> --project <dir> [--federated] [--lens <lens>]
+```
+
+`context` defaults to packet output unless `--json` is supplied. `--snapshot --yes` writes a reviewed project-only fallback. `index` without subcommand builds/updates index. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation.
+
+## Legacy live mount
+
+```text
+link --target <project> [--root-setup] [--dry-run] [--force] [--yes]
+unlink --target <project> [--dry-run] [--yes]
+```
+
+This is a filesystem symlink/junction mechanism, not metadata project link. It exposes complete selected data root to project tools. Retained for compatibility; prefer `link add` for new integrations.
+
+## General behavior
+
+- Unknown options fail.
+- Missing required values fail.
+- Interactive destructive/sensitive actions ask for typed confirmation; automation needs `--yes`.
+- CLI performs no network requests.
+- Paths resolve to absolute local paths.
+
+Authoritative short form: `node bin/holoself.mjs --help`.

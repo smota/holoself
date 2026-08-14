@@ -7,8 +7,9 @@ import { join, resolve, relative, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
+import { ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
 
-export const VERSION = '0.5.0'
+export const VERSION = '0.6.0'
 const START = '<!-- holoself-export-start -->'
 const END = '<!-- holoself-export-end -->'
 const ROOT_START = '<!-- holoself-root-start -->'
@@ -46,15 +47,42 @@ function parse(args){
     const a=args[i]
     if(a==='--root'||a==='--data-root'||a==='--data-dir') o.root=resolve(requiredValue(args,i++,a))
     else if(a==='--target') o.target=resolve(requiredValue(args,i++,a))
+    else if(a==='--project') o.project=resolve(requiredValue(args,i++,a))
+    else if(a==='--self') o.self=resolve(requiredValue(args,i++,a))
     else if(a==='--from') o.from=resolve(requiredValue(args,i++,a))
+    else if(a==='--lens') o.lens=requiredValue(args,i++,a)
+    else if(a==='--secondary-lenses') o.secondaryLenses=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean)
+    else if(a==='--task') o.task=requiredValue(args,i++,a)
+    else if(a==='--format') o.format=requiredValue(args,i++,a)
+    else if(a==='--output') o.output=resolve(requiredValue(args,i++,a))
+    else if(a==='--adapter') o.adapter=requiredValue(args,i++,a)
+    else if(a==='--activate') o.activate=requiredValue(args,i++,a)
+    else if(a==='--platform') { o.platforms=o.platforms||[]; o.platforms.push(requiredValue(args,i++,a)) }
+    else if(a==='--instructions') o.instructions=requiredValue(args,i++,a)
+    else if(a==='--install-skill') o.installSkill=requiredValue(args,i++,a)
+    else if(a==='--project-include') { o.projectContext=o.projectContext||{};o.projectContext.include=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean) }
+    else if(a==='--project-exclude') { o.projectContext=o.projectContext||{};o.projectContext.exclude=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean) }
+    else if(a==='--claim') o.claim=requiredValue(args,i++,a)
+    else if(a==='--evidence') o.evidence=requiredValue(args,i++,a)
+    else if(a==='--target-file') o.targetFile=requiredValue(args,i++,a)
+    else if(a==='--proposal-type'||a==='--type') o.proposalType=requiredValue(args,i++,a)
+    else if(a==='--confidence') o.confidence=requiredValue(args,i++,a)
+    else if(a==='--visibility') o.visibility=requiredValue(args,i++,a)
+    else if(a==='--source-file') { o.sourceFiles=o.sourceFiles||[]; o.sourceFiles.push(requiredValue(args,i++,a)) }
     else if(a==='--contribs') o.contribs=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean)
     else if(a==='--exclude-contrib') o.exclude=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean)
     else if(a==='--yes'||a==='--confirm') o.yes=true
+    else if(a==='--no-activate') o.noActivate=true
     else if(a==='--root-setup') o.rootSetup=true
     else if(a==='--force') o.force=true
     else if(a==='--dry-run') o.dryRun=true
     else if(a==='--packet-only') o.packetOnly=true
+    else if(a==='--snapshot') o.snapshot=true
+    else if(a==='--json') o.json=true
+    else if(a==='--changed') o.changed=true
+    else if(a==='--federated') o.federated=true
     else if(a==='--help'||a==='-h') o.help=true
+    else if(a.startsWith('-')) throw new Error(`unknown option: ${a}`)
     else positional.push(a)
   }
   o.root=o.root||defaultRoot(); o.command=positional[0]; o.args=positional.slice(1)
@@ -156,6 +184,10 @@ function copyMarkdownTree(source,dest){
   }
 }
 function pathExists(p){ try { lstatSync(p); return true } catch { return false } }
+function isEcosystemMetadata(out){
+  if(!pathExists(out)||lstatSync(out).isSymbolicLink()||!lstatSync(out).isDirectory())return false
+  return pathExists(join(out,'link.yaml'))||['index','proposals','reports'].some(name=>pathExists(join(out,name)))
+}
 function backupExport(out,target){
   if(!pathExists(out)) return null
   if(lstatSync(out).isSymbolicLink()) throw new Error(`${out} is a symlink; refusing to refresh it`)
@@ -258,12 +290,13 @@ function syncPublicDefaults(root, ids, dryRun=false){
     else if(!dryRun && existsSync(p)) rmSync(p,{force:true})
   }
 }
-function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCommands:\n  data-root                 Print private data root\n  init [--contribs a,b]     Create private data root and starter files\n  doctor                    Check installation and data root\n  validate                 Validate private data root and generated markers\n  migrate --from <dir>     Import PersonalOS data without publishing it\n  export --target <dir>    Export reviewable packet to a project\n  link --target <dir>      Link project .holoself to data root\n                            Add --root-setup to inject bounded loading instructions\n  unlink --target <dir>    Remove only a Holoself-managed link\n  upgrade                  Refresh selected public defaults\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nOptions: --data-dir <dir> --target <dir> --yes --dry-run --force\n`) }
+function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init | doctor | validate | migrate | export | upgrade\n  link --target <dir>       Legacy live data-root junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  link add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--json]\n  analyze overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n  proposals list|show|approve|reject|defer [id] --project <dir>\n  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill auto|project|none --no-activate.\nSafety confirmations: --yes. Runtime adapters: --adapter pi|claude|codex|generic|obsidian.\n`) }
 async function confirm(o,message){if(o.yes)return true; if(!input.isTTY||!output.isTTY) throw new Error(`${message} Re-run with --yes to confirm.`); const rl=createInterface({input,output}); try { const answer=await rl.question(`${message} Type "yes" to continue: `); return answer.trim().toLowerCase()==='yes' } finally { rl.close() }}
 export async function run(argv){
   const o=parse(argv); if(o.help||!o.command){help();return}
   const root=o.root
   if(o.command==='data-root'){console.log(root);return}
+  if(await runEcosystem(o)) return
   if(o.command==='init'){
     ensureDir(root); for(const name of ['context','topics','reference','me','exports']) ensureDir(join(root,name)); ensureDir(join(root,'contribs','local')); ensureDir(join(root,'profile'))
     if(!existsSync(join(root,'topics','.current'))) atomicWrite(join(root,'topics','.current'),'')
@@ -293,7 +326,8 @@ export async function run(argv){
     for(const name of Object.keys(CONTEXT_FILES))if(!existsSync(join(root,'context',name)))errors.push(`missing context/${name}`)
     const rootAgentsError=markerError(join(root,'AGENTS.md'),ROOT_START,ROOT_END); if(rootAgentsError)errors.push(rootAgentsError)
     for(const file of ['CLAUDE.md','CODEX.md']) { const error=markerError(join(root,file)); if(error)errors.push(error) }
-    for(const e of errors)console.error(`[!!] ${e}`); if(errors.length){process.exitCode=1}else console.log(`[ok] ${root} is valid`); return
+    errors.push(...ecosystemValidationErrors(root,o.project))
+    for(const e of [...new Set(errors)])console.error(`[!!] ${e}`); if(errors.length){process.exitCode=1}else console.log(`[ok] ${root} is valid`); return
   }
   if(o.command==='migrate'){
     if(!o.from)throw new Error('migrate requires --from <PersonalOS directory>')
@@ -318,6 +352,7 @@ export async function run(argv){
   if(o.command==='export'){
     if(!o.target)throw new Error('export requires --target <project>'); if(!existsSync(root))throw new Error('data root missing; run init first')
     const out=join(o.target,'.holoself'); let backup=null
+    if(isEcosystemMetadata(out))throw new Error(`${out} contains linked-ecosystem metadata; refusing legacy export overwrite`)
     if(!o.dryRun){
       ensureDir(o.target)
       const stage=join(o.target,`.holoself-tmp-${process.pid}-${tempCounter++}`)

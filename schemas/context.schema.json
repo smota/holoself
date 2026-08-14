@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/context.schema.json",
+  "title": "Holoself resolved context",
+  "type": "object",
+  "required": ["self", "lens", "project", "sources", "restrictions", "warnings", "proposals"],
+  "additionalProperties": false,
+  "properties": {
+    "self": { "type": "object" },
+    "lens": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] },
+    "project": { "type": "object" },
+    "task": { "type": ["string", "null"] },
+    "sources": { "type": "array" },
+    "restrictions": { "type": "array" },
+    "warnings": { "type": "array" },
+    "proposals": { "type": "array" }
+  }
+}

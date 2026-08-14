@@ -1,70 +1,134 @@
 # Holoself
 
-Holoself is a local, reviewable self-context layer for AI tools. Your data stays in a private data root; public defaults and the `skills/holoself/SKILL.md` instruction are separate.
+**Stop re-explaining yourself to every AI tool.**
 
-## Install the skill first
+Holoself keeps approved personal context in readable local files, links it to independent projects through task-specific lenses, and asks before project discoveries become durable knowledge.
 
-Holoself's first integration is its declarative skill. Install it with [skills](https://skills.sh/), which handles native installation for supported agents:
+Plain language: **your context, under your control, reusable across tools and projects.**
+
+Technical description: **an open-source, local-first whole-person context protocol built on Markdown, project links, lenses, provenance, deterministic local indexing, and explicit proposal review.**
+
+> Projects own their artifacts. Self owns approved reusable personal knowledge.
+
+## Why Holoself
+
+AI app memory is often opaque and tool-bound. Profile files are easy to duplicate and let drift. Central personal vaults tend to absorb project work that belongs elsewhere. Holoself separates these concerns:
+
+```text
+canonical self context
+        ↓ lens + privacy policy
+independent linked project
+        ↓ evidence-backed discovery
+      proposal
+        ↓ explicit review
+approved reusable knowledge
+```
+
+- **One whole person, many lenses.** Career, publishing, technical, leadership, interview, private, and general lenses change relevance and disclosure—not identity.
+- **Independent projects.** Applications, research, posts, calendars, and execution notes stay with their projects.
+- **Review before memory.** Projects propose; only explicit approval changes canonical self context.
+- **Inspectability.** Markdown is source of truth. Generated packets and indexes are disposable.
+- **Provenance.** Context and accepted claims identify their source files.
+- **Local by default.** CLI performs no network requests and requires no hosted account.
+
+## Product status
+
+| Capability | Status |
+|---|---|
+| Private Markdown data root | Stable |
+| Project metadata links and lenses | Available |
+| Context packets and JSON adapters | Available |
+| Proposal/review workflow | Available |
+| Deterministic local index and federated search | Available |
+| Overlap/conflict/stale reports | Available |
+| Legacy packet export and filesystem junction | Supported compatibility path |
+| SQLite/FTS acceleration | Planned, optional |
+| Embedding/vector search | Planned, optional |
+| Hosted sync or account | Not provided |
+| npm registry package | Not published yet |
+
+## Start here
+
+Requirements: Node.js 20+ and a private location for personal context.
+
+```bash
+git clone https://github.com/smota/holoself.git
+cd holoself
+node bin/holoself.mjs init --data-dir C:/private/my-self
+node bin/holoself.mjs doctor --data-dir C:/private/my-self
+node bin/holoself.mjs validate --data-dir C:/private/my-self
+```
+
+Install the declarative agent skill separately when useful:
 
 ```bash
 npx skills add smota/holoself --skill holoself
 ```
 
-The skill is instruction-only: it explains how agents load your Holoself context, select public and private contribs, use project packets, and request approval before durable writes.
+The skill contains instructions, not personal data. See [Quickstart](docs/start/quickstart.md) and [Concepts in five minutes](docs/start/concepts-in-five-minutes.md).
 
-## Run the local CLI
-
-The npm package is not published yet. Run it directly from this repository:
-
-Use the repository directly by cloning it (GitHub git specs do not reliably expose npm `bin` commands through `npx`):
+## Link an independent project
 
 ```bash
-git clone https://github.com/smota/holoself.git
-cd holoself
-node bin/holoself.mjs init
-node bin/holoself.mjs doctor
-node bin/holoself.mjs validate
+node bin/holoself.mjs link add \
+  --project C:/work/my-project \
+  --self C:/private/my-self \
+  --lens career
+
+node bin/holoself.mjs context \
+  --project C:/work/my-project \
+  --task "prepare interview" \
+  --json
 ```
 
-Or run the executable locally from an existing clone:
+`link add` writes project-local metadata under `.holoself/`, detects agent platforms, generates `.holoself/BOOTSTRAP.md`, and injects bounded startup pointers into detected instruction files after confirmation. It does not copy canonical self files. See [Activated project links](docs/guides/activated-links.md).
+
+### Two different link mechanisms
+
+- **Recommended protocol:** `link add|status|remove|setup|activate|deactivate|repair|doctor --project ...` creates `.holoself/link.yaml`, activates detected agent instructions, and maintains local index, proposal, and report directories.
+- **Legacy live mount:** `link --target ...` creates a filesystem symlink/junction from project `.holoself` to the complete data root. It remains supported for compatibility but is not the default for new linked projects. Think of it as a **mount**, not a project-link configuration.
+
+Never substitute one mechanism for the other without reviewing privacy exposure. See [Link or export?](docs/guides/link-or-export.md).
+
+## Common workflows
 
 ```bash
-git clone https://github.com/smota/holoself.git
-cd holoself
-node bin/holoself.mjs init
+# Inspect project context through a lens
+node bin/holoself.mjs context --project C:/work/my-project --lens career --format packet --adapter claude
+
+# Produce non-mutating ownership/conflict recommendations
+node bin/holoself.mjs analyze all --project C:/work/my-project
+
+# Propose reusable knowledge, then review it
+node bin/holoself.mjs propose --project C:/work/my-project --claim "..." --evidence "..." --source-file notes.md
+node bin/holoself.mjs proposals show <id> --project C:/work/my-project
+node bin/holoself.mjs proposals approve <id> --project C:/work/my-project --yes
+
+# Build and query disposable local indexes
+node bin/holoself.mjs index rebuild --project C:/work/my-project
+node bin/holoself.mjs search "regulated AI" --project C:/work/my-project --federated
 ```
 
-When `holoself-ai` is published, the equivalent package command will be:
+Approval prints target, evidence, affected files, and proposed diff before writing. Automation must pass `--yes` explicitly.
 
-```bash
-npx holoself-ai init
-```
+## Documentation
 
-Find storage with `holoself data-root`. Default is `~/.holoself`; override with `HOLOSELF_HOME=<path>` or `--data-dir <path>` (CLI option wins). `--root` is retained as a compatibility alias. Public contrib defaults ship with Holoself and are available by default. Select or exclude them explicitly:
-
-```bash
-holoself init --contribs communication
-holoself init --exclude-contrib communication
-```
-
-Private contribs belong only in `<data-root>/contribs/local/` and are never copied into this repository or published package.
-
-## Commands
-
-- `init`, `doctor`, `validate`: create and check local data.
-- `migrate --from <PersonalOS>`: preview or copy personal data after confirmation; source remains untouched. Add `--dry-run` for a path/count report; apply writes `migration-manifest.json`. Existing user files are preserved unless `--force`.
-- `export --target <project>`: write a project packet. Add `--root-setup` for explicit confirmation before bounded marker injection.
-- `link` / `unlink`: manage a clearly-owned `.holoself` junction or symlink. Add `link --root-setup` to separately confirm bounded loading instructions in project `AGENTS.md`, `CLAUDE.md`, and `CODEX.md`; add `--dry-run` to preview both operations.
-- `upgrade`: refresh shipped public defaults without touching profile/context.
-
-Exported `.holoself` content is private by default. Review before committing. No command sends data, publishes npm, or deploys a site.
+- [Documentation map](docs/README.md)
+- [Whole-person context](docs/concepts/whole-person-context.md)
+- [Ownership](docs/concepts/ownership.md)
+- [Lenses and privacy](docs/concepts/lenses-and-privacy.md)
+- [Proposal review](docs/concepts/proposal-review.md)
+- [CLI reference](docs/reference/cli.md)
+- [Threat model](docs/trust/threat-model.md)
+- [Status and roadmap](docs/contributing/status-and-roadmap.md)
+- [Privacy policy](PRIVACY.md)
 
 ## Development
 
 ```bash
 npm test
+npm run audit:package
 node bin/holoself.mjs --help
-node bin/holoself.mjs migrate --from <PersonalOS-directory> --data-dir <private-path> --dry-run
 ```
 
-See [PRIVACY.md](PRIVACY.md), [docs/architecture.md](docs/architecture.md), and [docs/migration.md](docs/migration.md). Public contribs are catalogued in [`contribs/catalog.json`](contribs/catalog.json); shipped defaults are synthetic/public only. Private reference, me extensions, profile, context, topics, and notes stay in the local data root.
+Public package paths contain code, schemas, templates, synthetic defaults, and documentation only. Private profile, context, topics, reference material, and local contribs must remain outside this repository.

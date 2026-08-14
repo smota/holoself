@@ -2,6 +2,16 @@
 
 All notable Holoself releases are documented here.
 
+## [0.6.0] — 2026-08-14
+
+- Adds activated read-only project links: `link add` detects agent platforms, generates a neutral bootstrap/runtime manifest, injects bounded startup pointers after confirmation, and supports activate/deactivate/repair/doctor lifecycle commands.
+- Adds lens/task/privacy-aware context resolution with provenance and Pi, Claude Code, Codex, generic, and Obsidian packet adapters.
+- Adds non-mutating overlap/conflict/stale reports and confirmed proposal approval/rejection/defer workflow.
+- Adds local deterministic indexing, changed/rebuild/status commands, and provenance-preserving federated search. Markdown remains source of truth; SQLite/FTS remains optional acceleration, not dependency.
+- Adds visibility, link, proposal, provenance, duplicate-claim, broken-reference, and generated-view validation plus public JSON schemas.
+- Security hardening validates proposal UUIDs/containment/schema/provenance, uses realpath containment for activation writes, preflights and transactionally rolls back adapter changes, protects unmanaged skill shims, detects managed-block drift, cleans markers despite missing runtime metadata, fails closed on malformed control/canonical YAML, conservatively salvages project privacy fields, excludes agent/config/generated trees, preserves metadata collisions, blocks legacy export overwrite, and applies privacy policy to index/search.
+- Adds Antigravity activation through `ANTIGRAVITY.md` detection.
+
 ## [0.5.0] — 2026-08-13
 
 Holoself v0.5.0 establishes the local-first architecture and public distribution boundary for the first release.
@@ -42,4 +52,5 @@ Holoself v0.5.0 establishes the local-first architecture and public distribution
 - Test suite covers initialization, validation, migration safeguards, export refresh and packet-only mode, link safety, contrib selection, and private Markdown boundaries.
 - Known limitations: Holoself does not automatically install skills, synchronize data, or provide remote storage; project exports require manual review and each project must be exported separately.
 
+[0.6.0]: https://github.com/smota/holoself/releases/tag/v0.6.0
 [0.5.0]: https://github.com/smota/holoself/releases/tag/v0.5.0
