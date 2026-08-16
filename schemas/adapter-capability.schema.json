@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/adapter-capability.schema.json",
+  "title": "Holoself startup adapter capability evidence",
+  "type": "object",
+  "required": ["delivery", "discovery", "tested_product", "tested_version", "evidence", "last_verified"],
+  "additionalProperties": true,
+  "properties": {
+    "delivery": { "enum": ["file", "skill", "manual-project-config", "snapshot"] },
+    "discovery": { "enum": ["verified", "configured", "generated-only", "unsupported"] },
+    "tested_product": { "type": "string", "minLength": 1 },
+    "tested_version": { "type": ["string", "null"] },
+    "evidence": { "type": "string", "minLength": 1 },
+    "last_verified": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

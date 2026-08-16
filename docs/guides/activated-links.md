@@ -10,7 +10,7 @@ node bin/holoself.mjs link add --project C:/work/project --self C:/private/self 
 
 By default, Holoself detects platform evidence, always installs the generic `AGENTS.md` fallback, writes `.holoself/BOOTSTRAP.md` and `runtime.json`, and injects bounded pointers into detected instructions. Personal paths remain in private `link.yaml`; injected instructions contain no absolute self path.
 
-Supported adapter ids: `agents`, `claude`, `codex`, `pi`, `agy`, `antigravity`, `gemini`, `copilot`, `cursor`, and `windsurf`. Antigravity is detected through `ANTIGRAVITY.md` or `.antigravity/`.
+Configurable startup adapter ids: `agents`, `claude`, `codex`, `pi`, `agy`, `antigravity`, `gemini`, `copilot`, `cursor`, and `windsurf`. Antigravity evidence is detected through `ANTIGRAVITY.md` or `.antigravity/`. Generation is not proof of product discovery: activation plans and runtime records expose delivery, discovery, tested-product, version, evidence, and verification fields. See [runtime adapters](runtime-adapters.md).
 
 ```bash
 # Preview through the interactive confirmation
@@ -38,7 +38,7 @@ holoself link add --project . --self <path> --yes \
 
 ## Sandboxed platforms
 
-Platforms that cannot access external paths cannot use a live link. Generate a reviewed snapshot explicitly:
+Platforms that cannot access external paths—including many Claude Desktop/Cowork and ChatGPT/Cowork configurations—cannot use a live metadata link. Generate a reviewed snapshot explicitly:
 
 ```bash
 holoself context --project . --snapshot --adapter generic --yes

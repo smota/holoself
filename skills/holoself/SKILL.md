@@ -96,7 +96,9 @@ When project instructions or `.holoself/BOOTSTRAP.md` indicate an activated link
 - Treat canonical root, project `.holoself/`, packets, proposals, reports, and indexes as private by default; review before committing or sharing.
 - Do not write durable context silently. Propose change, name target file, provide evidence/provenance, and request approval.
 - Do not infer sensitive identity or preferences as facts.
-- Apply declared visibility, sensitivity, field restrictions, and selected lens before output.
+- Apply declared `access_lenses` before reading. Treat `disclosure` as separate publication permission, `sensitivity` as handling classification, and `document_role` as policy/evidence/content behavior.
+- Readable or linked context is never publication-approved by implication. Public reuse requires `disclosure: publish-approved`; readable internal policy may still govern publishing output.
+- Treat legacy `visibility`/`public_safe` conservatively during migration. Canonical documents with neither `access_lenses` nor legacy `visibility` fail closed.
 - Secret-pattern filtering is defense in depth, not guarantee. Keep indexes/private packets private and review output.
 - Keep public skill instructions separate from private data.
 - Public contribs are optional reference methods selected in `config.json`; private contribs belong only under canonical root `contribs/local/`.

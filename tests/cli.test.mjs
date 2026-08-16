@@ -28,7 +28,19 @@ test('export packet and explicit root setup marker', async()=>{
 test('migrate maps private reference and me without deleting source', async()=>{
   const source=await temp(), root=await temp(); await mkdir(join(source,'personal','profile'),{recursive:true}); await mkdir(join(source,'personal','reference'),{recursive:true}); await mkdir(join(source,'personal','me'),{recursive:true}); await writeFile(join(source,'personal','profile','identity.md'),'private note'); await writeFile(join(source,'personal','reference','private.md'),'private reference'); await writeFile(join(source,'personal','me','private.md'),'private me')
   await run(['init','--root',root]); await run(['migrate','--root',root,'--from',source,'--yes']);
-  assert.equal(await readFile(join(root,'profile','identity.md'),'utf8'),'private note'); assert.equal(await readFile(join(root,'reference','private.md'),'utf8'),'private reference'); assert.equal(await readFile(join(root,'me','private.md'),'utf8'),'private me'); assert.equal(await readFile(join(source,'personal','profile','identity.md'),'utf8'),'private note')
+  const identity=await readFile(join(root,'profile','identity.md'),'utf8'); assert.match(identity,/access_lenses: \[private\]/); assert.match(identity,/sensitivity: restricted/); assert.match(identity,/private note$/)
+  assert.equal(await readFile(join(root,'reference','private.md'),'utf8'),'private reference'); assert.equal(await readFile(join(root,'me','private.md'),'utf8'),'private me'); assert.equal(await readFile(join(source,'personal','profile','identity.md'),'utf8'),'private note')
+})
+
+test('untagged canonical migration validates and resolves through private context',async()=>{
+  const source=await temp(),root=await temp(),project=await temp();await mkdir(join(source,'profile'),{recursive:true});await writeFile(join(source,'profile','identity.md'),'migrationprivatecontext marker')
+  await run(['init','--root',root]);const migrationOutput=await capture(()=>run(['migrate','--root',root,'--from',source,'--yes']))
+  assert.match(migrationOutput,/tagged: 1 \(profile\/identity\.md\)/)
+  assert.match(await capture(()=>run(['validate','--root',root])),/is valid/)
+  await run(['link','add','--project',project,'--self',root,'--lens','private','--yes'])
+  const data=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','private','--json'])))
+  const identity=data.self.documents.find(document=>document.path==='profile/identity.md')
+  assert.ok(identity);assert.match(identity.content,/migrationprivatecontext marker/);assert.equal(identity.metadata.sensitivity,'restricted');assert.equal(identity.metadata.publication_allowed,false)
 })
 
 test('link and unlink only manage symlink with explicit confirmation', async()=>{
@@ -104,7 +116,7 @@ test('migration preserves conflicts, supports force, and writes manifest', async
   const source=await temp(), root=await temp(); await mkdir(join(source,'profile'),{recursive:true}); await writeFile(join(source,'profile','identity.md'),'from source'); await run(['init','--data-dir',root]); await writeFile(join(root,'profile','identity.md'),'user authored')
   const output=await capture(()=>run(['migrate','--data-dir',root,'--from',source,'--yes'])); assert.match(output,/preserved: 1/); assert.match(output,/conflicts: 1/); assert.equal(await readFile(join(root,'profile','identity.md'),'utf8'),'user authored')
   const manifest=JSON.parse(await readFile(join(root,'migration-manifest.json'),'utf8')); assert.equal(manifest.schemaVersion,1); assert.equal(manifest.tool,'holoself'); assert.equal(manifest.sourceRoot,source); assert.equal(manifest.targetRoot,root); assert.ok(manifest.timestamp); assert.deepEqual(manifest.files.conflicts,['profile/identity.md'])
-  await run(['migrate','--data-dir',root,'--from',source,'--yes','--force']); assert.equal(await readFile(join(root,'profile','identity.md'),'utf8'),'from source')
+  await run(['migrate','--data-dir',root,'--from',source,'--yes','--force']); const migrated=await readFile(join(root,'profile','identity.md'),'utf8');assert.match(migrated,/access_lenses: \[private\]/);assert.match(migrated,/from source$/)
   assert.equal(await readFile(join(source,'profile','identity.md'),'utf8'),'from source')
 })
 

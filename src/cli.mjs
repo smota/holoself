@@ -15,25 +15,26 @@ const END = '<!-- holoself-export-end -->'
 const ROOT_START = '<!-- holoself-root-start -->'
 const ROOT_END = '<!-- holoself-root-end -->'
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
+const metadata=(access,disclosure='internal-only',sensitivity='personal',role='content')=>`---\naccess_lenses: [${access.join(', ')}]\ndisclosure: ${disclosure}\nsensitivity: ${sensitivity}\ndocument_role: ${role}\n---\n`
+const ALL_LENSES=['general','career','publishing','technical','leadership','interview','private']
 const PROFILE_FILES = {
-
-  'identity.md': '# Identity\n\nWrite a short description of who you are.\n',
-  'preferences.md': '# Preferences\n\nDescribe how you prefer to work with AI tools.\n',
-  'voice.md': '# Voice\n\nDescribe your writing voice.\n',
-  'thinking.md': '# Thinking\n\nDescribe how you reason and make decisions.\n',
-  'work-context.md': '# Work context\n\nDescribe current work and priorities.\n',
-  'change.md': '# Change compass\n\nDescribe current goals and patterns only if useful.\n'
+  'identity.md': metadata(ALL_LENSES)+'# Identity\n\nWrite a short description of who you are.\n',
+  'preferences.md': metadata(ALL_LENSES,'internal-only','personal','policy')+'# Preferences\n\nDescribe how you prefer to work with AI tools.\n',
+  'voice.md': metadata(ALL_LENSES,'internal-only','personal','policy')+'# Voice\n\nDescribe your writing voice.\n',
+  'thinking.md': metadata(ALL_LENSES,'internal-only','personal','policy')+'# Thinking\n\nDescribe how you reason and make decisions.\n',
+  'work-context.md': metadata(ALL_LENSES)+'# Work context\n\nDescribe current work and priorities.\n',
+  'change.md': metadata(ALL_LENSES,'internal-only','personal','policy')+'# Change compass\n\nDescribe current goals and patterns only if useful.\n'
 }
 const CONTEXT_FILES = {
-  'projects.md': '# Projects\n\nList active projects and their context.\n',
-  'people.md': '# People\n\nRecord useful relationship context with care.\n',
-  'decisions.md': '# Decisions\n\nRecord decisions, rationale, and date.\n',
-  'story-bank.md': '# Story bank\n\nKeep evidence-backed stories and examples.\n',
-  'career.md': '# Career\n\nKeep career context and evidence.\n',
-  'admin.md': '# Admin\n\nKeep relevant logistics and recurring details.\n',
-  'leadership.md': '# Leadership\n\nKeep leadership and reflection context.\n',
-  'technical.md': '# Technical\n\nKeep technical context, constraints, and preferences.\n',
-  'publishing.md': '# Publishing\n\nKeep publishing goals, audiences, and format preferences.\n'
+  'projects.md': metadata(['general','career','technical','leadership','private'])+'# Projects\n\nList active projects and their context.\n',
+  'people.md': metadata(['general','leadership','private'])+'# People\n\nRecord useful relationship context with care.\n',
+  'decisions.md': metadata(['general','career','technical','leadership','private'])+'# Decisions\n\nRecord decisions, rationale, and date.\n',
+  'story-bank.md': metadata(['general','career','publishing','leadership','interview','private'],'review-required','personal','evidence')+'# Story bank\n\nKeep evidence-backed stories and examples.\n',
+  'career.md': metadata(['general','career','publishing','interview','private'],'review-required','personal','evidence')+'# Career\n\nKeep career context and evidence.\n',
+  'admin.md': metadata(['general','private'])+'# Admin\n\nKeep relevant logistics and recurring details.\n',
+  'leadership.md': metadata(['general','career','publishing','leadership','interview','private'],'review-required')+'# Leadership\n\nKeep leadership and reflection context.\n',
+  'technical.md': metadata(['general','career','publishing','technical','interview','private'],'review-required')+'# Technical\n\nKeep technical context, constraints, and preferences.\n',
+  'publishing.md': metadata(['general','publishing','private'],'internal-only','personal','policy')+'# Publishing\n\nKeep publishing goals, audiences, and format preferences.\n'
 }
 function defaultRoot(){ return process.env.HOLOSELF_HOME || join(homedir(), '.holoself') }
 function requiredValue(args, i, flag){
@@ -199,7 +200,13 @@ function backupExport(out,target){
 const MIGRATION_ROOTS = new Set(['profile','context','topics','reference','me'])
 const SENSITIVE_ROOTS = new Set(['reference','me'])
 const GENERATED_ROOTS = new Set(['exports'])
+const MIGRATED_CANONICAL_METADATA=metadata(['private'],'internal-only','restricted','content')
 function migrationRelative(root, file){ return relative(root,file).replaceAll('\\','/') }
+function migratedCanonicalMarkdown(relativePath){return /^(?:profile|context|topics)\/.+\.md$/i.test(relativePath)}
+function migrationContent(item,destination){
+  const content=readFileSync(item.path,'utf8').replace(/^\uFEFF/,'')
+  return migratedCanonicalMarkdown(destination)&&!content.startsWith('---\n')&&!content.startsWith('---\r\n')?MIGRATED_CANONICAL_METADATA+content:content
+}
 function migrationFiles(root, prefix='', output=[]){
   if(!existsSync(root)) return output
   const walk=(dir)=>{ for(const entry of readdirSync(dir,{withFileTypes:true})){
@@ -220,7 +227,7 @@ function migrationPlan(source, target, sourceInput, force=false){
   const report={
     sourceRoot:source, sourceInput, targetRoot:target, dryRun:false,
     detectedFiles:detected.map(x=>x.relative).sort(), destinationMappings:[],
-    copied:[], preserved:[], conflicts:[], skipped:[], sensitive:[], generated:[], _detected:detected
+    copied:[], preserved:[], conflicts:[], skipped:[], sensitive:[], generated:[], tagged:[], _detected:detected
   }
   for(const item of detected){
     const top=item.relative.split('/')[0]
@@ -238,18 +245,22 @@ function migrationPlan(source, target, sourceInput, force=false){
     if(force || (destStat.isFile() && Object.values({...PROFILE_FILES,...CONTEXT_FILES}).includes(readFileSync(dest,'utf8')))) report.copied.push(destination)
     else { report.preserved.push(destination); report.conflicts.push(destination) }
   }
+  report.tagged=report.destinationMappings.filter(mapping=>report.copied.includes(mapping.destination)).filter(mapping=>{
+    const item=detected.find(candidate=>candidate.relative===mapping.source),content=readFileSync(item.path,'utf8').replace(/^\uFEFF/,'')
+    return migratedCanonicalMarkdown(mapping.destination)&&!content.startsWith('---\n')&&!content.startsWith('---\r\n')
+  }).map(mapping=>mapping.destination)
   report.detectedFiles.sort(); report.destinationMappings.sort((a,b)=>a.destination.localeCompare(b.destination))
-  for(const key of ['copied','preserved','conflicts','skipped','sensitive','generated']) report[key].sort()
+  for(const key of ['copied','preserved','conflicts','skipped','sensitive','generated','tagged']) report[key].sort()
   report.detectedCount=report.detectedFiles.length
-  report.summary={detected:report.detectedCount,mapped:report.destinationMappings.length,copied:report.copied.length,preserved:report.preserved.length,conflicts:report.conflicts.length,skipped:report.skipped.length,sensitive:report.sensitive.length,generated:report.generated.length}
-  report.files={detected:report.detectedFiles,copied:report.copied,preserved:report.preserved,conflicts:report.conflicts,skipped:report.skipped,sensitive:report.sensitive,generated:report.generated}
+  report.summary={detected:report.detectedCount,mapped:report.destinationMappings.length,copied:report.copied.length,preserved:report.preserved.length,conflicts:report.conflicts.length,skipped:report.skipped.length,sensitive:report.sensitive.length,generated:report.generated.length,tagged:report.tagged.length}
+  report.files={detected:report.detectedFiles,copied:report.copied,preserved:report.preserved,conflicts:report.conflicts,skipped:report.skipped,sensitive:report.sensitive,generated:report.generated,tagged:report.tagged}
   return {report,detected}
 }
 function applyMigration(plan, target){
   for(const mapping of plan.destinationMappings){
     if(!plan.copied.includes(mapping.destination)) continue
     const item=plan._detected.find(x=>x.relative===mapping.source); const dest=join(target,mapping.destination)
-    atomicWrite(dest,readFileSync(item.path))
+    atomicWrite(dest,migrationContent(item,mapping.destination))
   }
 }
 function migrationManifest(report){
@@ -273,7 +284,7 @@ function printMigrationReport(report, manifestPath=null){
   console.log(`target root: ${report.targetRoot}`)
   console.log(`detected files: ${report.detectedCount}`)
   for(const mapping of report.destinationMappings) console.log(`mapping: ${mapping.source} -> ${mapping.destination}`)
-  for(const key of ['copied','preserved','conflicts','skipped','sensitive','generated']) console.log(`${key}: ${report[key].length}${report[key].length?` (${report[key].join(', ')})`:''}`)
+  for(const key of ['copied','preserved','conflicts','skipped','sensitive','generated','tagged']) console.log(`${key}: ${report[key].length}${report[key].length?` (${report[key].join(', ')})`:''}`)
   console.log(`summary: ${JSON.stringify(report.summary)}`)
   if(manifestPath) console.log(`manifest: ${manifestPath}`)
 }

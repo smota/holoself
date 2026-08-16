@@ -2,6 +2,13 @@
 
 All notable Holoself releases are documented here.
 
+## Unreleased
+
+- Separates read access (`access_lenses`), public reuse (`disclosure`), handling classification (`sensitivity`), and policy/evidence/content behavior (`document_role`). Untagged canonical documents fail closed; legacy visibility metadata remains conservatively supported.
+- Ensures publishing resolution includes governing policy while excluding unapproved evidence and employer-confidential non-policy content. Context packets and search results expose publication eligibility explicitly.
+- Replaces blanket native-adapter claims with capability evidence fields and clarifies startup adapters, packet formatters, metadata links, snapshots, and legacy live mounts.
+- Adds canonical metadata and adapter capability schemas plus end-to-end privacy/capability tests.
+
 ## [0.6.0] — 2026-08-14
 
 - Adds activated read-only project links: `link add` detects agent platforms, generates a neutral bootstrap/runtime manifest, injects bounded startup pointers after confirmation, and supports activate/deactivate/repair/doctor lifecycle commands.

@@ -17,4 +17,4 @@ node bin/holoself.mjs migrate --data-dir C:/private/my-self --from C:/private/Pe
 node bin/holoself.mjs validate --data-dir C:/private/my-self
 ```
 
-Existing destination files are preserved unless `--force`. Applied migration writes `migration-manifest.json`. Private `reference/` and `me/` stay private; generated or repository files are skipped. Source is never deleted or rewritten.
+Existing destination files are preserved unless `--force`. Applied migration writes `migration-manifest.json`. Untagged Markdown migrated into canonical `profile/`, `context/`, or `topics/` paths receives conservative metadata (`private`, `internal-only`, `restricted`, `content`) and is listed under `tagged`; this keeps migration → validation → private-context resolution safe without granting broader access. Existing frontmatter is preserved and must pass validation. Private `reference/` and `me/` stay private; generated or repository files are skipped. Source is never deleted or rewritten.

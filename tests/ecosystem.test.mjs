@@ -202,7 +202,7 @@ test('tolerant project frontmatter preserves privacy fields and unclosed metadat
   await writeFile(join(project,'Context','unclosed.md'),'---\nvisibility: public-safe\npublic_safe: true\n# Unclosed\n\nMust remain private.\n')
   await run(['link','add','--project',project,'--self',self,'--lens','publishing','--yes','--project-include','Context/**/*.md'])
   const publishing=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','publishing','--json'])));assert.ok(publishing.project.documents.some(x=>x.path==='Context/safe.md'));assert.ok(!publishing.project.documents.some(x=>x.path==='Context/confidential.md'));assert.ok(!publishing.project.documents.some(x=>x.path==='Context/unclosed.md'));assert.ok(publishing.warnings.some(x=>x.includes('unclosed project frontmatter restricted')))
-  await writeFile(join(self,'context','bad-frontmatter.md'),'---\nvisibility: public-safe\n# Missing delimiter\n');await assert.rejects(run(['context','--project',project,'--json']),/unclosed frontmatter/)
+  await writeFile(join(self,'context','bad-frontmatter.md'),'---\nvisibility: public-safe\n# Missing delimiter\n');const canonical=JSON.parse(await capture(()=>run(['context','--project',project,'--json'])));assert.ok(!canonical.self.documents.some(x=>x.path==='context/bad-frontmatter.md'));assert.ok(canonical.warnings.some(x=>x.includes('context/bad-frontmatter.md: unclosed frontmatter')))
 })
 
 test('publishing context excludes documents when any salvaged privacy scalar is malformed',async()=>{

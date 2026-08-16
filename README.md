@@ -24,7 +24,7 @@ independent linked project
 approved reusable knowledge
 ```
 
-- **One whole person, many lenses.** Career, publishing, technical, leadership, interview, private, and general lenses change relevance and disclosure—not identity.
+- **One whole person, many lenses.** Career, publishing, technical, leadership, interview, private, and general lenses change read scope and relevance—not identity or publication approval.
 - **Independent projects.** Applications, research, posts, calendars, and execution notes stay with their projects.
 - **Review before memory.** Projects propose; only explicit approval changes canonical self context.
 - **Inspectability.** Markdown is source of truth. Generated packets and indexes are disposable.
@@ -83,12 +83,13 @@ node bin/holoself.mjs context \
 
 `link add` writes project-local metadata under `.holoself/`, detects agent platforms, generates `.holoself/BOOTSTRAP.md`, and injects bounded startup pointers into detected instruction files after confirmation. It does not copy canonical self files. See [Activated project links](docs/guides/activated-links.md).
 
-### Two different link mechanisms
+### Three distinct delivery modes
 
-- **Recommended protocol:** `link add|status|remove|setup|activate|deactivate|repair|doctor --project ...` creates `.holoself/link.yaml`, activates detected agent instructions, and maintains local index, proposal, and report directories.
-- **Legacy live mount:** `link --target ...` creates a filesystem symlink/junction from project `.holoself` to the complete data root. It remains supported for compatibility but is not the default for new linked projects. Think of it as a **mount**, not a project-link configuration.
+- **Metadata project link — recommended:** `link add|status|remove|setup|activate|deactivate|repair|doctor --project ...` creates `.holoself/link.yaml`, activates configured startup pointers, and maintains local index, proposal, and report directories.
+- **Snapshot:** `export` or `context --snapshot` creates reviewed generated context for portable or sandboxed use. It is not live and can become stale.
+- **Legacy live mount:** `link --target ...` creates a filesystem symlink/junction from project `.holoself` to complete data root. It remains compatibility-only.
 
-Never substitute one mechanism for the other without reviewing privacy exposure. See [Link or export?](docs/guides/link-or-export.md).
+Never substitute one mode for another without reviewing privacy exposure. Startup adapters configure instruction pointers; packet formatters only change output framing. Generated files do not prove an application discovered them. See [Runtime adapters](docs/guides/runtime-adapters.md). See [Link or export?](docs/guides/link-or-export.md).
 
 ## Common workflows
 

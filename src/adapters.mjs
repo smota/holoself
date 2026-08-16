@@ -18,17 +18,25 @@ description: Load linked whole-person context for this project.
 ---
 
 ${SKILL_BLOCK}`
+const capability=(delivery,discovery,testedProduct,evidence)=>({
+  delivery,
+  discovery,
+  tested_product:testedProduct,
+  tested_version:null,
+  evidence,
+  last_verified:null,
+})
 const REGISTRY=[
-  {id:'agents',name:'Generic AGENTS',files:['AGENTS.md'],dirs:[],support:'native',skillDirs:['.agents/skills/holoself']},
-  {id:'claude',name:'Claude Code',files:['CLAUDE.md'],dirs:['.claude'],support:'native',skillDirs:['.claude/skills/holoself']},
-  {id:'codex',name:'Codex',files:['CODEX.md','codex.md'],dirs:['.codex'],support:'native',skillDirs:[]},
-  {id:'pi',name:'Pi',files:['PI.md'],dirs:['.pi'],support:'native',skillDirs:['.pi/skills/holoself']},
-  {id:'agy',name:'AGY',files:['AGY.md'],dirs:['.agy'],support:'native',skillDirs:[]},
-  {id:'antigravity',name:'Antigravity',files:['ANTIGRAVITY.md'],dirs:['.antigravity'],support:'native',skillDirs:[]},
-  {id:'gemini',name:'Gemini CLI',files:['GEMINI.md'],dirs:['.gemini'],support:'native',skillDirs:[]},
-  {id:'copilot',name:'GitHub Copilot',files:['.github/copilot-instructions.md'],dirs:['.github'],support:'native',skillDirs:[]},
-  {id:'cursor',name:'Cursor',files:['.cursor/rules/holoself.mdc'],dirs:['.cursor'],support:'native',skillDirs:[]},
-  {id:'windsurf',name:'Windsurf',files:['.windsurfrules'],dirs:['.windsurf'],support:'native',skillDirs:[]},
+  {id:'agents',name:'Generic AGENTS',files:['AGENTS.md'],dirs:[],support:'configured',skillDirs:['.agents/skills/holoself'],...capability('file','configured','AGENTS.md-compatible hosts','Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.')},
+  {id:'claude',name:'Claude Code',files:['CLAUDE.md'],dirs:['.claude'],support:'configured',skillDirs:['.claude/skills/holoself'],...capability('file','configured','Claude Code','CLAUDE.md activation is generated and covered by filesystem tests; product discovery is not asserted without a recorded smoke test.')},
+  {id:'codex',name:'Codex',files:['CODEX.md','codex.md'],dirs:['.codex'],support:'configured',skillDirs:[],...capability('file','configured','Codex','Codex instruction pointer is generated; product discovery requires versioned smoke-test evidence.')},
+  {id:'pi',name:'Pi',files:['PI.md'],dirs:['.pi'],support:'configured',skillDirs:['.pi/skills/holoself'],...capability('file','configured','Pi','PI.md and optional skill pointer are generated; product discovery requires versioned smoke-test evidence.')},
+  {id:'agy',name:'AGY',files:['AGY.md'],dirs:['.agy'],support:'generated-only',skillDirs:[],...capability('file','generated-only','AGY','Adapter file can be generated, but no product-level discovery evidence is bundled.')},
+  {id:'antigravity',name:'Antigravity',files:['ANTIGRAVITY.md'],dirs:['.antigravity'],support:'generated-only',skillDirs:[],...capability('file','generated-only','Antigravity IDE','Adapter file can be generated, but IDE rule discovery must be configured and verified in product.')},
+  {id:'gemini',name:'Gemini CLI',files:['GEMINI.md'],dirs:['.gemini'],support:'configured',skillDirs:[],...capability('file','configured','Gemini CLI','GEMINI.md pointer is generated; product discovery requires versioned smoke-test evidence.')},
+  {id:'copilot',name:'GitHub Copilot',files:['.github/copilot-instructions.md'],dirs:['.github'],support:'configured',skillDirs:[],...capability('file','configured','GitHub Copilot','Known repository instruction path is generated; repository settings and product version remain external.')},
+  {id:'cursor',name:'Cursor',files:['.cursor/rules/holoself.mdc'],dirs:['.cursor'],support:'configured',skillDirs:[],...capability('file','configured','Cursor','Known project rule path is generated; product-level loading must be smoke tested.')},
+  {id:'windsurf',name:'Windsurf',files:['.windsurfrules'],dirs:['.windsurf'],support:'configured',skillDirs:[],...capability('file','configured','Windsurf','Known project rule path is generated; product-level loading must be smoke tested.')},
 ]
 function slash(p){return p.replaceAll('\\','/')}
 function ensureDir(p){mkdirSync(p,{recursive:true})}
@@ -56,7 +64,7 @@ export function activationPlan(project,options={}){
   const unknown=unique([...(selection.mode==='list'?selection.ids:[]),...explicit].filter(id=>!REGISTRY.some(a=>a.id===id)));if(unknown.length)throw new Error(`unknown platform adapter: ${unknown.join(', ')}`)
   if(!adapters.some(a=>a.id==='agents'))adapters.unshift(detected.find(a=>a.id==='agents'))
   const canonical=slash(options.instructions||'AGENTS.md');safeProjectFile(project,canonical,'canonical instructions')
-  const mapped=adapters.map(a=>({id:a.id,name:a.name,support:a.support,detected:a.detected,file:slash(a.id==='agents'?canonical:(a.files.find(f=>existsSync(safeProjectFile(project,f,'adapter instructions')))||a.files[0])),skillDirs:a.skillDirs}))
+  const mapped=adapters.map(a=>({id:a.id,name:a.name,support:a.support,delivery:a.delivery,discovery:a.discovery,tested_product:a.tested_product,tested_version:a.tested_version,evidence:a.evidence,last_verified:a.last_verified,detected:a.detected,file:slash(a.id==='agents'?canonical:(a.files.find(f=>existsSync(safeProjectFile(project,f,'adapter instructions')))||a.files[0])),skillDirs:a.skillDirs}))
   const install=options.installSkill||'auto',skills=[]
   if(install!=='none')for(const adapter of mapped)for(const dir of adapter.skillDirs){const file=slash(join(dir,'SKILL.md'));if(install==='project'||existsSync(dirname(safeProjectFile(project,file,'skill shim')))||adapter.id==='agents')skills.push({adapter:adapter.id,file})}
   return {canonical,adapters:mapped,skills,writes:unique(['.holoself/BOOTSTRAP.md','.holoself/runtime.json',...mapped.map(x=>x.file),...skills.map(x=>x.file)])}
@@ -99,9 +107,10 @@ This project links to canonical whole-person context. This file contains no cano
 1. Read \`.holoself/link.yaml\`.
 2. Resolve \`self_context.path\` and validate Holoself root.
 3. Load self context through default lens \`${link.default_lens}\`.
-4. Apply visibility, sensitivity, and field restrictions before output.
-5. Preserve source provenance and project-owned artifacts.
-6. Never write canonical self directly. Submit reusable discoveries through proposals.
+4. Apply access lenses before reading and disclosure approval before publishing.
+5. Treat sensitivity as classification, not publication permission; preserve field restrictions.
+6. Preserve source provenance and project-owned artifacts.
+7. Never write canonical self directly. Submit reusable discoveries through proposals.
 
 ## Runtime
 
@@ -133,7 +142,7 @@ export function activateProject(project,link,options={}){
     atomicWrite(safeProjectFile(project,'.holoself/BOOTSTRAP.md','bootstrap write'),bootstrapText(link))
     for(const adapter of plan.adapters){const section=adapter.file===plan.canonical?canonicalSection():overlaySection(plan.canonical);results.push({...adapter,result:injectMarker(project,adapter.file,section,false)})}
     for(const skill of plan.skills)skillResults.push({...skill,result:writeSkill(project,skill.file,false,options.force===true)})
-    const runtime={schemaVersion:1,project:basename(project),mode:'live-link',defaultLens:link.default_lens,activatedAdapters:results.map(x=>{const text=readFileSync(safeProjectFile(project,x.file,'runtime hash'),'utf8');return {id:x.id,file:x.file,status:'active',markerHash:managedBlockHash(text)}}),skillShims:skillResults.map(x=>({id:x.adapter,file:x.file,status:'active',owned:x.result==='created'||previousOwnedSkills.get(x.file)===true})),fallback:'.holoself/BOOTSTRAP.md',lastValidated:new Date().toISOString(),toolVersion:'0.6.0'}
+    const runtime={schemaVersion:1,project:basename(project),mode:'live-link',defaultLens:link.default_lens,activatedAdapters:results.map(x=>{const text=readFileSync(safeProjectFile(project,x.file,'runtime hash'),'utf8');return {id:x.id,file:x.file,status:'active',markerHash:managedBlockHash(text),delivery:x.delivery,discovery:x.discovery,tested_product:x.tested_product,tested_version:x.tested_version,evidence:x.evidence,last_verified:x.last_verified}}),skillShims:skillResults.map(x=>({id:x.adapter,file:x.file,status:'active',owned:x.result==='created'||previousOwnedSkills.get(x.file)===true})),fallback:'.holoself/BOOTSTRAP.md',lastValidated:new Date().toISOString(),toolVersion:'0.6.0'}
     atomicWrite(runtimeFile(project),JSON.stringify(runtime,null,2)+'\n');return {plan,results,skillResults,runtime}
   }catch(error){rollback(snapshots);throw error}
 }

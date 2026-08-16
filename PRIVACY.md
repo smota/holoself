@@ -6,13 +6,13 @@ Private profile, context, topics, reference material, proposals, and local contr
 
 ## Linked projects
 
-Recommended `link add --project --self` creates project-local metadata with `access: read`; it does not copy canonical self files. Lenses and visibility metadata filter resolved context. Project proposals cannot change canonical context without explicit approval.
+Recommended `link add --project --self` creates project-local metadata with `access: read`; it does not copy canonical self files. Access lenses control reading. Disclosure controls public reuse. Sensitivity classifies handling risk. A readable or linked document is never publication-approved unless `disclosure: publish-approved`. Project proposals cannot change canonical context without explicit approval.
 
 Legacy `link --target` creates filesystem symlink/junction to complete data root. It exposes more private context to project tools and should be used only when full live mounting is intended. `unlink` removes only managed link.
 
 ## Generated data
 
-Exports, packets, indexes, reports, and project `.holoself/` content are private by default. Review before committing or sharing. Indexing skips recognized secret-like filenames/content and redacts policy metadata, but pattern detection cannot guarantee finding every secret.
+Exports, snapshots, packets, indexes, reports, and project `.holoself/` content are private by default. Review before committing or sharing. Indexing skips recognized secret-like filenames/content and redacts policy metadata, but pattern detection cannot guarantee finding every secret.
 
 ## Mutations
 
