@@ -24,7 +24,9 @@
       "additionalProperties": false,
       "properties": {
         "include": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "exclude": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        "exclude": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "assert_include": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "assert_exclude": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       }
     }
   }

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/index.schema.json",
+  "title": "Holoself deterministic local index",
+  "type": "object",
+  "required": ["schema_version", "privacy_policy_version", "engine", "source_of_truth", "generated_at", "input_state_hash", "project_context_hash", "build_assertions", "entries"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 3 },
+    "privacy_policy_version": { "const": 2 },
+    "engine": { "const": "deterministic-json" },
+    "source_of_truth": { "const": "Markdown" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "input_state_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "project_context_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "project": { "type": "string" },
+    "self": { "type": "string" },
+    "skipped_secret_files": { "type": "integer", "minimum": 0 },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "build_assertions": {
+      "type": "object",
+      "required": ["status", "checks", "included_project_files"],
+      "properties": {
+        "status": { "const": "passed" },
+        "checks": { "type": "array", "items": { "type": "string" } },
+        "included_project_files": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "entries": { "type": "array" }
+  }
+}

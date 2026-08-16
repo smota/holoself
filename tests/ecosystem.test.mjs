@@ -115,7 +115,7 @@ test('index and search enforce claim, field, compensation, metadata, and secret 
   await writeFile(join(project,'Context','role.md'),'# Role\n\nMy annual compensation totals USD 200000 plus bonus and equity.\n')
   await writeFile(join(project,'credentials-notes.md'),'# Credentials\n\nfilename secret phrase\n');await writeFile(join(project,'.env.md'),'# Environment\n\ninternal credential phrase\n');await writeFile(join(project,'bearer.md'),'# Auth\n\nAuthorization: Bearer abcdefghijklmnopqrstuvwxyz\n')
   const built=JSON.parse(await capture(()=>run(['index','rebuild','--project',project])));assert.ok(built.skipped_secret_files>=3)
-  const raw=await readFile(join(project,'.holoself','index','index.json'),'utf8');assert.doesNotMatch(raw,/home_address|10 Secret Street|filename secret phrase|internal credential phrase|abcdefghijklmnopqrstuvwxyz/);assert.match(raw,/"schema_version": 2/)
+  const raw=await readFile(join(project,'.holoself','index','index.json'),'utf8');assert.doesNotMatch(raw,/home_address|10 Secret Street|filename secret phrase|internal credential phrase|abcdefghijklmnopqrstuvwxyz/);assert.match(raw,/"schema_version": 3/)
   const generalClaim=JSON.parse(await capture(()=>run(['search','private unicorn','--project',project,'--lens','general'])));assert.equal(generalClaim.results.length,0)
   const privateClaim=JSON.parse(await capture(()=>run(['search','private unicorn','--project',project,'--lens','private'])));assert.ok(privateClaim.results.length>0)
   const field=JSON.parse(await capture(()=>run(['search','golden package','--project',project,'--lens','general'])));assert.equal(field.results.length,0)

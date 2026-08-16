@@ -76,7 +76,7 @@ test('incomplete or invalid canonical privacy metadata is excluded from context,
   }
   await run(['index','rebuild','--project',project])
   const index=JSON.parse(await readFile(join(project,'.holoself','index','index.json'),'utf8'))
-  assert.equal(index.privacy_policy_version,1)
+  assert.equal(index.privacy_policy_version,2)
   for(const [name] of cases){
     assert.ok(!index.entries.some(entry=>entry.source_kind==='self'&&entry.file===`context/${name}.md`),`${name} index`)
     assert.ok(index.warnings.some(warning=>warning.includes(`self:context/${name}.md`)),`${name} index warning`)
@@ -98,6 +98,54 @@ test('explicit public_safe false overrides and quarantines conflicting public-sa
   const search=JSON.parse(await capture(()=>run(['search','legacyconflictmarker','--project',project,'--lens','publishing'])))
   assert.deepEqual(search.results,[])
   assert.ok(ecosystemValidationErrors(self,project).some(error=>error.includes('conflicting legacy privacy metadata: visibility public-safe with public_safe false')))
+})
+
+test('explicit sensitivity categories and task selectors narrow context fail closed',async()=>{
+  const {self,project}=await linkedFixture()
+  const categories=[
+    ['compensation-confidential','Compensation marker'],
+    ['third-party-personal','Third party marker'],
+    ['recruiter-confidential','Recruiter marker'],
+    ['employer-confidential','Employer marker'],
+    ['application-private','Application marker']
+  ]
+  for(const [sensitivity,marker] of categories)await writeFile(join(self,'context',`${sensitivity}.md`),frontmatter({accessLenses:['general','career','publishing','technical','leadership','interview','private'],disclosure:'publish-approved',sensitivity})+`# ${marker}\n\n${marker}.\n`)
+  await writeFile(join(self,'context','task-only.md'),'---\naccess_lenses: [career, private]\ndisclosure: review-required\nsensitivity: application-private\ndocument_role: content\ntask_include: [draft application]\ntask_exclude: [salary negotiation]\n---\n# Task only\n\ntaskonlymarker tailored material.\n')
+  await writeFile(join(project,'Context','task-match.md'),'# Draft application\n\nProject-specific draft application evidence.\n');await writeFile(join(project,'Context','unrelated.md'),'# Unrelated\n\nOffice maintenance schedule.\n')
+  const publishing=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','publishing','--json'])))
+  for(const [sensitivity] of categories)assert.ok(!publishing.sources.some(source=>source.path===`context/${sensitivity}.md`),sensitivity)
+  const career=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','career','--task','draft application','--json'])))
+  for(const sensitivity of ['compensation-confidential','recruiter-confidential','employer-confidential','application-private'])assert.ok(career.sources.some(source=>source.path===`context/${sensitivity}.md`),sensitivity)
+  assert.ok(!career.sources.some(source=>source.path==='context/third-party-personal.md'))
+  assert.ok(career.sources.some(source=>source.path==='context/task-only.md'));assert.ok(career.sources.some(source=>source.path==='Context/task-match.md'));assert.ok(!career.sources.some(source=>source.path==='Context/unrelated.md'))
+  const blocked=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','career','--task','salary negotiation','--json'])))
+  assert.ok(!blocked.sources.some(source=>source.path==='context/task-only.md'));assert.equal(blocked.sources.filter(source=>source.kind==='project').length,0)
+  assert.ok(blocked.restrictions.some(item=>item.source==='context/task-only.md'&&item.reason.includes('task selector')))
+})
+
+test('index schema tracks freshness and enforces post-build include/exclude assertions',async()=>{
+  const self=await temp(),project=await temp();await run(['init','--root',self]);await mkdir(join(project,'Context'),{recursive:true});await mkdir(join(project,'Private'),{recursive:true})
+  await writeFile(join(project,'Context','keep.md'),'# Keep\n\nfreshnessmarker one.\n');await writeFile(join(project,'Private','omit.md'),'# Omit\n\nforbiddenindexmarker.\n')
+  await run(['link','add','--project',project,'--self',self,'--yes','--project-include','Context/**/*.md,Private/**/*.md','--project-exclude','Private/**','--project-assert-include','Context/**','--project-assert-exclude','Private/**'])
+  await run(['index','rebuild','--project',project]);let index=JSON.parse(await readFile(join(project,'.holoself','index','index.json'),'utf8'))
+  assert.equal(index.schema_version,3);assert.equal(index.privacy_policy_version,2);assert.equal(index.build_assertions.status,'passed');assert.ok(index.input_state_hash);assert.ok(!index.entries.some(entry=>entry.file==='Private/omit.md'))
+  await writeFile(join(project,'Context','keep.md'),'# Keep\n\nfreshnessmarker two.\n')
+  const stale=JSON.parse(await capture(()=>run(['index','status','--project',project])));assert.equal(stale.status,'stale');assert.equal(stale.fresh,false)
+  const search=JSON.parse(await capture(()=>run(['search','freshnessmarker two','--project',project,'--lens','general'])));assert.ok(search.results.some(result=>result.source_file==='Context/keep.md'))
+  index=JSON.parse(await readFile(join(project,'.holoself','index','index.json'),'utf8'));assert.notEqual(index.input_state_hash,stale.input_state_hash)
+  const missing=await temp();await run(['link','add','--project',missing,'--self',self,'--yes','--project-assert-include','Required/**/*.md']);await assert.rejects(run(['index','rebuild','--project',missing]),/post-build assertions failed: assert_include unmatched/)
+})
+
+test('restricted-host snapshots carry expiry, source hashes, and leakage validation',async()=>{
+  const {self,project}=await linkedFixture()
+  await writeFile(join(self,'context','host-safe.md'),frontmatter({disclosure:'publish-approved',sensitivity:'public',role:'content'})+'# Host safe\n\nrestrictedhostmarker approved.\n')
+  await writeFile(join(self,'context','host-private.md'),frontmatter({disclosure:'review-required',sensitivity:'application-private',role:'content'})+'# Host private\n\nrestrictedhostprivate marker.\n')
+  const result=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','publishing','--json','--snapshot','--restricted-host','--expires-hours','2','--yes'])))
+  assert.equal(result.packet_metadata.host_mode,'restricted-host-snapshot');assert.equal(result.validation.status,'passed')
+  const snapshot=JSON.parse(await readFile(join(project,'.holoself','runtime','context-packet.md'),'utf8'))
+  assert.match(snapshot.packet_metadata.packet_id,/^[0-9a-f-]{36}$/);assert.ok(Date.parse(snapshot.packet_metadata.expires_at)>Date.parse(snapshot.packet_metadata.generated_at));assert.equal(snapshot.packet_metadata.source_hash_algorithm,'sha256');assert.ok(snapshot.packet_metadata.source_hashes.every(source=>/^[0-9a-f]{64}$/.test(source.sha256)))
+  assert.ok(snapshot.self.documents.some(document=>document.path==='context/host-safe.md'));assert.ok(!snapshot.self.documents.some(document=>document.path==='context/host-private.md'))
+  await assert.rejects(run(['context','--project',project,'--snapshot','--expires-hours','0','--yes']),/expires-hours/)
 })
 
 test('startup adapters expose honest capability evidence in plans and runtime',async()=>{

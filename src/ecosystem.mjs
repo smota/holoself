@@ -11,8 +11,16 @@ import { activateProject, activationPlan, activationStatus, deactivateProject, p
 export const LENSES = ['general','career','publishing','technical','leadership','interview','private']
 export const VISIBILITIES = ['private','linked-projects','career','publishing','public-safe']
 export const DISCLOSURES = ['internal-only','review-required','publish-approved']
-export const SENSITIVITIES = ['public','personal','employer-confidential','restricted','none']
+export const SENSITIVITIES = ['public','personal','compensation-confidential','third-party-personal','recruiter-confidential','employer-confidential','application-private','restricted','none']
 export const DOCUMENT_ROLES = ['policy','evidence','content']
+const SENSITIVITY_LENSES={
+  'compensation-confidential':['career','interview','private'],
+  'third-party-personal':['leadership','private'],
+  'recruiter-confidential':['career','interview','private'],
+  'employer-confidential':['career','technical','leadership','interview','private'],
+  'application-private':['career','interview','private'],
+  restricted:['private']
+}
 export const PROPOSAL_TYPES = ['new_fact','fact_update','fact_correction','new_story','new_preference','new_decision','privacy_warning','conflict_resolution']
 export const PROPOSAL_STATES = ['pending','approved','rejected','deferred','superseded']
 const SKIP_DIRS = new Set(['.git','node_modules','.holoself','proposals','exports','.agents','.claude','.codex','.pi','.agy','.gemini','.cursor','.github','skills','Generated','generated'])
@@ -105,7 +113,7 @@ function linkSchemaErrors(link){
   }
   return errors
 }
-function projectContextErrors(value){const errors=[];if(value===undefined)return errors;if(!value||Array.isArray(value)||typeof value!=='object')return ['project_context must be a mapping'];for(const key of Object.keys(value))if(!['include','exclude'].includes(key))errors.push(`unknown project_context field: ${key}`);for(const key of ['include','exclude'])if(value[key]!==undefined&&(!Array.isArray(value[key])||value[key].some(x=>typeof x!=='string'||!x.trim())))errors.push(`project_context.${key} must be a string array`);return errors}
+function projectContextErrors(value){const errors=[];if(value===undefined)return errors;if(!value||Array.isArray(value)||typeof value!=='object')return ['project_context must be a mapping'];for(const key of Object.keys(value))if(!['include','exclude','assert_include','assert_exclude'].includes(key))errors.push(`unknown project_context field: ${key}`);for(const key of ['include','exclude','assert_include','assert_exclude'])if(value[key]!==undefined&&(!Array.isArray(value[key])||value[key].some(x=>typeof x!=='string'||!x.trim())))errors.push(`project_context.${key} must be a string array`);return errors}
 function readLink(project){
   const path=assertContainedPath(project,linkPath(project),'link configuration');if(!pathExists(path))throw new Error(`link configuration missing: ${path}`)
   if(lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())throw new Error(`link configuration is not a regular file: ${path}`)
@@ -113,10 +121,10 @@ function readLink(project){
   if(!Object.hasOwn(parsed,'self_context'))throw new Error(`malformed link configuration ${path}: self_context mapping missing`)
   for(const key of Object.keys(parsed))if(!['self_context','project_context'].includes(key))throw new Error(`malformed link configuration ${path}: unknown root field ${key}`)
   const errors=[...linkSchemaErrors(parsed.self_context),...projectContextErrors(parsed.project_context)];if(errors.length)throw new Error(`invalid link configuration ${path}: ${errors.join('; ')}`)
-  return {...parsed.self_context,path:resolve(project,parsed.self_context.path),secondary_lenses:[...(parsed.self_context.secondary_lenses||[])],project_context:{include:parsed.project_context?.include||['**/*.md'],exclude:[...DEFAULT_PROJECT_EXCLUDES,...(parsed.project_context?.exclude||[])]}}
+  return {...parsed.self_context,path:resolve(project,parsed.self_context.path),secondary_lenses:[...(parsed.self_context.secondary_lenses||[])],project_context:{include:parsed.project_context?.include||['**/*.md'],exclude:[...DEFAULT_PROJECT_EXCLUDES,...(parsed.project_context?.exclude||[])],assert_include:parsed.project_context?.assert_include||[],assert_exclude:parsed.project_context?.assert_exclude||[]}}
 }
 function writeLink(project,self,lens='general',secondary=[],projectContext={}){
-  const data={self_context:{path:slash(resolve(self)),access:'read',proposals:'enabled',index:'local',default_lens:lens,secondary_lenses:secondary},project_context:{include:projectContext.include||['**/*.md'],exclude:projectContext.exclude||DEFAULT_PROJECT_EXCLUDES}},errors=[...linkSchemaErrors(data.self_context),...projectContextErrors(data.project_context)];if(errors.length)throw new Error(errors.join('; '))
+  const data={self_context:{path:slash(resolve(self)),access:'read',proposals:'enabled',index:'local',default_lens:lens,secondary_lenses:secondary},project_context:{include:projectContext.include||['**/*.md'],exclude:projectContext.exclude||DEFAULT_PROJECT_EXCLUDES,assert_include:projectContext.assert_include||[],assert_exclude:projectContext.assert_exclude||[]}},errors=[...linkSchemaErrors(data.self_context),...projectContextErrors(data.project_context)];if(errors.length)throw new Error(errors.join('; '))
   atomicWrite(linkPath(project),yamlObject(data));return {...data.self_context,project_context:data.project_context}
 }
 function managedReadme(){ return `# Linked Holoself context\n\nProject owns artifacts. Linked self owns approved reusable knowledge.\n\n- \`link.yaml\` grants read access and proposal delivery; it never copies self files.\n- \`index/\` is local, rebuildable acceleration data. Markdown remains source of truth.\n- \`proposals/\` and \`reports/\` are review artifacts.\n` }
@@ -153,12 +161,13 @@ function markdownFiles(root,{includeHoloself=false,skipDirs=SKIP_DIRS}={}){
   walk(root); return files.sort()
 }
 function projectMarkdownFiles(root,link){const config=link?.project_context||{include:['**/*.md'],exclude:DEFAULT_PROJECT_EXCLUDES};return markdownFiles(root,{skipDirs:new Set(['.git','node_modules','.holoself'])}).filter(path=>{const rel=slash(relative(root,path));return matchesAny(rel,config.include)&&!matchesAny(rel,config.exclude)})}
-const PRIVACY_FIELDS=new Set(['access_lenses','disclosure','sensitivity','document_role','visibility','public_safe','confidence','exclude_lenses','field_visibility'])
+const PRIVACY_FIELDS=new Set(['access_lenses','disclosure','sensitivity','document_role','task_include','task_exclude','visibility','public_safe','confidence','exclude_lenses','field_visibility'])
 function privacyValueValid(key,value){
   if(key==='access_lenses')return Array.isArray(value)&&value.length>0&&value.every(item=>typeof item==='string'&&LENSES.includes(item))&&new Set(value).size===value.length
   if(key==='disclosure')return typeof value==='string'&&DISCLOSURES.includes(value)
   if(key==='sensitivity')return typeof value==='string'&&SENSITIVITIES.includes(value)
   if(key==='document_role')return typeof value==='string'&&DOCUMENT_ROLES.includes(value)
+  if(key==='task_include'||key==='task_exclude')return Array.isArray(value)&&value.length>0&&value.every(item=>typeof item==='string'&&Boolean(item.trim()))&&new Set(value).size===value.length
   if(key==='visibility')return typeof value==='string'&&VISIBILITIES.includes(value)
   if(key==='public_safe')return typeof value==='boolean'
   if(key==='confidence')return typeof value==='string'&&Boolean(value.trim())
@@ -189,15 +198,15 @@ function salvagePrivacyFrontmatter(raw,{forcePrivate=false}={}){
       finishBlock();const match=trimmed.match(/^([^:#][^:]*):\s*(.*)$/);if(!match)continue
       const key=match[1].trim(),scalar=match[2].trim();if(!recognized.has(key))continue
       if(seen.has(key))malformed=true;seen.add(key)
-      if((key==='access_lenses'||key==='exclude_lenses'||key==='field_visibility')&&!scalar){metadata[key]=key==='field_visibility'?{}:[];block={key,items:0};continue}
+      if((key==='access_lenses'||key==='exclude_lenses'||key==='task_include'||key==='task_exclude'||key==='field_visibility')&&!scalar){metadata[key]=key==='field_visibility'?{}:[];block={key,items:0};continue}
       if(!scalar){malformed=true;continue}
       try{const value=parseScalar(scalar);if(privacyValueValid(key,value))metadata[key]=value;else malformed=true}catch{malformed=true}
       continue
     }
     if(!block)continue
-    if(block.key==='exclude_lenses'||block.key==='access_lenses'){
+    if(['exclude_lenses','access_lenses','task_include','task_exclude'].includes(block.key)){
       const item=trimmed.match(/^-\s+(.+)$/);if(!item){malformed=true;continue}
-      try{const value=parseScalar(item[1]);if(typeof value==='string'&&LENSES.includes(value)){metadata[block.key].push(value);block.items++}else malformed=true}catch{malformed=true}
+      try{const value=parseScalar(item[1]),valid=typeof value==='string'&&(block.key.startsWith('task_')?Boolean(value.trim()):LENSES.includes(value));if(valid){metadata[block.key].push(value);block.items++}else malformed=true}catch{malformed=true}
     }else{
       const item=trimmed.match(/^([^:#][^:]*):\s*(.+)$/);if(!item){malformed=true;continue}
       try{const value=parseScalar(item[2]);if(typeof value==='string'&&VISIBILITIES.includes(value)){metadata.field_visibility[item[1].trim()]=value;block.items++}else malformed=true}catch{malformed=true}
@@ -258,12 +267,18 @@ function disclosure(meta){
   return 'internal-only'
 }
 function documentRole(meta){return DOCUMENT_ROLES.includes(meta.document_role)?meta.document_role:'content'}
-function publicationAllowed(meta){return disclosure(meta)==='publish-approved'&&!['employer-confidential','restricted'].includes(meta.sensitivity||'')}
-function allowed(meta,lens,adapter='generic'){
+function publicationAllowed(meta){return disclosure(meta)==='publish-approved'&&!['compensation-confidential','third-party-personal','recruiter-confidential','employer-confidential','application-private','restricted'].includes(meta.sensitivity||'')}
+function taskAllowed(meta,task){
+  const include=Array.isArray(meta.task_include)?meta.task_include:[],exclude=Array.isArray(meta.task_exclude)?meta.task_exclude:[],value=(task||'').trim().toLowerCase()
+  if(include.length&&(!value||!include.some(pattern=>value.includes(pattern.toLowerCase()))))return false
+  return !value||!exclude.some(pattern=>value.includes(pattern.toLowerCase()))
+}
+function allowed(meta,lens,adapter='generic',task=null){
   if(!accessLenses(meta).includes(lens))return false
   const excluded=Array.isArray(meta.exclude_lenses)?meta.exclude_lenses:[]
-  if(excluded.includes(lens))return false
-  if((adapter==='obsidian-public'||adapter==='public')&&!publicationAllowed(meta))return false
+  if(excluded.includes(lens)||!taskAllowed(meta,task))return false
+  const sensitivity=meta.sensitivity||'';if(documentRole(meta)!=='policy'&&SENSITIVITY_LENSES[sensitivity]&&!SENSITIVITY_LENSES[sensitivity].includes(lens))return false
+  if((adapter==='obsidian-public'||adapter==='public'||adapter==='restricted-host')&&!publicationAllowed(meta))return false
   return true
 }
 function tokenize(text){ return new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]) }
@@ -309,17 +324,27 @@ function sourceRecords(root,kind,lens,task,adapter,link=null){
       if(metadataErrors.length){restrictions.push({source:rel,reason:'invalid canonical privacy metadata; excluded fail-closed'});warnings.push(`${rel}: ${metadataErrors.join('; ')}`);continue}
     }
     if(!VISIBILITIES.includes(visibility(metadata))){ restrictions.push({source:rel,reason:`unsupported visibility: ${visibility(metadata)}`}); continue }
-    if(!allowed(metadata,lens,adapter)){ restrictions.push({source:rel,reason:`access_lenses exclude ${lens} lens`}); continue }
+    if(!allowed(metadata,lens,adapter,task)){const reason=!taskAllowed(metadata,task)?`task selector excludes ${task||'(unspecified task)'}`:SENSITIVITY_LENSES[metadata.sensitivity]&&!SENSITIVITY_LENSES[metadata.sensitivity].includes(lens)?`sensitivity ${metadata.sensitivity} excludes ${lens} lens`:`access_lenses exclude ${lens} lens`;restrictions.push({source:rel,reason});continue}
     const safeMetadata=privacyMetadata(metadata)
     if(lens==='publishing'&&safeMetadata.sensitivity==='employer-confidential'&&safeMetadata.document_role!=='policy'){restrictions.push({source:rel,reason:'employer-confidential content excluded from publishing context'});continue}
     if(lens==='publishing'&&safeMetadata.document_role==='evidence'&&!safeMetadata.publication_allowed){restrictions.push({source:rel,reason:`evidence disclosure ${safeMetadata.disclosure} is not publish-approved`});continue}
     if(lens==='publishing'&&safeMetadata.document_role!=='policy'&&!safeMetadata.publication_allowed)restrictions.push({source:rel,reason:`readable context is not publication-approved (${safeMetadata.disclosure})`})
     const filteredBody=filterFieldVisibility(filterClaimVisibility(body,lens,rel,restrictions),metadata,lens,rel,restrictions)
     const score=relevance(`${rel}\n${filteredBody}`,task)
-    records.push({kind,path:rel,absolute_path:path,access_lenses:safeMetadata.access_lenses,disclosure:safeMetadata.disclosure,document_role:safeMetadata.document_role,publication_allowed:safeMetadata.publication_allowed,visibility:safeMetadata.visibility,public_safe:safeMetadata.public_safe,sensitivity:safeMetadata.sensitivity,confidence:safeMetadata.confidence,freshness:new Date(statSync(path).mtimeMs).toISOString(),task_relevance:score,content:filteredBody.trim(),metadata:safeMetadata})
+    const content=filteredBody.trim();records.push({kind,path:rel,absolute_path:path,access_lenses:safeMetadata.access_lenses,disclosure:safeMetadata.disclosure,document_role:safeMetadata.document_role,publication_allowed:safeMetadata.publication_allowed,visibility:safeMetadata.visibility,public_safe:safeMetadata.public_safe,sensitivity:safeMetadata.sensitivity,confidence:safeMetadata.confidence,freshness:new Date(statSync(path).mtimeMs).toISOString(),source_hash:hash(text),task_relevance:score,content,metadata:safeMetadata})
   }
-  if(task && records.some(r=>r.task_relevance>0)) records.sort((a,b)=>b.task_relevance-a.task_relevance || a.path.localeCompare(b.path))
+  if(task){
+    records.sort((a,b)=>b.task_relevance-a.task_relevance||a.path.localeCompare(b.path))
+    if(kind==='project')for(let i=records.length-1;i>=0;i--)if(records[i].task_relevance===0&&records[i].document_role!=='policy'){restrictions.push({source:records[i].path,reason:`no relevance match for task ${task}`});records.splice(i,1)}
+  }
   return {records,restrictions,warnings}
+}
+function resolvedContextAssertions(records,lens,task,adapter,link){
+  const errors=[],projectPaths=records.filter(record=>record.kind==='project').map(record=>record.path)
+  for(const record of records){if(!allowed(record.metadata,lens,adapter,task))errors.push(`${record.kind}:${record.path}: policy rejected after resolution`);if(SECRET_RE.test(record.content))errors.push(`${record.kind}:${record.path}: secret-like content survived filtering`)}
+  for(const path of projectPaths){if(!matchesAny(path,link?.project_context?.include||['**/*.md']))errors.push(`project:${path}: outside include policy`);if(matchesAny(path,link?.project_context?.exclude||DEFAULT_PROJECT_EXCLUDES))errors.push(`project:${path}: matched exclude policy`)}
+  if(errors.length)throw new Error(`context leakage validation failed: ${errors.join('; ')}`)
+  return {status:'passed',checks:['privacy-policy-reapplied','secret-pattern-scan','project-include-exclude-reapplied'],selected_sources:records.length}
 }
 function contextData(o){
   const project=projectPath(o); let link=null; let self=o.self ? resolve(o.self) : null
@@ -327,28 +352,32 @@ function contextData(o){
   self=self || o.root
   if(!existsSync(self)) throw new Error(`self path not found: ${self}`)
   const lens=o.lens || link?.default_lens || 'general'; if(!LENSES.includes(lens)) throw new Error(`unknown lens: ${lens}`)
-  const adapter=o.adapter || 'generic'
+  const adapter=o.restrictedHost?'restricted-host':(o.adapter||'generic')
   const selfData=sourceRecords(self,'self',lens,o.task,adapter,link)
   const local=existsSync(project) && resolve(project)!==resolve(self) ? sourceRecords(project,'project',lens,o.task,adapter,link) : {records:[],restrictions:[],warnings:[]}
-  const sources=[...selfData.records,...local.records].map(({content,metadata,absolute_path,...source})=>source)
+  const records=[...selfData.records,...local.records],sources=records.map(({content,metadata,absolute_path,...source})=>source)
   const warnings=[...(selfData.warnings||[]),...(local.warnings||[])]
   if(!link && !o.self && resolve(self)!==resolve(project)) warnings.push('No project link found; resolved explicit/default self root.')
+  const generatedAt=new Date().toISOString(),restrictedHost=Boolean(o.snapshot||o.restrictedHost||adapter==='restricted-host'),expiresAt=restrictedHost?new Date(Date.parse(generatedAt)+(o.expiresHours||24)*60*60*1000).toISOString():null
+  const validation=resolvedContextAssertions(records,lens,o.task,adapter,link)
   return {
     self:{path:slash(resolve(self)),documents:selfData.records.map(r=>({path:r.path,content:r.content,metadata:r.metadata}))},
     lens,
     project:{path:slash(project),name:basename(project),documents:local.records.map(r=>({path:r.path,content:r.content,metadata:r.metadata}))},
     task:o.task || null,
+    packet_metadata:{schema_version:1,packet_id:randomUUID(),generated_at:generatedAt,expires_at:expiresAt,host_mode:restrictedHost?'restricted-host-snapshot':'live-local',source_hash_algorithm:'sha256',source_hashes:sources.map(source=>({kind:source.kind,path:source.path,sha256:source.source_hash,freshness:source.freshness}))},
     sources,
     restrictions:[...selfData.restrictions,...local.restrictions],
     warnings,
+    validation,
     proposals:listProposalData(project).filter(p=>p.status==='pending')
   }
 }
 function packetFormat(data,adapter='generic'){
-  const labels={pi:'Pi context packet',claude:'Claude Code context packet',codex:'Codex context packet',generic:'Holoself context packet',obsidian:'Obsidian/Claude context packet'}
-  const title=labels[adapter] || labels.generic
+  const labels={pi:'Pi context packet',claude:'Claude Code context packet',codex:'Codex context packet',generic:'Holoself context packet',obsidian:'Obsidian/Claude context packet','restricted-host':'Restricted-host Holoself context packet'}
+  const title=labels[adapter] || labels.generic,metadata=data.packet_metadata
   const docs=[...data.self.documents.map(x=>({...x,owner:'self'})),...data.project.documents.map(x=>({...x,owner:'project'}))]
-  return `# ${title}\n\nLens: ${data.lens}\nTask: ${data.task || '(none)'}\nPrivacy: access-filtered. Publication requires disclosure=publish-approved; readability alone is never approval. Preserve provenance; never silently write self.\n\n${docs.map(d=>`## ${d.owner}: ${d.path}\n\nAccess lenses: ${(d.metadata.access_lenses||[]).join(', ')}\nDisclosure: ${d.metadata.disclosure}\nSensitivity: ${d.metadata.sensitivity}\nDocument role: ${d.metadata.document_role}\nPublication allowed: ${d.metadata.publication_allowed?'yes':'no'}\n\n${d.content}`).join('\n\n')}\n\n## Restrictions\n\n${data.restrictions.map(x=>`- ${x.source}: ${x.reason}`).join('\n') || '- None'}\n`
+  return `# ${title}\n\nPacket ID: ${metadata.packet_id}\nGenerated: ${metadata.generated_at}\nExpires: ${metadata.expires_at||'not applicable (live local resolution)'}\nHost mode: ${metadata.host_mode}\nLens: ${data.lens}\nTask: ${data.task || '(none)'}\nPrivacy: access-filtered. Publication requires disclosure=publish-approved; readability alone is never approval. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n${metadata.source_hashes.map(source=>`- ${source.kind}:${source.path} ${source.sha256} (${source.freshness})`).join('\n')||'- None'}\n\n${docs.map(d=>`## ${d.owner}: ${d.path}\n\nAccess lenses: ${(d.metadata.access_lenses||[]).join(', ')}\nDisclosure: ${d.metadata.disclosure}\nSensitivity: ${d.metadata.sensitivity}\nDocument role: ${d.metadata.document_role}\nPublication allowed: ${d.metadata.publication_allowed?'yes':'no'}\n\n${d.content}`).join('\n\n')}\n\n## Restrictions\n\n${data.restrictions.map(x=>`- ${x.source}: ${x.reason}`).join('\n') || '- None'}\n`
 }
 async function askConfirm(o,message){
   if(o.yes) return true
@@ -453,7 +482,7 @@ function safeTarget(self,target){
 function indexRoot(project){return assertContainedPath(project,join(project,'.holoself','index'),'index directory')}
 function privacyMetadata(metadata){
   const rawSensitivity=typeof metadata.sensitivity==='string'?metadata.sensitivity:null,sensitivity=SENSITIVITIES.includes(rawSensitivity)?rawSensitivity:(rawSensitivity?'restricted':'personal')
-  const result={access_lenses:accessLenses(metadata).filter(x=>LENSES.includes(x)),disclosure:disclosure(metadata),sensitivity,document_role:documentRole(metadata),publication_allowed:publicationAllowed({...metadata,sensitivity}),visibility:visibility(metadata),public_safe:metadata.public_safe===true,confidence:typeof metadata.confidence==='string'?metadata.confidence:null,exclude_lenses:Array.isArray(metadata.exclude_lenses)?metadata.exclude_lenses.filter(x=>LENSES.includes(x)):[],field_visibility:{}}
+  const result={access_lenses:accessLenses(metadata).filter(x=>LENSES.includes(x)),disclosure:disclosure(metadata),sensitivity,document_role:documentRole(metadata),publication_allowed:publicationAllowed({...metadata,sensitivity}),task_include:Array.isArray(metadata.task_include)?metadata.task_include:[],task_exclude:Array.isArray(metadata.task_exclude)?metadata.task_exclude:[],visibility:visibility(metadata),public_safe:Object.hasOwn(metadata,'public_safe')?metadata.public_safe:null,confidence:typeof metadata.confidence==='string'?metadata.confidence:null,exclude_lenses:Array.isArray(metadata.exclude_lenses)?metadata.exclude_lenses.filter(x=>LENSES.includes(x)):[],field_visibility:{}}
   if(metadata.field_visibility&&typeof metadata.field_visibility==='object'&&!Array.isArray(metadata.field_visibility))for(const [key,value] of Object.entries(metadata.field_visibility))result.field_visibility[key]=VISIBILITIES.includes(value)?value:'private'
   return result
 }
@@ -463,9 +492,15 @@ function privacySections(body,policy){
   for(const section of sections(ordinary)){const heading=section.heading.toLowerCase(),fieldRule=Object.entries(policy.field_visibility||{}).find(([field])=>heading.includes(field.toLowerCase())),v=COMPENSATION_RE.test(heading)?'private':fieldRule?.[1]||policy.visibility;chunks.push({...section,visibility:v,claim:false,disclosure:policy.disclosure})}
   return chunks
 }
+function indexInputHash(project,link=readLink(project)){
+  const state=[]
+  for(const [sourceKind,root,files] of [['self',link.path,canonicalFiles(link.path)],['project',project,projectMarkdownFiles(project,link)]])for(const file of files){const stat=statSync(file);state.push([sourceKind,slash(relative(root,file)),stat.size,stat.mtimeMs,hash(readFileSync(file,'utf8'))])}
+  return hash(JSON.stringify({project_context:link.project_context,state:state.sort((a,b)=>`${a[0]}:${a[1]}`.localeCompare(`${b[0]}:${b[1]}`))}))
+}
+function indexFreshness(project,index,link=readLink(project)){const actual=indexInputHash(project,link);return {fresh:index.input_state_hash===actual,expected:index.input_state_hash||null,actual}}
 function buildIndex(project,changed=false){
   const link=readLink(project),path=join(indexRoot(project),'index.json');let old={entries:[]};const warnings=[]
-  if(changed&&existsSync(path)){try{const parsed=JSON.parse(readFileSync(path,'utf8'));if(parsed.schema_version===2&&parsed.privacy_policy_version===1)old=parsed}catch{}}
+  if(changed&&existsSync(path)){try{const parsed=JSON.parse(readFileSync(path,'utf8'));if(parsed.schema_version===3&&parsed.privacy_policy_version===2)old=parsed}catch{}}
   const oldByPath=new Map((old.entries||[]).map(x=>[`${x.source_kind}:${x.file}`,x])),entries=[];let skippedSecrets=0
   for(const [sourceKind,root] of [['self',link.path],['project',project]]){
     for(const file of sourceKind==='self'?canonicalFiles(root):projectMarkdownFiles(root,link)){
@@ -477,23 +512,31 @@ function buildIndex(project,changed=false){
         const metadataErrors=canonicalPrivacyMetadataErrors(metadata)
         if(metadataErrors.length){warnings.push(`${sourceKind}:${rel}: ${metadataErrors.join('; ')}; excluded fail-closed`);continue}
       }
-      const modified=statSync(file).mtimeMs,oldEntry=oldByPath.get(`${sourceKind}:${rel}`);if(changed&&oldEntry?.modified_ms===modified){entries.push(oldEntry);continue}
+      const modified=statSync(file).mtimeMs,oldEntry=oldByPath.get(`${sourceKind}:${rel}`);if(changed&&oldEntry?.modified_ms===modified&&oldEntry?.source_text_hash===hash(text)){entries.push(oldEntry);continue}
       if(!VISIBILITIES.includes(visibility(metadata)))continue
       const policy=privacyMetadata(metadata),indexedSections=privacySections(body,policy)
       const annotatedClaims=indexedSections.flatMap(section=>claims(section.content).map(text=>({text,visibility:COMPENSATION_RE.test(text)?'private':section.visibility})))
       const annotatedLinks=indexedSections.flatMap(section=>links(section.content).map(value=>({value,visibility:section.visibility})))
       const annotatedTags=indexedSections.flatMap(section=>tags(section.content).map(value=>({value,visibility:section.visibility})))
-      entries.push({source_kind:sourceKind,source_project:sourceKind==='project'?basename(project):'self',file:rel,content_hash:hash(body),modified_ms:modified,modified_at:new Date(modified).toISOString(),frontmatter:policy,links:annotatedLinks,tags:annotatedTags,claims:annotatedClaims,visibility:policy.visibility,sections:indexedSections})
+      entries.push({source_kind:sourceKind,source_project:sourceKind==='project'?basename(project):'self',file:rel,source_text_hash:hash(text),content_hash:hash(body),modified_ms:modified,modified_at:new Date(modified).toISOString(),frontmatter:policy,links:annotatedLinks,tags:annotatedTags,claims:annotatedClaims,visibility:policy.visibility,sections:indexedSections})
     }
   }
   entries.sort((a,b)=>`${a.source_kind}:${a.file}`.localeCompare(`${b.source_kind}:${b.file}`))
-  const index={schema_version:2,privacy_policy_version:1,engine:'deterministic-json',source_of_truth:'Markdown',generated_at:new Date().toISOString(),project:slash(project),self:slash(link.path),skipped_secret_files:skippedSecrets,warnings,entries}
+  const projectEntries=entries.filter(entry=>entry.source_kind==='project'),projectPaths=projectEntries.map(entry=>entry.file),assertionErrors=[]
+  for(const entry of projectEntries){if(!matchesAny(entry.file,link.project_context.include))assertionErrors.push(`${entry.file}: outside include policy`);if(matchesAny(entry.file,link.project_context.exclude))assertionErrors.push(`${entry.file}: matched exclude policy`)}
+  for(const pattern of link.project_context.assert_include||[])if(!projectPaths.some(file=>globRegex(pattern).test(file)))assertionErrors.push(`assert_include unmatched: ${pattern}`)
+  for(const pattern of link.project_context.assert_exclude||[])if(projectPaths.some(file=>globRegex(pattern).test(file)))assertionErrors.push(`assert_exclude matched indexed file: ${pattern}`)
+  for(const entry of entries)for(const section of entry.sections||[])if(SECRET_RE.test(section.content))assertionErrors.push(`${entry.source_kind}:${entry.file}: secret-like content survived index build`)
+  if(assertionErrors.length)throw new Error(`index post-build assertions failed: ${assertionErrors.join('; ')}`)
+  const buildAssertions={status:'passed',checks:['include-policy','exclude-policy','required-includes','forbidden-excludes','secret-pattern-scan'],included_project_files:projectEntries.length}
+  const index={schema_version:3,privacy_policy_version:2,engine:'deterministic-json',source_of_truth:'Markdown',generated_at:new Date().toISOString(),input_state_hash:indexInputHash(project,link),project_context_hash:hash(JSON.stringify(link.project_context)),project:slash(project),self:slash(link.path),skipped_secret_files:skippedSecrets,warnings,build_assertions:buildAssertions,entries}
   ensureDir(indexRoot(project));atomicWrite(path,JSON.stringify(index,null,2)+'\n');return index
 }
 function readIndex(project,auto=true){
   const path=join(indexRoot(project),'index.json');if(!existsSync(path)){if(auto)return buildIndex(project);throw new Error(`index missing: ${path}`)}
   let index;try{index=JSON.parse(readFileSync(path,'utf8'))}catch{if(auto)return buildIndex(project);throw new Error(`index is invalid JSON: ${path}`)}
-  if(index.schema_version!==2||index.privacy_policy_version!==1||index.engine!=='deterministic-json'||!Array.isArray(index.entries)){if(auto)return buildIndex(project);throw new Error(`index schema is stale or invalid: ${path}`)}return index
+  if(index.schema_version!==3||index.privacy_policy_version!==2||index.engine!=='deterministic-json'||!Array.isArray(index.entries)||index.build_assertions?.status!=='passed'){if(auto)return buildIndex(project);throw new Error(`index schema is stale or invalid: ${path}`)}
+  const freshness=indexFreshness(project,index);if(!freshness.fresh){if(auto)return buildIndex(project);throw new Error(`index content is stale: ${path}`)}return index
 }
 function searchIndex(index,query,lens='general'){
   const terms=[...tokenize(query)],results=[]
@@ -581,7 +624,7 @@ export async function runEcosystem(o){
     const findings=setupFindings(project);console.log(JSON.stringify(findings,null,2));let self=o.self;if(!self&&input.isTTY&&output.isTTY){const answer=await askValue('Canonical self path');if(answer)self=resolve(answer)}if(!self){if(o.yes)throw new Error('link setup requires --self <path> before confirmation');console.log('No changes made. Re-run with --self <path> --yes to create link.');return true}if(!existsSync(join(self,'profile'))||!existsSync(join(self,'context')))throw new Error(`self path lacks profile/context layout: ${resolve(self)}`);const collisions=inspectLinkCollisions(project);if(collisions.length&&!o.force)throw new Error(`existing Holoself metadata collision: ${collisions.join(', ')}; use --force with explicit confirmation`);if(!o.noActivate){const {plan}=preflightActivation(project,{activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||'auto',dryRun:o.dryRun,force:o.force});console.log(JSON.stringify({activation_plan:{canonical:plan.canonical,adapters:plan.adapters,skills:plan.skills,writes:plan.writes}},null,2))}if(!await askConfirm(o,`${collisions.length?'Replace link configuration while preserving existing README and artifacts':'Create and activate link'} using ${self} and ${o.lens||findings.suggested_lens} lens?`)){console.log('Cancelled.');return true}let link;if(o.dryRun)link={path:resolve(self),access:'read',proposals:'enabled',index:'local',default_lens:o.lens||findings.suggested_lens,secondary_lenses:o.secondaryLenses||[],project_context:{include:o.projectContext?.include||['**/*.md'],exclude:[...DEFAULT_PROJECT_EXCLUDES,...(o.projectContext?.exclude||[])]}};else{createLinkDirs(project,{preserveReadme:o.force});link=writeLink(project,self,o.lens||findings.suggested_lens,o.secondaryLenses||[],o.projectContext||{})}if(!o.noActivate){const result=activateProject(project,link,{activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||'auto',dryRun:o.dryRun,force:o.force});for(const item of result.results)console.log(` - ${item.id}: ${item.file} (${item.result})`)}console.log(`${o.dryRun?'[dry-run] ':'[ok] '}setup complete; no files deleted or relocated`);return true
   }
   if(o.command==='context'){
-    const data=contextData(o),format=o.json?'json':(o.format||'packet'),content=format==='json'?JSON.stringify(data,null,2)+'\n':packetFormat(data,o.adapter||format);if(o.output||o.snapshot){const project=projectPath(o),out=o.output||join(project,'.holoself','runtime','context-packet.md');if(!o.yes)throw new Error(`Writing context snapshot requires --yes: ${out}`);assertContainedPath(project,out,'snapshot output');atomicWrite(out,content);console.log(JSON.stringify({status:'written',mode:'snapshot',path:slash(out),lens:data.lens,sources:data.sources.length,warnings:data.warnings},null,2))}else console.log(content.trimEnd());return true
+    const data=contextData(o),format=o.json?'json':(o.format||'packet'),packetAdapter=o.restrictedHost?'restricted-host':(o.adapter||format),content=format==='json'?JSON.stringify(data,null,2)+'\n':packetFormat(data,packetAdapter);if(o.output||o.snapshot){const project=projectPath(o),out=o.output||join(project,'.holoself','runtime','context-packet.md');if(!o.yes)throw new Error(`Writing context snapshot requires --yes: ${out}`);assertContainedPath(project,out,'snapshot output');atomicWrite(out,content);console.log(JSON.stringify({status:'written',mode:'snapshot',path:slash(out),lens:data.lens,sources:data.sources.length,packet_metadata:data.packet_metadata,validation:data.validation,warnings:data.warnings},null,2))}else console.log(content.trimEnd());return true
   }
   if(o.command==='analyze'){
     if(!['overlap','conflicts','stale','all'].includes(sub))throw new Error('analyze requires overlap, conflicts, stale, or all')
@@ -609,8 +652,8 @@ export async function runEcosystem(o){
     if(!await askConfirm(o,`${action==='reject'?'Reject':'Defer'} proposal ${p.proposal_id}?`)){console.log('Cancelled.');return true}stateProposal(project,p,action==='reject'?'rejected':'deferred');console.log(`[ok] ${action==='reject'?'rejected':'deferred'} ${p.proposal_id}`);return true
   }
   if(o.command==='index'){
-    const project=projectPath(o);if(sub==='status'){const path=join(indexRoot(project),'index.json');if(!existsSync(path)){console.log(JSON.stringify({status:'missing',path:slash(path)},null,2));return true}const index=readIndex(project,false);console.log(JSON.stringify({status:'ready',path:slash(path),engine:index.engine,entries:index.entries.length,generated_at:index.generated_at,skipped_secret_files:index.skipped_secret_files},null,2));return true}
-    const rebuild=sub==='rebuild';const index=buildIndex(project,o.changed&&!rebuild);console.log(JSON.stringify({status:'ready',engine:index.engine,entries:index.entries.length,generated_at:index.generated_at,skipped_secret_files:index.skipped_secret_files},null,2));return true
+    const project=projectPath(o);if(sub==='status'){const path=join(indexRoot(project),'index.json');if(!existsSync(path)){console.log(JSON.stringify({status:'missing',path:slash(path)},null,2));return true}let index;try{index=JSON.parse(readFileSync(path,'utf8'))}catch{throw new Error(`index is invalid JSON: ${path}`)};if(index.schema_version!==3||index.privacy_policy_version!==2||!Array.isArray(index.entries))throw new Error(`index schema is stale or invalid: ${path}`);const freshness=indexFreshness(project,index);console.log(JSON.stringify({status:freshness.fresh?'ready':'stale',fresh:freshness.fresh,path:slash(path),schema_version:index.schema_version,privacy_policy_version:index.privacy_policy_version,engine:index.engine,entries:index.entries.length,generated_at:index.generated_at,input_state_hash:index.input_state_hash,skipped_secret_files:index.skipped_secret_files,build_assertions:index.build_assertions},null,2));return true}
+    const rebuild=sub==='rebuild';const index=buildIndex(project,o.changed&&!rebuild);console.log(JSON.stringify({status:'ready',fresh:true,schema_version:index.schema_version,privacy_policy_version:index.privacy_policy_version,engine:index.engine,entries:index.entries.length,generated_at:index.generated_at,skipped_secret_files:index.skipped_secret_files,build_assertions:index.build_assertions},null,2));return true
   }
   if(o.command==='search'){
     const query=o.args.join(' ');if(!query)throw new Error('search requires a query');const project=projectPath(o),index=readIndex(project);let results=searchIndex(index,query,o.lens||'general')

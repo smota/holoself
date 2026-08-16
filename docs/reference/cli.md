@@ -30,7 +30,8 @@ link status|activate|deactivate|repair|doctor --project <dir> [--yes]
 link remove --project <dir> --yes
 link setup --project <dir> [--self <dir> --yes]
 context [--project <dir>] [--self <dir>] [--lens <lens>] [--task <text>]
-        [--json | --format packet] [--adapter pi|claude|codex|generic|obsidian]
+        [--json | --format packet] [--adapter pi|claude|codex|generic|obsidian|restricted-host]
+        [--restricted-host] [--expires-hours 24]
         [--snapshot | --output <project-contained-path>] [--yes]
 analyze overlap|conflicts|stale|all --project <dir>
 propose --project <dir> [--claim <text>] [--evidence <text>]
@@ -42,7 +43,7 @@ index [status|rebuild] --project <dir> [--changed]
 search <query> --project <dir> [--federated] [--lens <lens>]
 ```
 
-`context` defaults to packet output unless `--json` is supplied. `--snapshot --yes` writes a reviewed project-only fallback. `index` without subcommand builds/updates index. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation.
+`context` defaults to packet output unless `--json` is supplied. `--snapshot --yes` writes a reviewed project-only fallback; `--restricted-host` applies publication-safe filtering and adds default 24-hour expiry metadata. `--expires-hours` accepts values above 0 through 720. Link setup supports `--project-include`, `--project-exclude`, `--project-assert-include`, and `--project-assert-exclude`. `index` without subcommand builds/updates index. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation.
 
 ## Legacy live mount
 

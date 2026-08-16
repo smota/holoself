@@ -30,12 +30,15 @@ confidence: confirmed
 
 - `access_lenses` answers **which tasks may read this document**.
 - `disclosure` answers **whether document facts may be reproduced publicly**: `internal-only`, `review-required`, or `publish-approved`.
-- `sensitivity` classifies handling risk: `public`, `personal`, `employer-confidential`, `restricted`, or `none`. `personal` does not automatically block a permitted lens.
+- `sensitivity` classifies handling risk: `public`, `personal`, `compensation-confidential`, `third-party-personal`, `recruiter-confidential`, `employer-confidential`, `application-private`, `restricted`, or `none`. `personal` does not automatically block a permitted lens.
 - `document_role` distinguishes `policy`, `evidence`, and ordinary `content`.
+- Optional `task_include` and `task_exclude` string lists narrow use by explicit task text. `task_include` without matching `--task` fails closed.
 
 Readability is never publication approval. A metadata link grants read access only. `linked-projects` visibility does not mean `publish-approved`.
 
-Publishing resolution always includes readable `policy` documents, even when their disclosure is `internal-only`, because policy governs output rather than supplying publishable facts. Unapproved `evidence` is excluded from publishing context. Other readable, unapproved content is marked `publication_allowed: false` and receives an explicit restriction. Employer-confidential content remains excluded from publishing context.
+Publishing resolution always includes readable `policy` documents, even when their disclosure is `internal-only`, because policy governs output rather than supplying publishable facts. Unapproved `evidence` is excluded from publishing context. Other readable, unapproved content is marked `publication_allowed: false` and receives an explicit restriction. Confidential sensitivity categories are never publication-eligible, even when disclosure metadata is mistakenly permissive.
+
+Sensitivity defaults narrow lenses: compensation, recruiter, and application-private material to career/interview/private; third-party personal material to leadership/private; employer-confidential material to career/technical/leadership/interview/private; and restricted material to private. Policy documents may still be read where their access lens permits because they constrain output rather than provide facts.
 
 ## Legacy metadata
 

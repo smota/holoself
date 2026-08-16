@@ -41,7 +41,7 @@ exclude_lenses:
 ---
 ```
 
-Visibility values: `private`, `linked-projects`, `career`, `publishing`, `public-safe`. Private material requires private lens. Employer-confidential material is excluded from publishing lens. Secret-like files are excluded from context/index output and reported as restrictions. Output always lists source paths. JSON follows `schemas/context.schema.json`; packet adapters are `pi`, `claude`, `codex`, `generic`, and `obsidian`.
+Visibility values: `private`, `linked-projects`, `career`, `publishing`, `public-safe`. Explicit sensitivity categories include `compensation-confidential`, `third-party-personal`, `recruiter-confidential`, `employer-confidential`, and `application-private`; category defaults narrow eligible lenses and all confidential categories block publication. Optional `task_include`/`task_exclude` metadata narrows documents by `--task`, while project documents with no task match are removed (policy documents remain available to constrain work). Secret-like files are excluded from context/index output and reported as restrictions. Output lists source paths and SHA-256 hashes. JSON follows `schemas/context.schema.json`; packet adapters are `pi`, `claude`, `codex`, `generic`, `obsidian`, and product-owned `restricted-host` snapshot framing.
 
 ## Analysis and proposal review
 
@@ -51,7 +51,7 @@ Proposals follow `schemas/proposal.schema.json`. UUIDs, filenames, allowed field
 
 ## Local indexing and search
 
-Markdown remains source of truth. Each linked project owns rebuildable `.holoself/index/index.json` schema v2, containing paths, headings, SHA-256 content hashes, timestamps, redacted privacy-policy metadata, visibility-annotated links/tags/claims, and provenance. Search reapplies file, claim, field, sensitivity, and publishing compensation filters. Credential-like filenames, explicit secret sensitivity, private keys, tokens, connection strings, and common secret content patterns are excluded. Dependency-free deterministic JSON is current engine. SQLite/FTS can be added as optional acceleration later, but cannot become source of truth. Index is local, ignorable, independently versioned, and safe to delete/rebuild.
+Markdown remains source of truth. Each linked project owns rebuildable `.holoself/index/index.json` schema v3/privacy-policy v2, containing paths, headings, SHA-256 content hashes, input/config state hashes, timestamps, redacted privacy-policy metadata, visibility-annotated links/tags/claims, provenance, and passed post-build assertions. Search verifies freshness and auto-rebuilds when selected inputs or link policy change. `index status` reports `stale` without rebuilding. Optional `project_context.assert_include` and `assert_exclude` patterns make builds fail when expected sources are absent or forbidden sources survive. Search reapplies file, claim, field, sensitivity, and publishing compensation filters. Credential-like filenames, explicit secret sensitivity, private keys, tokens, connection strings, and common secret content patterns are excluded. Dependency-free deterministic JSON is current engine. SQLite/FTS can be added as optional acceleration later, but cannot become source of truth. Index is local, ignorable, independently versioned, and safe to delete/rebuild.
 
 Federated search reads linked self and project entries in place; it does not centralize Markdown. Results include source, section, passage, provenance, visibility, and freshness.
 
@@ -64,6 +64,7 @@ holoself link remove --project <path> --yes
 holoself link setup --project <path> --self <path> --yes
 holoself context --project <path> --lens career --task "prepare interview" --json
 holoself context --project <path> --format packet --adapter claude
+holoself context --project <path> --snapshot --restricted-host --expires-hours 24 --yes
 holoself analyze overlap|conflicts|stale|all --project <path>
 holoself propose --project <path> --claim "..." --evidence "..." --source-file file.md
 holoself proposals list|show|approve|reject|defer [id] --project <path>

@@ -3,16 +3,31 @@
   "$id": "https://holoself.local/schemas/context.schema.json",
   "title": "Holoself resolved context",
   "type": "object",
-  "required": ["self", "lens", "project", "sources", "restrictions", "warnings", "proposals"],
+  "required": ["self", "lens", "project", "packet_metadata", "sources", "restrictions", "warnings", "validation", "proposals"],
   "additionalProperties": false,
   "properties": {
     "self": { "type": "object" },
     "lens": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] },
     "project": { "type": "object" },
     "task": { "type": ["string", "null"] },
+    "packet_metadata": {
+      "type": "object",
+      "required": ["schema_version", "packet_id", "generated_at", "expires_at", "host_mode", "source_hash_algorithm", "source_hashes"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "packet_id": { "type": "string", "format": "uuid" },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": ["string", "null"], "format": "date-time" },
+        "host_mode": { "enum": ["live-local", "restricted-host-snapshot"] },
+        "source_hash_algorithm": { "const": "sha256" },
+        "source_hashes": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
     "sources": { "type": "array" },
     "restrictions": { "type": "array" },
     "warnings": { "type": "array" },
+    "validation": { "type": "object" },
     "proposals": { "type": "array" }
   }
 }
