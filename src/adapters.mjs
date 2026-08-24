@@ -18,7 +18,7 @@ description: Load linked whole-person context for this project.
 ---
 
 ${LEGACY_SKILL_BLOCK}`
-const PUBLIC_SKILL=readFileSync(new URL('../skills/holoself/SKILL.md',import.meta.url),'utf8')
+const PUBLIC_SKILL=readFileSync(new URL('../skills/holoself/SKILL.md',import.meta.url),'utf8').replace(/\r\n/g,'\n')
 const frontmatterEnd=PUBLIC_SKILL.indexOf('---',4)+3
 if(!PUBLIC_SKILL.startsWith('---\n')||frontmatterEnd<6)throw new Error('public Holoself skill has invalid frontmatter')
 const SKILL_FRONTMATTER=PUBLIC_SKILL.slice(0,frontmatterEnd)

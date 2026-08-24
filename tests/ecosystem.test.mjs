@@ -65,6 +65,12 @@ test('proposal lifecycle requires confirmation, preserves evidence, and validate
   await run(['proposals','defer',second.proposal_id,'--project',project,'--yes']);assert.match(await readFile(join(project,'.holoself','proposals',`${second.proposal_id}.yaml`),'utf8'),/status: "deferred"/)
 })
 
+test('terminal legacy proposal records preserve folded text and external evidence paths',async()=>{
+  const {project}=await fixture(),id='11111111-2222-4333-8444-555555555555',file=join(project,'.holoself','proposals',`${id}.yaml`)
+  await writeFile(file,`proposal_id: "${id}"\nsource_project: "Legacy review"\nsource_project_path: "C:/legacy"\nsource_files:\n  - "C:/legacy/evidence.md"\ntarget: "context/preferences.md and profile/preferences.md"\nproposal_type: "preference_update"\nclaim: >-\n  Preserve folded legacy preference\n  wording without mutation.\nevidence: |-\n  Historical external evidence.\nconfidence: "confirmed"\nvisibility: "private"\nstatus: "approved"\ncreated_at: "2026-08-24T00:00:00Z"\nprovenance:\n  - "Legacy migration"\n`)
+  const listed=JSON.parse(await capture(()=>run(['proposals','list','--project',project]))),record=listed.find(x=>x.proposal_id===id);assert.equal(record.proposal_type,'preference_update');assert.equal(record.claim,'Preserve folded legacy preference wording without mutation.');assert.equal(record.evidence,'Historical external evidence.')
+})
+
 test('deterministic index supports changed/rebuild/search and skips secrets',async()=>{
   const {project}=await fixture();await writeFile(join(project,'secret.md'),'# Secret\n\napi_key = abcdefghijklmnop\n')
   const built=JSON.parse(await capture(()=>run(['index','rebuild','--project',project])));assert.equal(built.engine,'deterministic-json');assert.equal(built.skipped_secret_files,1)
@@ -155,7 +161,7 @@ test('link add activates detected agents with private bounded bootstrap and supp
 test('all supported adapters can be activated explicitly',async()=>{
   const self=await temp(),project=await temp();await run(['init','--root',self]);await run(['link','add','--project',project,'--self',self,'--activate','all','--install-skill','project','--yes'])
   for(const file of ['AGENTS.md','CLAUDE.md','CODEX.md','PI.md','AGY.md','ANTIGRAVITY.md','GEMINI.md','.github/copilot-instructions.md','.cursor/rules/holoself.mdc','.windsurfrules'])assert.match(await readFile(join(project,file),'utf8'),/holoself-link-start/)
-  const publicSkill=await readFile(join(process.cwd(),'skills','holoself','SKILL.md'),'utf8')
+  const publicSkill=(await readFile(join(process.cwd(),'skills','holoself','SKILL.md'),'utf8')).replaceAll('\r\n','\n')
   for(const dir of ['.agents','.claude','.pi']){const installed=await readFile(join(project,dir,'skills','holoself','SKILL.md'),'utf8');assert.match(installed,/holoself-skill-start schema=1/);assert.match(installed,/## Canonical-root validation/);assert.ok(installed.includes(publicSkill.slice(publicSkill.indexOf('# Holoself'))))}
   const runtime=JSON.parse(await readFile(join(project,'.holoself','runtime.json'),'utf8'));assert.ok(runtime.skillInstallations.every(x=>x.kind==='full-public-skill'));assert.ok(Array.isArray(runtime.skillShims))
   const status=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.ok(status.skill_installations.every(x=>x.kind==='full-public-skill'));assert.equal(status.cli_command.invocation,'source-checkout');assert.equal(status.cli_command.available,'not-verified')
@@ -167,7 +173,7 @@ test('legacy shims upgrade and deactivation preserves appended user content',asy
 })
 
 test('separately installed public skill is accepted and preserved',async()=>{
-  const self=await temp(),project=await temp(),file=join(project,'.agents','skills','holoself','SKILL.md'),publicSkill=await readFile(join(process.cwd(),'skills','holoself','SKILL.md'),'utf8');await run(['init','--root',self]);await mkdir(dirname(file),{recursive:true});await writeFile(file,publicSkill.replaceAll('\n','\r\n'))
+  const self=await temp(),project=await temp(),file=join(project,'.agents','skills','holoself','SKILL.md'),publicSkill=(await readFile(join(process.cwd(),'skills','holoself','SKILL.md'),'utf8')).replaceAll('\r\n','\n');await run(['init','--root',self]);await mkdir(dirname(file),{recursive:true});await writeFile(file,publicSkill.replaceAll('\n','\r\n'))
   await run(['link','add','--project',project,'--self',self,'--yes']);assert.equal(await readFile(file,'utf8'),publicSkill.replaceAll('\n','\r\n'));const status=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.equal(status.skill_installations[0].marker,'public');assert.equal(status.skill_installations[0].kind,'full-public-skill');await run(['link','deactivate','--project',project,'--yes']);assert.equal(await readFile(file,'utf8'),publicSkill.replaceAll('\n','\r\n'))
 })
 
@@ -177,12 +183,12 @@ test('owned installation hash supports cross-version removal and none policy sta
   const noneProject=await temp();await run(['link','add','--project',noneProject,'--self',self,'--install-skill','none','--yes']);const status=JSON.parse(await capture(()=>run(['link','status','--project',noneProject])));assert.equal(status.state,'activated');assert.equal(status.skill_install_policy,'none');const doctor=JSON.parse(await capture(()=>run(['link','doctor','--project',noneProject])));assert.equal(doctor.state,'activated');assert.equal(doctor.checks.skill_installation,'disabled')
 })
 
-test('real project structures exclude agent skills and tolerate unrelated folded YAML',async()=>{
+test('real project structures exclude agent skills and parse folded YAML',async()=>{
   const self=await temp(),project=await temp();await run(['init','--root',self]);await mkdir(join(project,'.agents','skills','example'),{recursive:true});await mkdir(join(project,'Master'),{recursive:true});await mkdir(join(project,'Context'),{recursive:true})
   await writeFile(join(project,'.agents','skills','example','SKILL.md'),'---\nname: example\ndescription: >\n  folded YAML that belongs to another skill\n---\n# Private agent skill noise\n')
   await writeFile(join(project,'Master','career.md'),'---\nvisibility: career\npublic_safe: false\ndescription: >\n  valid arbitrary folded frontmatter\n---\n# Career\n\nProject evidence.\n');await writeFile(join(project,'Context','publishing.md'),'# Publishing\n\nProject publishing rules.\n')
   await run(['link','add','--project',project,'--self',self,'--lens','career','--yes','--project-include','Master/**/*.md,Context/**/*.md'])
-  const data=JSON.parse(await capture(()=>run(['context','--project',project,'--json'])));assert.ok(data.project.documents.some(x=>x.path==='Master/career.md'));assert.ok(!data.project.documents.some(x=>x.path.includes('.agents/skills')));assert.ok(data.warnings.some(x=>x.includes('unsupported project frontmatter parsed conservatively')))
+  const data=JSON.parse(await capture(()=>run(['context','--project',project,'--json'])));assert.ok(data.project.documents.some(x=>x.path==='Master/career.md'));assert.ok(!data.project.documents.some(x=>x.path.includes('.agents/skills')));assert.ok(!data.warnings.some(x=>x.includes('unsupported project frontmatter parsed conservatively')))
   const doctor=JSON.parse(await capture(()=>run(['link','doctor','--project',project])));assert.equal(doctor.checks.context,'valid')
   const snapshot=JSON.parse(await capture(()=>run(['context','--project',project,'--snapshot','--adapter','generic','--yes'])));assert.equal(snapshot.mode,'snapshot');assert.match(await readFile(join(project,'.holoself','runtime','context-packet.md'),'utf8'),/Holoself context packet/)
 })
