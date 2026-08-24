@@ -1,6 +1,22 @@
 # Lenses and privacy
 
-Supported lenses: `general`, `career`, `publishing`, `technical`, `leadership`, `interview`, `private`.
+Built-in lenses: `general`, `career`, `publishing`, `technical`, `leadership`, `interview`, `private`.
+
+## Custom lens registry
+
+A private self root may add typed definitions under `<data-root>/lenses/*.json`. A missing directory is valid. Use `lens list`, `lens show <id>`, and `lens validate` to inspect the effective built-in plus custom vocabulary.
+
+```json
+{
+  "schema_version": 1,
+  "id": "client-advisory",
+  "title": "Client advisory",
+  "base_lens": "publishing",
+  "sensitivity_access": ["employer-confidential"]
+}
+```
+
+IDs are lowercase kebab-case, begin with a letter, and are at most 40 characters. Bases are built-in and affect safe filtering behavior only: they never grant access. A canonical document must explicitly include the custom ID in `access_lenses`. Custom lenses receive no confidential sensitivity access by default; allowed categories must be listed, and `restricted` is never available to custom lenses in v1. Unknown, duplicate, malformed, or unsafe definitions fail closed.
 
 | Task | Typical lens |
 |---|---|

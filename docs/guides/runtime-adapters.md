@@ -32,7 +32,7 @@ node bin/holoself.mjs context --project C:/work/project --format packet --adapte
 node bin/holoself.mjs context --project C:/work/project --snapshot --restricted-host --expires-hours 24 --yes
 ```
 
-JSON contains `self`, `lens`, `project`, `packet_metadata`, `sources`, `restrictions`, `warnings`, `validation`, and `proposals`. Source metadata includes access lenses, disclosure, sensitivity, document role, publication eligibility, freshness, and SHA-256 source hash.
+Packet schema v2 JSON contains `self`, the compatibility `lens` string, normalized `lens_resolution`, `project`, `packet_metadata`, `sources`, `restrictions`, `warnings`, `validation`, and `proposals`. Packet metadata includes a deterministic lens-registry hash; raw private definition files and registry paths are not exposed. Source metadata includes access lenses, disclosure, sensitivity, document role, publication eligibility, freshness, and SHA-256 source hash.
 
 Restricted-host snapshots default to 24-hour expiry metadata and can set more than 0 and at most 720 hours with `--expires-hours`. Packet metadata includes unique packet id, generation/expiry timestamps, host mode, and filtered-source hashes. Consumers must reject expired packets and refresh after source changes; hashes support comparison but do not make snapshots live.
 

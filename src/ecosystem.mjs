@@ -7,8 +7,9 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { activateProject, activationPlan, activationStatus, deactivateProject, preflightActivation } from './adapters.mjs'
+import { BUILTIN_LENS_IDS, lensIdStructurallyValid, loadLensRegistry, resolveLens } from './lenses.mjs'
 
-export const LENSES = ['general','career','publishing','technical','leadership','interview','private']
+export const LENSES = BUILTIN_LENS_IDS
 export const VISIBILITIES = ['private','linked-projects','career','publishing','public-safe']
 export const DISCLOSURES = ['internal-only','review-required','publish-approved']
 export const SENSITIVITIES = ['public','personal','compensation-confidential','third-party-personal','recruiter-confidential','employer-confidential','application-private','restricted','none']
@@ -98,17 +99,17 @@ function yamlObject(object, indent=''){
   }
   return out
 }
-function linkSchemaErrors(link){
-  const errors=[],allowedKeys=new Set(['path','access','proposals','index','default_lens','secondary_lenses'])
+function linkSchemaErrors(link,registry=null){
+  const errors=[],allowedKeys=new Set(['path','access','proposals','index','default_lens','secondary_lenses']),known=id=>registry?registry.byId.has(id):lensIdStructurallyValid(id)
   if(!link||Array.isArray(link)||typeof link!=='object')return ['self_context must be a mapping']
   for(const key of Object.keys(link))if(!allowedKeys.has(key))errors.push(`unknown self_context field: ${key}`)
   if(typeof link.path!=='string'||!link.path.trim())errors.push('self_context.path must be a non-empty string')
   if(link.access!=='read')errors.push('self_context.access must be read')
   if(!['enabled','disabled'].includes(link.proposals))errors.push('self_context.proposals must be enabled or disabled')
   if(link.index!=='local')errors.push('self_context.index must be local')
-  if(!LENSES.includes(link.default_lens))errors.push(`invalid default lens: ${link.default_lens}`)
+  if(!known(link.default_lens))errors.push(`invalid default lens: ${link.default_lens}`)
   if(link.secondary_lenses!==undefined){
-    if(!Array.isArray(link.secondary_lenses)||link.secondary_lenses.some(x=>typeof x!=='string'||!LENSES.includes(x)))errors.push('secondary_lenses must contain only known lenses')
+    if(!Array.isArray(link.secondary_lenses)||link.secondary_lenses.some(x=>typeof x!=='string'||!known(x)))errors.push('secondary_lenses must contain only known lenses')
     else if(new Set(link.secondary_lenses).size!==link.secondary_lenses.length)errors.push('secondary_lenses must contain unique lenses')
   }
   return errors
@@ -120,11 +121,12 @@ function readLink(project){
   let parsed;try{parsed=parseYaml(readFileSync(path,'utf8'))}catch(error){throw new Error(`malformed link configuration ${path}: ${error.message}`)}
   if(!Object.hasOwn(parsed,'self_context'))throw new Error(`malformed link configuration ${path}: self_context mapping missing`)
   for(const key of Object.keys(parsed))if(!['self_context','project_context'].includes(key))throw new Error(`malformed link configuration ${path}: unknown root field ${key}`)
-  const errors=[...linkSchemaErrors(parsed.self_context),...projectContextErrors(parsed.project_context)];if(errors.length)throw new Error(`invalid link configuration ${path}: ${errors.join('; ')}`)
-  return {...parsed.self_context,path:resolve(project,parsed.self_context.path),secondary_lenses:[...(parsed.self_context.secondary_lenses||[])],project_context:{include:parsed.project_context?.include||['**/*.md'],exclude:[...DEFAULT_PROJECT_EXCLUDES,...(parsed.project_context?.exclude||[])],assert_include:parsed.project_context?.assert_include||[],assert_exclude:parsed.project_context?.assert_exclude||[]}}
+  const structuralErrors=[...linkSchemaErrors(parsed.self_context),...projectContextErrors(parsed.project_context)];if(structuralErrors.length)throw new Error(`invalid link configuration ${path}: ${structuralErrors.join('; ')}`)
+  const selfPath=resolve(project,parsed.self_context.path),registry=loadLensRegistry(selfPath),errors=linkSchemaErrors(parsed.self_context,registry);if(errors.length)throw new Error(`invalid link configuration ${path}: ${errors.join('; ')}`)
+  return {...parsed.self_context,path:selfPath,secondary_lenses:[...(parsed.self_context.secondary_lenses||[])],project_context:{include:parsed.project_context?.include||['**/*.md'],exclude:[...DEFAULT_PROJECT_EXCLUDES,...(parsed.project_context?.exclude||[])],assert_include:parsed.project_context?.assert_include||[],assert_exclude:parsed.project_context?.assert_exclude||[]}}
 }
 function writeLink(project,self,lens='general',secondary=[],projectContext={}){
-  const data={self_context:{path:slash(resolve(self)),access:'read',proposals:'enabled',index:'local',default_lens:lens,secondary_lenses:secondary},project_context:{include:projectContext.include||['**/*.md'],exclude:projectContext.exclude||DEFAULT_PROJECT_EXCLUDES,assert_include:projectContext.assert_include||[],assert_exclude:projectContext.assert_exclude||[]}},errors=[...linkSchemaErrors(data.self_context),...projectContextErrors(data.project_context)];if(errors.length)throw new Error(errors.join('; '))
+  const registry=loadLensRegistry(resolve(self)),data={self_context:{path:slash(resolve(self)),access:'read',proposals:'enabled',index:'local',default_lens:lens,secondary_lenses:secondary},project_context:{include:projectContext.include||['**/*.md'],exclude:projectContext.exclude||DEFAULT_PROJECT_EXCLUDES,assert_include:projectContext.assert_include||[],assert_exclude:projectContext.assert_exclude||[]}},errors=[...linkSchemaErrors(data.self_context,registry),...projectContextErrors(data.project_context)];if(errors.length)throw new Error(errors.join('; '))
   atomicWrite(linkPath(project),yamlObject(data));return {...data.self_context,project_context:data.project_context}
 }
 function managedReadme(){ return `# Linked Holoself context\n\nProject owns artifacts. Linked self owns approved reusable knowledge.\n\n- \`link.yaml\` grants read access and proposal delivery; it never copies self files.\n- \`index/\` is local, rebuildable acceleration data. Markdown remains source of truth.\n- \`proposals/\` and \`reports/\` are review artifacts.\n` }
@@ -162,8 +164,9 @@ function markdownFiles(root,{includeHoloself=false,skipDirs=SKIP_DIRS}={}){
 }
 function projectMarkdownFiles(root,link){const config=link?.project_context||{include:['**/*.md'],exclude:DEFAULT_PROJECT_EXCLUDES};return markdownFiles(root,{skipDirs:new Set(['.git','node_modules','.holoself'])}).filter(path=>{const rel=slash(relative(root,path));return matchesAny(rel,config.include)&&!matchesAny(rel,config.exclude)})}
 const PRIVACY_FIELDS=new Set(['access_lenses','disclosure','sensitivity','document_role','task_include','task_exclude','visibility','public_safe','confidence','exclude_lenses','field_visibility'])
-function privacyValueValid(key,value){
-  if(key==='access_lenses')return Array.isArray(value)&&value.length>0&&value.every(item=>typeof item==='string'&&LENSES.includes(item))&&new Set(value).size===value.length
+function privacyValueValid(key,value,registry=null){
+  const known=item=>typeof item==='string'&&(registry?registry.byId.has(item):lensIdStructurallyValid(item))
+  if(key==='access_lenses')return Array.isArray(value)&&value.length>0&&value.every(known)&&new Set(value).size===value.length
   if(key==='disclosure')return typeof value==='string'&&DISCLOSURES.includes(value)
   if(key==='sensitivity')return typeof value==='string'&&SENSITIVITIES.includes(value)
   if(key==='document_role')return typeof value==='string'&&DOCUMENT_ROLES.includes(value)
@@ -171,23 +174,23 @@ function privacyValueValid(key,value){
   if(key==='visibility')return typeof value==='string'&&VISIBILITIES.includes(value)
   if(key==='public_safe')return typeof value==='boolean'
   if(key==='confidence')return typeof value==='string'&&Boolean(value.trim())
-  if(key==='exclude_lenses')return Array.isArray(value)&&value.every(item=>typeof item==='string'&&LENSES.includes(item))
+  if(key==='exclude_lenses')return Array.isArray(value)&&value.every(known)
   if(key==='field_visibility')return value&&typeof value==='object'&&!Array.isArray(value)&&Object.values(value).every(item=>typeof item==='string'&&VISIBILITIES.includes(item))
   return true
 }
-function privacyMetadataErrors(metadata){const errors=[];for(const key of PRIVACY_FIELDS)if(Object.hasOwn(metadata,key)&&!privacyValueValid(key,metadata[key])){const value=typeof metadata[key]==='string'?metadata[key]:JSON.stringify(metadata[key]);errors.push(key==='visibility'?`invalid visibility ${value}`:`invalid ${key} value ${value}`)}return errors}
-function canonicalPrivacyMetadataErrors(metadata){
-  const errors=privacyMetadataErrors(metadata)
+function privacyMetadataErrors(metadata,registry=null){const errors=[];for(const key of PRIVACY_FIELDS)if(Object.hasOwn(metadata,key)&&!privacyValueValid(key,metadata[key],registry)){const value=typeof metadata[key]==='string'?metadata[key]:JSON.stringify(metadata[key]);errors.push(key==='visibility'?`invalid visibility ${value}`:`invalid ${key} value ${value}`)}return errors}
+function canonicalPrivacyMetadataErrors(metadata,registry=null){
+  const errors=privacyMetadataErrors(metadata,registry)
   if(!Object.hasOwn(metadata,'access_lenses')&&!Object.hasOwn(metadata,'visibility'))errors.push('canonical privacy metadata missing access_lenses or legacy visibility')
   if(Object.hasOwn(metadata,'access_lenses'))for(const key of ['disclosure','sensitivity','document_role']){
     if(!Object.hasOwn(metadata,key))errors.push(`canonical metadata missing ${key}`)
-    else if(!privacyValueValid(key,metadata[key])&&!errors.some(error=>error.startsWith(`invalid ${key} `)))errors.push(`invalid ${key} value`)
+    else if(!privacyValueValid(key,metadata[key],registry)&&!errors.some(error=>error.startsWith(`invalid ${key} `)))errors.push(`invalid ${key} value`)
   }
   if(metadata.visibility==='public-safe'&&metadata.public_safe===false)errors.push('conflicting legacy privacy metadata: visibility public-safe with public_safe false')
   return [...new Set(errors)]
 }
 function restrictPrivacyMetadata(metadata){metadata.access_lenses=['private'];metadata.disclosure='internal-only';metadata.document_role='content';metadata.visibility='private';metadata.public_safe=false;metadata.sensitivity='restricted';return metadata}
-function salvagePrivacyFrontmatter(raw,{forcePrivate=false}={}){
+function salvagePrivacyFrontmatter(raw,{forcePrivate=false,registry=null}={}){
   const metadata={},recognized=PRIVACY_FIELDS,seen=new Set(),lines=raw.split(/\r?\n/)
   let malformed=false,block=null
   const finishBlock=()=>{if(block&&!block.items)malformed=true;block=null}
@@ -200,27 +203,27 @@ function salvagePrivacyFrontmatter(raw,{forcePrivate=false}={}){
       if(seen.has(key))malformed=true;seen.add(key)
       if((key==='access_lenses'||key==='exclude_lenses'||key==='task_include'||key==='task_exclude'||key==='field_visibility')&&!scalar){metadata[key]=key==='field_visibility'?{}:[];block={key,items:0};continue}
       if(!scalar){malformed=true;continue}
-      try{const value=parseScalar(scalar);if(privacyValueValid(key,value))metadata[key]=value;else malformed=true}catch{malformed=true}
+      try{const value=parseScalar(scalar);if(privacyValueValid(key,value,registry))metadata[key]=value;else malformed=true}catch{malformed=true}
       continue
     }
     if(!block)continue
     if(['exclude_lenses','access_lenses','task_include','task_exclude'].includes(block.key)){
       const item=trimmed.match(/^-\s+(.+)$/);if(!item){malformed=true;continue}
-      try{const value=parseScalar(item[1]),valid=typeof value==='string'&&(block.key.startsWith('task_')?Boolean(value.trim()):LENSES.includes(value));if(valid){metadata[block.key].push(value);block.items++}else malformed=true}catch{malformed=true}
+      try{const value=parseScalar(item[1]),valid=typeof value==='string'&&(block.key.startsWith('task_')?Boolean(value.trim()):(registry?registry.byId.has(value):lensIdStructurallyValid(value)));if(valid){metadata[block.key].push(value);block.items++}else malformed=true}catch{malformed=true}
     }else{
       const item=trimmed.match(/^([^:#][^:]*):\s*(.+)$/);if(!item){malformed=true;continue}
       try{const value=parseScalar(item[2]);if(typeof value==='string'&&VISIBILITIES.includes(value)){metadata.field_visibility[item[1].trim()]=value;block.items++}else malformed=true}catch{malformed=true}
     }
   }
-  finishBlock();if(forcePrivate||malformed||privacyMetadataErrors(metadata).length)restrictPrivacyMetadata(metadata);return metadata
+  finishBlock();if(forcePrivate||malformed||privacyMetadataErrors(metadata,registry).length)restrictPrivacyMetadata(metadata);return metadata
 }
-function frontmatter(text,{tolerant=false}={}){
+function frontmatter(text,{tolerant=false,registry=null}={}){
   if(!text.startsWith('---\n') && !text.startsWith('---\r\n')) return {metadata:{},body:text,warnings:[]}
   const end=text.indexOf('\n---',4)
-  if(end<0){if(!tolerant)throw new Error('unclosed frontmatter');return {metadata:salvagePrivacyFrontmatter(text.slice(4),{forcePrivate:true}),body:text.slice(4),warnings:['unclosed project frontmatter restricted to private']}}
+  if(end<0){if(!tolerant)throw new Error('unclosed frontmatter');return {metadata:salvagePrivacyFrontmatter(text.slice(4),{forcePrivate:true,registry}),body:text.slice(4),warnings:['unclosed project frontmatter restricted to private']}}
   const raw=text.slice(4,end),body=text.slice(end+4).replace(/^\r?\n/,'');let metadata
-  try{metadata=parseYaml(raw)}catch(error){if(!tolerant)throw error;metadata=salvagePrivacyFrontmatter(raw);if(!Object.keys(metadata).length)restrictPrivacyMetadata(metadata);return {metadata,body,warnings:[`unsupported project frontmatter parsed conservatively: ${error.message}`]}}
-  const privacyErrors=privacyMetadataErrors(metadata)
+  try{metadata=parseYaml(raw)}catch(error){if(!tolerant)throw error;metadata=salvagePrivacyFrontmatter(raw,{registry});if(!Object.keys(metadata).length)restrictPrivacyMetadata(metadata);return {metadata,body,warnings:[`unsupported project frontmatter parsed conservatively: ${error.message}`]}}
+  const privacyErrors=privacyMetadataErrors(metadata,registry)
   if(privacyErrors.length){if(!tolerant)throw new Error(privacyErrors.join('; '));restrictPrivacyMetadata(metadata);return {metadata,body,warnings:[`invalid project privacy metadata restricted: ${privacyErrors.join(', ')}`]}}
   return {metadata,body,warnings:[]}
 }
@@ -273,11 +276,14 @@ function taskAllowed(meta,task){
   if(include.length&&(!value||!include.some(pattern=>value.includes(pattern.toLowerCase()))))return false
   return !value||!exclude.some(pattern=>value.includes(pattern.toLowerCase()))
 }
-function allowed(meta,lens,adapter='generic',task=null){
+function allowed(meta,lens,adapter='generic',task=null,resolution=null){
   if(!accessLenses(meta).includes(lens))return false
   const excluded=Array.isArray(meta.exclude_lenses)?meta.exclude_lenses:[]
   if(excluded.includes(lens)||!taskAllowed(meta,task))return false
-  const sensitivity=meta.sensitivity||'';if(documentRole(meta)!=='policy'&&SENSITIVITY_LENSES[sensitivity]&&!SENSITIVITY_LENSES[sensitivity].includes(lens))return false
+  const sensitivity=meta.sensitivity||'',custom=resolution?.source==='registry'
+  if(custom&&sensitivity==='restricted')return false
+  if(custom&&SENSITIVITY_LENSES[sensitivity]&&!resolution.sensitivity_access.includes(sensitivity))return false
+  if(!custom&&documentRole(meta)!=='policy'&&SENSITIVITY_LENSES[sensitivity]&&!SENSITIVITY_LENSES[sensitivity].includes(lens))return false
   if((adapter==='obsidian-public'||adapter==='public'||adapter==='restricted-host')&&!publicationAllowed(meta))return false
   return true
 }
@@ -292,44 +298,45 @@ function canonicalFiles(root){
   const current=join(root,'topics','.current');if(existsSync(current)){const topic=readFileSync(current,'utf8').trim();if(topic){const path=join(root,'topics',topic.endsWith('.md')?topic:`${topic}.md`);if(existsSync(path))files.push(path)}}
   return [...new Set(files)].sort()
 }
-function filterClaimVisibility(body,lens,source,restrictions){
-  return body.replace(/<!-- holoself-claim visibility=([a-z-]+) -->[\s\S]*?<!-- \/holoself-claim -->/g,(block,claimVisibility)=>{if(allowed({visibility:claimVisibility},lens,'generic'))return block;restrictions.push({source,reason:`claim visibility ${claimVisibility} excluded by ${lens} lens`});return ''})
+function filterClaimVisibility(body,lens,source,restrictions,resolution=null){
+  const behaviorLens=resolution?.base_lens||lens
+  return body.replace(/<!-- holoself-claim visibility=([a-z-]+) -->[\s\S]*?<!-- \/holoself-claim -->/g,(block,claimVisibility)=>{if(allowed({visibility:claimVisibility},behaviorLens,'generic'))return block;restrictions.push({source,reason:`claim visibility ${claimVisibility} excluded by ${lens} lens`});return ''})
 }
-function filterFieldVisibility(body,metadata,lens,source,restrictions){
-  const configured=metadata.field_visibility&&typeof metadata.field_visibility==='object'&&!Array.isArray(metadata.field_visibility)?metadata.field_visibility:{}
-  const policies={...configured};if(lens==='publishing')for(const field of ['compensation','salary','base pay','pay range','bonus','equity','negotiation'])if(!policies[field])policies[field]='private'
+function filterFieldVisibility(body,metadata,lens,source,restrictions,resolution=null){
+  const behaviorLens=resolution?.base_lens||lens,configured=metadata.field_visibility&&typeof metadata.field_visibility==='object'&&!Array.isArray(metadata.field_visibility)?metadata.field_visibility:{}
+  const policies={...configured};if(behaviorLens==='publishing')for(const field of ['compensation','salary','base pay','pay range','bonus','equity','negotiation'])if(!policies[field])policies[field]='private'
   let blockedHeading=false,reportedCompensation=false
   return body.split(/\r?\n/).filter(line=>{
     const heading=line.match(/^#{1,6}\s+(.+)$/)
-    if(heading){const key=heading[1].trim().toLowerCase(),rule=Object.entries(policies).find(([field])=>key.includes(field.toLowerCase()));blockedHeading=Boolean(rule&&!allowed({visibility:rule[1]},lens,'generic'));if(lens==='publishing'&&COMPENSATION_RE.test(key))blockedHeading=true;if(blockedHeading)restrictions.push({source,reason:`field ${rule?.[0]||'compensation'} excluded by ${lens} lens`});return !blockedHeading}
+    if(heading){const key=heading[1].trim().toLowerCase(),rule=Object.entries(policies).find(([field])=>key.includes(field.toLowerCase()));blockedHeading=Boolean(rule&&!allowed({visibility:rule[1]},behaviorLens,'generic'));if(behaviorLens==='publishing'&&COMPENSATION_RE.test(key))blockedHeading=true;if(blockedHeading)restrictions.push({source,reason:`field ${rule?.[0]||'compensation'} excluded by ${lens} lens`});return !blockedHeading}
     if(blockedHeading)return false
     const field=line.match(/^\s*[-*]?\s*([^:]{2,40}):\s*(.+)$/),rule=field&&Object.entries(policies).find(([name])=>field[1].trim().toLowerCase()===name.toLowerCase())
-    if(rule&&!allowed({visibility:rule[1]},lens,'generic')){restrictions.push({source,reason:`field ${rule[0]} excluded by ${lens} lens`});return false}
-    if(lens==='publishing'&&COMPENSATION_RE.test(line)){if(!reportedCompensation){restrictions.push({source,reason:'compensation content excluded by publishing lens'});reportedCompensation=true}return false}
+    if(rule&&!allowed({visibility:rule[1]},behaviorLens,'generic')){restrictions.push({source,reason:`field ${rule[0]} excluded by ${lens} lens`});return false}
+    if(behaviorLens==='publishing'&&COMPENSATION_RE.test(line)){if(!reportedCompensation){restrictions.push({source,reason:'compensation content excluded by publishing lens'});reportedCompensation=true}return false}
     return true
   }).join('\n')
 }
-function sourceRecords(root,kind,lens,task,adapter,link=null){
+function sourceRecords(root,kind,lens,task,adapter,link=null,registry=null,resolution=null){
   const records=[]; const restrictions=[],warnings=[]
   let files
   if(kind==='self')files=canonicalFiles(root)
   else files=projectMarkdownFiles(root,link)
   for(const path of files){
     const text=readFileSync(path,'utf8'),rel=slash(relative(root,path));let parsed
-    try{parsed=frontmatter(text,{tolerant:kind==='project'})}catch(error){restrictions.push({source:rel,reason:'invalid canonical privacy metadata; excluded fail-closed'});warnings.push(`${rel}: ${error.message}`);continue}
+    try{parsed=frontmatter(text,{tolerant:kind==='project',registry})}catch(error){restrictions.push({source:rel,reason:'invalid canonical privacy metadata; excluded fail-closed'});warnings.push(`${rel}: ${error.message}`);continue}
     const {metadata,body,warnings:documentWarnings}=parsed;for(const warning of documentWarnings)warnings.push(`${rel}: ${warning}`)
     if(secretFile(path,root)||SECRET_RE.test(text)||['secret','credential','credentials'].includes(metadata.sensitivity)){ restrictions.push({source:rel,reason:'secret-like content excluded'}); continue }
     if(kind==='self'){
-      const metadataErrors=canonicalPrivacyMetadataErrors(metadata)
+      const metadataErrors=canonicalPrivacyMetadataErrors(metadata,registry)
       if(metadataErrors.length){restrictions.push({source:rel,reason:'invalid canonical privacy metadata; excluded fail-closed'});warnings.push(`${rel}: ${metadataErrors.join('; ')}`);continue}
     }
     if(!VISIBILITIES.includes(visibility(metadata))){ restrictions.push({source:rel,reason:`unsupported visibility: ${visibility(metadata)}`}); continue }
-    if(!allowed(metadata,lens,adapter,task)){const reason=!taskAllowed(metadata,task)?`task selector excludes ${task||'(unspecified task)'}`:SENSITIVITY_LENSES[metadata.sensitivity]&&!SENSITIVITY_LENSES[metadata.sensitivity].includes(lens)?`sensitivity ${metadata.sensitivity} excludes ${lens} lens`:`access_lenses exclude ${lens} lens`;restrictions.push({source:rel,reason});continue}
-    const safeMetadata=privacyMetadata(metadata)
-    if(lens==='publishing'&&safeMetadata.sensitivity==='employer-confidential'&&safeMetadata.document_role!=='policy'){restrictions.push({source:rel,reason:'employer-confidential content excluded from publishing context'});continue}
-    if(lens==='publishing'&&safeMetadata.document_role==='evidence'&&!safeMetadata.publication_allowed){restrictions.push({source:rel,reason:`evidence disclosure ${safeMetadata.disclosure} is not publish-approved`});continue}
-    if(lens==='publishing'&&safeMetadata.document_role!=='policy'&&!safeMetadata.publication_allowed)restrictions.push({source:rel,reason:`readable context is not publication-approved (${safeMetadata.disclosure})`})
-    const filteredBody=filterFieldVisibility(filterClaimVisibility(body,lens,rel,restrictions),metadata,lens,rel,restrictions)
+    if(!allowed(metadata,lens,adapter,task,resolution)){const customDenied=resolution?.source==='registry'&&SENSITIVITY_LENSES[metadata.sensitivity]&&!resolution.sensitivity_access.includes(metadata.sensitivity),reason=!taskAllowed(metadata,task)?`task selector excludes ${task||'(unspecified task)'}`:customDenied||SENSITIVITY_LENSES[metadata.sensitivity]&&!SENSITIVITY_LENSES[metadata.sensitivity].includes(lens)?`sensitivity ${metadata.sensitivity} excludes ${lens} lens`:`access_lenses exclude ${lens} lens`;restrictions.push({source:rel,reason});continue}
+    const safeMetadata=privacyMetadata(metadata,registry),behaviorLens=resolution?.base_lens||lens
+    if(behaviorLens==='publishing'&&safeMetadata.sensitivity==='employer-confidential'&&safeMetadata.document_role!=='policy'){restrictions.push({source:rel,reason:'employer-confidential content excluded from publishing context'});continue}
+    if(behaviorLens==='publishing'&&safeMetadata.document_role==='evidence'&&!safeMetadata.publication_allowed){restrictions.push({source:rel,reason:`evidence disclosure ${safeMetadata.disclosure} is not publish-approved`});continue}
+    if(behaviorLens==='publishing'&&safeMetadata.document_role!=='policy'&&!safeMetadata.publication_allowed)restrictions.push({source:rel,reason:`readable context is not publication-approved (${safeMetadata.disclosure})`})
+    const filteredBody=filterFieldVisibility(filterClaimVisibility(body,lens,rel,restrictions,resolution),metadata,lens,rel,restrictions,resolution)
     const score=relevance(`${rel}\n${filteredBody}`,task)
     const content=filteredBody.trim();records.push({kind,path:rel,absolute_path:path,access_lenses:safeMetadata.access_lenses,disclosure:safeMetadata.disclosure,document_role:safeMetadata.document_role,publication_allowed:safeMetadata.publication_allowed,visibility:safeMetadata.visibility,public_safe:safeMetadata.public_safe,sensitivity:safeMetadata.sensitivity,confidence:safeMetadata.confidence,freshness:new Date(statSync(path).mtimeMs).toISOString(),source_hash:hash(text),task_relevance:score,content,metadata:safeMetadata})
   }
@@ -339,9 +346,9 @@ function sourceRecords(root,kind,lens,task,adapter,link=null){
   }
   return {records,restrictions,warnings}
 }
-function resolvedContextAssertions(records,lens,task,adapter,link){
+function resolvedContextAssertions(records,lens,task,adapter,link,resolution=null){
   const errors=[],projectPaths=records.filter(record=>record.kind==='project').map(record=>record.path)
-  for(const record of records){if(!allowed(record.metadata,lens,adapter,task))errors.push(`${record.kind}:${record.path}: policy rejected after resolution`);if(SECRET_RE.test(record.content))errors.push(`${record.kind}:${record.path}: secret-like content survived filtering`)}
+  for(const record of records){if(!allowed(record.metadata,lens,adapter,task,resolution))errors.push(`${record.kind}:${record.path}: policy rejected after resolution`);if(SECRET_RE.test(record.content))errors.push(`${record.kind}:${record.path}: secret-like content survived filtering`)}
   for(const path of projectPaths){if(!matchesAny(path,link?.project_context?.include||['**/*.md']))errors.push(`project:${path}: outside include policy`);if(matchesAny(path,link?.project_context?.exclude||DEFAULT_PROJECT_EXCLUDES))errors.push(`project:${path}: matched exclude policy`)}
   if(errors.length)throw new Error(`context leakage validation failed: ${errors.join('; ')}`)
   return {status:'passed',checks:['privacy-policy-reapplied','secret-pattern-scan','project-include-exclude-reapplied'],selected_sources:records.length}
@@ -351,21 +358,22 @@ function contextData(o){
   if(!self&&pathExists(linkPath(project))){link=readLink(project);self=link.path}
   self=self || o.root
   if(!existsSync(self)) throw new Error(`self path not found: ${self}`)
-  const lens=o.lens || link?.default_lens || 'general'; if(!LENSES.includes(lens)) throw new Error(`unknown lens: ${lens}`)
+  const registry=loadLensRegistry(self),lens=o.lens || link?.default_lens || 'general',resolution=resolveLens(registry,lens)
   const adapter=o.restrictedHost?'restricted-host':(o.adapter||'generic')
-  const selfData=sourceRecords(self,'self',lens,o.task,adapter,link)
-  const local=existsSync(project) && resolve(project)!==resolve(self) ? sourceRecords(project,'project',lens,o.task,adapter,link) : {records:[],restrictions:[],warnings:[]}
+  const selfData=sourceRecords(self,'self',lens,o.task,adapter,link,registry,resolution)
+  const local=existsSync(project) && resolve(project)!==resolve(self) ? sourceRecords(project,'project',lens,o.task,adapter,link,registry,resolution) : {records:[],restrictions:[],warnings:[]}
   const records=[...selfData.records,...local.records],sources=records.map(({content,metadata,absolute_path,...source})=>source)
   const warnings=[...(selfData.warnings||[]),...(local.warnings||[])]
   if(!link && !o.self && resolve(self)!==resolve(project)) warnings.push('No project link found; resolved explicit/default self root.')
   const generatedAt=new Date().toISOString(),restrictedHost=Boolean(o.snapshot||o.restrictedHost||adapter==='restricted-host'),expiresAt=restrictedHost?new Date(Date.parse(generatedAt)+(o.expiresHours||24)*60*60*1000).toISOString():null
-  const validation=resolvedContextAssertions(records,lens,o.task,adapter,link)
+  const validation=resolvedContextAssertions(records,lens,o.task,adapter,link,resolution)
   return {
     self:{path:slash(resolve(self)),documents:selfData.records.map(r=>({path:r.path,content:r.content,metadata:r.metadata}))},
     lens,
+    lens_resolution:{schema_version:resolution.schema_version,id:resolution.id,title:resolution.title,source:resolution.source,base_lens:resolution.base_lens,sensitivity_access:[...resolution.sensitivity_access]},
     project:{path:slash(project),name:basename(project),documents:local.records.map(r=>({path:r.path,content:r.content,metadata:r.metadata}))},
     task:o.task || null,
-    packet_metadata:{schema_version:1,packet_id:randomUUID(),generated_at:generatedAt,expires_at:expiresAt,host_mode:restrictedHost?'restricted-host-snapshot':'live-local',source_hash_algorithm:'sha256',source_hashes:sources.map(source=>({kind:source.kind,path:source.path,sha256:source.source_hash,freshness:source.freshness}))},
+    packet_metadata:{schema_version:2,packet_id:randomUUID(),generated_at:generatedAt,expires_at:expiresAt,host_mode:restrictedHost?'restricted-host-snapshot':'live-local',lens_registry_hash:registry.registry_hash,source_hash_algorithm:'sha256',source_hashes:sources.map(source=>({kind:source.kind,path:source.path,sha256:source.source_hash,freshness:source.freshness}))},
     sources,
     restrictions:[...selfData.restrictions,...local.restrictions],
     warnings,
@@ -377,7 +385,7 @@ function packetFormat(data,adapter='generic'){
   const labels={pi:'Pi context packet',claude:'Claude Code context packet',codex:'Codex context packet',generic:'Holoself context packet',obsidian:'Obsidian/Claude context packet','restricted-host':'Restricted-host Holoself context packet'}
   const title=labels[adapter] || labels.generic,metadata=data.packet_metadata
   const docs=[...data.self.documents.map(x=>({...x,owner:'self'})),...data.project.documents.map(x=>({...x,owner:'project'}))]
-  return `# ${title}\n\nPacket ID: ${metadata.packet_id}\nGenerated: ${metadata.generated_at}\nExpires: ${metadata.expires_at||'not applicable (live local resolution)'}\nHost mode: ${metadata.host_mode}\nLens: ${data.lens}\nTask: ${data.task || '(none)'}\nPrivacy: access-filtered. Publication requires disclosure=publish-approved; readability alone is never approval. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n${metadata.source_hashes.map(source=>`- ${source.kind}:${source.path} ${source.sha256} (${source.freshness})`).join('\n')||'- None'}\n\n${docs.map(d=>`## ${d.owner}: ${d.path}\n\nAccess lenses: ${(d.metadata.access_lenses||[]).join(', ')}\nDisclosure: ${d.metadata.disclosure}\nSensitivity: ${d.metadata.sensitivity}\nDocument role: ${d.metadata.document_role}\nPublication allowed: ${d.metadata.publication_allowed?'yes':'no'}\n\n${d.content}`).join('\n\n')}\n\n## Restrictions\n\n${data.restrictions.map(x=>`- ${x.source}: ${x.reason}`).join('\n') || '- None'}\n`
+  return `# ${title}\n\nPacket ID: ${metadata.packet_id}\nGenerated: ${metadata.generated_at}\nExpires: ${metadata.expires_at||'not applicable (live local resolution)'}\nHost mode: ${metadata.host_mode}\nLens: ${data.lens}\nLens source: ${data.lens_resolution.source}\nLens base: ${data.lens_resolution.base_lens}\nTask: ${data.task || '(none)'}\nPrivacy: access-filtered. Publication requires disclosure=publish-approved; readability alone is never approval. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n${metadata.source_hashes.map(source=>`- ${source.kind}:${source.path} ${source.sha256} (${source.freshness})`).join('\n')||'- None'}\n\n${docs.map(d=>`## ${d.owner}: ${d.path}\n\nAccess lenses: ${(d.metadata.access_lenses||[]).join(', ')}\nDisclosure: ${d.metadata.disclosure}\nSensitivity: ${d.metadata.sensitivity}\nDocument role: ${d.metadata.document_role}\nPublication allowed: ${d.metadata.publication_allowed?'yes':'no'}\n\n${d.content}`).join('\n\n')}\n\n## Restrictions\n\n${data.restrictions.map(x=>`- ${x.source}: ${x.reason}`).join('\n') || '- None'}\n`
 }
 async function askConfirm(o,message){
   if(o.yes) return true
@@ -480,9 +488,9 @@ function safeTarget(self,target){
   return path
 }
 function indexRoot(project){return assertContainedPath(project,join(project,'.holoself','index'),'index directory')}
-function privacyMetadata(metadata){
-  const rawSensitivity=typeof metadata.sensitivity==='string'?metadata.sensitivity:null,sensitivity=SENSITIVITIES.includes(rawSensitivity)?rawSensitivity:(rawSensitivity?'restricted':'personal')
-  const result={access_lenses:accessLenses(metadata).filter(x=>LENSES.includes(x)),disclosure:disclosure(metadata),sensitivity,document_role:documentRole(metadata),publication_allowed:publicationAllowed({...metadata,sensitivity}),task_include:Array.isArray(metadata.task_include)?metadata.task_include:[],task_exclude:Array.isArray(metadata.task_exclude)?metadata.task_exclude:[],visibility:visibility(metadata),public_safe:Object.hasOwn(metadata,'public_safe')?metadata.public_safe:null,confidence:typeof metadata.confidence==='string'?metadata.confidence:null,exclude_lenses:Array.isArray(metadata.exclude_lenses)?metadata.exclude_lenses.filter(x=>LENSES.includes(x)):[],field_visibility:{}}
+function privacyMetadata(metadata,registry=null){
+  const rawSensitivity=typeof metadata.sensitivity==='string'?metadata.sensitivity:null,sensitivity=SENSITIVITIES.includes(rawSensitivity)?rawSensitivity:(rawSensitivity?'restricted':'personal'),known=x=>registry?registry.byId.has(x):LENSES.includes(x)
+  const result={access_lenses:accessLenses(metadata).filter(known),disclosure:disclosure(metadata),sensitivity,document_role:documentRole(metadata),publication_allowed:publicationAllowed({...metadata,sensitivity}),task_include:Array.isArray(metadata.task_include)?metadata.task_include:[],task_exclude:Array.isArray(metadata.task_exclude)?metadata.task_exclude:[],visibility:visibility(metadata),public_safe:Object.hasOwn(metadata,'public_safe')?metadata.public_safe:null,confidence:typeof metadata.confidence==='string'?metadata.confidence:null,exclude_lenses:Array.isArray(metadata.exclude_lenses)?metadata.exclude_lenses.filter(known):[],field_visibility:{}}
   if(metadata.field_visibility&&typeof metadata.field_visibility==='object'&&!Array.isArray(metadata.field_visibility))for(const [key,value] of Object.entries(metadata.field_visibility))result.field_visibility[key]=VISIBILITIES.includes(value)?value:'private'
   return result
 }
@@ -492,29 +500,29 @@ function privacySections(body,policy){
   for(const section of sections(ordinary)){const heading=section.heading.toLowerCase(),fieldRule=Object.entries(policy.field_visibility||{}).find(([field])=>heading.includes(field.toLowerCase())),v=COMPENSATION_RE.test(heading)?'private':fieldRule?.[1]||policy.visibility;chunks.push({...section,visibility:v,claim:false,disclosure:policy.disclosure})}
   return chunks
 }
-function indexInputHash(project,link=readLink(project)){
+function indexInputHash(project,link=readLink(project),registry=loadLensRegistry(link.path)){
   const state=[]
   for(const [sourceKind,root,files] of [['self',link.path,canonicalFiles(link.path)],['project',project,projectMarkdownFiles(project,link)]])for(const file of files){const stat=statSync(file);state.push([sourceKind,slash(relative(root,file)),stat.size,stat.mtimeMs,hash(readFileSync(file,'utf8'))])}
-  return hash(JSON.stringify({project_context:link.project_context,state:state.sort((a,b)=>`${a[0]}:${a[1]}`.localeCompare(`${b[0]}:${b[1]}`))}))
+  return hash(JSON.stringify({lens_registry_hash:registry.registry_hash,project_context:link.project_context,state:state.sort((a,b)=>`${a[0]}:${a[1]}`.localeCompare(`${b[0]}:${b[1]}`))}))
 }
-function indexFreshness(project,index,link=readLink(project)){const actual=indexInputHash(project,link);return {fresh:index.input_state_hash===actual,expected:index.input_state_hash||null,actual}}
+function indexFreshness(project,index,link=readLink(project)){const registry=loadLensRegistry(link.path),actual=indexInputHash(project,link,registry);return {fresh:index.lens_registry_hash===registry.registry_hash&&index.input_state_hash===actual,expected:index.input_state_hash||null,actual,lens_registry_hash:registry.registry_hash}}
 function buildIndex(project,changed=false){
-  const link=readLink(project),path=join(indexRoot(project),'index.json');let old={entries:[]};const warnings=[]
-  if(changed&&existsSync(path)){try{const parsed=JSON.parse(readFileSync(path,'utf8'));if(parsed.schema_version===3&&parsed.privacy_policy_version===2)old=parsed}catch{}}
+  const link=readLink(project),registry=loadLensRegistry(link.path),path=join(indexRoot(project),'index.json');let old={entries:[]};const warnings=[]
+  if(changed&&existsSync(path)){try{const parsed=JSON.parse(readFileSync(path,'utf8'));if(parsed.schema_version===4&&parsed.privacy_policy_version===3&&parsed.lens_registry_hash===registry.registry_hash)old=parsed}catch{}}
   const oldByPath=new Map((old.entries||[]).map(x=>[`${x.source_kind}:${x.file}`,x])),entries=[];let skippedSecrets=0
   for(const [sourceKind,root] of [['self',link.path],['project',project]]){
     for(const file of sourceKind==='self'?canonicalFiles(root):projectMarkdownFiles(root,link)){
       const rel=slash(relative(root,file)),text=readFileSync(file,'utf8');let parsed
-      try{parsed=frontmatter(text,{tolerant:sourceKind==='project'})}catch(error){warnings.push(`${sourceKind}:${rel}: ${error.message}; excluded fail-closed`);continue}
+      try{parsed=frontmatter(text,{tolerant:sourceKind==='project',registry})}catch(error){warnings.push(`${sourceKind}:${rel}: ${error.message}; excluded fail-closed`);continue}
       const {metadata,body}=parsed
       if(secretFile(file,root)||SECRET_RE.test(text)||['secret','credential','credentials'].includes(metadata.sensitivity)){skippedSecrets++;continue}
       if(sourceKind==='self'){
-        const metadataErrors=canonicalPrivacyMetadataErrors(metadata)
+        const metadataErrors=canonicalPrivacyMetadataErrors(metadata,registry)
         if(metadataErrors.length){warnings.push(`${sourceKind}:${rel}: ${metadataErrors.join('; ')}; excluded fail-closed`);continue}
       }
       const modified=statSync(file).mtimeMs,oldEntry=oldByPath.get(`${sourceKind}:${rel}`);if(changed&&oldEntry?.modified_ms===modified&&oldEntry?.source_text_hash===hash(text)){entries.push(oldEntry);continue}
       if(!VISIBILITIES.includes(visibility(metadata)))continue
-      const policy=privacyMetadata(metadata),indexedSections=privacySections(body,policy)
+      const policy=privacyMetadata(metadata,registry),indexedSections=privacySections(body,policy)
       const annotatedClaims=indexedSections.flatMap(section=>claims(section.content).map(text=>({text,visibility:COMPENSATION_RE.test(text)?'private':section.visibility})))
       const annotatedLinks=indexedSections.flatMap(section=>links(section.content).map(value=>({value,visibility:section.visibility})))
       const annotatedTags=indexedSections.flatMap(section=>tags(section.content).map(value=>({value,visibility:section.visibility})))
@@ -529,23 +537,23 @@ function buildIndex(project,changed=false){
   for(const entry of entries)for(const section of entry.sections||[])if(SECRET_RE.test(section.content))assertionErrors.push(`${entry.source_kind}:${entry.file}: secret-like content survived index build`)
   if(assertionErrors.length)throw new Error(`index post-build assertions failed: ${assertionErrors.join('; ')}`)
   const buildAssertions={status:'passed',checks:['include-policy','exclude-policy','required-includes','forbidden-excludes','secret-pattern-scan'],included_project_files:projectEntries.length}
-  const index={schema_version:3,privacy_policy_version:2,engine:'deterministic-json',source_of_truth:'Markdown',generated_at:new Date().toISOString(),input_state_hash:indexInputHash(project,link),project_context_hash:hash(JSON.stringify(link.project_context)),project:slash(project),self:slash(link.path),skipped_secret_files:skippedSecrets,warnings,build_assertions:buildAssertions,entries}
+  const index={schema_version:4,privacy_policy_version:3,lens_registry_hash:registry.registry_hash,engine:'deterministic-json',source_of_truth:'Markdown',generated_at:new Date().toISOString(),input_state_hash:indexInputHash(project,link,registry),project_context_hash:hash(JSON.stringify(link.project_context)),project:slash(project),self:slash(link.path),skipped_secret_files:skippedSecrets,warnings,build_assertions:buildAssertions,entries}
   ensureDir(indexRoot(project));atomicWrite(path,JSON.stringify(index,null,2)+'\n');return index
 }
 function readIndex(project,auto=true){
   const path=join(indexRoot(project),'index.json');if(!existsSync(path)){if(auto)return buildIndex(project);throw new Error(`index missing: ${path}`)}
   let index;try{index=JSON.parse(readFileSync(path,'utf8'))}catch{if(auto)return buildIndex(project);throw new Error(`index is invalid JSON: ${path}`)}
-  if(index.schema_version!==3||index.privacy_policy_version!==2||index.engine!=='deterministic-json'||!Array.isArray(index.entries)||index.build_assertions?.status!=='passed'){if(auto)return buildIndex(project);throw new Error(`index schema is stale or invalid: ${path}`)}
+  if(index.schema_version!==4||index.privacy_policy_version!==3||typeof index.lens_registry_hash!=='string'||index.engine!=='deterministic-json'||!Array.isArray(index.entries)||index.build_assertions?.status!=='passed'){if(auto)return buildIndex(project);throw new Error(`index schema is stale or invalid: ${path}`)}
   const freshness=indexFreshness(project,index);if(!freshness.fresh){if(auto)return buildIndex(project);throw new Error(`index content is stale: ${path}`)}return index
 }
-function searchIndex(index,query,lens='general'){
-  const terms=[...tokenize(query)],results=[]
-  for(const entry of index.entries){if(!allowed(entry.frontmatter||{},lens,'generic'))continue
+function searchIndex(index,query,lens='general',registry=null,resolution=null){
+  const terms=[...tokenize(query)],results=[],behaviorLens=resolution?.base_lens||lens
+  for(const entry of index.entries){if(!allowed(entry.frontmatter||{},lens,'generic',null,resolution))continue
     const policy=entry.frontmatter||{}
-    if(lens==='publishing'&&policy.sensitivity==='employer-confidential'&&policy.document_role!=='policy')continue
-    if(lens==='publishing'&&policy.document_role==='evidence'&&!policy.publication_allowed)continue
-    for(const section of entry.sections||[]){const sectionVisibility=VISIBILITIES.includes(section.visibility)?section.visibility:'private';if(!allowed({visibility:sectionVisibility},lens,'generic'))continue
-      const restrictions=[],filtered=filterFieldVisibility(filterClaimVisibility(section.content,lens,entry.file,restrictions),entry.frontmatter||{},lens,entry.file,restrictions);if(!filtered.trim())continue
+    if(behaviorLens==='publishing'&&policy.sensitivity==='employer-confidential'&&policy.document_role!=='policy')continue
+    if(behaviorLens==='publishing'&&policy.document_role==='evidence'&&!policy.publication_allowed)continue
+    for(const section of entry.sections||[]){const sectionVisibility=VISIBILITIES.includes(section.visibility)?section.visibility:'private';if(!allowed({visibility:sectionVisibility},behaviorLens,'generic'))continue
+      const restrictions=[],filtered=filterFieldVisibility(filterClaimVisibility(section.content,lens,entry.file,restrictions,resolution),entry.frontmatter||{},lens,entry.file,restrictions,resolution);if(!filtered.trim())continue
       const hay=`${section.heading} ${filtered}`.toLowerCase(),score=terms.filter(x=>hay.includes(x)).length;if(!score)continue
       const passage=filtered.length>360?filtered.slice(0,357)+'...':filtered
       results.push({source_file:entry.file,source_kind:entry.source_kind,source_project:entry.source_project,section:section.heading,matching_passage:passage,provenance:`${entry.source_kind}:${entry.file}#${section.heading}`,access_lenses:policy.access_lenses||[],disclosure:section.disclosure||policy.disclosure||'internal-only',sensitivity:policy.sensitivity||'personal',document_role:policy.document_role||'content',publication_allowed:Boolean(policy.publication_allowed),visibility:sectionVisibility,freshness:entry.modified_at,score})
@@ -554,13 +562,14 @@ function searchIndex(index,query,lens='general'){
   return results.sort((a,b)=>b.score-a.score||a.source_file.localeCompare(b.source_file))
 }
 export function ecosystemValidationErrors(root,project=null){
-  const errors=[]
-  const checkMarkdown=base=>{
+  const errors=[];let rootRegistry=null
+  if(existsSync(root)){try{rootRegistry=loadLensRegistry(root)}catch(error){errors.push(error.message)}}
+  const checkMarkdown=(base,registry=rootRegistry)=>{
     for(const path of markdownFiles(base)){
       const text=readFileSync(path,'utf8'),rel=slash(relative(base,path));let metadata={}
-      try{metadata=frontmatter(text).metadata}catch(error){errors.push(`${error.message}: ${rel}`)}
+      try{metadata=frontmatter(text,{registry}).metadata}catch(error){errors.push(`${error.message}: ${rel}`)}
       const canonicalContent=/^(?:profile|context|topics)\//.test(rel)
-      if(canonicalContent)for(const error of canonicalPrivacyMetadataErrors(metadata))errors.push(`${error}: ${rel}`)
+      if(canonicalContent)for(const error of canonicalPrivacyMetadataErrors(metadata,registry))errors.push(`${error}: ${rel}`)
       if(metadata.visibility&&!VISIBILITIES.includes(metadata.visibility))errors.push(`invalid visibility ${metadata.visibility}: ${rel}`)
       if(metadata.field_visibility!==undefined&&(typeof metadata.field_visibility!=='object'||Array.isArray(metadata.field_visibility)))errors.push(`field_visibility must be a mapping: ${rel}`)
       else for(const value of Object.values(metadata.field_visibility||{}))if(!VISIBILITIES.includes(value))errors.push(`invalid field visibility ${value}: ${rel}`)
@@ -571,7 +580,7 @@ export function ecosystemValidationErrors(root,project=null){
     const claimsPath=join(base,'context','claims.md')
     if(existsSync(claimsPath)){const seen=new Set();for(const claim of canonicalClaims(readFileSync(claimsPath,'utf8'))){const key=normalize(claim);if(seen.has(key))errors.push(`duplicate canonical claim: ${claim}`);seen.add(key)}}
   }
-  if(existsSync(root))checkMarkdown(root)
+  if(existsSync(root)&&rootRegistry)checkMarkdown(root)
   const proposalRoots=[join(root,'proposals')]
   if(project){
     try{
@@ -581,8 +590,9 @@ export function ecosystemValidationErrors(root,project=null){
       if(link.access!=='read')errors.push('link access must be read')
       if(link.proposals!=='enabled'&&link.proposals!=='disabled')errors.push(`invalid proposals mode: ${link.proposals}`)
       if(link.index!=='local')errors.push(`link index must be local: ${link.index}`)
-      if(!LENSES.includes(link.default_lens))errors.push(`invalid default lens: ${link.default_lens}`)
-      for(const lens of link.secondary_lenses||[])if(!LENSES.includes(lens))errors.push(`invalid secondary lens: ${lens}`)
+      const registry=loadLensRegistry(link.path)
+      try{resolveLens(registry,link.default_lens)}catch{errors.push(`invalid default lens: ${link.default_lens}`)}
+      for(const lens of link.secondary_lenses||[])try{resolveLens(registry,lens)}catch{errors.push(`invalid secondary lens: ${lens}`)}
     }catch(error){errors.push(error.message)}
     proposalRoots.push(join(project,'.holoself','proposals'))
   }
@@ -601,27 +611,37 @@ async function activateLinkedProject(o,project,link,verb='Activate'){
   if(!await askConfirm(o,`${verb} Holoself by modifying bounded managed files: ${plan.writes.join(', ')}?`))return null
   const result=activateProject(project,link,options);for(const item of result.results)console.log(` - ${item.id}: ${item.file} (${item.result})`);return result
 }
-function healthStatus(project,link){const activation=activationStatus(project),selfExists=existsSync(link.path),snapshot=existsSync(join(project,'.holoself','runtime','context-packet.md')),errors=[];if(!selfExists)errors.push('self path missing');if(!activation.bootstrap&&!snapshot)errors.push('bootstrap missing');if(!activation.adapters.length&&!snapshot)errors.push('no activated adapters');for(const a of activation.adapters){if(a.marker!=='active')errors.push(`${a.file}: ${a.marker}`);else if(a.drift)errors.push(`${a.file}: managed block drift`)}const state=!selfExists?'broken':activation.active?'activated':snapshot&&!activation.runtime?'manual-only':activation.runtime?'degraded':'configured';return {state,activation,snapshot,errors}}
+function healthStatus(project,link){const activation=activationStatus(project),selfExists=existsSync(link.path),snapshot=existsSync(join(project,'.holoself','runtime','context-packet.md')),skillPolicy=activation.runtime?.skillInstallPolicy||'auto',errors=[];if(!selfExists)errors.push('self path missing');if(!activation.bootstrap&&!snapshot)errors.push('bootstrap missing');if(!activation.adapters.length&&!snapshot)errors.push('no activated adapters');for(const a of activation.adapters){if(a.marker!=='active')errors.push(`${a.file}: ${a.marker}`);else if(a.drift)errors.push(`${a.file}: managed block drift`)}for(const skill of activation.skillInstallations)if(!skill.installed||skill.kind!=='full-public-skill')errors.push(`${skill.file}: ${skill.kind}`);if(skillPolicy!=='none'&&!activation.skillInstallations.length)errors.push('no public skill installation');const state=!selfExists?'broken':activation.active&&errors.length===0?'activated':snapshot&&!activation.runtime?'manual-only':activation.runtime?'degraded':'configured';return {state,activation,snapshot,skillPolicy,errors}}
+function commandStatus(){const invoked=slash(resolve(process.argv[1]||'')),packageBin=invoked.includes('/node_modules/');return {available:'not-verified',invocation:packageBin?'package-bin':'source-checkout',path:invoked||null,note:packageBin?'This process used a package bin, but PATH availability was not independently verified.':'Run with node bin/holoself.mjs; source checkout does not prove a holoself command is installed on PATH.'}}
 export async function runEcosystem(o){
   const sub=o.args?.[0]
+  if(o.command==='lens'){
+    const root=resolve(o.root)
+    if(!existsSync(root)||lstatSync(root).isSymbolicLink()||!lstatSync(root).isDirectory())throw new Error(`invalid self root: ${root}`)
+    const registry=loadLensRegistry(root)
+    if(sub==='list'){console.log(JSON.stringify({root:slash(root),registry_path:slash(registry.registry_path),registry_hash:registry.registry_hash,lenses:registry.lenses.map(lens=>({...lens,sensitivity_access:[...lens.sensitivity_access]}))},null,2));return true}
+    if(sub==='show'){const id=o.args?.[1];if(!id)throw new Error('lens show requires <id>');const lens=resolveLens(registry,id);console.log(JSON.stringify({root:slash(root),registry_hash:registry.registry_hash,lens:{...lens,sensitivity_access:[...lens.sensitivity_access]}},null,2));return true}
+    if(sub==='validate'){console.log(JSON.stringify({status:'valid',root:slash(root),registry_path:slash(registry.registry_path),registry_hash:registry.registry_hash,builtins:registry.builtins.length,custom_lenses:registry.custom.length},null,2));return true}
+    throw new Error('lens requires list, show, or validate')
+  }
   if(o.command==='link' && ['add','status','remove','setup','activate','deactivate','repair','doctor'].includes(sub)){
     const project=projectPath(o)
     if(sub==='add'){
-      if(!o.self)throw new Error('link add requires --self <path>');if(!existsSync(project))throw new Error(`project not found: ${project}`);if(!existsSync(o.self))throw new Error(`self path not found: ${resolve(o.self)}`);if(!existsSync(join(o.self,'profile'))||!existsSync(join(o.self,'context')))throw new Error(`self path lacks profile/context layout: ${resolve(o.self)}`);const desired={path:slash(resolve(o.self)),access:'read',proposals:'enabled',index:'local',default_lens:o.lens||'general',secondary_lenses:o.secondaryLenses||[]},desiredErrors=linkSchemaErrors(desired);if(desiredErrors.length)throw new Error(desiredErrors.join('; '))
+      if(!o.self)throw new Error('link add requires --self <path>');if(!existsSync(project))throw new Error(`project not found: ${project}`);if(!existsSync(o.self))throw new Error(`self path not found: ${resolve(o.self)}`);if(!existsSync(join(o.self,'profile'))||!existsSync(join(o.self,'context')))throw new Error(`self path lacks profile/context layout: ${resolve(o.self)}`);const desired={path:slash(resolve(o.self)),access:'read',proposals:'enabled',index:'local',default_lens:o.lens||'general',secondary_lenses:o.secondaryLenses||[]},desiredErrors=linkSchemaErrors(desired,loadLensRegistry(resolve(o.self)));if(desiredErrors.length)throw new Error(desiredErrors.join('; '))
       const collisions=inspectLinkCollisions(project);if(collisions.length){if(!o.force)throw new Error(`existing Holoself metadata collision: ${collisions.join(', ')}; use --force with explicit confirmation to preserve README and replace link configuration`);if(!await askConfirm(o,`Replace link configuration while preserving existing project metadata (${collisions.join(', ')})?`))return true}
       if(!o.noActivate){const {plan}=preflightActivation(project,{activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||'auto',dryRun:o.dryRun,force:o.force});console.log(JSON.stringify({activation_plan:{canonical:plan.canonical,adapters:plan.adapters.map(x=>({id:x.id,file:x.file,support:x.support,delivery:x.delivery,discovery:x.discovery,tested_product:x.tested_product,tested_version:x.tested_version,evidence:x.evidence,last_verified:x.last_verified,detected:x.detected})),skills:plan.skills,writes:plan.writes}},null,2));if(!await askConfirm(o,`Create link and modify bounded managed files: ${plan.writes.join(', ')}?`))return true}
       const existingLink=pathExists(linkPath(project))?readFileSync(linkPath(project)):null;let link;try{if(o.dryRun)link={...desired,project_context:{include:o.projectContext?.include||['**/*.md'],exclude:[...DEFAULT_PROJECT_EXCLUDES,...(o.projectContext?.exclude||[])]}};else{createLinkDirs(project,{preserveReadme:o.force});link=writeLink(project,o.self,o.lens||'general',o.secondaryLenses||[],o.projectContext||{})}console.log(`${o.dryRun?'[dry-run] ':'[ok] '}linked ${project} -> ${link.path}`);if(!o.noActivate){const result=activateProject(project,link,{activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||'auto',dryRun:o.dryRun,force:o.force});for(const item of result.results)console.log(` - ${item.id}: ${item.file} (${item.result})`)}}catch(error){if(!o.dryRun){if(existingLink)atomicWrite(linkPath(project),existingLink);else if(pathExists(linkPath(project)))rmSync(linkPath(project),{force:true})}throw error}return true
     }
     if(sub==='status'){
-      let link;try{link=readLink(project)}catch(error){console.log(JSON.stringify({project:slash(project),state:'broken',errors:[error.message]},null,2));process.exitCode=1;return true}const health=healthStatus(project,link),{project_context,...selfContext}=link,status={project:slash(project),state:health.state,self_context:{...selfContext,path:slash(link.path)},project_context,self_exists:existsSync(link.path),pending_proposals:listProposalData(project).filter(x=>x.status==='pending').length,index_exists:existsSync(join(indexRoot(project),'index.json')),bootstrap_exists:health.activation.bootstrap,activated_adapters:health.activation.adapters,errors:health.errors};console.log(JSON.stringify(status,null,2));if(['broken','degraded'].includes(status.state))process.exitCode=1;return true
+      let link;try{link=readLink(project)}catch(error){console.log(JSON.stringify({project:slash(project),state:'broken',errors:[error.message]},null,2));process.exitCode=1;return true}const health=healthStatus(project,link),{project_context,...selfContext}=link,status={project:slash(project),state:health.state,self_context:{...selfContext,path:slash(link.path)},project_context,self_exists:existsSync(link.path),pending_proposals:listProposalData(project).filter(x=>x.status==='pending').length,index_exists:existsSync(join(indexRoot(project),'index.json')),bootstrap_exists:health.activation.bootstrap,activated_adapters:health.activation.adapters,skill_install_policy:health.skillPolicy,skill_installations:health.activation.skillInstallations,cli_command:commandStatus(),errors:health.errors};console.log(JSON.stringify(status,null,2));if(['broken','degraded'].includes(status.state))process.exitCode=1;return true
     }
     if(sub==='remove'){
       const path=linkPath(project);if(!pathExists(path)){console.log('[ok] no link configuration found');return true}if(lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())throw new Error(`${path} is not a regular link configuration; refusing to remove`);if(!await askConfirm(o,`Remove managed activation and link configuration ${path}?`)){console.log('Cancelled.');return true}deactivateProject(project,{dryRun:o.dryRun});if(!o.dryRun)rmSync(path);console.log(`[ok] removed ${path}; indexes, reports, and proposals preserved`);return true
     }
     if(['activate','repair'].includes(sub)){const link=readLink(project);await activateLinkedProject(o,project,link,sub==='repair'?'Repair':'Activate');return true}
     if(sub==='deactivate'){if(!await askConfirm(o,'Remove bounded Holoself activation sections while preserving link metadata?'))return true;const results=deactivateProject(project,{dryRun:o.dryRun});for(const item of results)console.log(` - ${item.file}: ${item.result}`);return true}
-    if(sub==='doctor'){const link=readLink(project),health=healthStatus(project,link),checks={link:'valid',self_root:existsSync(link.path)?'valid':'missing',lens:LENSES.includes(link.default_lens)?'valid':'invalid',bootstrap:health.activation.bootstrap?'valid':'missing',activation:health.activation.active?'valid':'degraded',context:'unknown'};try{const data=contextData({...o,project});checks.context=data.sources.length?'valid':'empty';checks.warnings=data.warnings}catch(error){checks.context='broken';checks.context_error=error.message}const ok=!Object.values(checks).some(x=>['missing','invalid','degraded','broken'].includes(x));console.log(JSON.stringify({state:ok?'activated':'degraded',checks},null,2));if(!ok)process.exitCode=1;return true}
-    const findings=setupFindings(project);console.log(JSON.stringify(findings,null,2));let self=o.self;if(!self&&input.isTTY&&output.isTTY){const answer=await askValue('Canonical self path');if(answer)self=resolve(answer)}if(!self){if(o.yes)throw new Error('link setup requires --self <path> before confirmation');console.log('No changes made. Re-run with --self <path> --yes to create link.');return true}if(!existsSync(join(self,'profile'))||!existsSync(join(self,'context')))throw new Error(`self path lacks profile/context layout: ${resolve(self)}`);const collisions=inspectLinkCollisions(project);if(collisions.length&&!o.force)throw new Error(`existing Holoself metadata collision: ${collisions.join(', ')}; use --force with explicit confirmation`);if(!o.noActivate){const {plan}=preflightActivation(project,{activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||'auto',dryRun:o.dryRun,force:o.force});console.log(JSON.stringify({activation_plan:{canonical:plan.canonical,adapters:plan.adapters,skills:plan.skills,writes:plan.writes}},null,2))}if(!await askConfirm(o,`${collisions.length?'Replace link configuration while preserving existing README and artifacts':'Create and activate link'} using ${self} and ${o.lens||findings.suggested_lens} lens?`)){console.log('Cancelled.');return true}let link;if(o.dryRun)link={path:resolve(self),access:'read',proposals:'enabled',index:'local',default_lens:o.lens||findings.suggested_lens,secondary_lenses:o.secondaryLenses||[],project_context:{include:o.projectContext?.include||['**/*.md'],exclude:[...DEFAULT_PROJECT_EXCLUDES,...(o.projectContext?.exclude||[])]}};else{createLinkDirs(project,{preserveReadme:o.force});link=writeLink(project,self,o.lens||findings.suggested_lens,o.secondaryLenses||[],o.projectContext||{})}if(!o.noActivate){const result=activateProject(project,link,{activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||'auto',dryRun:o.dryRun,force:o.force});for(const item of result.results)console.log(` - ${item.id}: ${item.file} (${item.result})`)}console.log(`${o.dryRun?'[dry-run] ':'[ok] '}setup complete; no files deleted or relocated`);return true
+    if(sub==='doctor'){const link=readLink(project),health=healthStatus(project,link),skillHealthy=health.skillPolicy==='none'||(health.activation.skillInstallations.length&&health.activation.skillInstallations.every(x=>x.kind==='full-public-skill'&&x.installed)),checks={link:'valid',self_root:existsSync(link.path)?'valid':'missing',lens:loadLensRegistry(link.path).byId.has(link.default_lens)?'valid':'invalid',bootstrap:health.activation.bootstrap?'valid':'missing',activation:health.activation.active?'valid':'degraded',skill_installation:health.skillPolicy==='none'?'disabled':skillHealthy?'full-public-skill':'degraded',cli_command:commandStatus(),context:'unknown'};try{const data=contextData({...o,project});checks.context=data.sources.length?'valid':'empty';checks.warnings=data.warnings}catch(error){checks.context='broken';checks.context_error=error.message}const ok=!Object.values(checks).some(x=>['missing','invalid','degraded','broken'].includes(x));console.log(JSON.stringify({state:ok?'activated':'degraded',checks},null,2));if(!ok)process.exitCode=1;return true}
+    const findings=setupFindings(project);console.log(JSON.stringify(findings,null,2));let self=o.self;if(!self&&input.isTTY&&output.isTTY){const answer=await askValue('Canonical self path');if(answer)self=resolve(answer)}if(!self){if(o.yes)throw new Error('link setup requires --self <path> before confirmation');console.log('No changes made. Re-run with --self <path> --yes to create link.');return true}if(!existsSync(join(self,'profile'))||!existsSync(join(self,'context')))throw new Error(`self path lacks profile/context layout: ${resolve(self)}`);const setupRegistry=loadLensRegistry(resolve(self));resolveLens(setupRegistry,o.lens||findings.suggested_lens);for(const lens of o.secondaryLenses||[])resolveLens(setupRegistry,lens);const collisions=inspectLinkCollisions(project);if(collisions.length&&!o.force)throw new Error(`existing Holoself metadata collision: ${collisions.join(', ')}; use --force with explicit confirmation`);if(!o.noActivate){const {plan}=preflightActivation(project,{activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||'auto',dryRun:o.dryRun,force:o.force});console.log(JSON.stringify({activation_plan:{canonical:plan.canonical,adapters:plan.adapters,skills:plan.skills,writes:plan.writes}},null,2))}if(!await askConfirm(o,`${collisions.length?'Replace link configuration while preserving existing README and artifacts':'Create and activate link'} using ${self} and ${o.lens||findings.suggested_lens} lens?`)){console.log('Cancelled.');return true}let link;if(o.dryRun)link={path:resolve(self),access:'read',proposals:'enabled',index:'local',default_lens:o.lens||findings.suggested_lens,secondary_lenses:o.secondaryLenses||[],project_context:{include:o.projectContext?.include||['**/*.md'],exclude:[...DEFAULT_PROJECT_EXCLUDES,...(o.projectContext?.exclude||[])]}};else{createLinkDirs(project,{preserveReadme:o.force});link=writeLink(project,self,o.lens||findings.suggested_lens,o.secondaryLenses||[],o.projectContext||{})}if(!o.noActivate){const result=activateProject(project,link,{activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||'auto',dryRun:o.dryRun,force:o.force});for(const item of result.results)console.log(` - ${item.id}: ${item.file} (${item.result})`)}console.log(`${o.dryRun?'[dry-run] ':'[ok] '}setup complete; no files deleted or relocated`);return true
   }
   if(o.command==='context'){
     const data=contextData(o),format=o.json?'json':(o.format||'packet'),packetAdapter=o.restrictedHost?'restricted-host':(o.adapter||format),content=format==='json'?JSON.stringify(data,null,2)+'\n':packetFormat(data,packetAdapter);if(o.output||o.snapshot){const project=projectPath(o),out=o.output||join(project,'.holoself','runtime','context-packet.md');if(!o.yes)throw new Error(`Writing context snapshot requires --yes: ${out}`);assertContainedPath(project,out,'snapshot output');atomicWrite(out,content);console.log(JSON.stringify({status:'written',mode:'snapshot',path:slash(out),lens:data.lens,sources:data.sources.length,packet_metadata:data.packet_metadata,validation:data.validation,warnings:data.warnings},null,2))}else console.log(content.trimEnd());return true
@@ -652,11 +672,11 @@ export async function runEcosystem(o){
     if(!await askConfirm(o,`${action==='reject'?'Reject':'Defer'} proposal ${p.proposal_id}?`)){console.log('Cancelled.');return true}stateProposal(project,p,action==='reject'?'rejected':'deferred');console.log(`[ok] ${action==='reject'?'rejected':'deferred'} ${p.proposal_id}`);return true
   }
   if(o.command==='index'){
-    const project=projectPath(o);if(sub==='status'){const path=join(indexRoot(project),'index.json');if(!existsSync(path)){console.log(JSON.stringify({status:'missing',path:slash(path)},null,2));return true}let index;try{index=JSON.parse(readFileSync(path,'utf8'))}catch{throw new Error(`index is invalid JSON: ${path}`)};if(index.schema_version!==3||index.privacy_policy_version!==2||!Array.isArray(index.entries))throw new Error(`index schema is stale or invalid: ${path}`);const freshness=indexFreshness(project,index);console.log(JSON.stringify({status:freshness.fresh?'ready':'stale',fresh:freshness.fresh,path:slash(path),schema_version:index.schema_version,privacy_policy_version:index.privacy_policy_version,engine:index.engine,entries:index.entries.length,generated_at:index.generated_at,input_state_hash:index.input_state_hash,skipped_secret_files:index.skipped_secret_files,build_assertions:index.build_assertions},null,2));return true}
-    const rebuild=sub==='rebuild';const index=buildIndex(project,o.changed&&!rebuild);console.log(JSON.stringify({status:'ready',fresh:true,schema_version:index.schema_version,privacy_policy_version:index.privacy_policy_version,engine:index.engine,entries:index.entries.length,generated_at:index.generated_at,skipped_secret_files:index.skipped_secret_files,build_assertions:index.build_assertions},null,2));return true
+    const project=projectPath(o);if(sub==='status'){const path=join(indexRoot(project),'index.json');if(!existsSync(path)){console.log(JSON.stringify({status:'missing',path:slash(path)},null,2));return true}let index;try{index=JSON.parse(readFileSync(path,'utf8'))}catch{throw new Error(`index is invalid JSON: ${path}`)};if(index.schema_version!==4||index.privacy_policy_version!==3||typeof index.lens_registry_hash!=='string'||!Array.isArray(index.entries))throw new Error(`index schema is stale or invalid: ${path}`);const freshness=indexFreshness(project,index);console.log(JSON.stringify({status:freshness.fresh?'ready':'stale',fresh:freshness.fresh,path:slash(path),schema_version:index.schema_version,privacy_policy_version:index.privacy_policy_version,lens_registry_hash:freshness.lens_registry_hash,engine:index.engine,entries:index.entries.length,generated_at:index.generated_at,input_state_hash:index.input_state_hash,skipped_secret_files:index.skipped_secret_files,build_assertions:index.build_assertions},null,2));return true}
+    const rebuild=sub==='rebuild';const index=buildIndex(project,o.changed&&!rebuild);console.log(JSON.stringify({status:'ready',fresh:true,schema_version:index.schema_version,privacy_policy_version:index.privacy_policy_version,lens_registry_hash:index.lens_registry_hash,engine:index.engine,entries:index.entries.length,generated_at:index.generated_at,skipped_secret_files:index.skipped_secret_files,build_assertions:index.build_assertions},null,2));return true
   }
   if(o.command==='search'){
-    const query=o.args.join(' ');if(!query)throw new Error('search requires a query');const project=projectPath(o),index=readIndex(project);let results=searchIndex(index,query,o.lens||'general')
+    const query=o.args.join(' ');if(!query)throw new Error('search requires a query');const project=projectPath(o),link=readLink(project),registry=loadLensRegistry(link.path),lens=o.lens||'general',resolution=resolveLens(registry,lens),index=readIndex(project);let results=searchIndex(index,query,lens,registry,resolution)
     if(o.federated){const seen=new Set(results.map(x=>`${x.provenance}:${x.matching_passage}`));results=results.filter(x=>{const key=`${x.provenance}:${x.matching_passage}`;if(seen.has(key)){seen.delete(key);return true}return false})}
     console.log(JSON.stringify({query,federated:Boolean(o.federated),results},null,2));return true
   }

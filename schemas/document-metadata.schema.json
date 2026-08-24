@@ -9,7 +9,7 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] }
+      "items": { "description": "Structurally valid lens id; runtime semantic validation requires a built-in or registry-known id.", "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40 }
     },
     "disclosure": { "enum": ["internal-only", "review-required", "publish-approved"] },
     "sensitivity": { "enum": ["public", "personal", "compensation-confidential", "third-party-personal", "recruiter-confidential", "employer-confidential", "application-private", "restricted", "none"] },
@@ -20,7 +20,7 @@
     "exclude_lenses": {
       "type": "array",
       "uniqueItems": true,
-      "items": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] }
+      "items": { "description": "Structurally valid lens id; runtime semantic validation requires a built-in or registry-known id.", "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40 }
     },
     "field_visibility": {
       "type": "object",

@@ -76,7 +76,7 @@ test('incomplete or invalid canonical privacy metadata is excluded from context,
   }
   await run(['index','rebuild','--project',project])
   const index=JSON.parse(await readFile(join(project,'.holoself','index','index.json'),'utf8'))
-  assert.equal(index.privacy_policy_version,2)
+  assert.equal(index.privacy_policy_version,3)
   for(const [name] of cases){
     assert.ok(!index.entries.some(entry=>entry.source_kind==='self'&&entry.file===`context/${name}.md`),`${name} index`)
     assert.ok(index.warnings.some(warning=>warning.includes(`self:context/${name}.md`)),`${name} index warning`)
@@ -128,7 +128,7 @@ test('index schema tracks freshness and enforces post-build include/exclude asse
   await writeFile(join(project,'Context','keep.md'),'# Keep\n\nfreshnessmarker one.\n');await writeFile(join(project,'Private','omit.md'),'# Omit\n\nforbiddenindexmarker.\n')
   await run(['link','add','--project',project,'--self',self,'--yes','--project-include','Context/**/*.md,Private/**/*.md','--project-exclude','Private/**','--project-assert-include','Context/**','--project-assert-exclude','Private/**'])
   await run(['index','rebuild','--project',project]);let index=JSON.parse(await readFile(join(project,'.holoself','index','index.json'),'utf8'))
-  assert.equal(index.schema_version,3);assert.equal(index.privacy_policy_version,2);assert.equal(index.build_assertions.status,'passed');assert.ok(index.input_state_hash);assert.ok(!index.entries.some(entry=>entry.file==='Private/omit.md'))
+  assert.equal(index.schema_version,4);assert.equal(index.privacy_policy_version,3);assert.equal(index.build_assertions.status,'passed');assert.ok(index.input_state_hash);assert.ok(!index.entries.some(entry=>entry.file==='Private/omit.md'))
   await writeFile(join(project,'Context','keep.md'),'# Keep\n\nfreshnessmarker two.\n')
   const stale=JSON.parse(await capture(()=>run(['index','status','--project',project])));assert.equal(stale.status,'stale');assert.equal(stale.fresh,false)
   const search=JSON.parse(await capture(()=>run(['search','freshnessmarker two','--project',project,'--lens','general'])));assert.ok(search.results.some(result=>result.source_file==='Context/keep.md'))

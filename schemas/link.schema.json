@@ -15,8 +15,8 @@
         "access": { "const": "read" },
         "proposals": { "enum": ["enabled", "disabled"] },
         "index": { "const": "local" },
-        "default_lens": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] },
-        "secondary_lenses": { "type": "array", "items": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] }, "uniqueItems": true }
+        "default_lens": { "description": "Structurally valid lens id; the CLI requires it to resolve from built-ins or the linked self registry.", "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40 },
+        "secondary_lenses": { "type": "array", "items": { "description": "Structurally valid lens id; runtime semantic validation requires a known id.", "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40 }, "uniqueItems": true }
       }
     },
     "project_context": {

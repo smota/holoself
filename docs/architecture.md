@@ -9,6 +9,7 @@ Holoself is a local-first, Markdown-first whole-person context protocol. Public 
 ├── config.json                 # user selection and schema marker
 ├── profile/                    # stable self attributes
 ├── context/                    # domain context and notes
+├── lenses/                     # optional private typed custom-lens registry
 ├── topics/                     # bounded explorations; .current selects one
 ├── reference/                  # private/local reference material
 ├── me/                         # local self-model activation (for example contribs.md)
@@ -21,7 +22,7 @@ Holoself is a local-first, Markdown-first whole-person context protocol. Public 
 
 ## Schema and ownership
 
-`config.json` uses `schemaVersion: 1` and `product: "holoself"`. Public `contribs/catalog.json` uses `schemaVersion: 1`; each catalog entry identifies an id, title, domain, type, and shipped path. Markdown is canonical. Config, catalogs, and packets are generated/operational metadata.
+`config.json` uses `schemaVersion: 1` and `product: "holoself"`. Public `contribs/catalog.json` uses `schemaVersion: 1`; each catalog entry identifies an id, title, domain, type, and shipped path. Markdown is canonical. Config, catalogs, lens definitions, and packets are generated/operational metadata. Custom lens definitions use schema v1 under optional `<data-root>/lenses/*.json`; runtime semantic resolution validates registry membership after structural schema validation.
 
 - **User-owned/private:** `profile/`, `context/`, `topics/`, `reference/`, `me/`, `contribs/local/`.
 - **Holoself-managed:** `config.json`, `contribs/default/`, and generated `exports/`.

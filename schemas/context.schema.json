@@ -3,22 +3,56 @@
   "$id": "https://holoself.local/schemas/context.schema.json",
   "title": "Holoself resolved context",
   "type": "object",
-  "required": ["self", "lens", "project", "packet_metadata", "sources", "restrictions", "warnings", "validation", "proposals"],
+  "required": ["self", "lens", "lens_resolution", "project", "packet_metadata", "sources", "restrictions", "warnings", "validation", "proposals"],
   "additionalProperties": false,
+  "$defs": {
+    "lensId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40 },
+    "lensResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "id", "title", "source", "base_lens", "sensitivity_access"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/lensId" },
+        "title": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "source": { "enum": ["builtin", "registry"] },
+        "base_lens": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] },
+        "sensitivity_access": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["compensation-confidential", "third-party-personal", "recruiter-confidential", "employer-confidential", "application-private", "restricted"] }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "source": { "const": "registry" } }, "required": ["source"] },
+          "then": {
+            "properties": {
+              "sensitivity_access": {
+                "items": { "enum": ["compensation-confidential", "third-party-personal", "recruiter-confidential", "employer-confidential", "application-private"] }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
   "properties": {
     "self": { "type": "object" },
-    "lens": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] },
+    "lens": { "$ref": "#/$defs/lensId" },
+    "lens_resolution": { "$ref": "#/$defs/lensResolution" },
     "project": { "type": "object" },
     "task": { "type": ["string", "null"] },
     "packet_metadata": {
       "type": "object",
-      "required": ["schema_version", "packet_id", "generated_at", "expires_at", "host_mode", "source_hash_algorithm", "source_hashes"],
+      "required": ["schema_version", "packet_id", "generated_at", "expires_at", "host_mode", "lens_registry_hash", "source_hash_algorithm", "source_hashes"],
       "properties": {
-        "schema_version": { "const": 1 },
+        "schema_version": { "const": 2 },
         "packet_id": { "type": "string", "format": "uuid" },
         "generated_at": { "type": "string", "format": "date-time" },
         "expires_at": { "type": ["string", "null"], "format": "date-time" },
         "host_mode": { "enum": ["live-local", "restricted-host-snapshot"] },
+        "lens_registry_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
         "source_hash_algorithm": { "const": "sha256" },
         "source_hashes": { "type": "array" }
       },

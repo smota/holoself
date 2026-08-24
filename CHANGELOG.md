@@ -4,12 +4,14 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- Adds optional private `<data-root>/lenses/*.json` custom-lens registries with strict v1 definitions, deterministic hashes, hard-error semantic validation, exact document grants, explicit sensitivity access, and read-only `lens list|show|validate` commands.
+- Advances context packets to schema v2 with normalized lens resolution and registry hash, and indexes to schema v4/privacy-policy v3 so registry changes invalidate freshness without migrating Markdown or links.
 - Separates read access (`access_lenses`), public reuse (`disclosure`), handling classification (`sensitivity`), and policy/evidence/content behavior (`document_role`). Untagged canonical documents fail closed; legacy visibility metadata remains conservatively supported.
 - Ensures publishing resolution includes governing policy while excluding unapproved evidence and employer-confidential non-policy content. Context packets and search results expose publication eligibility explicitly.
 - Replaces blanket native-adapter claims with capability evidence fields and clarifies startup adapters, packet formatters, metadata links, snapshots, and legacy live mounts.
 - Adds canonical metadata and adapter capability schemas plus end-to-end privacy/capability tests.
 - Adds task selectors and explicit compensation, third-party, recruiter, employer, and application sensitivity categories with fail-closed lens defaults and post-resolution leakage checks.
-- Upgrades deterministic index to schema v3/privacy-policy v2 with input/config freshness hashes, automatic stale rebuild for search, and persisted include/exclude build assertions.
+- Upgrades deterministic index to schema v4/privacy-policy v3 with input/config/registry freshness hashes, automatic stale rebuild for search, and persisted include/exclude build assertions.
 - Adds restricted-host packet generation with bounded expiry, packet ids, source hashes, validation metadata, and honest snapshot-only adapter documentation.
 
 ## [0.6.0] — 2026-08-14

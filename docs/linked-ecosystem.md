@@ -26,7 +26,7 @@ self_context:
 
 ## Context and privacy
 
-Resolution order: canonical self → selected lens → project-local context → task relevance → privacy filter → provenance-preserving output. Lenses: `general`, `career`, `publishing`, `technical`, `leadership`, `interview`, `private`.
+Resolution order: canonical self → validated built-in/custom lens → project-local context → task relevance → privacy filter → provenance-preserving output. Built-ins are `general`, `career`, `publishing`, `technical`, `leadership`, `interview`, and `private`; optional private custom definitions live under the self root's `lenses/*.json`. Base lenses preserve safe behavior but never grant document access: custom IDs must be explicit in `access_lenses`.
 
 Optional Markdown frontmatter:
 
@@ -51,7 +51,7 @@ Proposals follow `schemas/proposal.schema.json`. UUIDs, filenames, allowed field
 
 ## Local indexing and search
 
-Markdown remains source of truth. Each linked project owns rebuildable `.holoself/index/index.json` schema v3/privacy-policy v2, containing paths, headings, SHA-256 content hashes, input/config state hashes, timestamps, redacted privacy-policy metadata, visibility-annotated links/tags/claims, provenance, and passed post-build assertions. Search verifies freshness and auto-rebuilds when selected inputs or link policy change. `index status` reports `stale` without rebuilding. Optional `project_context.assert_include` and `assert_exclude` patterns make builds fail when expected sources are absent or forbidden sources survive. Search reapplies file, claim, field, sensitivity, and publishing compensation filters. Credential-like filenames, explicit secret sensitivity, private keys, tokens, connection strings, and common secret content patterns are excluded. Dependency-free deterministic JSON is current engine. SQLite/FTS can be added as optional acceleration later, but cannot become source of truth. Index is local, ignorable, independently versioned, and safe to delete/rebuild.
+Markdown remains source of truth. Each linked project owns rebuildable `.holoself/index/index.json` schema v4/privacy-policy v3, containing paths, headings, SHA-256 content hashes, input/config state hashes, timestamps, redacted privacy-policy metadata, visibility-annotated links/tags/claims, provenance, and passed post-build assertions. Search verifies freshness and auto-rebuilds when selected inputs or link policy change. `index status` reports `stale` without rebuilding. Optional `project_context.assert_include` and `assert_exclude` patterns make builds fail when expected sources are absent or forbidden sources survive. Search reapplies file, claim, field, sensitivity, and publishing compensation filters. Credential-like filenames, explicit secret sensitivity, private keys, tokens, connection strings, and common secret content patterns are excluded. Dependency-free deterministic JSON is current engine. SQLite/FTS can be added as optional acceleration later, but cannot become source of truth. Index is local, ignorable, independently versioned, and safe to delete/rebuild.
 
 Federated search reads linked self and project entries in place; it does not centralize Markdown. Results include source, section, passage, provenance, visibility, and freshness.
 

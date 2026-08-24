@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/lens.schema.json",
+  "title": "Holoself custom lens definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "title", "base_lens"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40, "not": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] } },
+    "title": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "base_lens": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] },
+    "sensitivity_access": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["compensation-confidential", "third-party-personal", "recruiter-confidential", "employer-confidential", "application-private"] }
+    }
+  }
+}
