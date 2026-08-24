@@ -4,6 +4,8 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+## [0.6.0] — 2026-08-24
+
 - Adds optional private `<data-root>/lenses/*.json` custom-lens registries with strict v1 definitions, deterministic hashes, hard-error semantic validation, exact document grants, explicit sensitivity access, and read-only `lens list|show|validate` commands.
 - Advances context packets to schema v2 with normalized lens resolution and registry hash, and indexes to schema v4/privacy-policy v3 so registry changes invalidate freshness without migrating Markdown or links.
 - Separates read access (`access_lenses`), public reuse (`disclosure`), handling classification (`sensitivity`), and policy/evidence/content behavior (`document_role`). Untagged canonical documents fail closed; legacy visibility metadata remains conservatively supported.
@@ -13,9 +15,8 @@ All notable Holoself releases are documented here.
 - Adds task selectors and explicit compensation, third-party, recruiter, employer, and application sensitivity categories with fail-closed lens defaults and post-resolution leakage checks.
 - Upgrades deterministic index to schema v4/privacy-policy v3 with input/config/registry freshness hashes, automatic stale rebuild for search, and persisted include/exclude build assertions.
 - Adds restricted-host packet generation with bounded expiry, packet ids, source hashes, validation metadata, and honest snapshot-only adapter documentation.
-
-## [0.6.0] — 2026-08-14
-
+- Hardens Windows live activation by normalizing CRLF public skills before managed-section parsing.
+- Preserves legacy folded/literal proposal text, `preference_update` records, and terminal audit archives while retaining strict containment for pending proposals.
 - Adds activated read-only project links: `link add` detects agent platforms, generates a neutral bootstrap/runtime manifest, injects bounded startup pointers after confirmation, and supports activate/deactivate/repair/doctor lifecycle commands.
 - Adds lens/task/privacy-aware context resolution with provenance and Pi, Claude Code, Codex, generic, and Obsidian packet adapters.
 - Adds non-mutating overlap/conflict/stale reports and confirmed proposal approval/rejection/defer workflow.
