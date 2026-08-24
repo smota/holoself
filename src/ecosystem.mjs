@@ -22,7 +22,7 @@ const SENSITIVITY_LENSES={
   'application-private':['career','interview','private'],
   restricted:['private']
 }
-export const PROPOSAL_TYPES = ['new_fact','fact_update','fact_correction','new_story','new_preference','new_decision','privacy_warning','conflict_resolution']
+export const PROPOSAL_TYPES = ['new_fact','fact_update','fact_correction','new_story','new_preference','preference_update','new_decision','privacy_warning','conflict_resolution']
 export const PROPOSAL_STATES = ['pending','approved','rejected','deferred','superseded']
 const SKIP_DIRS = new Set(['.git','node_modules','.holoself','proposals','exports','.agents','.claude','.codex','.pi','.agy','.gemini','.cursor','.github','skills','Generated','generated'])
 const DEFAULT_PROJECT_EXCLUDES=['.git/**','node_modules/**','.holoself/**','.agents/**','.claude/**','.codex/**','.pi/**','.agy/**','.gemini/**','.cursor/**','.github/**','skills/**','**/Generated/**','**/generated/**']
@@ -78,6 +78,10 @@ function parseYaml(text){
       if(item.text.startsWith('- '))throw new Error(`unexpected YAML list item at line ${item.line}`)
       const match=item.text.match(/^([^:#][^:]*):(?:\s*(.*))?$/);if(!match)throw new Error(`invalid YAML mapping at line ${item.line}`)
       const key=match[1].trim(),raw=match[2]??'';if(['__proto__','prototype','constructor'].includes(key))throw new Error(`unsafe YAML key ${key} at line ${item.line}`);if(Object.hasOwn(value,key))throw new Error(`duplicate YAML key ${key} at line ${item.line}`)
+      if(['>','>-','|','|-'].includes(raw)){
+        const chunks=[];let j=i+1;while(j<lines.length&&lines[j].indent>indent){chunks.push(lines[j].text);j++}
+        const folded=raw.startsWith('>'),keepNewline=!raw.endsWith('-');value[key]=(folded?chunks.join(' '):chunks.join('\n'))+(keepNewline?'\n':'');i=j;continue
+      }
       if(raw!==''){value[key]=parseScalar(raw);i++;continue}
       const next=lines[i+1]
       if(!next||next.indent<=indent){value[key]=null;i++;continue}
@@ -443,7 +447,8 @@ function validateProposal(p){
   for(const key of Object.keys(p))if(!allowedKeys.has(key))errors.push(`unknown proposal field: ${key}`)
   for(const key of requiredStrings)if(typeof p[key]!=='string'||!p[key].trim())errors.push(`proposal ${key} must be a non-empty string`)
   if(typeof p.proposal_id==='string'&&!UUID_RE.test(p.proposal_id))errors.push('proposal_id must be a UUID')
-  if(typeof p.target==='string'&&(isAbsolute(p.target)||slash(p.target).split('/').includes('..')||!p.target.toLowerCase().endsWith('.md')))errors.push('proposal target must be a contained relative Markdown path')
+  const terminal=PROPOSAL_STATES.includes(p.status)&&p.status!=='pending'
+  if(!terminal&&typeof p.target==='string'&&(isAbsolute(p.target)||slash(p.target).split('/').includes('..')||!p.target.toLowerCase().endsWith('.md')))errors.push('proposal target must be a contained relative Markdown path')
   if(!PROPOSAL_TYPES.includes(p.proposal_type))errors.push(`invalid proposal_type: ${p.proposal_type}`)
   if(!PROPOSAL_STATES.includes(p.status))errors.push(`invalid proposal status: ${p.status}`)
   if(!VISIBILITIES.includes(p.visibility))errors.push(`invalid proposal visibility: ${p.visibility}`)
@@ -451,7 +456,7 @@ function validateProposal(p){
   if(p.reviewed_at!==undefined&&(typeof p.reviewed_at!=='string'||Number.isNaN(Date.parse(p.reviewed_at))))errors.push('proposal reviewed_at must be an ISO date-time')
   if(p.source_project_path!==undefined&&typeof p.source_project_path!=='string')errors.push('proposal source_project_path must be a string')
   for(const key of ['source_files','provenance'])if(!Array.isArray(p[key])||!p[key].length||p[key].some(x=>typeof x!=='string'||!x.trim()))errors.push(`proposal ${key} must be a non-empty string array`)
-  if(Array.isArray(p.source_files)&&p.source_files.some(x=>isAbsolute(x)||slash(x).split('/').includes('..')))errors.push('proposal source_files must be contained relative paths')
+  if(!terminal&&Array.isArray(p.source_files)&&p.source_files.some(x=>isAbsolute(x)||slash(x).split('/').includes('..')))errors.push('proposal source_files must be contained relative paths')
   const textFields=[p.claim,p.evidence,p.confidence,...(Array.isArray(p.provenance)?p.provenance:[])];if(textFields.some(x=>typeof x==='string'&&/<!--\s*\/?holoself-claim/i.test(x)))errors.push('proposal text contains reserved claim markers')
   return errors
 }
