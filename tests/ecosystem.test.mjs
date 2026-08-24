@@ -1,8 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { access, mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { run } from '../src/cli.mjs'
 import { ecosystemValidationErrors } from '../src/ecosystem.mjs'
 
@@ -115,7 +116,7 @@ test('index and search enforce claim, field, compensation, metadata, and secret 
   await writeFile(join(project,'Context','role.md'),'# Role\n\nMy annual compensation totals USD 200000 plus bonus and equity.\n')
   await writeFile(join(project,'credentials-notes.md'),'# Credentials\n\nfilename secret phrase\n');await writeFile(join(project,'.env.md'),'# Environment\n\ninternal credential phrase\n');await writeFile(join(project,'bearer.md'),'# Auth\n\nAuthorization: Bearer abcdefghijklmnopqrstuvwxyz\n')
   const built=JSON.parse(await capture(()=>run(['index','rebuild','--project',project])));assert.ok(built.skipped_secret_files>=3)
-  const raw=await readFile(join(project,'.holoself','index','index.json'),'utf8');assert.doesNotMatch(raw,/home_address|10 Secret Street|filename secret phrase|internal credential phrase|abcdefghijklmnopqrstuvwxyz/);assert.match(raw,/"schema_version": 3/)
+  const raw=await readFile(join(project,'.holoself','index','index.json'),'utf8');assert.doesNotMatch(raw,/home_address|10 Secret Street|filename secret phrase|internal credential phrase|abcdefghijklmnopqrstuvwxyz/);assert.match(raw,/"schema_version": 4/)
   const generalClaim=JSON.parse(await capture(()=>run(['search','private unicorn','--project',project,'--lens','general'])));assert.equal(generalClaim.results.length,0)
   const privateClaim=JSON.parse(await capture(()=>run(['search','private unicorn','--project',project,'--lens','private'])));assert.ok(privateClaim.results.length>0)
   const field=JSON.parse(await capture(()=>run(['search','golden package','--project',project,'--lens','general'])));assert.equal(field.results.length,0)
@@ -154,7 +155,26 @@ test('link add activates detected agents with private bounded bootstrap and supp
 test('all supported adapters can be activated explicitly',async()=>{
   const self=await temp(),project=await temp();await run(['init','--root',self]);await run(['link','add','--project',project,'--self',self,'--activate','all','--install-skill','project','--yes'])
   for(const file of ['AGENTS.md','CLAUDE.md','CODEX.md','PI.md','AGY.md','ANTIGRAVITY.md','GEMINI.md','.github/copilot-instructions.md','.cursor/rules/holoself.mdc','.windsurfrules'])assert.match(await readFile(join(project,file),'utf8'),/holoself-link-start/)
-  await access(join(project,'.agents','skills','holoself','SKILL.md'));await access(join(project,'.claude','skills','holoself','SKILL.md'));await access(join(project,'.pi','skills','holoself','SKILL.md'))
+  const publicSkill=await readFile(join(process.cwd(),'skills','holoself','SKILL.md'),'utf8')
+  for(const dir of ['.agents','.claude','.pi']){const installed=await readFile(join(project,dir,'skills','holoself','SKILL.md'),'utf8');assert.match(installed,/holoself-skill-start schema=1/);assert.match(installed,/## Canonical-root validation/);assert.ok(installed.includes(publicSkill.slice(publicSkill.indexOf('# Holoself'))))}
+  const runtime=JSON.parse(await readFile(join(project,'.holoself','runtime.json'),'utf8'));assert.ok(runtime.skillInstallations.every(x=>x.kind==='full-public-skill'));assert.ok(Array.isArray(runtime.skillShims))
+  const status=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.ok(status.skill_installations.every(x=>x.kind==='full-public-skill'));assert.equal(status.cli_command.invocation,'source-checkout');assert.equal(status.cli_command.available,'not-verified')
+})
+
+test('legacy shims upgrade and deactivation preserves appended user content',async()=>{
+  const self=await temp(),project=await temp();await run(['init','--root',self]);const file=join(project,'.agents','skills','holoself','SKILL.md');await mkdir(join(project,'.agents','skills','holoself'),{recursive:true});await writeFile(file,'---\nname: holoself\ndescription: Load linked whole-person context for this project.\n---\n\n<!-- holoself-skill-start schema=1 -->\n# Linked Holoself\n\nRead `.holoself/BOOTSTRAP.md` before substantive work. Use installed public Holoself skill when available. Resolve context through configured lens, preserve provenance and project ownership, and create proposals instead of editing canonical self directly.\n<!-- holoself-skill-end -->\n')
+  await run(['link','add','--project',project,'--self',self,'--yes']);const upgraded=await readFile(file,'utf8');assert.match(upgraded,/description: Load and apply a user's local, reviewable Holoself context/);assert.match(upgraded,/## Canonical-root validation/);await writeFile(file,upgraded+'\n# User appendix\nKeep this.\n');await run(['link','deactivate','--project',project,'--yes']);const remaining=await readFile(file,'utf8');assert.match(remaining,/# User appendix/);assert.doesNotMatch(remaining,/holoself-skill-start/)
+})
+
+test('separately installed public skill is accepted and preserved',async()=>{
+  const self=await temp(),project=await temp(),file=join(project,'.agents','skills','holoself','SKILL.md'),publicSkill=await readFile(join(process.cwd(),'skills','holoself','SKILL.md'),'utf8');await run(['init','--root',self]);await mkdir(dirname(file),{recursive:true});await writeFile(file,publicSkill.replaceAll('\n','\r\n'))
+  await run(['link','add','--project',project,'--self',self,'--yes']);assert.equal(await readFile(file,'utf8'),publicSkill.replaceAll('\n','\r\n'));const status=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.equal(status.skill_installations[0].marker,'public');assert.equal(status.skill_installations[0].kind,'full-public-skill');await run(['link','deactivate','--project',project,'--yes']);assert.equal(await readFile(file,'utf8'),publicSkill.replaceAll('\n','\r\n'))
+})
+
+test('owned installation hash supports cross-version removal and none policy stays healthy',async()=>{
+  const self=await temp(),project=await temp();await run(['init','--root',self]);await run(['link','add','--project',project,'--self',self,'--yes']);const file=join(project,'.agents','skills','holoself','SKILL.md'),runtimePath=join(project,'.holoself','runtime.json'),changed=(await readFile(file,'utf8')).replace("description: Load and apply a user's local, reviewable Holoself context across AI tools.",'description: Historical public skill metadata.');await writeFile(file,changed);const runtime=JSON.parse(await readFile(runtimePath,'utf8'));runtime.skillInstallations[0].contentHash=createHash('sha256').update(changed).digest('hex');await writeFile(runtimePath,JSON.stringify(runtime,null,2)+'\n');await run(['link','deactivate','--project',project,'--yes']);await assert.rejects(access(file))
+  const repairProject=await temp();await run(['link','add','--project',repairProject,'--self',self,'--yes']);const repairFile=join(repairProject,'.agents','skills','holoself','SKILL.md');await writeFile(repairFile,(await readFile(repairFile,'utf8'))+'\n# User appendix\nPreserve after repair.\n');await run(['link','repair','--project',repairProject,'--yes']);await run(['link','deactivate','--project',repairProject,'--yes']);assert.match(await readFile(repairFile,'utf8'),/Preserve after repair/)
+  const noneProject=await temp();await run(['link','add','--project',noneProject,'--self',self,'--install-skill','none','--yes']);const status=JSON.parse(await capture(()=>run(['link','status','--project',noneProject])));assert.equal(status.state,'activated');assert.equal(status.skill_install_policy,'none');const doctor=JSON.parse(await capture(()=>run(['link','doctor','--project',noneProject])));assert.equal(doctor.state,'activated');assert.equal(doctor.checks.skill_installation,'disabled')
 })
 
 test('real project structures exclude agent skills and tolerate unrelated folded YAML',async()=>{

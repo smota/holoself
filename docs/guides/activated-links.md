@@ -24,7 +24,9 @@ holoself link deactivate --project . --yes
 holoself link doctor --project .
 ```
 
-Use `--no-activate` only for deliberate configuration-only workflows. Use `--instructions <relative-file>` to identify an existing canonical manual. Use `--install-skill auto|project|none` to control generated skill shims. Preview lists every instruction, bootstrap/runtime artifact, and skill shim. Activation rejects symlink parents, malformed or reversed markers, and unmanaged skill collisions before writing; `--force --yes` may append a bounded managed shim to an existing skill without replacing its content. Managed writes roll back on failure. Runtime drift hashes only bounded managed blocks, so ordinary user edits outside those blocks remain valid.
+Use `--no-activate` only for deliberate configuration-only workflows. Use `--instructions <relative-file>` to identify an existing canonical manual. Use `--install-skill auto|project|none` to control full public skill installations under `.agents`, `.claude`, and `.pi`. Preview lists every instruction, bootstrap/runtime artifact, and skill installation. Activation upgrades the old generated miniature shim in place, rejects symlink parents, malformed or reversed markers, and preserves unmanaged skill files unless `--force --yes` appends a bounded managed installation. Deactivation deletes an unchanged Holoself-owned install, but removes only the managed block when user content was appended. Managed writes roll back on failure.
+
+`link status` and `link doctor` report skill installation kind separately from instruction activation. They also report whether this process was invoked from the source checkout or a package bin; running `node bin/holoself.mjs` does **not** mean a global `holoself` command is installed. The npm package remains unpublished, so use the documented source-checkout invocation.
 
 ## Project context boundaries
 

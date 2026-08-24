@@ -10,7 +10,7 @@ node bin/holoself.mjs search "regulated AI" --project C:/work/project
 node bin/holoself.mjs search "regulated AI" --project C:/work/project --federated
 ```
 
-Each project owns `.holoself/index/index.json` schema v3/privacy-policy v2. It stores paths, headings, hashes, timestamps, redacted policy metadata, links, tags, claims, visibility, provenance, input/config state hashes, and post-build assertion results. Secret-like content is skipped. Search reapplies privacy filters and auto-rebuilds stale indexes; `index status` reports freshness without mutation.
+Each project owns `.holoself/index/index.json` schema v4/privacy-policy v3. It stores paths, headings, hashes, timestamps, redacted policy metadata, links, tags, claims, visibility, provenance, input/config state hashes, the self-root lens-registry hash, and post-build assertion results. A registry definition change makes the index stale; search rebuilds it before use. Secret-like content is skipped. Search reapplies privacy filters and auto-rebuilds stale indexes; `index status` reports freshness without mutation.
 
 Link-time `--project-assert-include <globs>` and `--project-assert-exclude <globs>` persist build assertions. Build fails closed if an expected include has no indexed match, any forbidden exclude survives, configured boundaries are violated, or secret-pattern leakage is detected after build.
 

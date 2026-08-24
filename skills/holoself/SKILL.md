@@ -31,7 +31,7 @@ When `.holoself` is real directory containing `link.yaml`:
 - Require non-empty `path`, `access: read`, `index: local`, `proposals: enabled|disabled`, known `default_lens`, and unique known `secondary_lenses`.
 - Resolve relative `self_context.path` from project directory; canonicalize it.
 - Accept target only when it is valid canonical root with Holoself config plus real `profile/` and `context/` directories.
-- Use configured default lens unless user explicitly selects another supported lens.
+- Use configured default lens unless user explicitly selects another supported lens. Resolve custom IDs from the linked self root with `holoself lens list|show|validate`; never invent a lens name.
 - Treat project `.holoself/index/`, `proposals/`, and `reports/` as project-owned operational data, not canonical self context.
 
 Metadata link grants read access. Never write canonical self directly; use proposal/review workflow.
@@ -65,6 +65,7 @@ Before loading canonical root:
 - Require `profile/` and `context/` as real directories contained by root.
 - Reject unsafe traversal, broken links, ambiguous mixed modes, or paths that do not exist.
 - Treat symlinks inside personal content conservatively; do not follow them outside validated root.
+- When optional `lenses/*.json` exists, require schema-v1 definitions with known built-in bases. Custom bases affect safe behavior only and never grant document access; exact custom IDs remain required in `access_lenses`.
 
 After resolving canonical root, load in fixed order:
 
@@ -75,7 +76,7 @@ After resolving canonical root, load in fixed order:
 5. selected `contribs/default/`, then `contribs/local/`;
 6. `reference/` only when relevant and explicitly permitted.
 
-See [architecture](../../docs/architecture.md), [lenses and privacy](../../docs/concepts/lenses-and-privacy.md), and [proposal review](../../docs/concepts/proposal-review.md).
+See [architecture](https://github.com/smota/holoself/blob/main/docs/architecture.md), [lenses and privacy](https://github.com/smota/holoself/blob/main/docs/concepts/lenses-and-privacy.md), and [proposal review](https://github.com/smota/holoself/blob/main/docs/concepts/proposal-review.md).
 
 ## Activated project interface
 
@@ -89,14 +90,14 @@ When project instructions or `.holoself/BOOTSTRAP.md` indicate an activated link
 - **validate:** use `holoself link doctor --project .` and surface degraded activation;
 - **snapshot:** when external paths are inaccessible, use reviewed `.holoself/runtime/context-packet.md`, clearly marked as non-live.
 
-`link add` normally creates `.holoself/BOOTSTRAP.md`, bounded startup sections, runtime metadata, and project skill shims. Bounded startup sections are pointers, not copies of personal data. If activation is missing, recommend `holoself link repair --project .`; do not silently rewrite project instructions.
+`link add` normally creates `.holoself/BOOTSTRAP.md`, bounded startup sections, runtime metadata, and managed full public skill installations. Bounded startup sections are pointers, not copies of personal data. If activation is missing, recommend `holoself link repair --project .`; do not silently rewrite project instructions.
 
 ## Safety
 
 - Treat canonical root, project `.holoself/`, packets, proposals, reports, and indexes as private by default; review before committing or sharing.
 - Do not write durable context silently. Propose change, name target file, provide evidence/provenance, and request approval.
 - Do not infer sensitive identity or preferences as facts.
-- Apply declared `access_lenses` before reading. Treat `disclosure` as separate publication permission, `sensitivity` as handling classification, and `document_role` as policy/evidence/content behavior.
+- Apply declared `access_lenses` before reading. Custom lenses receive no base-lens access inheritance, require explicit confidential sensitivity grants, and cannot read `restricted` content in v1. Treat `disclosure` as separate publication permission, `sensitivity` as handling classification, and `document_role` as policy/evidence/content behavior.
 - Readable or linked context is never publication-approved by implication. Public reuse requires `disclosure: publish-approved`; readable internal policy may still govern publishing output.
 - Treat legacy `visibility`/`public_safe` conservatively during migration. Canonical documents with neither `access_lenses` nor legacy `visibility` fail closed.
 - Secret-pattern filtering is defense in depth, not guarantee. Keep indexes/private packets private and review output.

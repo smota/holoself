@@ -2,6 +2,7 @@
 
 Machine-readable contracts:
 
+- [`schemas/lens.schema.json`](../../schemas/lens.schema.json): private custom-lens definition
 - [`schemas/link.schema.json`](../../schemas/link.schema.json): project `self_context` link
 - [`schemas/adapter-capability.schema.json`](../../schemas/adapter-capability.schema.json): startup adapter capability evidence
 - [`schemas/context.schema.json`](../../schemas/context.schema.json): resolved runtime context
@@ -11,4 +12,4 @@ Machine-readable contracts:
 
 Link configuration grants read access and optional proposals. Proposal validation covers UUID, type, state, source paths, target containment, evidence/provenance, confidence, visibility, and reserved markers. Context output preserves packet generation/expiry metadata, source hashes, sources, restrictions, warnings, leakage validation, and pending proposals.
 
-Canonical Markdown frontmatter is validated by CLI rules and documented by the standalone metadata schema. Legacy `visibility` and `public_safe` remain readable during migration, but new `access_lenses` metadata requires disclosure, sensitivity, and document role.
+Lens references are structurally validated as lowercase kebab IDs of at most 40 characters; the CLI then semantically requires each ID to resolve from built-ins or the selected self registry. Canonical Markdown frontmatter is validated by CLI rules and documented by the standalone metadata schema. Legacy `visibility` and `public_safe` remain readable during migration, but new `access_lenses` metadata requires disclosure, sensitivity, and document role.

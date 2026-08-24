@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
+import { BUILTIN_LENS_IDS } from './lenses.mjs'
 
 export const VERSION = '0.6.0'
 const START = '<!-- holoself-export-start -->'
@@ -16,7 +17,7 @@ const ROOT_START = '<!-- holoself-root-start -->'
 const ROOT_END = '<!-- holoself-root-end -->'
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const metadata=(access,disclosure='internal-only',sensitivity='personal',role='content')=>`---\naccess_lenses: [${access.join(', ')}]\ndisclosure: ${disclosure}\nsensitivity: ${sensitivity}\ndocument_role: ${role}\n---\n`
-const ALL_LENSES=['general','career','publishing','technical','leadership','interview','private']
+const ALL_LENSES=BUILTIN_LENS_IDS
 const PROFILE_FILES = {
   'identity.md': metadata(ALL_LENSES)+'# Identity\n\nWrite a short description of who you are.\n',
   'preferences.md': metadata(ALL_LENSES,'internal-only','personal','policy')+'# Preferences\n\nDescribe how you prefer to work with AI tools.\n',
@@ -305,7 +306,7 @@ function syncPublicDefaults(root, ids, dryRun=false){
     else if(!dryRun && existsSync(p)) rmSync(p,{force:true})
   }
 }
-function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init | doctor | validate | migrate | export | upgrade\n  link --target <dir>       Legacy live data-root junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  link add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n  proposals list|show|approve|reject|defer [id] --project <dir>\n  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill auto|project|none --no-activate.\nProject filters: --project-include/--project-exclude and --project-assert-include/--project-assert-exclude <globs>.
+function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init | doctor | validate | migrate | export | upgrade\n  link --target <dir>       Legacy live data-root junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  lens list|show|validate [id] [--root <self-root>]\n  link add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n  proposals list|show|approve|reject|defer [id] --project <dir>\n  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill auto|project|none --no-activate.\nProject filters: --project-include/--project-exclude and --project-assert-include/--project-assert-exclude <globs>.
 Safety confirmations: --yes. Packet adapters: --adapter pi|claude|codex|generic|obsidian|restricted-host.\n`) }
 async function confirm(o,message){if(o.yes)return true; if(!input.isTTY||!output.isTTY) throw new Error(`${message} Re-run with --yes to confirm.`); const rl=createInterface({input,output}); try { const answer=await rl.question(`${message} Type "yes" to continue: `); return answer.trim().toLowerCase()==='yes' } finally { rl.close() }}
 export async function run(argv){

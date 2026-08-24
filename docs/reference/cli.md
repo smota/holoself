@@ -20,6 +20,16 @@ holoself <command> [options]
 
 Core options: `--data-dir <dir>` (`--root` and `--data-root` aliases), `--contribs a,b`, `--exclude-contrib a,b`, `--yes`, `--force`, `--dry-run`, `--packet-only`, `--root-setup`.
 
+## Lenses
+
+```text
+lens list [--root <self-root>]
+lens show <id> [--root <self-root>]
+lens validate [--root <self-root>]
+```
+
+These commands are read-only. They list the effective built-in/custom catalog, show normalized resolution, or validate all immediate `<self-root>/lenses/*.json` definitions. Structurally valid but registry-unknown IDs still fail runtime semantic validation.
+
 ## Linked ecosystem
 
 ```text

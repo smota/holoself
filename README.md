@@ -24,7 +24,7 @@ independent linked project
 approved reusable knowledge
 ```
 
-- **One whole person, many lenses.** Career, publishing, technical, leadership, interview, private, and general lenses change read scope and relevance—not identity or publication approval.
+- **One whole person, many lenses.** Built-in and optional private registry-backed lenses change explicit read scope and relevance—not identity or publication approval. Custom base lenses never inherit document access.
 - **Independent projects.** Applications, research, posts, calendars, and execution notes stay with their projects.
 - **Review before memory.** Projects propose; only explicit approval changes canonical self context.
 - **Inspectability.** Markdown is source of truth. Generated packets and indexes are disposable.
@@ -94,7 +94,8 @@ Never substitute one mode for another without reviewing privacy exposure. Startu
 ## Common workflows
 
 ```bash
-# Inspect project context through a lens
+# Inspect the validated lens vocabulary and project context
+node bin/holoself.mjs lens list --root C:/private/my-self
 node bin/holoself.mjs context --project C:/work/my-project --lens career --format packet --adapter claude
 
 # Produce non-mutating ownership/conflict recommendations
