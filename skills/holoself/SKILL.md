@@ -92,6 +92,10 @@ When project instructions or `.holoself/BOOTSTRAP.md` indicate an activated link
 
 `link add` normally creates `.holoself/BOOTSTRAP.md`, bounded startup sections, runtime metadata, and managed full public skill installations. Bounded startup sections are pointers, not copies of personal data. If activation is missing, recommend `holoself link repair --project .`; do not silently rewrite project instructions.
 
+## Optional Workbench
+
+Launch local `holoself web --root <canonical-self-root>` from installed CLI or product source checkout. Canonical root contains `config.json` and Markdown data; it does not require `.holoself/link.yaml`. Optional `--project <linked-project>` supplies project context and must resolve to same root. Workbench may help a human browse lenses, linked spaces, annotated Markdown, proposals, and detected external connectors. Workbench is never required and does not change this skill's loading or ownership rules. Its knowledge editor protects frontmatter and `os-section` markers behind typed fields; automation must not bypass those structured contracts. Treat user-confirmed editor saves as direct human edits; automation and conversational discoveries must still use proposals and explicit review. CLI, terminal, and GUI connectors are external capabilities discovered from built-ins or validated `<root>/connectors/*.json` extensions; interactive launches must use the selected linked-space cwd and `shell: false`.
+
 ## Safety
 
 - Treat canonical root, project `.holoself/`, packets, proposals, reports, and indexes as private by default; review before committing or sharing.

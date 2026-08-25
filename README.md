@@ -67,6 +67,10 @@ npx skills add smota/holoself --skill holoself
 
 The skill contains instructions, not personal data. See [Quickstart](docs/start/quickstart.md) and [Concepts in five minutes](docs/start/concepts-in-five-minutes.md).
 
+## Optional Web GUI
+
+Launch local Workbench from product code with explicit canonical data root: `holoself web --root C:/path/to/my-self` (or `node bin/holoself.mjs web --root ...` from source checkout). Canonical root contains `config.json`, profile/context/topics Markdown, and needs no `.holoself/link.yaml`. Optional `--project <linked-project>` adds project context. The GUI includes annotation-safe knowledge forms, lens instruction overrides, correctable Degraded spaces, and extensible detected CLI/terminal/GUI connectors with Open Here actions. See [Web GUI](docs/web-gui.md).
+
 ## Link an independent project
 
 ```bash
@@ -124,6 +128,7 @@ Approval prints target, evidence, affected files, and proposed diff before writi
 - [Threat model](docs/trust/threat-model.md)
 - [Status and roadmap](docs/contributing/status-and-roadmap.md)
 - [Privacy policy](PRIVACY.md)
+- [Optional Web GUI](docs/web-gui.md)
 
 ## Development
 

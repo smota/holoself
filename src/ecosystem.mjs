@@ -8,12 +8,10 @@ import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { activateProject, activationPlan, activationStatus, deactivateProject, preflightActivation } from './adapters.mjs'
 import { BUILTIN_LENS_IDS, lensIdStructurallyValid, loadLensRegistry, resolveLens } from './lenses.mjs'
+import { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES } from './annotations.mjs'
 
+export { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES }
 export const LENSES = BUILTIN_LENS_IDS
-export const VISIBILITIES = ['private','linked-projects','career','publishing','public-safe']
-export const DISCLOSURES = ['internal-only','review-required','publish-approved']
-export const SENSITIVITIES = ['public','personal','compensation-confidential','third-party-personal','recruiter-confidential','employer-confidential','application-private','restricted','none']
-export const DOCUMENT_ROLES = ['policy','evidence','content']
 const SENSITIVITY_LENSES={
   'compensation-confidential':['career','interview','private'],
   'third-party-personal':['leadership','private'],

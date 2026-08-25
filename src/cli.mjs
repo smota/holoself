@@ -47,7 +47,7 @@ function parse(args){
   const o={rootSetup:false}; const positional=[]
   for(let i=0;i<args.length;i++){
     const a=args[i]
-    if(a==='--root'||a==='--data-root'||a==='--data-dir') o.root=resolve(requiredValue(args,i++,a))
+    if(a==='--root'||a==='--data-root'||a==='--data-dir') { o.root=resolve(requiredValue(args,i++,a));o.rootExplicit=true }
     else if(a==='--target') o.target=resolve(requiredValue(args,i++,a))
     else if(a==='--project') o.project=resolve(requiredValue(args,i++,a))
     else if(a==='--self') o.self=resolve(requiredValue(args,i++,a))
@@ -67,6 +67,7 @@ function parse(args){
     else if(a==='--project-assert-include') { o.projectContext=o.projectContext||{};o.projectContext.assert_include=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean) }
     else if(a==='--project-assert-exclude') { o.projectContext=o.projectContext||{};o.projectContext.assert_exclude=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean) }
     else if(a==='--expires-hours') { const value=Number(requiredValue(args,i++,a));if(!Number.isFinite(value)||value<=0||value>720)throw new Error('--expires-hours must be a number greater than 0 and at most 720');o.expiresHours=value }
+    else if(a==='--port') { const value=Number(requiredValue(args,i++,a));if(!Number.isInteger(value)||value<0||value>65535)throw new Error('--port must be between 0 and 65535');o.port=value }
     else if(a==='--restricted-host') o.restrictedHost=true
     else if(a==='--claim') o.claim=requiredValue(args,i++,a)
     else if(a==='--evidence') o.evidence=requiredValue(args,i++,a)
@@ -79,6 +80,7 @@ function parse(args){
     else if(a==='--exclude-contrib') o.exclude=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean)
     else if(a==='--yes'||a==='--confirm') o.yes=true
     else if(a==='--no-activate') o.noActivate=true
+    else if(a==='--no-open') o.noOpen=true
     else if(a==='--root-setup') o.rootSetup=true
     else if(a==='--force') o.force=true
     else if(a==='--dry-run') o.dryRun=true
@@ -306,12 +308,17 @@ function syncPublicDefaults(root, ids, dryRun=false){
     else if(!dryRun && existsSync(p)) rmSync(p,{force:true})
   }
 }
-function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init | doctor | validate | migrate | export | upgrade\n  link --target <dir>       Legacy live data-root junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  lens list|show|validate [id] [--root <self-root>]\n  link add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n  proposals list|show|approve|reject|defer [id] --project <dir>\n  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill auto|project|none --no-activate.\nProject filters: --project-include/--project-exclude and --project-assert-include/--project-assert-exclude <globs>.
+function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init | doctor | validate | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] [--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  lens list|show|validate [id] [--root <self-root>]\n  link add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n  proposals list|show|approve|reject|defer [id] --project <dir>\n  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill auto|project|none --no-activate.\nProject filters: --project-include/--project-exclude and --project-assert-include/--project-assert-exclude <globs>.
 Safety confirmations: --yes. Packet adapters: --adapter pi|claude|codex|generic|obsidian|restricted-host.\n`) }
 async function confirm(o,message){if(o.yes)return true; if(!input.isTTY||!output.isTTY) throw new Error(`${message} Re-run with --yes to confirm.`); const rl=createInterface({input,output}); try { const answer=await rl.question(`${message} Type "yes" to continue: `); return answer.trim().toLowerCase()==='yes' } finally { rl.close() }}
 export async function run(argv){
   const o=parse(argv); if(o.help||!o.command){help();return}
   const root=o.root
+  if(o.command==='web'){
+    const {startWebServer}=await import('./web-server.mjs');const app=await startWebServer({project:o.project||process.cwd(),root:o.rootExplicit?root:undefined,port:o.port??0});console.log(`Holoself Workbench: ${app.url}\nData root: ${app.root}${app.project?`\nLinked project: ${app.project}`:''}`)
+    if(!o.noOpen){const {spawn}=await import('node:child_process');const command=process.platform==='win32'?'cmd':process.platform==='darwin'?'open':'xdg-open';const args=process.platform==='win32'?['/c','start','',app.url]:[app.url];spawn(command,args,{detached:true,stdio:'ignore',windowsHide:true}).unref()}
+    return
+  }
   if(o.command==='data-root'){console.log(root);return}
   if(await runEcosystem(o)) return
   if(o.command==='init'){

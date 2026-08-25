@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { access, mkdtemp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { BUILTIN_LENS_IDS, loadLensRegistry, resolveLens } from '../src/lenses.mjs'
+import { BUILTIN_LENS_IDS, loadLensRegistry, resolveLens, saveLensInstructions } from '../src/lenses.mjs'
 import { run } from '../src/cli.mjs'
 import { ecosystemValidationErrors } from '../src/ecosystem.mjs'
 
@@ -11,6 +11,8 @@ const temp=()=>mkdtemp(join(tmpdir(),'holoself-lenses-'))
 const definition=(id='spiritual',extra={})=>({schema_version:1,id,title:'Spiritual',base_lens:'general',...extra})
 async function registryFile(root,name,value){await mkdir(join(root,'lenses'),{recursive:true});await writeFile(join(root,'lenses',name),typeof value==='string'?value:JSON.stringify(value))}
 async function capture(fn){const old=console.log;let out='';console.log=(...args)=>{out+=args.join(' ')+'\n'};try{await fn()}finally{console.log=old}return out}
+
+test('lens instruction overrides fine-tune built-ins without mutating definitions',async()=>{const root=await temp(),before=loadLensRegistry(root),career=before.byId.get('career');assert.match(career.instructions.purpose,/Career/);const next=saveLensInstructions(root,'career',{purpose:'Career decisions for regulated technology leadership',priorities:['evidence'],include:['leadership outcomes'],exclude:['unsupported claims'],response_guidance:['Use concise examples']},before.registry_hash);assert.equal(next.byId.get('career').source,'builtin');assert.equal(next.byId.get('career').instructions.purpose,'Career decisions for regulated technology leadership');assert.notEqual(next.registry_hash,before.registry_hash);await access(join(root,'lenses','instructions','career.json'))})
 
 test('missing lens registry is valid, deterministic, and built-in only',async()=>{
   const a=loadLensRegistry(await temp()),b=loadLensRegistry(await temp())
