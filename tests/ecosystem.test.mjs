@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { run } from '../src/cli.mjs'
 import { ecosystemValidationErrors } from '../src/ecosystem.mjs'
+import { migrateProjectSkillsToGlobal } from '../src/adapters.mjs'
 
 async function temp(){return mkdtemp(join(tmpdir(),'holoself-eco-'))}
 async function capture(fn){const old=console.log;let out='';console.log=(...x)=>{out+=x.join(' ')+'\n'};try{await fn()}finally{console.log=old}return out}
@@ -257,4 +258,65 @@ test('activation preflight rejects non-file managed artifacts without partial wr
 
 test('dry-run previews instruction and skill writes without mutation',async()=>{
   const self=await temp(),project=await temp();await run(['init','--root',self]);const output=await capture(()=>run(['link','add','--project',project,'--self',self,'--activate','all','--install-skill','project','--dry-run','--yes']));assert.match(output,/ANTIGRAVITY\.md/);assert.match(output,/\.agents\/skills\/holoself\/SKILL\.md/);await assert.rejects(access(join(project,'.holoself')))
+})
+
+test('user-scoped skill install is explicit, inspectable, and installs the canonical public skill',async()=>{
+  const skillHome=await temp(),canonical=(await readFile(join(process.cwd(),'skills','holoself','SKILL.md'),'utf8')).replaceAll('\r\n','\n')
+  const preview=JSON.parse(await capture(()=>run(['skill','install','--scope','user','--skill-home',skillHome,'--dry-run'])))
+  assert.equal(preview.installation_plan.installations.length,3);assert.ok(preview.installation_plan.installations.every(x=>x.action==='write'))
+  await assert.rejects(access(join(skillHome,'.agents','skills','holoself','SKILL.md')))
+  await run(['skill','install','--scope','user','--skill-home',skillHome,'--yes'])
+  for(const dir of ['.agents','.claude','.pi'])assert.equal((await readFile(join(skillHome,dir,'skills','holoself','SKILL.md'),'utf8')).replaceAll('\r\n','\n'),canonical)
+  const status=JSON.parse(await capture(()=>run(['skill','status','--scope','user','--skill-home',skillHome])));assert.ok(status.installations.every(x=>x.status==='full-public-skill-current'))
+})
+
+test('global policy validates user skills and creates no project skill override',async()=>{
+  const self=await temp(),project=await temp(),skillHome=await temp();await run(['init','--root',self]);await run(['skill','install','--scope','user','--skill-home',skillHome,'--platform','agents','--yes'])
+  await run(['link','add','--project',project,'--self',self,'--install-skill','global','--skill-home',skillHome,'--yes'])
+  await assert.rejects(access(join(project,'.agents','skills','holoself','SKILL.md')))
+  const runtime=JSON.parse(await readFile(join(project,'.holoself','runtime.json'),'utf8'));assert.equal(runtime.schemaVersion,2);assert.equal(runtime.skillInstallPolicy,'global');assert.equal(runtime.skillInstallations.length,0);assert.equal(runtime.globalSkillInstallations.length,1)
+  const status=JSON.parse(await capture(()=>run(['link','status','--project',project,'--skill-home',skillHome])));assert.equal(status.state,'activated');assert.deepEqual(status.project_skill_overrides,[])
+  const doctor=JSON.parse(await capture(()=>run(['link','doctor','--project',project,'--skill-home',skillHome])));assert.equal(doctor.checks.skill_installation,'global-full-public-skill');assert.equal(doctor.checks.project_skill_overrides,'absent')
+  await run(['link','repair','--project',project,'--skill-home',skillHome,'--yes']);await assert.rejects(access(join(project,'.agents','skills','holoself','SKILL.md')));assert.equal(JSON.parse(await readFile(join(project,'.holoself','runtime.json'),'utf8')).skillInstallPolicy,'global')
+})
+
+test('global migration removes owned and untracked generated project skills transactionally',async()=>{
+  const self=await temp(),project=await temp(),skillHome=await temp();await run(['init','--root',self]);await run(['skill','install','--scope','user','--skill-home',skillHome,'--yes']);await run(['link','add','--project',project,'--self',self,'--activate','all','--install-skill','project','--yes'])
+  const runtimePath=join(project,'.holoself','runtime.json');await rm(runtimePath)
+  const preview=JSON.parse(await capture(()=>run(['link','skill','migrate-global','--project',project,'--skill-home',skillHome,'--dry-run'])));assert.equal(preview.migration_plan.project_cleanup.length,3);assert.ok(preview.migration_plan.project_cleanup.every(x=>x.action==='delete'))
+  await run(['link','skill','migrate-global','--project',project,'--skill-home',skillHome,'--yes'])
+  for(const dir of ['.agents','.claude','.pi'])await assert.rejects(access(join(project,dir,'skills','holoself','SKILL.md')))
+  const runtime=JSON.parse(await readFile(runtimePath,'utf8'));assert.equal(runtime.skillInstallPolicy,'global');assert.equal(runtime.globalSkillInstallations.length,3)
+  const doctor=JSON.parse(await capture(()=>run(['link','doctor','--project',project,'--skill-home',skillHome])));assert.equal(doctor.state,'activated');assert.equal(doctor.checks.project_skill_overrides,'absent')
+})
+
+test('global migration preserves appended user content and reports the residual override',async()=>{
+  const self=await temp(),project=await temp(),skillHome=await temp();await run(['init','--root',self]);await run(['skill','install','--scope','user','--skill-home',skillHome,'--platform','agents','--yes']);await run(['link','add','--project',project,'--self',self,'--yes'])
+  const local=join(project,'.agents','skills','holoself','SKILL.md');await writeFile(local,(await readFile(local,'utf8'))+'\n# User appendix\nKeep this.\n')
+  await run(['link','skill','migrate-global','--project',project,'--skill-home',skillHome,'--yes']);const preserved=await readFile(local,'utf8');assert.match(preserved,/User appendix/);assert.doesNotMatch(preserved,/holoself-skill-start/)
+  const status=JSON.parse(await capture(()=>run(['link','status','--project',project,'--skill-home',skillHome])));assert.equal(status.state,'degraded');assert.deepEqual(status.project_skill_overrides,['.agents/skills/holoself/SKILL.md']);process.exitCode=0
+})
+
+test('migration refuses missing globals without changing project files',async()=>{
+  const self=await temp(),project=await temp(),skillHome=await temp();await run(['init','--root',self]);await run(['link','add','--project',project,'--self',self,'--yes']);const local=join(project,'.agents','skills','holoself','SKILL.md'),before=await readFile(local,'utf8'),runtime=await readFile(join(project,'.holoself','runtime.json'),'utf8')
+  await assert.rejects(run(['link','skill','migrate-global','--project',project,'--skill-home',skillHome,'--yes']),/global skill missing/);assert.equal(await readFile(local,'utf8'),before);assert.equal(await readFile(join(project,'.holoself','runtime.json'),'utf8'),runtime)
+})
+
+test('global install protects unmanaged files unless replacement is explicitly forced',async()=>{
+  const skillHome=await temp(),file=join(skillHome,'.agents','skills','holoself','SKILL.md');await mkdir(dirname(file),{recursive:true});await writeFile(file,'# User-owned skill\n')
+  const preview=JSON.parse(await capture(()=>run(['skill','install','--scope','user','--skill-home',skillHome,'--platform','agents','--dry-run'])));assert.equal(preview.installation_plan.installations[0].from,'unmanaged-collision');assert.equal(await readFile(file,'utf8'),'# User-owned skill\n')
+  await assert.rejects(run(['skill','install','--scope','user','--skill-home',skillHome,'--platform','agents','--yes']),/use --force --yes/);assert.equal(await readFile(file,'utf8'),'# User-owned skill\n')
+  await run(['skill','install','--scope','user','--skill-home',skillHome,'--platform','agents','--force','--yes']);assert.match(await readFile(file,'utf8'),/## Canonical-root validation/)
+})
+
+test('migration rollback restores runtime and project skill after a late failure',async()=>{
+  const self=await temp(),project=await temp(),skillHome=await temp();await run(['init','--root',self]);await run(['skill','install','--scope','user','--skill-home',skillHome,'--platform','agents','--yes']);await run(['link','add','--project',project,'--self',self,'--yes'])
+  const local=join(project,'.agents','skills','holoself','SKILL.md'),runtimePath=join(project,'.holoself','runtime.json'),beforeSkill=await readFile(local,'utf8'),beforeRuntime=await readFile(runtimePath,'utf8'),link={path:self,access:'read',proposals:'enabled',index:'local',default_lens:'general',secondary_lenses:[]}
+  assert.throws(()=>migrateProjectSkillsToGlobal(project,link,{skillHome,afterCleanup(){throw new Error('injected late failure')}}),/injected late failure/);assert.equal(await readFile(local,'utf8'),beforeSkill);assert.equal(await readFile(runtimePath,'utf8'),beforeRuntime)
+})
+
+test('migration recognizes exact historical generated skill wrappers as removable',async()=>{
+  const self=await temp(),project=await temp(),skillHome=await temp(),canonical=await readFile(join(process.cwd(),'skills','holoself','SKILL.md'),'utf8');await run(['init','--root',self]);await run(['skill','install','--scope','user','--skill-home',skillHome,'--platform','agents','--yes']);await run(['link','add','--project',project,'--self',self,'--yes'])
+  const local=join(project,'.agents','skills','holoself','SKILL.md'),start=canonical.indexOf('# Holoself'),body=canonical.slice(start).trim(),historical=`---\nname: holoself\ndescription: Load linked whole-person context for this project.\n---\n\n# Linked Holoself\n\nRead \`.holoself/BOOTSTRAP.md\` before substantive work. Use the installed public Holoself skill when available. Resolve context through the configured lens, preserve provenance and project ownership, and create proposals instead of editing canonical self directly.\n\n<!-- holoself-skill-start schema=1 -->\n${body}\n<!-- holoself-skill-end -->\n`;await writeFile(local,historical);await rm(join(project,'.holoself','runtime.json'))
+  const preview=JSON.parse(await capture(()=>run(['link','skill','migrate-global','--project',project,'--skill-home',skillHome,'--dry-run'])));assert.equal(preview.migration_plan.project_cleanup[0].action,'delete');await run(['link','skill','migrate-global','--project',project,'--skill-home',skillHome,'--yes']);await assert.rejects(access(local))
 })

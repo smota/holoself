@@ -24,9 +24,30 @@ holoself link deactivate --project . --yes
 holoself link doctor --project .
 ```
 
-Use `--no-activate` only for deliberate configuration-only workflows. Use `--instructions <relative-file>` to identify an existing canonical manual. Use `--install-skill auto|project|none` to control full public skill installations under `.agents`, `.claude`, and `.pi`. Preview lists every instruction, bootstrap/runtime artifact, and skill installation. Activation upgrades the old generated miniature shim in place, rejects symlink parents, malformed or reversed markers, and preserves unmanaged skill files unless `--force --yes` appends a bounded managed installation. Deactivation deletes an unchanged Holoself-owned install, but removes only the managed block when user content was appended. Managed writes roll back on failure.
+Use `--no-activate` only for deliberate configuration-only workflows. Use `--instructions <relative-file>` to identify an existing canonical manual. Use `--install-skill auto|project|global|none` to control skill resolution. `project` installs full public skills under `.agents`, `.claude`, and `.pi`; `global` requires validated user-level installations and creates no project copies; `none` disables skill management and validation. Preview lists every instruction, bootstrap/runtime artifact, and skill installation. Activation upgrades the old generated miniature shim in place, rejects symlink parents, malformed or reversed markers, and preserves unmanaged skill files unless `--force --yes` appends a bounded managed installation. Deactivation deletes an unchanged Holoself-owned install, but removes only the managed block when user content was appended. Managed writes roll back on failure.
 
-`link status` and `link doctor` report skill installation kind separately from instruction activation. They also report whether this process was invoked from the source checkout or a package bin; running `node bin/holoself.mjs` does **not** mean a global `holoself` command is installed. The npm package remains unpublished, so use the documented source-checkout invocation.
+## User-level skills and project cleanup
+
+Install or inspect the complete public skill once for the current user:
+
+```bash
+holoself skill status --scope user
+holoself skill install --scope user --dry-run
+holoself skill install --scope user --yes
+```
+
+User-level installation writes only after confirmation. Existing unmanaged files are reported as collisions and require reviewed `--force --yes` replacement. Use `--skill-home <dir>` to inspect or test an isolated user home.
+
+After the global installations are healthy, migrate a linked project transactionally:
+
+```bash
+holoself link skill migrate-global --project . --dry-run
+holoself link skill migrate-global --project . --yes
+```
+
+Migration validates every required global skill before changing the project, repairs the bounded activation metadata, removes generated project copies, records runtime schema 2 with `skillInstallPolicy: "global"`, and rolls back on failure. User-authored content outside managed skill markers is preserved; the remaining local file is reported as a project override and keeps `link doctor` degraded until the user relocates or reviews it.
+
+`link status` and `link doctor` report project and global skill installation separately from instruction activation. Under global policy, `doctor` also rejects unexpected project overrides. They report whether this process was invoked from the source checkout or a package bin; running `node bin/holoself.mjs` does **not** mean a global `holoself` command is installed. The npm package remains unpublished, so use the documented source-checkout invocation.
 
 ## Project context boundaries
 

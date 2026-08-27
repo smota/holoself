@@ -4,6 +4,10 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- Adds validated user-level Holoself skill installation with `skill status|install --scope user`.
+- Adds `--install-skill global` and runtime schema 2 global installation records.
+- Adds transactional `link skill migrate-global` cleanup for redundant project skill copies, including untracked generated installations, rollback, and project-override health reporting.
+
 ## [0.6.0] — 2026-08-24
 
 - Adds optional private `<data-root>/lenses/*.json` custom-lens registries with strict v1 definitions, deterministic hashes, hard-error semantic validation, exact document grants, explicit sensitivity access, and read-only `lens list|show|validate` commands.

@@ -65,8 +65,10 @@ test('link root setup dry-run and safety checks do not edit instructions', async
   await writeFile(join(project,'AGENTS.md'),'before\n'); await run(['link','--root',root,'--target',project,'--root-setup','--yes','--dry-run']);
   assert.equal(await readFile(join(project,'AGENTS.md'),'utf8'),'before\n'); await assert.rejects(lstat(join(project,'.holoself')))
   await writeFile(join(project,'CLAUDE.md'),'<!-- holoself-export-start -->\n'); await assert.rejects(run(['link','--root',root,'--target',project,'--root-setup','--yes','--force']),/malformed Holoself markers/)
-  const file=join(project,'CODEX.md'); await writeFile(file,'external\n'); const instructionLink=join(project,'AGENTS.md'); await rm(instructionLink); await symlink(file,instructionLink); await assert.rejects(run(['link','--root',root,'--target',project,'--root-setup','--yes','--force']),/symlink; refusing to modify/)
-  await rm(instructionLink); await mkdir(instructionLink); await assert.rejects(run(['link','--root',root,'--target',project,'--root-setup','--yes','--force']),/not a file; refusing to modify/)
+  const file=join(project,'CODEX.md'); await writeFile(file,'external\n'); const instructionLink=join(project,'AGENTS.md'); await rm(instructionLink);let linked=false
+  try{await symlink(file,instructionLink);linked=true}catch(error){if(error.code!=='EPERM')throw error}
+  if(linked){await assert.rejects(run(['link','--root',root,'--target',project,'--root-setup','--yes','--force']),/symlink; refusing to modify/);await rm(instructionLink)}
+  await mkdir(instructionLink); await assert.rejects(run(['link','--root',root,'--target',project,'--root-setup','--yes','--force']),/not a file; refusing to modify/)
 })
 
 test('init creates private architecture directories and catalog defaults', async()=>{
