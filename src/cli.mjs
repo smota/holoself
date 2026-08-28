@@ -9,8 +9,9 @@ import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
 import { BUILTIN_LENS_IDS } from './lenses.mjs'
+import { VERSION } from './version.mjs'
 
-export const VERSION = '0.6.0'
+export { VERSION } from './version.mjs'
 const START = '<!-- holoself-export-start -->'
 const END = '<!-- holoself-export-end -->'
 const ROOT_START = '<!-- holoself-root-start -->'
@@ -87,11 +88,13 @@ function parse(args){
     else if(a==='--force') o.force=true
     else if(a==='--dry-run') o.dryRun=true
     else if(a==='--packet-only') o.packetOnly=true
+    else if(a==='--self-only') o.selfOnly=true
     else if(a==='--snapshot') o.snapshot=true
     else if(a==='--json') o.json=true
     else if(a==='--changed') o.changed=true
     else if(a==='--federated') o.federated=true
     else if(a==='--help'||a==='-h') o.help=true
+    else if(a==='--version'||a==='-v') o.version=true
     else if(a.startsWith('-')) throw new Error(`unknown option: ${a}`)
     else positional.push(a)
   }
@@ -314,7 +317,12 @@ function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [o
 Safety confirmations: --yes. Packet adapters: --adapter pi|claude|codex|generic|obsidian|restricted-host.\n`) }
 async function confirm(o,message){if(o.yes)return true; if(!input.isTTY||!output.isTTY) throw new Error(`${message} Re-run with --yes to confirm.`); const rl=createInterface({input,output}); try { const answer=await rl.question(`${message} Type "yes" to continue: `); return answer.trim().toLowerCase()==='yes' } finally { rl.close() }}
 export async function run(argv){
-  const o=parse(argv); if(o.help||!o.command){help();return}
+  const o=parse(argv)
+  if(o.version){console.log(o.json?JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION}):`Holoself ${VERSION}`);return}
+  if(o.command==='capabilities'){
+    console.log(JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION,interface:'local-cli',contextSchemaVersion:1,commands:['doctor','context','search','propose','proposals','link','skill'],globalSkillSupported:true},null,2));return
+  }
+  if(o.help||!o.command){help();return}
   const root=o.root
   if(o.command==='web'){
     const {startWebServer}=await import('./web-server.mjs');const app=await startWebServer({project:o.project||process.cwd(),root:o.rootExplicit?root:undefined,port:o.port??0});console.log(`Holoself Workbench: ${app.url}\nData root: ${app.root}${app.project?`\nLinked project: ${app.project}`:''}`)

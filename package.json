@@ -1,6 +1,6 @@
 {
   "name": "holoself-ai",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "A local, reviewable self-context layer for AI tools",
   "type": "module",
   "bin": { "holoself": "bin/holoself.mjs" },

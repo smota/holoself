@@ -1,10 +1,18 @@
 # CLI reference
 
-Run from repository checkout as `node bin/holoself.mjs`; after future package installation, executable name is `holoself`.
+Run as `holoself` when installed globally, or from a repository checkout as `node bin/holoself.mjs`.
 
 ```text
 holoself <command> [options]
 ```
+
+## Machine contract
+
+| Command | Purpose |
+|---|---|
+| `capabilities --json` | Report the stable local CLI interface, version, context schema and supported command groups |
+| `--version` | Print the human-readable version |
+| `--version --json` | Print machine-readable product and version information |
 
 ## Core
 
@@ -42,7 +50,7 @@ link remove --project <dir> --yes
 link setup --project <dir> [--self <dir> --yes]
 skill status --scope user [--platform <id>] [--skill-home <dir>]
 skill install --scope user [--platform <id>] [--skill-home <dir>] [--dry-run] [--force] [--yes]
-context [--project <dir>] [--self <dir>] [--lens <lens>] [--task <text>]
+context [--project <dir>] [--self <dir>] [--lens <lens>] [--task <text>] [--self-only]
         [--json | --format packet] [--adapter pi|claude|codex|generic|obsidian|restricted-host]
         [--restricted-host] [--expires-hours 24]
         [--snapshot | --output <project-contained-path>] [--yes]
@@ -56,7 +64,7 @@ index [status|rebuild] --project <dir> [--changed]
 search <query> --project <dir> [--federated] [--lens <lens>]
 ```
 
-`context` defaults to packet output unless `--json` is supplied. `--snapshot --yes` writes a reviewed project-only fallback; `--restricted-host` applies publication-safe filtering and adds default 24-hour expiry metadata. `--expires-hours` accepts values above 0 through 720. Link setup supports `--project-include`, `--project-exclude`, `--project-assert-include`, and `--project-assert-exclude`. `index` without subcommand builds/updates index. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation. Global skill installation is separately confirmed; project migration validates the global copy before removing managed local copies.
+`context` defaults to packet output unless `--json` is supplied. `--self-only` applies the selected lens and task while excluding linked-project documents, which lets bounded consumers request personal context without duplicating subject data they already select themselves. `--snapshot --yes` writes a reviewed project-only fallback; `--restricted-host` applies publication-safe filtering and adds default 24-hour expiry metadata. `--expires-hours` accepts values above 0 through 720. Link setup supports `--project-include`, `--project-exclude`, `--project-assert-include`, and `--project-assert-exclude`. `index` without subcommand builds/updates index. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation. Global skill installation is separately confirmed; project migration validates the global copy before removing managed local copies.
 
 ## Legacy live mount
 

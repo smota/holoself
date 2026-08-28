@@ -8,6 +8,20 @@ import { run } from '../src/cli.mjs'
 async function temp(){return mkdtemp(join(tmpdir(),'holoself-'))}
 async function capture(fn){const old=console.log;let out='';console.log=(...x)=>{out+=x.join(' ')+'\n'};try{await fn()}finally{console.log=old}return out}
 
+test('machine-readable capabilities and version are stable', async()=>{
+  const capabilities=JSON.parse(await capture(()=>run(['capabilities','--json'])))
+  assert.equal(capabilities.product,'holoself');assert.equal(capabilities.interface,'local-cli');assert.equal(capabilities.contextSchemaVersion,1)
+  const version=JSON.parse(await capture(()=>run(['--version','--json'])))
+  assert.equal(version.product,'holoself');assert.equal(version.version,capabilities.version)
+})
+
+test('self-only context excludes project documents for bounded consumers', async()=>{
+  const root=await temp(),project=await temp();await run(['init','--root',root]);await writeFile(join(project,'notes.md'),'# Project-only marker\n')
+  await run(['link','add','--project',project,'--self',root,'--no-activate','--yes'])
+  const packet=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','career','--self-only','--json'])))
+  assert.ok(packet.self.documents.length>0);assert.deepEqual(packet.project.documents,[]);assert.ok(packet.sources.every(source=>source.kind==='self'))
+})
+
 test('init and validate create private root', async()=>{
   const root=await temp(); await run(['init','--root',root,'--contribs','communication','--exclude-contrib','communication']);
   const config=JSON.parse(await readFile(join(root,'config.json'),'utf8')); assert.deepEqual(config.selectedContribs,[])

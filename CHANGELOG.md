@@ -4,6 +4,11 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+## [0.7.0] — 2026-08-28
+
+- Adds `capabilities --json` and `--version --json` as a small, stable discovery contract for agent-neutral local consumers.
+- Adds `context --self-only`, allowing bounded consumers to load Holoself context without redundantly including linked-project documents.
+
 - Adds validated user-level Holoself skill installation with `skill status|install --scope user`.
 - Adds `--install-skill global` and runtime schema 2 global installation records.
 - Adds transactional `link skill migrate-global` cleanup for redundant project skill copies, including untracked generated installations, rollback, and project-override health reporting.
@@ -69,5 +74,6 @@ Holoself v0.5.0 establishes the local-first architecture and public distribution
 - Test suite covers initialization, validation, migration safeguards, export refresh and packet-only mode, link safety, contrib selection, and private Markdown boundaries.
 - Known limitations: Holoself does not automatically install skills, synchronize data, or provide remote storage; project exports require manual review and each project must be exported separately.
 
+[0.7.0]: https://github.com/smota/holoself/releases/tag/v0.7.0
 [0.6.0]: https://github.com/smota/holoself/releases/tag/v0.6.0
 [0.5.0]: https://github.com/smota/holoself/releases/tag/v0.5.0
