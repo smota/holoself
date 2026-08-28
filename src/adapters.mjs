@@ -2,6 +2,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSyn
 import { createHash } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
+import { VERSION } from './version.mjs'
 
 export const LINK_START='<!-- holoself-link-start schema=1 -->'
 export const LINK_END='<!-- holoself-link-end -->'
@@ -213,7 +214,7 @@ export function activateProject(project,link,options={}){
     for(const skill of plan.skills)skillResults.push({...skill,result:writeSkill(project,skill.file,false,options.force===true)})
     const installations=skillResults.map(x=>{const text=readFileSync(safeProjectFile(project,x.file,'skill runtime hash'),'utf8'),owned=x.result==='created'||previousUnchangedOwned.get(x.file)===true;return {id:x.adapter,file:x.file,status:'installed',kind:'full-public-skill',owned,contentHash:owned?contentHash(text):null}})
     const globalInstallations=(plan.globalSkills||[]).map(x=>({id:x.id,file:x.file,status:x.status,kind:'full-public-skill',contentHash:inspectGlobalSkillPath(x.path).contentHash,verifiedAt:new Date().toISOString()}))
-    const runtime={schemaVersion:2,project:basename(project),mode:'live-link',defaultLens:link.default_lens,activatedAdapters:results.map(x=>{const text=readFileSync(safeProjectFile(project,x.file,'runtime hash'),'utf8');return {id:x.id,file:x.file,status:'active',markerHash:managedBlockHash(text),delivery:x.delivery,discovery:x.discovery,tested_product:x.tested_product,tested_version:x.tested_version,evidence:x.evidence,last_verified:x.last_verified}}),skillInstallPolicy:options.installSkill||'auto',skillInstallations:installations,globalSkillInstallations:globalInstallations,skillShims:installations.map(({contentHash,...x})=>({...x,status:'active'})),fallback:'.holoself/BOOTSTRAP.md',lastValidated:new Date().toISOString(),toolVersion:'0.6.0'}
+    const runtime={schemaVersion:2,project:basename(project),mode:'live-link',defaultLens:link.default_lens,activatedAdapters:results.map(x=>{const text=readFileSync(safeProjectFile(project,x.file,'runtime hash'),'utf8');return {id:x.id,file:x.file,status:'active',markerHash:managedBlockHash(text),delivery:x.delivery,discovery:x.discovery,tested_product:x.tested_product,tested_version:x.tested_version,evidence:x.evidence,last_verified:x.last_verified}}),skillInstallPolicy:options.installSkill||'auto',skillInstallations:installations,globalSkillInstallations:globalInstallations,skillShims:installations.map(({contentHash,...x})=>({...x,status:'active'})),fallback:'.holoself/BOOTSTRAP.md',lastValidated:new Date().toISOString(),toolVersion:VERSION}
     atomicWrite(runtimeFile(project),JSON.stringify(runtime,null,2)+'\n');return {plan,results,skillResults,runtime}
   }catch(error){rollback(snapshots);throw error}
 }

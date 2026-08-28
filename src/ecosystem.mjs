@@ -363,7 +363,7 @@ function contextData(o){
   const registry=loadLensRegistry(self),lens=o.lens || link?.default_lens || 'general',resolution=resolveLens(registry,lens)
   const adapter=o.restrictedHost?'restricted-host':(o.adapter||'generic')
   const selfData=sourceRecords(self,'self',lens,o.task,adapter,link,registry,resolution)
-  const local=existsSync(project) && resolve(project)!==resolve(self) ? sourceRecords(project,'project',lens,o.task,adapter,link,registry,resolution) : {records:[],restrictions:[],warnings:[]}
+  const local=!o.selfOnly && existsSync(project) && resolve(project)!==resolve(self) ? sourceRecords(project,'project',lens,o.task,adapter,link,registry,resolution) : {records:[],restrictions:[],warnings:[]}
   const records=[...selfData.records,...local.records],sources=records.map(({content,metadata,absolute_path,...source})=>source)
   const warnings=[...(selfData.warnings||[]),...(local.warnings||[])]
   if(!link && !o.self && resolve(self)!==resolve(project)) warnings.push('No project link found; resolved explicit/default self root.')

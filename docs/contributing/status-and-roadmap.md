@@ -1,6 +1,6 @@
 # Status and roadmap
 
-Current version: 0.6.0. Product is usable from repository checkout; npm registry package is not yet published.
+Current version: 0.7.0. Product is usable from repository checkout; npm registry package is not yet published.
 
 ## Available
 
