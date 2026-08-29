@@ -114,7 +114,8 @@ test('proposal identifiers, containment, filenames, and schemas fail closed',asy
   await writeFile(join(project,'.holoself','proposals',`${id}.yaml`),`proposal_id: "${id}"\nsource_project: "project"\nsource_files:\n  - "README.md"\ntarget: "../../outside.md"\nproposal_type: "new_fact"\nclaim: "unsafe"\nevidence: "README"\nconfidence: "confirmed"\nvisibility: "private"\nstatus: "pending"\ncreated_at: "2026-08-14T00:00:00.000Z"\nprovenance:\n  - "project:README.md"\nunknown_field: "no"\n`)
   await assert.rejects(run(['proposals','show',id,'--project',project]),/unknown proposal field|contained relative Markdown path/)
   await writeFile(join(project,'.holoself','proposals','22222222-2222-4222-8222-222222222222.yaml'),`proposal_id: "33333333-3333-4333-8333-333333333333"\nsource_project: "project"\nsource_files:\n  - "README.md"\ntarget: "context/x.md"\nproposal_type: "new_fact"\nclaim: "claim"\nevidence: "evidence"\nconfidence: "confirmed"\nvisibility: "private"\nstatus: "pending"\ncreated_at: "2026-08-14T00:00:00.000Z"\nprovenance:\n  - "project:README.md"\n`)
-  await assert.rejects(run(['proposals','list','--project',project]),/filename does not match proposal_id|invalid proposal/)
+  const listed=JSON.parse(await capture(()=>run(['proposals','list','--project',project])));assert.deepEqual(listed,[])
+  const audit=JSON.parse(await capture(()=>run(['proposals','audit','--project',project])));assert.ok(audit.diagnostics.some(item=>item.code==='INVALID_PROPOSAL'));process.exitCode=0
 })
 
 test('index and search enforce claim, field, compensation, metadata, and secret filters',async()=>{
@@ -123,7 +124,7 @@ test('index and search enforce claim, field, compensation, metadata, and secret 
   await writeFile(join(project,'Context','role.md'),'# Role\n\nMy annual compensation totals USD 200000 plus bonus and equity.\n')
   await writeFile(join(project,'credentials-notes.md'),'# Credentials\n\nfilename secret phrase\n');await writeFile(join(project,'.env.md'),'# Environment\n\ninternal credential phrase\n');await writeFile(join(project,'bearer.md'),'# Auth\n\nAuthorization: Bearer abcdefghijklmnopqrstuvwxyz\n')
   const built=JSON.parse(await capture(()=>run(['index','rebuild','--project',project])));assert.ok(built.skipped_secret_files>=3)
-  const raw=await readFile(join(project,'.holoself','index','index.json'),'utf8');assert.doesNotMatch(raw,/home_address|10 Secret Street|filename secret phrase|internal credential phrase|abcdefghijklmnopqrstuvwxyz/);assert.match(raw,/"schema_version": 4/)
+  const raw=await readFile(join(project,'.holoself','index','index.json'),'utf8');assert.doesNotMatch(raw,/home_address|10 Secret Street|filename secret phrase|internal credential phrase|abcdefghijklmnopqrstuvwxyz/);assert.match(raw,/"schema_version": 5/)
   const generalClaim=JSON.parse(await capture(()=>run(['search','private unicorn','--project',project,'--lens','general'])));assert.equal(generalClaim.results.length,0)
   const privateClaim=JSON.parse(await capture(()=>run(['search','private unicorn','--project',project,'--lens','private'])));assert.ok(privateClaim.results.length>0)
   const field=JSON.parse(await capture(()=>run(['search','golden package','--project',project,'--lens','general'])));assert.equal(field.results.length,0)

@@ -3,9 +3,9 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { validateAnnotationMetadata } from './annotations.mjs'
 
-const ROOTS = new Set(['profile','context','topics','reference','me','contribs'])
+const ROOTS = new Set(['profile','context','topics','reference','me','contribs','history'])
 const hash = value => createHash('sha256').update(value).digest('hex')
-export const ANNOTATION_FIELDS={schema_version:'number',access_lenses:'array',disclosure:'string',sensitivity:'string',document_role:'string',confidence:'string',visibility:'string',public_safe:'boolean'}
+export const ANNOTATION_FIELDS={schema_version:'number',access_lenses:'array',disclosure:'string',sensitivity:'string',document_role:'string',confidence:'string',visibility:'string',public_safe:'boolean',knowledge_status:'string',temporal_scope:'string',valid_from:'string',valid_until:'string',review_after:'string',supersedes:'array',superseded_by:'string'}
 function parseValue(value){const text=value.trim();if(/^\[.*\]$/.test(text))return text.slice(1,-1).split(',').map(item=>item.trim()).filter(Boolean);if(text==='true'||text==='false')return text==='true';if(/^\d+$/.test(text))return Number(text);return text.replace(/^['"]|['"]$/g,'')}
 function formatValue(value){if(Array.isArray(value))return `[${value.join(', ')}]`;if(typeof value==='boolean')return String(value);return String(value)}
 export function parseAnnotatedMarkdown(content){const normalized=content.replaceAll('\r\n','\n'),match=normalized.match(/^---\n([\s\S]*?)\n---\n?/),frontmatter=match?match[1].split('\n'):[],body=match?normalized.slice(match[0].length):normalized,metadata={},unknown=[];for(const line of frontmatter){const found=line.match(/^([a-zA-Z0-9_-]+):\s*(.*)$/);if(!found){unknown.push(line);continue}if(Object.hasOwn(ANNOTATION_FIELDS,found[1]))metadata[found[1]]=parseValue(found[2]);else unknown.push(line)}const markers=[...body.matchAll(/<!--\s*(\/?)os-section(?::\s*([a-zA-Z0-9_-]+))?\s*-->/g)],segments=[];if(!markers.length)segments.push({annotation:null,marker:null,content:body});else{if(markers[0].index>0)segments.push({annotation:null,marker:null,content:body.slice(0,markers[0].index)});for(let index=0;index<markers.length;index++){const marker=markers[index],nextIndex=markers[index+1]?.index??body.length;segments.push({annotation:marker[1]?`end:${marker[2]||''}`:marker[2],marker:marker[0],content:body.slice(marker.index+marker[0].length,nextIndex)})}}return {metadata,unknownMetadata:unknown,segments}}
@@ -21,9 +21,9 @@ function safe(root, name, { missing=false }={}) {
 }
 export function listDocuments(root){
   const out=[]
-  for(const top of ['profile','context','topics','reference','me','contribs/local']){
+  for(const top of ['profile','context','topics','reference','me','contribs/local','history']){
     const base=join(resolve(root),top);if(!existsSync(base))continue
-    const walk=dir=>{for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isSymbolicLink())continue;if(e.isDirectory())walk(p);else if(e.isFile()&&e.name.endsWith('.md')){const text=readFileSync(p,'utf8'),s=lstatSync(p);out.push({path:relative(resolve(root),p).replaceAll('\\','/'),bytes:s.size,modified_at:s.mtime.toISOString(),hash:hash(text)})}}};walk(base)
+    const walk=dir=>{for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isSymbolicLink())continue;if(e.isDirectory())walk(p);else if(e.isFile()&&e.name.endsWith('.md')){const text=readFileSync(p,'utf8'),s=lstatSync(p),metadata=parseAnnotatedMarkdown(text).metadata;out.push({path:relative(resolve(root),p).replaceAll('\\','/'),bytes:s.size,modified_at:s.mtime.toISOString(),hash:hash(text),knowledge_status:metadata.knowledge_status||'current',temporal_scope:metadata.temporal_scope||'current',review_after:metadata.review_after||null})}}};walk(base)
   } return out.sort((a,b)=>a.path.localeCompare(b.path))
 }
 export function readDocument(root,name){const item=safe(root,name);const content=readFileSync(item.path,'utf8');return {...item,content,annotations:parseAnnotatedMarkdown(content),hash:hash(content)}}

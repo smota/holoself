@@ -3,9 +3,9 @@ import { createHash } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { VERSION } from './version.mjs'
+import { LINK_START, LINK_END, auditInstructions, bootstrapText, canonicalSection, instructionEvidence, overlaySection } from './instructions.mjs'
 
-export const LINK_START='<!-- holoself-link-start schema=1 -->'
-export const LINK_END='<!-- holoself-link-end -->'
+export { LINK_START, LINK_END, auditInstructions, bootstrapText }
 const SKILL_START='<!-- holoself-skill-start schema=1 -->'
 const SKILL_END='<!-- holoself-skill-end -->'
 const LEGACY_SKILL_BLOCK=`${SKILL_START}
@@ -111,25 +111,6 @@ export function activationPlan(project,options={}){
   const globalSkills=install==='global'?userSkillTargets(unique(['agents',...mapped.map(x=>x.id)]),options).map(x=>({...x,status:inspectGlobalSkillPath(x.path).status})):[]
   return {canonical,adapters:mapped,skills,globalSkills,writes:unique(['.holoself/BOOTSTRAP.md','.holoself/runtime.json',...mapped.map(x=>x.file),...skills.map(x=>x.file)])}
 }
-function canonicalSection(){return `${LINK_START}
-## Linked Holoself context
-
-Before substantive work:
-
-1. Read \`.holoself/BOOTSTRAP.md\`.
-2. Resolve linked self through configured lens and privacy policy.
-3. Preserve source provenance and project ownership.
-4. Never modify canonical self directly; use proposal/review.
-
-Use Holoself skill when available.
-${LINK_END}
-`}
-function overlaySection(canonical){return `${LINK_START}
-## Linked Holoself context
-
-Load \`${canonical}\`, then \`.holoself/BOOTSTRAP.md\`, before substantive work. Use Holoself skill when available.
-${LINK_END}
-`}
 function markerInfo(text,start=LINK_START,end=LINK_END){const starts=[];const ends=[];let i=-1;while((i=text.indexOf(start,i+1))>=0)starts.push(i);i=-1;while((i=text.indexOf(end,i+1))>=0)ends.push(i);if(!starts.length&&!ends.length)return {state:'inactive'};if(starts.length!==1||ends.length!==1||ends[0]<starts[0])return {state:'malformed'};const finish=ends[0]+end.length;return {state:'active',start:starts[0],end:finish,block:text.slice(starts[0],finish)}}
 function managedBlockHash(text){const info=markerInfo(text);return info.state==='active'?createHash('sha256').update(info.block).digest('hex'):null}
 export function managedMarkerState(path){if(!existsSync(path))return 'missing';if(lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())return 'unsafe';return markerInfo(readFileSync(path,'utf8')).state}
@@ -167,30 +148,6 @@ function generatedSkillOutside(text,info){const outside=normalizedSkill(text.sli
 function nextSkillContent(old){if(normalizedSkill(old)===normalizedSkill(PUBLIC_SKILL))return old;const info=markerInfo(old,SKILL_START,SKILL_END);if(info.state==='malformed')throw new Error('malformed Holoself skill markers');if(info.state==='active')return generatedSkillOutside(old,info)?NEW_SKILL:old.slice(0,info.start)+SKILL_BLOCK.trimEnd()+old.slice(info.end);return old?null:NEW_SKILL}
 function writeSkill(project,rel,dryRun=false,force=false){const p=safeProjectFile(project,rel,'skill installation write'),state=skillState(p);if(['unsafe','malformed'].includes(state))throw new Error(`${p} has unsafe or malformed Holoself skill markers`);const old=existsSync(p)?readFileSync(p,'utf8'):'',generated=nextSkillContent(old),next=generated===null&&force?old.trimEnd()+'\n\n'+SKILL_BLOCK:generated;if(next===null)throw new Error(`existing skill installation collision: ${p}; use --force --yes to append managed installation or choose --install-skill none`);if(!dryRun&&next!==old)atomicWrite(p,next);return next===old?'unchanged':state==='active'?'updated':old?'appended':'created'}
 function removeSkill(project,rel,dryRun=false){const p=safeProjectFile(project,rel,'skill installation removal'),state=skillState(p);if(['missing','inactive'].includes(state))return 'unchanged';if(state!=='active')throw new Error(`${p} has unsafe or malformed Holoself skill markers`);const old=readFileSync(p,'utf8'),info=markerInfo(old,SKILL_START,SKILL_END),next=(old.slice(0,info.start)+old.slice(info.end)).trimEnd()+'\n';if(!dryRun)atomicWrite(p,next);return 'removed'}
-export function bootstrapText(link){return `# Linked Holoself context
-
-This project links to canonical whole-person context. This file contains no canonical personal data.
-
-## Startup
-
-1. Read \`.holoself/link.yaml\`.
-2. Resolve \`self_context.path\` and validate Holoself root.
-3. Load self context through default lens \`${link.default_lens}\`.
-4. Apply access lenses before reading and disclosure approval before publishing.
-5. Treat sensitivity as classification, not publication permission; preserve field restrictions.
-6. Preserve source provenance and project-owned artifacts.
-7. Never write canonical self directly. Submit reusable discoveries through proposals.
-
-## Runtime
-
-Preferred when command execution is available: \`holoself context --project . --json\`.
-
-If CLI is unavailable, use installed Holoself skill. If external paths are inaccessible, use reviewed \`.holoself/runtime/context-packet.md\`; snapshots are not live context.
-
-## Ownership
-
-Projects own execution artifacts. Self owns approved reusable personal knowledge.
-`}
 function runtimeFile(project){return safeProjectFile(project,'.holoself/runtime.json','runtime write')}
 export function readRuntime(project){try{return JSON.parse(readFileSync(runtimeFile(project),'utf8'))}catch{return null}}
 function preflight(project,plan,options={}){
@@ -214,7 +171,7 @@ export function activateProject(project,link,options={}){
     for(const skill of plan.skills)skillResults.push({...skill,result:writeSkill(project,skill.file,false,options.force===true)})
     const installations=skillResults.map(x=>{const text=readFileSync(safeProjectFile(project,x.file,'skill runtime hash'),'utf8'),owned=x.result==='created'||previousUnchangedOwned.get(x.file)===true;return {id:x.adapter,file:x.file,status:'installed',kind:'full-public-skill',owned,contentHash:owned?contentHash(text):null}})
     const globalInstallations=(plan.globalSkills||[]).map(x=>({id:x.id,file:x.file,status:x.status,kind:'full-public-skill',contentHash:inspectGlobalSkillPath(x.path).contentHash,verifiedAt:new Date().toISOString()}))
-    const runtime={schemaVersion:2,project:basename(project),mode:'live-link',defaultLens:link.default_lens,activatedAdapters:results.map(x=>{const text=readFileSync(safeProjectFile(project,x.file,'runtime hash'),'utf8');return {id:x.id,file:x.file,status:'active',markerHash:managedBlockHash(text),delivery:x.delivery,discovery:x.discovery,tested_product:x.tested_product,tested_version:x.tested_version,evidence:x.evidence,last_verified:x.last_verified}}),skillInstallPolicy:options.installSkill||'auto',skillInstallations:installations,globalSkillInstallations:globalInstallations,skillShims:installations.map(({contentHash,...x})=>({...x,status:'active'})),fallback:'.holoself/BOOTSTRAP.md',lastValidated:new Date().toISOString(),toolVersion:VERSION}
+    const runtime={schemaVersion:2,project:basename(project),mode:'live-link',defaultLens:link.default_lens,activatedAdapters:results.map(x=>{const text=readFileSync(safeProjectFile(project,x.file,'runtime hash'),'utf8');return {id:x.id,file:x.file,status:'active',markerHash:managedBlockHash(text),delivery:x.delivery,discovery:x.discovery,tested_product:x.tested_product,tested_version:x.tested_version,evidence:x.evidence,last_verified:x.last_verified}}),skillInstallPolicy:options.installSkill||'auto',skillInstallations:installations,globalSkillInstallations:globalInstallations,skillShims:installations.map(({contentHash,...x})=>({...x,status:'active'})),fallback:'.holoself/BOOTSTRAP.md',instructionEvidence:instructionEvidence(link),lastValidated:new Date().toISOString(),toolVersion:VERSION}
     atomicWrite(runtimeFile(project),JSON.stringify(runtime,null,2)+'\n');return {plan,results,skillResults,runtime}
   }catch(error){rollback(snapshots);throw error}
 }

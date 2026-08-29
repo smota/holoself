@@ -4,8 +4,10 @@
   "title": "Holoself proposal",
   "type": "object",
   "additionalProperties": false,
-  "required": ["proposal_id", "source_project", "source_files", "target", "proposal_type", "claim", "evidence", "confidence", "visibility", "status", "created_at", "provenance"],
+  "required": ["proposal_id", "source_project", "source_files", "status", "created_at", "provenance"],
   "properties": {
+    "schema_version": { "enum": [1, 2] },
+    "title": { "type": "string", "minLength": 1 },
     "proposal_id": { "type": "string", "format": "uuid" },
     "source_project": { "type": "string", "minLength": 1 },
     "source_project_path": { "type": "string", "minLength": 1 },
@@ -20,7 +22,26 @@
     "created_at": { "type": "string", "format": "date-time" },
     "reviewed_at": { "type": "string", "format": "date-time" },
     "provenance": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+    ,"changes": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["change_id", "target", "operation", "proposal_type", "claim", "evidence", "confidence", "visibility"],
+        "properties": {
+          "change_id": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*$" },
+          "target": { "type": "string", "pattern": "^(?:profile|context|reference|contribs|topics)/.+\\.md$" },
+          "operation": { "const": "append_claim" },
+          "proposal_type": { "enum": ["new_fact", "fact_update", "fact_correction", "new_story", "new_preference", "preference_update", "new_decision", "privacy_warning", "conflict_resolution"] },
+          "claim": { "type": "string", "minLength": 1 }, "evidence": { "type": "string", "minLength": 1 }, "confidence": { "type": "string", "minLength": 1 },
+          "visibility": { "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] }
+        }
+      }
+    }
   },
+  "oneOf": [
+    { "required": ["target", "proposal_type", "claim", "evidence", "confidence", "visibility"], "not": { "required": ["changes"] } },
+    { "required": ["schema_version", "title", "changes"], "properties": { "schema_version": { "const": 2 } }, "not": { "anyOf": [{"required":["target"]},{"required":["claim"]}] } }
+  ],
   "allOf": [
     {
       "if": { "properties": { "status": { "const": "pending" } }, "required": ["status"] },
@@ -30,6 +51,7 @@
           "target": { "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$))(?:profile|context|reference|contribs|topics)/.+\\.md$" }
         }
       }
+    }
     }
   ]
 }

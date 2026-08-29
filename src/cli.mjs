@@ -10,6 +10,7 @@ import { stdin as input, stdout as output } from 'node:process'
 import { ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
 import { BUILTIN_LENS_IDS } from './lenses.mjs'
 import { VERSION } from './version.mjs'
+import { applyCleanupPlan, buildCleanupPlan } from './cleanup.mjs'
 
 export { VERSION } from './version.mjs'
 const START = '<!-- holoself-export-start -->'
@@ -56,8 +57,17 @@ function parse(args){
     else if(a==='--lens') o.lens=requiredValue(args,i++,a)
     else if(a==='--secondary-lenses') o.secondaryLenses=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean)
     else if(a==='--task') o.task=requiredValue(args,i++,a)
+    else if(a==='--budget') o.budget=requiredValue(args,i++,a)
+    else if(a==='--temporal') o.temporal=requiredValue(args,i++,a)
+    else if(a==='--source') { o.sources=o.sources||[];o.sources.push(requiredValue(args,i++,a)) }
+    else if(a==='--manifest') o.manifest=true
+    else if(a==='--include-history') o.includeHistory=true
+    else if(a==='--no-cache') o.noCache=true
     else if(a==='--format') o.format=requiredValue(args,i++,a)
     else if(a==='--output') o.output=resolve(requiredValue(args,i++,a))
+    else if(a==='--plan') o.plan=resolve(requiredValue(args,i++,a))
+    else if(a==='--apply') o.apply=resolve(requiredValue(args,i++,a))
+    else if(a==='--digest'||a==='--preview-hash') o.digest=requiredValue(args,i++,a)
     else if(a==='--adapter') o.adapter=requiredValue(args,i++,a)
     else if(a==='--activate') o.activate=requiredValue(args,i++,a)
     else if(a==='--platform') { o.platforms=o.platforms||[]; o.platforms.push(requiredValue(args,i++,a)) }
@@ -304,23 +314,14 @@ function isHoloselfLink(p, root){
   if(!lstatSync(p).isSymbolicLink()) return false
   try { return resolve(dirname(p), readlinkSync(p)) === resolve(root) } catch { return false }
 }
-function syncPublicDefaults(root, ids, dryRun=false){
-  const dest=join(root,'contribs','default'); if(!dryRun) ensureDir(dest)
-  const known=availableContribs()
-  for(const id of known){
-    const p=join(dest,`${id}.md`)
-    if(ids.includes(id)){ if(!dryRun) atomicWrite(p,readFileSync(join(PACKAGE_ROOT,'contribs','default',`${id}.md`))) }
-    else if(!dryRun && existsSync(p)) rmSync(p,{force:true})
-  }
-}
 function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init | doctor | validate | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] [--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  skill status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens list|show|validate [id] [--root <self-root>]\n  link add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  link skill migrate-global --project <dir> [--skill-home <dir>] [--dry-run|--yes]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n  proposals list|show|approve|reject|defer [id] --project <dir>\n  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill auto|project|global|none --no-activate.\nProject filters: --project-include/--project-exclude and --project-assert-include/--project-assert-exclude <globs>.
-Safety confirmations: --yes. Packet adapters: --adapter pi|claude|codex|generic|obsidian|restricted-host.\n`) }
+Efficiency: context supports --budget small|standard|deep|unbounded, --manifest, repeatable --source, and --temporal current|historical|superseded|all.\nInstruction consolidation: instructions render|audit --project <dir>.\nSafety confirmations: --yes. Packet adapters: --adapter pi|claude|codex|generic|obsidian|restricted-host.\n`) }
 async function confirm(o,message){if(o.yes)return true; if(!input.isTTY||!output.isTTY) throw new Error(`${message} Re-run with --yes to confirm.`); const rl=createInterface({input,output}); try { const answer=await rl.question(`${message} Type "yes" to continue: `); return answer.trim().toLowerCase()==='yes' } finally { rl.close() }}
 export async function run(argv){
   const o=parse(argv)
   if(o.version){console.log(o.json?JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION}):`Holoself ${VERSION}`);return}
   if(o.command==='capabilities'){
-    console.log(JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION,interface:'local-cli',contextSchemaVersion:1,commands:['doctor','context','search','propose','proposals','link','skill'],globalSkillSupported:true},null,2));return
+    console.log(JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION,interface:'local-cli',contextSchemaVersion:1,commands:['doctor','context','search','propose','proposals','instructions','knowledge','link','skill'],contextFeatures:['need-gate','budgets','manifest','source-handles','lifecycle','receipts','persistent-cache','task-contrib-routing'],proposalSchemaVersions:[1,2],indexSchemaVersion:5,globalSkillSupported:true},null,2));return
   }
   if(o.help||!o.command){help();return}
   const root=o.root
@@ -330,9 +331,14 @@ export async function run(argv){
     return
   }
   if(o.command==='data-root'){console.log(root);return}
+  if(o.command==='knowledge'){
+    if(o.args[0]!=='cleanup')throw new Error('knowledge requires cleanup')
+    if(o.apply){if(!o.yes)throw new Error('knowledge cleanup --apply requires --yes');const plan=JSON.parse(readFileSync(o.apply,'utf8')),result=applyCleanupPlan(root,plan,{expectedDigest:o.digest});console.log(JSON.stringify(result,null,2));return}
+    const plan=buildCleanupPlan(root);if(o.output){atomicWrite(o.output,JSON.stringify(plan,null,2)+'\n');console.log(JSON.stringify({status:'planned',plan_path:o.output,digest:plan.digest,operations:plan.operations,review_only:plan.review_only},null,2))}else console.log(JSON.stringify(plan,null,2));return
+  }
   if(await runEcosystem(o)) return
   if(o.command==='init'){
-    ensureDir(root); for(const name of ['context','topics','reference','me','exports']) ensureDir(join(root,name)); ensureDir(join(root,'contribs','local')); ensureDir(join(root,'profile'))
+    ensureDir(root); for(const name of ['context','topics','reference','me','exports','history']) ensureDir(join(root,name));for(const state of ['pending','approved','rejected','deferred','superseded'])ensureDir(join(root,'proposals',state)); ensureDir(join(root,'contribs','local')); ensureDir(join(root,'profile'))
     if(!existsSync(join(root,'topics','.current'))) atomicWrite(join(root,'topics','.current'),'')
     if(!existsSync(join(root,'reference','README.md'))) atomicWrite(join(root,'reference','README.md'),'# Private reference\n\nKeep private reference material here. It is never published as a public contrib.\n')
     if(!existsSync(join(root,'me','contribs.md'))) atomicWrite(join(root,'me','contribs.md'),'# Local self-model extensions\n\nList private contrib paths here when needed.\n')
@@ -341,7 +347,7 @@ export async function run(argv){
     // Keep data-root guidance beside private data. Bounded injection preserves user text.
     inject(root,'AGENTS.md',false,rootSection(),ROOT_START,ROOT_END)
     const old=readConfig(root); const contribs=selectedContribs(o, old?.selectedContribs)
-    json(configPath(root),{schemaVersion:1,product:'holoself',selectedContribs:contribs,createdAt:old?.createdAt || new Date().toISOString()}); syncPublicDefaults(root,contribs)
+    json(configPath(root),{schemaVersion:1,product:'holoself',selectedContribs:contribs,createdAt:old?.createdAt || new Date().toISOString()})
     console.log(`[ok] initialized ${root}`); console.log(`Contribs: ${contribs.join(', ')||'(none)'}`);return
   }
   if(o.command==='doctor'){
@@ -414,7 +420,7 @@ export async function run(argv){
     if(!o.target)throw new Error('unlink requires --target <project>'); const p=join(o.target,'.holoself'); if(!pathExists(p)){console.log('[ok] no link found');return} if(!isHoloselfLink(p,root))throw new Error(`${p} is not a Holoself link; refusing to remove`); if(!await confirm(o,`WARNING: remove Holoself link ${p}?`))return; if(!o.dryRun)unlinkSync(p); console.log(`${o.dryRun?'[dry-run] ':''}[ok] unlinked ${p}`);return
   }
   if(o.command==='upgrade'){
-    const c=readConfig(root); if(!c)throw new Error('config.json missing; run init first'); const ids=selectedContribs(o,c.selectedContribs); if(!o.dryRun){c.selectedContribs=ids;json(configPath(root),c)} syncPublicDefaults(root,ids,o.dryRun); console.log(`${o.dryRun?'[dry-run] ':''}[ok] refreshed public defaults`);return
+    const c=readConfig(root); if(!c)throw new Error('config.json missing; run init first'); const ids=selectedContribs(o,c.selectedContribs); if(!o.dryRun){c.selectedContribs=ids;json(configPath(root),c)} console.log(`${o.dryRun?'[dry-run] ':''}[ok] refreshed public contrib availability; product files remain package-owned`);return
   }
   throw new Error(`unknown command: ${o.command}`)
 }

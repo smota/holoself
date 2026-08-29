@@ -11,6 +11,7 @@
     "start": "node bin/holoself.mjs",
     "web": "node bin/holoself.mjs web",
     "audit:package": "node scripts/package-audit.mjs",
+    "verify": "node scripts/verify.mjs",
     "prepack": "npm run audit:package"
   },
   "license": "MIT"

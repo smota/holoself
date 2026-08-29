@@ -87,17 +87,17 @@ test('link root setup dry-run and safety checks do not edit instructions', async
 
 test('init creates private architecture directories and catalog defaults', async()=>{
   const root=await temp(); await run(['init','--root',root]);
-  const agents=await readFile(join(root,'AGENTS.md'),'utf8'); assert.match(agents,/holoself-root-start/); assert.match(agents,/Loading order/);
-  for (const name of ['reference','me','exports','contribs/local']) await access(join(root,name));
+  const agents=await readFile(join(root,'AGENTS.md'),'utf8'); assert.match(agents,/holoself-root-start/); assert.match(agents,/normative resolver contract/);assert.match(agents,/--budget standard/)
+  for (const name of ['reference','me','exports','history','contribs/local','proposals/approved','proposals/superseded']) await access(join(root,name));
   const config=JSON.parse(await readFile(join(root,'config.json'),'utf8'));
   assert.equal(config.schemaVersion,1); assert.ok(config.selectedContribs.includes('minto-pyramid'));
   assert.match(await readFile(join(root,'me','contribs.md'),'utf8'),/Local self-model/);
 })
 
-test('selection rejects unknown contrib and upgrade removes deselected defaults', async()=>{
+test('selection rejects unknown contrib and keeps public methods package-owned', async()=>{
   const root=await temp(); await assert.rejects(run(['init','--root',root,'--contribs','missing']),/unknown public contrib/)
-  await run(['init','--root',root]); await access(join(root,'contribs','default','communication.md'))
-  await run(['init','--root',root,'--exclude-contrib','communication']); await assert.rejects(access(join(root,'contribs','default','communication.md')))
+  await run(['init','--root',root]);await assert.rejects(access(join(root,'contribs','default','communication.md')))
+  await run(['init','--root',root,'--exclude-contrib','communication']);const config=JSON.parse(await readFile(join(root,'config.json'),'utf8'));assert.equal(config.selectedContribs.includes('communication'),false)
 })
 
 test('packet-only export has no fallback paths', async()=>{

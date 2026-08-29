@@ -49,3 +49,16 @@ test('skill documents validated resolution for every supported project mode',asy
   const schema=JSON.parse(await readFile(join(root,'schemas','link.schema.json'),'utf8'))
   assert.equal(schema.properties.self_context.properties.secondary_lenses.uniqueItems,true)
 })
+
+test('agent instructions consolidate resolution in the public skill and bounded command',async()=>{
+  const [skill,template]=await Promise.all([
+    readFile(join(root,'skills','holoself','SKILL.md'),'utf8'),
+    readFile(join(root,'templates','AGENTS.md'),'utf8')
+  ])
+  assert.match(skill,/Do not open linked canonical `profile\/` or `context\/` files directly/)
+  assert.match(skill,/context --project \. --task/)
+  assert.match(skill,/Do not bulk-load/)
+  assert.match(template,/public Holoself skill is the normative resolver contract/)
+  assert.match(template,/--budget standard/)
+  assert.doesNotMatch(template,/Loading order:/)
+})

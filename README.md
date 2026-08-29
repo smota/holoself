@@ -124,6 +124,8 @@ Approval prints target, evidence, affected files, and proposed diff before writi
 - [Ownership](docs/concepts/ownership.md)
 - [Lenses and privacy](docs/concepts/lenses-and-privacy.md)
 - [Proposal review](docs/concepts/proposal-review.md)
+- [Context efficiency and receipts](docs/concepts/context-efficiency.md)
+- [Knowledge lifecycle](docs/concepts/knowledge-lifecycle.md)
 - [CLI reference](docs/reference/cli.md)
 - [Threat model](docs/trust/threat-model.md)
 - [Status and roadmap](docs/contributing/status-and-roadmap.md)

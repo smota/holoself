@@ -3,7 +3,7 @@
   "$id": "https://holoself.local/schemas/context.schema.json",
   "title": "Holoself resolved context",
   "type": "object",
-  "required": ["self", "lens", "lens_resolution", "project", "packet_metadata", "sources", "restrictions", "warnings", "validation", "proposals"],
+  "required": ["self", "lens", "lens_resolution", "project", "packet_metadata", "sources", "restrictions", "warnings", "validation", "selection", "context_receipt", "proposals"],
   "additionalProperties": false,
   "$defs": {
     "lensId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40 },
@@ -42,6 +42,7 @@
     "lens": { "$ref": "#/$defs/lensId" },
     "lens_resolution": { "$ref": "#/$defs/lensResolution" },
     "project": { "type": "object" },
+    "methods": { "type": "object" },
     "task": { "type": ["string", "null"] },
     "packet_metadata": {
       "type": "object",
@@ -62,6 +63,8 @@
     "restrictions": { "type": "array" },
     "warnings": { "type": "array" },
     "validation": { "type": "object" },
+    "selection": { "type": "object" },
+    "context_receipt": { "type": "object" },
     "proposals": { "type": "array" }
   }
 }

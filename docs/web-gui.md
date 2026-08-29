@@ -20,8 +20,8 @@ The Workbench turns the existing model into seven predictable areas:
 1. **Overview** — canonical-root readiness, optional linked-project context, and next actions.
 2. **Spaces** — independent linked project folders, status, context, health and indexes.
 3. **Lenses** — visible scope and sensitivity policy.
-4. **Knowledge** — guarded human editing of canonical local Markdown.
-5. **Review** — project proposals and explicit approve, defer or reject decisions.
+4. **Knowledge** — guarded human editing, lifecycle filters, and content-redacted cleanup previews for canonical local Markdown.
+5. **Review** — managed and invalid inbox items, review-item creation, grouped previews, and exact-hash approve, defer, reject or supersede decisions.
 6. **Conversations** — context-aware turns through an explicitly configured local CLI.
 7. **Setup** — canonical-root details and PI, CLAUDE, CODEX and GROK detection/configuration.
 
@@ -37,11 +37,11 @@ Canonical `profile/`, `context/`, `topics/`, `reference/`, `me/`, and `contribs/
 
 Workbench has one extensible connector registry with `cli`, `terminal`, and `gui` kinds. Built-ins detect PI, Claude, Codex, Grok, Windows Terminal, PowerShell, Command Prompt, and registered Claude/OpenAI Windows apps. Detected built-ins require no setup. Validated root extensions or overrides live under `<root>/connectors/*.json`. Conversation and interactive launch plans use fixed connector capabilities, a linked-space allowlist, structured arguments, and `shell: false`; there is no generic command endpoint.
 
-Every conversation turn resolves lens-filtered Holoself context before invoking the detected CLI. **Open here** combines a CLI or GUI connector with a terminal host and the selected space working directory.
+Every conversation turn resolves bounded, lens-filtered, current Holoself context before invoking the detected CLI. The packet carries its context gate, budget, receipt hash, cache state, estimated tokens, and selected-source count. **Open here** combines a CLI or GUI connector with a terminal host and the selected space working directory.
 
 ## Annotation-safe knowledge and lens instructions
 
-Knowledge APIs parse frontmatter fields (`access_lenses`, disclosure, sensitivity, role, confidence, visibility, and public-safe status) plus `os-section` markers. The UI renders schema-driven metadata controls: dynamic Access Lens checkboxes, guided disclosure/sensitivity/document-role/visibility values, confidence suggestions with custom-value compatibility, and a derived-or-legacy public-safe selector. Unknown lens and confidence values remain visible and preserved. Inline and save-time cross-field checks block unsafe publication combinations and fail closed when modern documents have no Access Lens. Frontmatter delimiters and opening/closing annotation comments are never exposed as editable text; the backend preserves unknown metadata, validates marker order, hash-guards the write, validates the complete root, and rolls back on failure.
+Knowledge APIs parse frontmatter fields (`access_lenses`, disclosure, sensitivity, role, confidence, visibility, public-safe status, lifecycle state, validity/review dates, and supersession references) plus `os-section` markers. The UI renders schema-driven metadata controls: dynamic Access Lens checkboxes, guided disclosure/sensitivity/document-role/visibility values, confidence suggestions with custom-value compatibility, and a derived-or-legacy public-safe selector. Unknown lens and confidence values remain visible and preserved. Inline and save-time cross-field checks block unsafe publication combinations and fail closed when modern documents have no Access Lens. Frontmatter delimiters and opening/closing annotation comments are never exposed as editable text; the backend preserves unknown metadata, validates marker order, hash-guards the write, validates the complete root, and rolls back on failure.
 
 Lens instructions contain structured purpose, priorities, include/exclude rules, and response guidance. Personal overrides are stored under `<root>/lenses/instructions/` so built-in definitions remain intact.
 

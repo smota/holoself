@@ -4,11 +4,13 @@ import {
 } from 'node:fs'
 import { createHash, randomUUID } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
-import { activateProject, activationPlan, activationStatus, deactivateProject, globalSkillStatus, installGlobalSkills, migrateProjectSkillsToGlobal, preflightActivation, readRuntime } from './adapters.mjs'
+import { activateProject, activationPlan, activationStatus, auditInstructions, bootstrapText, deactivateProject, globalSkillStatus, installGlobalSkills, migrateProjectSkillsToGlobal, preflightActivation, readRuntime } from './adapters.mjs'
 import { BUILTIN_LENS_IDS, lensIdStructurallyValid, loadLensRegistry, resolveLens } from './lenses.mjs'
 import { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES } from './annotations.mjs'
+import { cachedSelection, KNOWLEDGE_STATUSES, persistentSelection, TEMPORAL_SCOPES, temporalDisposition } from './context-selection.mjs'
 
 export { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES }
 export const LENSES = BUILTIN_LENS_IDS
@@ -29,6 +31,7 @@ const SECRET_FILE_RE = /(^|\/)(?:\.env(?:\..*)?|id_(?:rsa|dsa|ecdsa|ed25519)|[^/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const UUID_PREFIX_RE = /^[0-9a-f-]{8,36}$/i
 const COMPENSATION_RE = /(?:\b(?:compensation|salary|base\s+pay|pay\s+(?:band|range|package)|remuneration|annual\s+pay|total\s+comp|bonus|equity|stock\s+options?|negotiat(?:e|ion))\b|[$€£]\s?\d[\d,.]*(?:\s?(?:k|m|usd|eur|gbp))?)/i
+const PACKAGE_ROOT=resolve(fileURLToPath(new URL('..',import.meta.url)))
 
 function pathExists(path){try{lstatSync(path);return true}catch{return false}}
 function ensureDir(path){ mkdirSync(path,{recursive:true}) }
@@ -165,7 +168,7 @@ function markdownFiles(root,{includeHoloself=false,skipDirs=SKIP_DIRS}={}){
   walk(root); return files.sort()
 }
 function projectMarkdownFiles(root,link){const config=link?.project_context||{include:['**/*.md'],exclude:DEFAULT_PROJECT_EXCLUDES};return markdownFiles(root,{skipDirs:new Set(['.git','node_modules','.holoself'])}).filter(path=>{const rel=slash(relative(root,path));return matchesAny(rel,config.include)&&!matchesAny(rel,config.exclude)})}
-const PRIVACY_FIELDS=new Set(['access_lenses','disclosure','sensitivity','document_role','task_include','task_exclude','visibility','public_safe','confidence','exclude_lenses','field_visibility'])
+const PRIVACY_FIELDS=new Set(['access_lenses','disclosure','sensitivity','document_role','task_include','task_exclude','visibility','public_safe','confidence','exclude_lenses','field_visibility','knowledge_status','temporal_scope','valid_from','valid_until','review_after','supersedes','superseded_by'])
 function privacyValueValid(key,value,registry=null){
   const known=item=>typeof item==='string'&&(registry?registry.byId.has(item):lensIdStructurallyValid(item))
   if(key==='access_lenses')return Array.isArray(value)&&value.length>0&&value.every(known)&&new Set(value).size===value.length
@@ -178,6 +181,11 @@ function privacyValueValid(key,value,registry=null){
   if(key==='confidence')return typeof value==='string'&&Boolean(value.trim())
   if(key==='exclude_lenses')return Array.isArray(value)&&value.every(known)
   if(key==='field_visibility')return value&&typeof value==='object'&&!Array.isArray(value)&&Object.values(value).every(item=>typeof item==='string'&&VISIBILITIES.includes(item))
+  if(key==='knowledge_status')return typeof value==='string'&&KNOWLEDGE_STATUSES.includes(value)
+  if(key==='temporal_scope')return typeof value==='string'&&TEMPORAL_SCOPES.includes(value)
+  if(['valid_from','valid_until','review_after'].includes(key))return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))
+  if(key==='supersedes')return Array.isArray(value)&&value.every(item=>typeof item==='string'&&Boolean(item.trim()))
+  if(key==='superseded_by')return typeof value==='string'&&Boolean(value.trim())
   return true
 }
 function privacyMetadataErrors(metadata,registry=null){const errors=[];for(const key of PRIVACY_FIELDS)if(Object.hasOwn(metadata,key)&&!privacyValueValid(key,metadata[key],registry)){const value=typeof metadata[key]==='string'?metadata[key]:JSON.stringify(metadata[key]);errors.push(key==='visibility'?`invalid visibility ${value}`:`invalid ${key} value ${value}`)}return errors}
@@ -189,6 +197,8 @@ function canonicalPrivacyMetadataErrors(metadata,registry=null){
     else if(!privacyValueValid(key,metadata[key],registry)&&!errors.some(error=>error.startsWith(`invalid ${key} `)))errors.push(`invalid ${key} value`)
   }
   if(metadata.visibility==='public-safe'&&metadata.public_safe===false)errors.push('conflicting legacy privacy metadata: visibility public-safe with public_safe false')
+  if(metadata.valid_from&&metadata.valid_until&&Date.parse(metadata.valid_from)>Date.parse(metadata.valid_until))errors.push('valid_from must not be after valid_until')
+  if(metadata.knowledge_status==='superseded'&&!metadata.superseded_by)errors.push('superseded knowledge must name superseded_by')
   return [...new Set(errors)]
 }
 function restrictPrivacyMetadata(metadata){metadata.access_lenses=['private'];metadata.disclosure='internal-only';metadata.document_role='content';metadata.visibility='private';metadata.public_safe=false;metadata.sensitivity='restricted';return metadata}
@@ -295,8 +305,9 @@ function relevance(text,task){
   for(const token of wanted) if(got.has(token)) score++
   return score
 }
-function canonicalFiles(root){
+function canonicalFiles(root,{includeHistory=false}={}){
   let files=[...markdownFiles(join(root,'profile')),...markdownFiles(join(root,'context'))]
+  if(includeHistory)files.push(...markdownFiles(join(root,'history')))
   const current=join(root,'topics','.current');if(existsSync(current)){const topic=readFileSync(current,'utf8').trim();if(topic){const path=join(root,'topics',topic.endsWith('.md')?topic:`${topic}.md`);if(existsSync(path))files.push(path)}}
   return [...new Set(files)].sort()
 }
@@ -318,10 +329,10 @@ function filterFieldVisibility(body,metadata,lens,source,restrictions,resolution
     return true
   }).join('\n')
 }
-function sourceRecords(root,kind,lens,task,adapter,link=null,registry=null,resolution=null){
+function sourceRecords(root,kind,lens,task,adapter,link=null,registry=null,resolution=null,selectionOptions={}){
   const records=[]; const restrictions=[],warnings=[]
   let files
-  if(kind==='self')files=canonicalFiles(root)
+  if(kind==='self')files=canonicalFiles(root,{includeHistory:selectionOptions.includeHistory||selectionOptions.temporal&&selectionOptions.temporal!=='current'})
   else files=projectMarkdownFiles(root,link)
   for(const path of files){
     const text=readFileSync(path,'utf8'),rel=slash(relative(root,path));let parsed
@@ -348,6 +359,12 @@ function sourceRecords(root,kind,lens,task,adapter,link=null,registry=null,resol
   }
   return {records,restrictions,warnings}
 }
+function contribRecords(self){
+  let config,catalog;try{config=JSON.parse(readFileSync(join(self,'config.json'),'utf8'));catalog=JSON.parse(readFileSync(join(PACKAGE_ROOT,'contribs','catalog.json'),'utf8'))}catch{return []}
+  const selected=new Set(Array.isArray(config.selectedContribs)?config.selectedContribs:[]),records=[]
+  for(const entry of catalog.contribs||[]){if(!selected.has(entry.id))continue;const path=join(PACKAGE_ROOT,'contribs',entry.path);if(!existsSync(path)||lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())continue;const content=readFileSync(path,'utf8'),metadata={access_lenses:['general','career','technical','leadership','publishing','interview','private'],disclosure:'internal-only',document_role:'policy',publication_allowed:false,visibility:'private',sensitivity:'none',knowledge_status:'current',temporal_scope:'timeless'};records.push({kind:'contrib',path:`contribs/${entry.path}`,absolute_path:path,...metadata,public_safe:false,confidence:null,freshness:new Date(statSync(path).mtimeMs).toISOString(),source_hash:hash(content),content:content.trim(),metadata,contrib:{id:entry.id,title:entry.title,domain:entry.domain,type:entry.type}})}
+  return records
+}
 function resolvedContextAssertions(records,lens,task,adapter,link,resolution=null){
   const errors=[],projectPaths=records.filter(record=>record.kind==='project').map(record=>record.path)
   for(const record of records){if(!allowed(record.metadata,lens,adapter,task,resolution))errors.push(`${record.kind}:${record.path}: policy rejected after resolution`);if(SECRET_RE.test(record.content))errors.push(`${record.kind}:${record.path}: secret-like content survived filtering`)}
@@ -362,32 +379,39 @@ function contextData(o){
   if(!existsSync(self)) throw new Error(`self path not found: ${self}`)
   const registry=loadLensRegistry(self),lens=o.lens || link?.default_lens || 'general',resolution=resolveLens(registry,lens)
   const adapter=o.restrictedHost?'restricted-host':(o.adapter||'generic')
-  const selfData=sourceRecords(self,'self',lens,o.task,adapter,link,registry,resolution)
+  const selfData=sourceRecords(self,'self',lens,o.task,adapter,link,registry,resolution,o)
   const local=!o.selfOnly && existsSync(project) && resolve(project)!==resolve(self) ? sourceRecords(project,'project',lens,o.task,adapter,link,registry,resolution) : {records:[],restrictions:[],warnings:[]}
-  const records=[...selfData.records,...local.records],sources=records.map(({content,metadata,absolute_path,...source})=>source)
+  const candidates=[...selfData.records,...local.records,...(o.task?contribRecords(self):[])]
+  const selectionOptions={task:o.task,lens,budget:o.budget||'standard',manifest:o.manifest,sources:o.sources||[],temporal:o.temporal||'current',includeHistory:o.includeHistory},cacheDir=link&&!o.noCache?join(project,'.holoself','runtime','context-cache'):null,selected=cacheDir?persistentSelection(candidates,selectionOptions,cacheDir):cachedSelection(candidates,selectionOptions)
+  const records=selected.records,sources=records.map(({content,metadata,absolute_path,...source})=>source)
   const warnings=[...(selfData.warnings||[]),...(local.warnings||[])]
   if(!link && !o.self && resolve(self)!==resolve(project)) warnings.push('No project link found; resolved explicit/default self root.')
   const generatedAt=new Date().toISOString(),restrictedHost=Boolean(o.snapshot||o.restrictedHost||adapter==='restricted-host'),expiresAt=restrictedHost?new Date(Date.parse(generatedAt)+(o.expiresHours||24)*60*60*1000).toISOString():null
   const validation=resolvedContextAssertions(records,lens,o.task,adapter,link,resolution)
+  const selfRecords=records.filter(record=>record.kind==='self'),localRecords=records.filter(record=>record.kind==='project'),methodRecords=records.filter(record=>record.kind==='contrib')
   return {
-    self:{path:slash(resolve(self)),documents:selfData.records.map(r=>({path:r.path,content:r.content,metadata:r.metadata}))},
+    self:{path:slash(resolve(self)),documents:selfRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))},
     lens,
     lens_resolution:{schema_version:resolution.schema_version,id:resolution.id,title:resolution.title,source:resolution.source,base_lens:resolution.base_lens,sensitivity_access:[...resolution.sensitivity_access]},
-    project:{path:slash(project),name:basename(project),documents:local.records.map(r=>({path:r.path,content:r.content,metadata:r.metadata}))},
+    project:{path:slash(project),name:basename(project),documents:localRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))},
+    methods:{documents:methodRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only,contrib:r.contrib}))},
     task:o.task || null,
     packet_metadata:{schema_version:2,packet_id:randomUUID(),generated_at:generatedAt,expires_at:expiresAt,host_mode:restrictedHost?'restricted-host-snapshot':'live-local',lens_registry_hash:registry.registry_hash,source_hash_algorithm:'sha256',source_hashes:sources.map(source=>({kind:source.kind,path:source.path,sha256:source.source_hash,freshness:source.freshness}))},
     sources,
-    restrictions:[...selfData.restrictions,...local.restrictions],
+    restrictions:[...selfData.restrictions,...local.restrictions,...selected.omitted,...selected.temporalExcluded],
     warnings,
     validation,
+    selection:selected.selection,
+    context_receipt:{...selected.receipt,cache:selected.cache},
     proposals:listProposalData(project).filter(p=>p.status==='pending')
   }
 }
 function packetFormat(data,adapter='generic'){
   const labels={pi:'Pi context packet',claude:'Claude Code context packet',codex:'Codex context packet',generic:'Holoself context packet',obsidian:'Obsidian/Claude context packet','restricted-host':'Restricted-host Holoself context packet'}
   const title=labels[adapter] || labels.generic,metadata=data.packet_metadata
-  const docs=[...data.self.documents.map(x=>({...x,owner:'self'})),...data.project.documents.map(x=>({...x,owner:'project'}))]
-  return `# ${title}\n\nPacket ID: ${metadata.packet_id}\nGenerated: ${metadata.generated_at}\nExpires: ${metadata.expires_at||'not applicable (live local resolution)'}\nHost mode: ${metadata.host_mode}\nLens: ${data.lens}\nLens source: ${data.lens_resolution.source}\nLens base: ${data.lens_resolution.base_lens}\nTask: ${data.task || '(none)'}\nPrivacy: access-filtered. Publication requires disclosure=publish-approved; readability alone is never approval. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n${metadata.source_hashes.map(source=>`- ${source.kind}:${source.path} ${source.sha256} (${source.freshness})`).join('\n')||'- None'}\n\n${docs.map(d=>`## ${d.owner}: ${d.path}\n\nAccess lenses: ${(d.metadata.access_lenses||[]).join(', ')}\nDisclosure: ${d.metadata.disclosure}\nSensitivity: ${d.metadata.sensitivity}\nDocument role: ${d.metadata.document_role}\nPublication allowed: ${d.metadata.publication_allowed?'yes':'no'}\n\n${d.content}`).join('\n\n')}\n\n## Restrictions\n\n${data.restrictions.map(x=>`- ${x.source}: ${x.reason}`).join('\n') || '- None'}\n`
+  const docs=[...data.self.documents.map(x=>({...x,owner:'self'})),...data.project.documents.map(x=>({...x,owner:'project'})),...(data.methods?.documents||[]).map(x=>({...x,owner:'method'}))]
+  const receipt=`Context receipt: ${data.context_receipt.context_hash} (${data.context_receipt.cache.hit?'cache hit':'fresh resolution'})\nContext gate: ${data.selection.context_need}; budget: ${data.selection.budget}; estimated tokens: ${data.selection.estimated_tokens}; selected sources: ${data.selection.selected_count}`
+  return `# ${title}\n\nPacket ID: ${metadata.packet_id}\n${receipt}\nGenerated: ${metadata.generated_at}\nExpires: ${metadata.expires_at||'not applicable (live local resolution)'}\nHost mode: ${metadata.host_mode}\nLens: ${data.lens}\nLens source: ${data.lens_resolution.source}\nLens base: ${data.lens_resolution.base_lens}\nTask: ${data.task || '(none)'}\nPrivacy: access-filtered. Publication requires disclosure=publish-approved; readability alone is never approval. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n${metadata.source_hashes.map(source=>`- ${source.kind}:${source.path} ${source.sha256} (${source.freshness})`).join('\n')||'- None'}\n\n${docs.map(d=>`## ${d.owner}: ${d.path}\n\nAccess lenses: ${(d.metadata.access_lenses||[]).join(', ')}\nDisclosure: ${d.metadata.disclosure}\nSensitivity: ${d.metadata.sensitivity}\nDocument role: ${d.metadata.document_role}\nPublication allowed: ${d.metadata.publication_allowed?'yes':'no'}\n\n${d.content}`).join('\n\n')}\n\n## Restrictions\n\n${data.restrictions.map(x=>`- ${x.source}: ${x.reason}`).join('\n') || '- None'}\n`
 }
 async function askConfirm(o,message){
   if(o.yes) return true
@@ -439,23 +463,29 @@ function filterAnalysis(report,type){
 function proposalDir(project){return assertContainedPath(project,join(project,'.holoself','proposals'),'proposal directory')}
 function proposalFile(project,id){if(!UUID_RE.test(id))throw new Error(`invalid proposal id: ${id}`);return join(proposalDir(project),`${id}.yaml`)}
 function proposalText(p){ return yamlObject(p) }
+function proposalChanges(p){return Array.isArray(p.changes)?p.changes:[{change_id:'claim',target:p.target,operation:'append_claim',proposal_type:p.proposal_type,claim:p.claim,evidence:p.evidence,confidence:p.confidence,visibility:p.visibility}]}
 function validateProposal(p){
-  const errors=[],requiredStrings=['proposal_id','source_project','target','proposal_type','claim','evidence','confidence','visibility','status','created_at'],allowedKeys=new Set(['proposal_id','source_project','source_project_path','source_files','target','proposal_type','claim','evidence','confidence','visibility','status','created_at','reviewed_at','provenance','_path'])
+  const errors=[],v2=p?.schema_version===2,requiredStrings=v2?['proposal_id','source_project','status','created_at']:['proposal_id','source_project','target','proposal_type','claim','evidence','confidence','visibility','status','created_at'],allowedKeys=new Set(['schema_version','title','proposal_id','source_project','source_project_path','source_files','target','proposal_type','claim','evidence','confidence','visibility','status','created_at','reviewed_at','provenance','changes','_path'])
   if(!p||Array.isArray(p)||typeof p!=='object')return ['proposal must be a mapping']
   for(const key of Object.keys(p))if(!allowedKeys.has(key))errors.push(`unknown proposal field: ${key}`)
   for(const key of requiredStrings)if(typeof p[key]!=='string'||!p[key].trim())errors.push(`proposal ${key} must be a non-empty string`)
   if(typeof p.proposal_id==='string'&&!UUID_RE.test(p.proposal_id))errors.push('proposal_id must be a UUID')
   const terminal=PROPOSAL_STATES.includes(p.status)&&p.status!=='pending'
+  if(v2){
+    if(typeof p.title!=='string'||!p.title.trim())errors.push('proposal title must be a non-empty string')
+    if(!Array.isArray(p.changes)||!p.changes.length)errors.push('proposal changes must be a non-empty array')
+    const ids=new Set();for(const change of p.changes||[]){if(!change||Array.isArray(change)||typeof change!=='object'){errors.push('proposal change must be a mapping');continue}for(const key of ['change_id','target','operation'])if(typeof change[key]!=='string'||!change[key].trim())errors.push(`proposal change ${key} must be a non-empty string`);if(ids.has(change.change_id))errors.push(`duplicate change_id: ${change.change_id}`);ids.add(change.change_id);if(change.operation!=='append_claim')errors.push(`unsupported proposal operation: ${change.operation}`);if(isAbsolute(change.target||'')||slash(change.target||'').split('/').includes('..')||!String(change.target||'').toLowerCase().endsWith('.md'))errors.push(`proposal change target must be a contained relative Markdown path: ${change.change_id}`);if(!PROPOSAL_TYPES.includes(change.proposal_type))errors.push(`invalid proposal_type: ${change.proposal_type}`);if(!VISIBILITIES.includes(change.visibility))errors.push(`invalid proposal visibility: ${change.visibility}`);for(const key of ['claim','evidence','confidence'])if(typeof change[key]!=='string'||!change[key].trim())errors.push(`proposal change ${key} must be a non-empty string`)}
+  }
   if(!terminal&&typeof p.target==='string'&&(isAbsolute(p.target)||slash(p.target).split('/').includes('..')||!p.target.toLowerCase().endsWith('.md')))errors.push('proposal target must be a contained relative Markdown path')
-  if(!PROPOSAL_TYPES.includes(p.proposal_type))errors.push(`invalid proposal_type: ${p.proposal_type}`)
+  if(!v2&&!PROPOSAL_TYPES.includes(p.proposal_type))errors.push(`invalid proposal_type: ${p.proposal_type}`)
   if(!PROPOSAL_STATES.includes(p.status))errors.push(`invalid proposal status: ${p.status}`)
-  if(!VISIBILITIES.includes(p.visibility))errors.push(`invalid proposal visibility: ${p.visibility}`)
+  if(!v2&&!VISIBILITIES.includes(p.visibility))errors.push(`invalid proposal visibility: ${p.visibility}`)
   if(typeof p.created_at==='string'&&Number.isNaN(Date.parse(p.created_at)))errors.push('proposal created_at must be an ISO date-time')
   if(p.reviewed_at!==undefined&&(typeof p.reviewed_at!=='string'||Number.isNaN(Date.parse(p.reviewed_at))))errors.push('proposal reviewed_at must be an ISO date-time')
   if(p.source_project_path!==undefined&&typeof p.source_project_path!=='string')errors.push('proposal source_project_path must be a string')
   for(const key of ['source_files','provenance'])if(!Array.isArray(p[key])||!p[key].length||p[key].some(x=>typeof x!=='string'||!x.trim()))errors.push(`proposal ${key} must be a non-empty string array`)
   if(!terminal&&Array.isArray(p.source_files)&&p.source_files.some(x=>isAbsolute(x)||slash(x).split('/').includes('..')))errors.push('proposal source_files must be contained relative paths')
-  const textFields=[p.claim,p.evidence,p.confidence,...(Array.isArray(p.provenance)?p.provenance:[])];if(textFields.some(x=>typeof x==='string'&&/<!--\s*\/?holoself-claim/i.test(x)))errors.push('proposal text contains reserved claim markers')
+  const textFields=[p.claim,p.evidence,p.confidence,...proposalChanges(p).flatMap(x=>[x.claim,x.evidence,x.confidence]),...(Array.isArray(p.provenance)?p.provenance:[])];if(textFields.some(x=>typeof x==='string'&&/<!--\s*\/?holoself-claim/i.test(x)))errors.push('proposal text contains reserved claim markers')
   return errors
 }
 function readProposal(path){
@@ -466,13 +496,24 @@ function readProposal(path){
   p._path=path;return p
 }
 function listProposalData(project){
-  const dir=proposalDir(project);if(!existsSync(dir))return []
+  return scanProposalStore(project).managed
+}
+function scanProposalStore(project){
+  const dir=proposalDir(project);if(!existsSync(dir))return {managed:[],diagnostics:[]}
   if(lstatSync(dir).isSymbolicLink()||!lstatSync(dir).isDirectory())throw new Error(`proposal directory is unsafe: ${dir}`)
-  return readdirSync(dir).filter(x=>x.endsWith('.yaml')).sort().map(x=>readProposal(join(dir,x)))
+  const managed=[],diagnostics=[]
+  for(const entry of readdirSync(dir,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))){
+    const rel=`.holoself/proposals/${entry.name}`,path=join(dir,entry.name)
+    if(entry.isDirectory()){diagnostics.push({path:rel,code:'UNMANAGED_PROPOSAL_DIRECTORY',severity:'warning',suggested_action:'review-manually'});continue}
+    if(entry.isSymbolicLink()||!entry.isFile()){diagnostics.push({path:rel,code:'UNSAFE_PROPOSAL_ENTRY',severity:'error',suggested_action:'review-manually'});continue}
+    if(!entry.name.endsWith('.yaml')){diagnostics.push({path:rel,code:'UNMANAGED_PROPOSAL_FORMAT',severity:'warning',suggested_action:'adopt-or-preserve'});continue}
+    try{managed.push(readProposal(path))}catch(error){diagnostics.push({path:rel,code:'INVALID_PROPOSAL',severity:'error',suggested_action:'repair-or-preserve',detail:error.message.replace(path,rel)})}
+  }
+  return {managed,diagnostics}
 }
 function findProposal(project,id){
   if(typeof id!=='string'||!UUID_PREFIX_RE.test(id)||id.includes('..')||id.includes('/')||id.includes('\\'))throw new Error(`invalid proposal id: ${id}`)
-  const proposals=listProposalData(project),matches=proposals.filter(p=>p.proposal_id===id||p.proposal_id.startsWith(id));if(!matches.length)throw new Error(`proposal not found: ${id}`);if(matches.length>1)throw new Error(`ambiguous proposal id: ${id}`);return matches[0]
+  const scan=scanProposalStore(project),matches=scan.managed.filter(p=>p.proposal_id===id||p.proposal_id.startsWith(id));if(!matches.length){const invalid=scan.diagnostics.find(item=>basename(item.path,'.yaml').startsWith(id));if(invalid)throw new Error(invalid.detail||`${invalid.code}: ${invalid.path}`);throw new Error(`proposal not found: ${id}`)}if(matches.length>1)throw new Error(`ambiguous proposal id: ${id}`);return matches[0]
 }
 function proposalProjectErrors(p,project){
   const errors=[];if(p.source_project!==basename(project))errors.push('proposal source_project does not match linked project')
@@ -480,10 +521,11 @@ function proposalProjectErrors(p,project){
   for(const source of p.source_files||[]){try{const path=assertContainedPath(project,resolve(project,source),'proposal source file');if(!existsSync(path)||!lstatSync(path).isFile())errors.push(`proposal source file not found: ${source}`)}catch(error){errors.push(error.message)}}return errors
 }
 function saveProposal(p,path=p._path){const errors=validateProposal(p);if(errors.length)throw new Error(`invalid proposal: ${errors.join('; ')}`);const clean={...p};delete clean._path;atomicWrite(path,proposalText(clean))}
-function stateProposal(project,p,state){
+function stateProposal(project,p,state,details={}){
   if(!UUID_RE.test(p.proposal_id))throw new Error('proposal_id must be a UUID')
-  const self=readLink(project).path,dir=assertContainedPath(self,join(self,'proposals',state),'proposal archive'),archive=assertContainedPath(self,join(dir,`${p.proposal_id}.yaml`),'proposal archive');if(existsSync(archive))throw new Error(`proposal archive collision: ${archive}`)
-  p.status=state;p.reviewed_at=new Date().toISOString();ensureDir(dir);atomicWrite(archive,proposalText(Object.fromEntries(Object.entries(p).filter(([k])=>k!=='_path'))));saveProposal(p)
+  const self=readLink(project).path,dir=assertContainedPath(self,join(self,'proposals',state),'proposal archive'),archive=assertContainedPath(self,join(dir,`${p.proposal_id}.yaml`),'proposal archive'),receiptDir=assertContainedPath(self,join(self,'proposals','receipts'),'proposal receipts'),receipt=assertContainedPath(self,join(receiptDir,`${p.proposal_id}-${state}.json`),'proposal receipt');if(existsSync(archive)||existsSync(receipt))throw new Error(`proposal archive or receipt collision: ${archive}`)
+  const original={status:p.status,reviewed_at:p.reviewed_at},proposalSha=hash(proposalText(Object.fromEntries(Object.entries(p).filter(([k])=>k!=='_path'))));p.status=state;p.reviewed_at=new Date().toISOString();ensureDir(dir);ensureDir(receiptDir)
+  try{writeFileSync(archive,proposalText(Object.fromEntries(Object.entries(p).filter(([k])=>k!=='_path'))),{encoding:'utf8',flag:'wx'});writeFileSync(receipt,JSON.stringify({schema_version:1,proposal_id:p.proposal_id,decision:state,reviewed_at:p.reviewed_at,proposal_sha256:proposalSha,...details},null,2)+'\n',{encoding:'utf8',flag:'wx'});saveProposal(p)}catch(error){rmSync(archive,{force:true});rmSync(receipt,{force:true});p.status=original.status;if(original.reviewed_at===undefined)delete p.reviewed_at;else p.reviewed_at=original.reviewed_at;throw error}
 }
 function safeTarget(self,target){
   const root=resolve(self),path=assertContainedPath(root,resolve(root,target),'proposal target'),rel=slash(relative(root,path)),top=rel.split('/')[0]
@@ -493,7 +535,7 @@ function safeTarget(self,target){
 function indexRoot(project){return assertContainedPath(project,join(project,'.holoself','index'),'index directory')}
 function privacyMetadata(metadata,registry=null){
   const rawSensitivity=typeof metadata.sensitivity==='string'?metadata.sensitivity:null,sensitivity=SENSITIVITIES.includes(rawSensitivity)?rawSensitivity:(rawSensitivity?'restricted':'personal'),known=x=>registry?registry.byId.has(x):LENSES.includes(x)
-  const result={access_lenses:accessLenses(metadata).filter(known),disclosure:disclosure(metadata),sensitivity,document_role:documentRole(metadata),publication_allowed:publicationAllowed({...metadata,sensitivity}),task_include:Array.isArray(metadata.task_include)?metadata.task_include:[],task_exclude:Array.isArray(metadata.task_exclude)?metadata.task_exclude:[],visibility:visibility(metadata),public_safe:Object.hasOwn(metadata,'public_safe')?metadata.public_safe:null,confidence:typeof metadata.confidence==='string'?metadata.confidence:null,exclude_lenses:Array.isArray(metadata.exclude_lenses)?metadata.exclude_lenses.filter(known):[],field_visibility:{}}
+  const result={access_lenses:accessLenses(metadata).filter(known),disclosure:disclosure(metadata),sensitivity,document_role:documentRole(metadata),publication_allowed:publicationAllowed({...metadata,sensitivity}),task_include:Array.isArray(metadata.task_include)?metadata.task_include:[],task_exclude:Array.isArray(metadata.task_exclude)?metadata.task_exclude:[],visibility:visibility(metadata),public_safe:Object.hasOwn(metadata,'public_safe')?metadata.public_safe:null,confidence:typeof metadata.confidence==='string'?metadata.confidence:null,exclude_lenses:Array.isArray(metadata.exclude_lenses)?metadata.exclude_lenses.filter(known):[],field_visibility:{},knowledge_status:KNOWLEDGE_STATUSES.includes(metadata.knowledge_status)?metadata.knowledge_status:'current',temporal_scope:TEMPORAL_SCOPES.includes(metadata.temporal_scope)?metadata.temporal_scope:'current',valid_from:typeof metadata.valid_from==='string'?metadata.valid_from:null,valid_until:typeof metadata.valid_until==='string'?metadata.valid_until:null,review_after:typeof metadata.review_after==='string'?metadata.review_after:null,supersedes:Array.isArray(metadata.supersedes)?metadata.supersedes:[],superseded_by:typeof metadata.superseded_by==='string'?metadata.superseded_by:null}
   if(metadata.field_visibility&&typeof metadata.field_visibility==='object'&&!Array.isArray(metadata.field_visibility))for(const [key,value] of Object.entries(metadata.field_visibility))result.field_visibility[key]=VISIBILITIES.includes(value)?value:'private'
   return result
 }
@@ -505,16 +547,16 @@ function privacySections(body,policy){
 }
 function indexInputHash(project,link=readLink(project),registry=loadLensRegistry(link.path)){
   const state=[]
-  for(const [sourceKind,root,files] of [['self',link.path,canonicalFiles(link.path)],['project',project,projectMarkdownFiles(project,link)]])for(const file of files){const stat=statSync(file);state.push([sourceKind,slash(relative(root,file)),stat.size,stat.mtimeMs,hash(readFileSync(file,'utf8'))])}
+  for(const [sourceKind,root,files] of [['self',link.path,canonicalFiles(link.path,{includeHistory:true})],['project',project,projectMarkdownFiles(project,link)]])for(const file of files){const stat=statSync(file);state.push([sourceKind,slash(relative(root,file)),stat.size,stat.mtimeMs,hash(readFileSync(file,'utf8'))])}
   return hash(JSON.stringify({lens_registry_hash:registry.registry_hash,project_context:link.project_context,state:state.sort((a,b)=>`${a[0]}:${a[1]}`.localeCompare(`${b[0]}:${b[1]}`))}))
 }
 function indexFreshness(project,index,link=readLink(project)){const registry=loadLensRegistry(link.path),actual=indexInputHash(project,link,registry);return {fresh:index.lens_registry_hash===registry.registry_hash&&index.input_state_hash===actual,expected:index.input_state_hash||null,actual,lens_registry_hash:registry.registry_hash}}
 function buildIndex(project,changed=false){
   const link=readLink(project),registry=loadLensRegistry(link.path),path=join(indexRoot(project),'index.json');let old={entries:[]};const warnings=[]
-  if(changed&&existsSync(path)){try{const parsed=JSON.parse(readFileSync(path,'utf8'));if(parsed.schema_version===4&&parsed.privacy_policy_version===3&&parsed.lens_registry_hash===registry.registry_hash)old=parsed}catch{}}
+  if(changed&&existsSync(path)){try{const parsed=JSON.parse(readFileSync(path,'utf8'));if(parsed.schema_version===5&&parsed.privacy_policy_version===4&&parsed.lens_registry_hash===registry.registry_hash)old=parsed}catch{}}
   const oldByPath=new Map((old.entries||[]).map(x=>[`${x.source_kind}:${x.file}`,x])),entries=[];let skippedSecrets=0
   for(const [sourceKind,root] of [['self',link.path],['project',project]]){
-    for(const file of sourceKind==='self'?canonicalFiles(root):projectMarkdownFiles(root,link)){
+    for(const file of sourceKind==='self'?canonicalFiles(root,{includeHistory:true}):projectMarkdownFiles(root,link)){
       const rel=slash(relative(root,file)),text=readFileSync(file,'utf8');let parsed
       try{parsed=frontmatter(text,{tolerant:sourceKind==='project',registry})}catch(error){warnings.push(`${sourceKind}:${rel}: ${error.message}; excluded fail-closed`);continue}
       const {metadata,body}=parsed
@@ -540,24 +582,24 @@ function buildIndex(project,changed=false){
   for(const entry of entries)for(const section of entry.sections||[])if(SECRET_RE.test(section.content))assertionErrors.push(`${entry.source_kind}:${entry.file}: secret-like content survived index build`)
   if(assertionErrors.length)throw new Error(`index post-build assertions failed: ${assertionErrors.join('; ')}`)
   const buildAssertions={status:'passed',checks:['include-policy','exclude-policy','required-includes','forbidden-excludes','secret-pattern-scan'],included_project_files:projectEntries.length}
-  const index={schema_version:4,privacy_policy_version:3,lens_registry_hash:registry.registry_hash,engine:'deterministic-json',source_of_truth:'Markdown',generated_at:new Date().toISOString(),input_state_hash:indexInputHash(project,link,registry),project_context_hash:hash(JSON.stringify(link.project_context)),project:slash(project),self:slash(link.path),skipped_secret_files:skippedSecrets,warnings,build_assertions:buildAssertions,entries}
+  const index={schema_version:5,privacy_policy_version:4,lens_registry_hash:registry.registry_hash,engine:'deterministic-json',source_of_truth:'Markdown',generated_at:new Date().toISOString(),input_state_hash:indexInputHash(project,link,registry),project_context_hash:hash(JSON.stringify(link.project_context)),project:slash(project),self:slash(link.path),skipped_secret_files:skippedSecrets,warnings,build_assertions:buildAssertions,entries}
   ensureDir(indexRoot(project));atomicWrite(path,JSON.stringify(index,null,2)+'\n');return index
 }
 function readIndex(project,auto=true){
   const path=join(indexRoot(project),'index.json');if(!existsSync(path)){if(auto)return buildIndex(project);throw new Error(`index missing: ${path}`)}
   let index;try{index=JSON.parse(readFileSync(path,'utf8'))}catch{if(auto)return buildIndex(project);throw new Error(`index is invalid JSON: ${path}`)}
-  if(index.schema_version!==4||index.privacy_policy_version!==3||typeof index.lens_registry_hash!=='string'||index.engine!=='deterministic-json'||!Array.isArray(index.entries)||index.build_assertions?.status!=='passed'){if(auto)return buildIndex(project);throw new Error(`index schema is stale or invalid: ${path}`)}
+  if(index.schema_version!==5||index.privacy_policy_version!==4||typeof index.lens_registry_hash!=='string'||index.engine!=='deterministic-json'||!Array.isArray(index.entries)||index.build_assertions?.status!=='passed'){if(auto)return buildIndex(project);throw new Error(`index schema is stale or invalid: ${path}`)}
   const freshness=indexFreshness(project,index);if(!freshness.fresh){if(auto)return buildIndex(project);throw new Error(`index content is stale: ${path}`)}return index
 }
-function searchIndex(index,query,lens='general',registry=null,resolution=null){
+function searchIndex(index,query,lens='general',registry=null,resolution=null,temporal='current'){
   const terms=[...tokenize(query)],results=[],behaviorLens=resolution?.base_lens||lens
-  for(const entry of index.entries){if(!allowed(entry.frontmatter||{},lens,'generic',null,resolution))continue
+  for(const entry of index.entries){if(!allowed(entry.frontmatter||{},lens,'generic',null,resolution)||!temporalDisposition(entry.frontmatter||{},query,{temporal}).include)continue
     const policy=entry.frontmatter||{}
     if(behaviorLens==='publishing'&&policy.sensitivity==='employer-confidential'&&policy.document_role!=='policy')continue
     if(behaviorLens==='publishing'&&policy.document_role==='evidence'&&!policy.publication_allowed)continue
     for(const section of entry.sections||[]){const sectionVisibility=VISIBILITIES.includes(section.visibility)?section.visibility:'private';if(!allowed({visibility:sectionVisibility},behaviorLens,'generic'))continue
       const restrictions=[],filtered=filterFieldVisibility(filterClaimVisibility(section.content,lens,entry.file,restrictions,resolution),entry.frontmatter||{},lens,entry.file,restrictions,resolution);if(!filtered.trim())continue
-      const hay=`${section.heading} ${filtered}`.toLowerCase(),score=terms.filter(x=>hay.includes(x)).length;if(!score)continue
+      const hay=`${section.heading} ${filtered}`.toLowerCase(),score=terms.filter(x=>hay.includes(x)).length;if(!score||score<terms.length)continue
       const passage=filtered.length>360?filtered.slice(0,357)+'...':filtered
       results.push({source_file:entry.file,source_kind:entry.source_kind,source_project:entry.source_project,section:section.heading,matching_passage:passage,provenance:`${entry.source_kind}:${entry.file}#${section.heading}`,access_lenses:policy.access_lenses||[],disclosure:section.disclosure||policy.disclosure||'internal-only',sensitivity:policy.sensitivity||'personal',document_role:policy.document_role||'content',publication_allowed:Boolean(policy.publication_allowed),visibility:sectionVisibility,freshness:entry.modified_at,score})
     }
@@ -618,6 +660,12 @@ function healthStatus(project,link,o={}){const activation=activationStatus(proje
 function commandStatus(){const invoked=slash(resolve(process.argv[1]||'')),packageBin=invoked.includes('/node_modules/');return {available:'not-verified',invocation:packageBin?'package-bin':'source-checkout',path:invoked||null,note:packageBin?'This process used a package bin, but PATH availability was not independently verified.':'Run with node bin/holoself.mjs; source checkout does not prove a holoself command is installed on PATH.'}}
 export async function runEcosystem(o){
   const sub=o.args?.[0]
+  if(o.command==='instructions'){
+    const project=projectPath(o),action=sub||'audit',link=readLink(project)
+    if(action==='render'){const content=bootstrapText(link);console.log(o.json?JSON.stringify({schema_version:1,project:slash(project),adapter:o.adapter||'generic',content},null,2):content.trimEnd());return true}
+    if(action!=='audit')throw new Error('instructions requires render or audit')
+    const result=auditInstructions(project,link,readRuntime(project));console.log(JSON.stringify(result,null,2));if(result.status!=='valid')process.exitCode=1;return true
+  }
   if(o.command==='skill'){
     if(o.scope&&o.scope!=='user')throw new Error('skill --scope currently supports only user')
     if(sub==='status'){console.log(JSON.stringify(globalSkillStatus(o),null,2));return true}
@@ -652,7 +700,7 @@ export async function runEcosystem(o){
       const existingLink=pathExists(linkPath(project))?readFileSync(linkPath(project)):null;let link;try{if(o.dryRun)link={...desired,project_context:{include:o.projectContext?.include||['**/*.md'],exclude:[...DEFAULT_PROJECT_EXCLUDES,...(o.projectContext?.exclude||[])]}};else{createLinkDirs(project,{preserveReadme:o.force});link=writeLink(project,o.self,o.lens||'general',o.secondaryLenses||[],o.projectContext||{})}console.log(`${o.dryRun?'[dry-run] ':'[ok] '}linked ${project} -> ${link.path}`);if(!o.noActivate){const result=activateProject(project,link,{activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||'auto',skillHome:o.skillHome,dryRun:o.dryRun,force:o.force});for(const item of result.results)console.log(` - ${item.id}: ${item.file} (${item.result})`)}}catch(error){if(!o.dryRun){if(existingLink)atomicWrite(linkPath(project),existingLink);else if(pathExists(linkPath(project)))rmSync(linkPath(project),{force:true})}throw error}return true
     }
     if(sub==='status'){
-      let link;try{link=readLink(project)}catch(error){console.log(JSON.stringify({project:slash(project),state:'broken',errors:[error.message]},null,2));process.exitCode=1;return true}const health=healthStatus(project,link,o),{project_context,...selfContext}=link,status={project:slash(project),state:health.state,self_context:{...selfContext,path:slash(link.path)},project_context,self_exists:existsSync(link.path),pending_proposals:listProposalData(project).filter(x=>x.status==='pending').length,index_exists:existsSync(join(indexRoot(project),'index.json')),bootstrap_exists:health.activation.bootstrap,activated_adapters:health.activation.adapters,skill_install_policy:health.skillPolicy,skill_installations:health.activation.skillInstallations,global_skill_installations:health.activation.globalSkillInstallations,project_skill_overrides:health.activation.projectSkillOverrides,cli_command:commandStatus(),errors:health.errors};console.log(JSON.stringify(status,null,2));if(['broken','degraded'].includes(status.state))process.exitCode=1;return true
+      let link;try{link=readLink(project)}catch(error){console.log(JSON.stringify({project:slash(project),state:'broken',errors:[error.message]},null,2));process.exitCode=1;return true}const health=healthStatus(project,link,o),{project_context,...selfContext}=link,proposalScan=scanProposalStore(project),status={project:slash(project),state:health.state,self_context:{...selfContext,path:slash(link.path)},project_context,self_exists:existsSync(link.path),pending_proposals:proposalScan.managed.filter(x=>x.status==='pending').length,proposal_health:{managed_pending:proposalScan.managed.filter(x=>x.status==='pending').length,unmanaged:proposalScan.diagnostics.filter(x=>x.code.startsWith('UNMANAGED')).length,invalid:proposalScan.diagnostics.filter(x=>x.severity==='error').length},index_exists:existsSync(join(indexRoot(project),'index.json')),bootstrap_exists:health.activation.bootstrap,activated_adapters:health.activation.adapters,skill_install_policy:health.skillPolicy,skill_installations:health.activation.skillInstallations,global_skill_installations:health.activation.globalSkillInstallations,project_skill_overrides:health.activation.projectSkillOverrides,cli_command:commandStatus(),errors:health.errors};console.log(JSON.stringify(status,null,2));if(['broken','degraded'].includes(status.state))process.exitCode=1;return true
     }
     if(sub==='remove'){
       const path=linkPath(project);if(!pathExists(path)){console.log('[ok] no link configuration found');return true}if(lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())throw new Error(`${path} is not a regular link configuration; refusing to remove`);if(!await askConfirm(o,`Remove managed activation and link configuration ${path}?`)){console.log('Cancelled.');return true}deactivateProject(project,{dryRun:o.dryRun});if(!o.dryRun)rmSync(path);console.log(`[ok] removed ${path}; indexes, reports, and proposals preserved`);return true
@@ -674,28 +722,32 @@ export async function runEcosystem(o){
     const candidates=analysis(project).findings.filter(x=>x.classification==='Candidate for self');const claim=o.claim || (candidates[0]?`Review reusable context from ${candidates[0].project_file}`:null);if(!claim)throw new Error('propose requires --claim <text> when no candidate is detected')
     const sourceFiles=o.sourceFiles?.length?o.sourceFiles:(candidates[0]?[candidates[0].project_file]:[]);if(!sourceFiles.length)throw new Error('propose requires --source-file <path>')
     for(const source of sourceFiles){const path=resolve(project,source),rel=relative(project,path);if(rel.startsWith('..')||isAbsolute(rel))throw new Error(`source file escapes project: ${source}`);if(!existsSync(path)||!lstatSync(path).isFile())throw new Error(`source file not found: ${source}`)}
-    const p={proposal_id:randomUUID(),source_project:basename(project),source_project_path:slash(project),source_files:sourceFiles,target:o.targetFile||'context/claims.md',proposal_type:o.proposalType||'new_fact',claim,evidence:o.evidence||`Source project files: ${sourceFiles.join(', ')}`,confidence:o.confidence||'unverified',visibility:o.visibility||'private',status:'pending',created_at:new Date().toISOString(),provenance:sourceFiles.map(x=>`${basename(project)}:${x}`)}
+    const p={schema_version:2,proposal_id:randomUUID(),title:`Review reusable context from ${basename(project)}`,source_project:basename(project),source_project_path:slash(project),source_files:sourceFiles,status:'pending',created_at:new Date().toISOString(),provenance:sourceFiles.map(x=>`${basename(project)}:${x}`),changes:[{change_id:'claim',target:o.targetFile||'context/claims.md',operation:'append_claim',proposal_type:o.proposalType||'new_fact',claim,evidence:o.evidence||`Source project files: ${sourceFiles.join(', ')}`,confidence:o.confidence||'unverified',visibility:o.visibility||'private'}]}
     const errors=validateProposal(p);if(errors.length)throw new Error(errors.join('; '));createLinkDirs(project,{preserveReadme:true});saveProposal(p,proposalFile(project,p.proposal_id));console.log(JSON.stringify(p,null,2));return true
   }
   if(o.command==='proposals'){
-    const project=projectPath(o),action=sub;if(action==='list'){console.log(JSON.stringify(listProposalData(project).map(({_path,...p})=>p),null,2));return true}
+    const project=projectPath(o),action=sub;if(action==='list'){console.log(JSON.stringify(listProposalData(project).map(({_path,...p})=>p),null,2));return true}if(action==='audit'){const scan=scanProposalStore(project);console.log(JSON.stringify({managed:scan.managed.map(({_path,...p})=>p),diagnostics:scan.diagnostics},null,2));if(scan.diagnostics.some(x=>x.severity==='error'))process.exitCode=1;return true}
     const id=o.args[1];if(!id)throw new Error(`proposals ${action} requires <id>`);const p=findProposal(project,id)
     if(action==='show'){console.log(proposalText(Object.fromEntries(Object.entries(p).filter(([k])=>k!=='_path'))));return true}
-    if(!['approve','reject','defer'].includes(action))throw new Error('proposals requires list, show, approve, reject, or defer')
+    if(!['approve','reject','defer','supersede'].includes(action))throw new Error('proposals requires list, audit, show, approve, reject, defer, or supersede')
     if(p.status!=='pending')throw new Error(`proposal is ${p.status}, expected pending`)
     if(action==='approve'){
       const projectErrors=proposalProjectErrors(p,project);if(projectErrors.length)throw new Error(`proposal provenance validation failed: ${projectErrors.join('; ')}`)
-      const link=readLink(project),target=safeTarget(link.path,p.target);const preErrors=ecosystemValidationErrors(link.path,project);if(preErrors.length)throw new Error(`pre-approval validation failed: ${preErrors.join('; ')}`);const before=existsSync(target)?readFileSync(target,'utf8'):'---\naccess_lenses: [general, career, publishing, technical, leadership, interview, private]\ndisclosure: review-required\nsensitivity: personal\ndocument_role: evidence\n---\n';if(claims(before).some(x=>normalize(x)===normalize(p.claim)))throw new Error('proposal duplicates an existing canonical claim');const block=`\n\n<!-- holoself-claim visibility=${p.visibility} -->\n## Approved proposal ${p.proposal_id}\n\n${p.claim}\n\n- Evidence: ${p.evidence}\n- Confidence: ${p.confidence}\n- Visibility: ${p.visibility}\n- Provenance: ${p.provenance.join('; ')}\n- Approved: ${new Date().toISOString()}\n<!-- /holoself-claim -->\n`;console.log(`Target: ${target}\nAffected files: ${target}\nEvidence: ${p.evidence}\n--- proposed diff ---\n+${block.trim().replaceAll('\n','\n+')}`)
-      if(!await askConfirm(o,'Approve proposal and append canonical self context?')){console.log('Cancelled.');return true}atomicWrite(target,before.trimEnd()+block);stateProposal(project,p,'approved');const errors=ecosystemValidationErrors(link.path,project);if(errors.length)throw new Error(`post-approval validation failed: ${errors.join('; ')}`);console.log(`[ok] approved ${p.proposal_id}; validation passed`);return true
+      const link=readLink(project),changes=proposalChanges(p),archive=join(link.path,'proposals','approved',`${p.proposal_id}.yaml`);if(existsSync(archive))throw new Error(`proposal archive collision: ${archive}`);const preErrors=ecosystemValidationErrors(link.path,project);if(preErrors.length)throw new Error(`pre-approval validation failed: ${preErrors.join('; ')}`)
+      const grouped=new Map(),approvedAt='<commit-time>',previews=[]
+      for(const change of changes){const target=safeTarget(link.path,change.target),before=grouped.get(target)?.before??(existsSync(target)?readFileSync(target,'utf8'):'---\naccess_lenses: [general, career, publishing, technical, leadership, interview, private]\ndisclosure: review-required\nsensitivity: personal\ndocument_role: evidence\n---\n');if(claims(before).some(x=>normalize(x)===normalize(change.claim)))throw new Error(`proposal duplicates an existing canonical claim: ${change.change_id}`);const block=`\n\n<!-- holoself-claim visibility=${change.visibility} -->\n## Approved proposal ${p.proposal_id}/${change.change_id}\n\n${change.claim}\n\n- Evidence: ${change.evidence}\n- Confidence: ${change.confidence}\n- Visibility: ${change.visibility}\n- Provenance: ${p.provenance.join('; ')}\n- Approved: ${approvedAt}\n<!-- /holoself-claim -->\n`,current=grouped.get(target)?.after??before,after=current.trimEnd()+block;grouped.set(target,{target,before,after});previews.push({change_id:change.change_id,target:slash(relative(link.path,target)),before_sha256:hash(before),after_sha256:hash(after),preview:block.trim()})}
+      const previewHash=hash(JSON.stringify(previews));console.log(o.json?JSON.stringify({proposal_id:p.proposal_id,changes:previews,preview_hash:previewHash},null,2):`Affected files: ${[...grouped.keys()].join(', ')}\nPreview hash: ${previewHash}\n--- proposed diff ---\n${previews.map(x=>`--- ${x.change_id}: ${x.target} ---\n+${x.preview.replaceAll('\n','\n+')}`).join('\n')}`)
+      if(o.digest&&o.digest!==previewHash){const error=new Error('proposal preview is stale');error.code='STALE_PREVIEW';throw error}if(!await askConfirm(o,'Approve proposal and apply grouped canonical self changes?')){console.log('Cancelled.');return true}
+      const proposalBefore=readFileSync(p._path),receipt=join(link.path,'proposals','receipts',`${p.proposal_id}-approved.json`),commitTime=new Date().toISOString(),appliedChanges=previews.map(item=>({...item,after_sha256:hash(grouped.get(safeTarget(link.path,item.target)).after.replaceAll('<commit-time>',commitTime))}));try{for(const item of grouped.values())atomicWrite(item.target,item.after.replaceAll('<commit-time>',commitTime));stateProposal(project,p,'approved',{preview_sha256:previewHash,applied_changes:appliedChanges.map(({change_id,target,before_sha256,after_sha256})=>({change_id,target,before_sha256,after_sha256}))});const errors=ecosystemValidationErrors(link.path,project);if(errors.length)throw new Error(`post-approval validation failed: ${errors.join('; ')}`)}catch(error){for(const item of grouped.values())atomicWrite(item.target,item.before);atomicWrite(p._path,proposalBefore);if(existsSync(archive))rmSync(archive,{force:true});if(existsSync(receipt))rmSync(receipt,{force:true});throw error}console.log(`[ok] approved ${p.proposal_id}; ${changes.length} change(s), validation passed`);return true
     }
-    if(!await askConfirm(o,`${action==='reject'?'Reject':'Defer'} proposal ${p.proposal_id}?`)){console.log('Cancelled.');return true}stateProposal(project,p,action==='reject'?'rejected':'deferred');console.log(`[ok] ${action==='reject'?'rejected':'deferred'} ${p.proposal_id}`);return true
+    if(!await askConfirm(o,`${action==='reject'?'Reject':action==='supersede'?'Supersede':'Defer'} proposal ${p.proposal_id}?`)){console.log('Cancelled.');return true}const state=action==='reject'?'rejected':action==='supersede'?'superseded':'deferred';stateProposal(project,p,state);console.log(`[ok] ${state} ${p.proposal_id}`);return true
   }
   if(o.command==='index'){
-    const project=projectPath(o);if(sub==='status'){const path=join(indexRoot(project),'index.json');if(!existsSync(path)){console.log(JSON.stringify({status:'missing',path:slash(path)},null,2));return true}let index;try{index=JSON.parse(readFileSync(path,'utf8'))}catch{throw new Error(`index is invalid JSON: ${path}`)};if(index.schema_version!==4||index.privacy_policy_version!==3||typeof index.lens_registry_hash!=='string'||!Array.isArray(index.entries))throw new Error(`index schema is stale or invalid: ${path}`);const freshness=indexFreshness(project,index);console.log(JSON.stringify({status:freshness.fresh?'ready':'stale',fresh:freshness.fresh,path:slash(path),schema_version:index.schema_version,privacy_policy_version:index.privacy_policy_version,lens_registry_hash:freshness.lens_registry_hash,engine:index.engine,entries:index.entries.length,generated_at:index.generated_at,input_state_hash:index.input_state_hash,skipped_secret_files:index.skipped_secret_files,build_assertions:index.build_assertions},null,2));return true}
+    const project=projectPath(o);if(sub==='status'){const path=join(indexRoot(project),'index.json');if(!existsSync(path)){console.log(JSON.stringify({status:'missing',path:slash(path)},null,2));return true}let index;try{index=JSON.parse(readFileSync(path,'utf8'))}catch{throw new Error(`index is invalid JSON: ${path}`)};if(index.schema_version!==5||index.privacy_policy_version!==4||typeof index.lens_registry_hash!=='string'||!Array.isArray(index.entries))throw new Error(`index schema is stale or invalid: ${path}`);const freshness=indexFreshness(project,index);console.log(JSON.stringify({status:freshness.fresh?'ready':'stale',fresh:freshness.fresh,path:slash(path),schema_version:index.schema_version,privacy_policy_version:index.privacy_policy_version,lens_registry_hash:freshness.lens_registry_hash,engine:index.engine,entries:index.entries.length,generated_at:index.generated_at,input_state_hash:index.input_state_hash,skipped_secret_files:index.skipped_secret_files,build_assertions:index.build_assertions},null,2));return true}
     const rebuild=sub==='rebuild';const index=buildIndex(project,o.changed&&!rebuild);console.log(JSON.stringify({status:'ready',fresh:true,schema_version:index.schema_version,privacy_policy_version:index.privacy_policy_version,lens_registry_hash:index.lens_registry_hash,engine:index.engine,entries:index.entries.length,generated_at:index.generated_at,skipped_secret_files:index.skipped_secret_files,build_assertions:index.build_assertions},null,2));return true
   }
   if(o.command==='search'){
-    const query=o.args.join(' ');if(!query)throw new Error('search requires a query');const project=projectPath(o),link=readLink(project),registry=loadLensRegistry(link.path),lens=o.lens||'general',resolution=resolveLens(registry,lens),index=readIndex(project);let results=searchIndex(index,query,lens,registry,resolution)
+    const query=o.args.join(' ');if(!query)throw new Error('search requires a query');const project=projectPath(o),link=readLink(project),registry=loadLensRegistry(link.path),lens=o.lens||'general',resolution=resolveLens(registry,lens),index=readIndex(project);let results=searchIndex(index,query,lens,registry,resolution,o.temporal||'current')
     if(o.federated){const seen=new Set(results.map(x=>`${x.provenance}:${x.matching_passage}`));results=results.filter(x=>{const key=`${x.provenance}:${x.matching_passage}`;if(seen.has(key)){seen.delete(key);return true}return false})}
     console.log(JSON.stringify({query,federated:Boolean(o.federated),results},null,2));return true
   }

@@ -13,7 +13,7 @@ Holoself is a local-first, Markdown-first whole-person context protocol. Public 
 ├── topics/                     # bounded explorations; .current selects one
 ├── reference/                  # private/local reference material
 ├── me/                         # local self-model activation (for example contribs.md)
-├── contribs/default/           # selected copies of shipped public contribs
+├── contribs/local/             # private local extensions only; public methods stay package-owned
 ├── contribs/local/             # user-only contribs; never packaged
 └── exports/                    # generated, reviewable export staging/output
 ```
@@ -25,10 +25,10 @@ Holoself is a local-first, Markdown-first whole-person context protocol. Public 
 `config.json` uses `schemaVersion: 1` and `product: "holoself"`. Public `contribs/catalog.json` uses `schemaVersion: 1`; each catalog entry identifies an id, title, domain, type, and shipped path. Markdown is canonical. Config, catalogs, lens definitions, and packets are generated/operational metadata. Custom lens definitions use schema v1 under optional `<data-root>/lenses/*.json`; runtime semantic resolution validates registry membership after structural schema validation.
 
 - **User-owned/private:** `profile/`, `context/`, `topics/`, `reference/`, `me/`, `contribs/local/`.
-- **Holoself-managed:** `config.json`, `contribs/default/`, and generated `exports/`.
+- **Holoself-managed:** `config.json`, lifecycle/history metadata, and generated `exports/`.
 - **Project-owned after review:** project instruction files and linked-project `.holoself/BOOTSTRAP.md`, `runtime.json`, `index`, `proposals`, and `reports`. `export --root-setup` and legacy `link --root-setup` change only bounded Holoself markers and ask for confirmation.
 - **Self-owned after review:** approved reusable knowledge accepted through proposal workflow, with evidence and provenance.
-- **Public/package-owned:** `contribs/default/`, its catalog/manifest, `skills/`, `docs/`, and source code. No profile, context, topic, or private reference data ships.
+- **Public/package-owned:** `contribs/default/`, its catalog/manifest, `skills/`, `docs/`, and source code. `config.json.selectedContribs` is an availability allowlist; public method bodies are not copied into private roots. No profile, context, topic, or private reference data ships.
 
 Private contribs must be placed under `<data-root>/contribs/local/`. They are not discovered as public contribs, copied into this repository, or included in npm package paths.
 
@@ -36,7 +36,7 @@ Private contribs must be placed under `<data-root>/contribs/local/`. They are no
 
 Agents resolve roots deterministically: (1) current/opened directory itself when it has Holoself `config.json` plus `profile/` and `context/`; (2) an ancestor's `.holoself/` directory link; (3) `HOLOSELF_HOME`; (4) `~/.holoself`. Invalid or ambiguous roots require asking the user. Direct data roots always win over project links.
 
-After root resolution, load root `AGENTS.md` instructions, then profile files in stable order: identity, work-context, preferences, voice, thinking, change; relevant context files: projects, people, decisions, story-bank, career, admin, leadership, technical, publishing; active topic selected by `topics/.current`; explicitly selected public defaults from `contribs/default/`, then local contribs from `contribs/local/`; and private reference material only when relevant and explicitly permitted. For linked projects, load generated `.holoself/context-packet.md` first when present.
+After root resolution, the context resolver applies lifecycle, privacy, task relevance, and a bounded budget. It progressively selects current profile/context/topic sources, zero to two task-relevant public methods from the package allowlisted by `config.json.selectedContribs`, then private `contribs/local/` or reference material only when specifically relevant. For linked projects, use the resolver or a reviewed `.holoself/context-packet.md`; do not bulk-read the canonical root.
 
 A packet can be made self-contained with `export --packet-only`; it then embeds the selected profile/context text rather than relying on fallback paths.
 

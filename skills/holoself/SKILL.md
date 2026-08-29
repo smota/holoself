@@ -67,25 +67,20 @@ Before loading canonical root:
 - Treat symlinks inside personal content conservatively; do not follow them outside validated root.
 - When optional `lenses/*.json` exists, require schema-v1 definitions with known built-in bases. Custom bases affect safe behavior only and never grant document access; exact custom IDs remain required in `access_lenses`.
 
-After resolving canonical root, load in fixed order:
-
-1. root `AGENTS.md` guidance, instructions only;
-2. `profile/identity.md`, `work-context.md`, `preferences.md`, `voice.md`, `thinking.md`, `change.md` when present;
-3. relevant `context/` Markdown in stable filename order;
-4. active topic named by `topics/.current` when contained by `topics/`;
-5. selected `contribs/default/`, then `contribs/local/`;
-6. `reference/` only when relevant and explicitly permitted.
+After resolving a canonical root, prefer `holoself context --root <root> --project <root> --task "<current request>" --budget standard --json`. If command execution is unavailable, load progressively in fixed order: root `AGENTS.md` as instructions only; a manifest of explicit `profile/` and `context/` Markdown paths; only task-relevant current documents; the active contained topic; zero to two task-relevant selected public contribs; then local contribs or `reference/` only when specifically relevant and permitted. Do not bulk-load the canonical root.
 
 See [architecture](https://github.com/smota/holoself/blob/main/docs/architecture.md), [lenses and privacy](https://github.com/smota/holoself/blob/main/docs/concepts/lenses-and-privacy.md), and [proposal review](https://github.com/smota/holoself/blob/main/docs/concepts/proposal-review.md).
 
 ## Activated project interface
 
-When project instructions or `.holoself/BOOTSTRAP.md` indicate an activated link, use Holoself before substantive work.
+When project instructions or `.holoself/BOOTSTRAP.md` indicate an activated link, use Holoself before substantive work. Use it for requests that depend on the user's identity, preferences, voice, career or leadership evidence, personal constraints, or prior whole-person decisions. Project-only facts and mechanical operations do not require personal context.
+
+When command execution is available in a metadata-linked project, first decide whether personal context is required, helpful, or not needed. Resolve useful context through `holoself context --project . --task "<current request>" --budget standard --json` (or start with `--manifest` and expand reviewed `--source` handles). Do not open linked canonical `profile/` or `context/` files directly. Direct canonical reads are reserved for a validated direct data root, or for a clearly disclosed fallback when the CLI is unavailable. Current knowledge is the default; historical or superseded material requires an explicit temporal selector. Treat selected public contribs as available methods and inject at most two task-relevant methods.
 
 - **load:** read bootstrap and link, select configured lens, apply privacy, and preserve sources;
 - **status:** report configured link, activation markers, bootstrap, self reachability, and warnings;
 - **search:** use local deterministic index where available;
-- **context:** prefer `holoself context --project . --json` when command execution is available;
+- **context:** use `holoself context --project . --task "<current request>" --json` when command execution is available;
 - **propose:** create project-local evidence-backed proposal, never direct canonical write;
 - **validate:** use `holoself link doctor --project .` and surface degraded activation;
 - **snapshot:** when external paths are inaccessible, use reviewed `.holoself/runtime/context-packet.md`, clearly marked as non-live.

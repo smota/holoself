@@ -12,7 +12,7 @@
   topics/
   reference/
   me/
-  contribs/default/
+  contribs/local/        # private extensions; public defaults remain in the product package
   contribs/local/
   proposals/{pending,approved,rejected,deferred}/
   exports/

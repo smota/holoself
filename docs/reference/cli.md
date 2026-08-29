@@ -24,7 +24,7 @@ holoself <command> [options]
 | `validate` | Validate root, links, proposals, visibility, provenance, references, and markers |
 | `migrate --from <dir>` | Copy supported PersonalOS data after confirmation |
 | `export --target <dir>` | Create reviewable project packet snapshot |
-| `upgrade` | Refresh selected public defaults |
+| `upgrade` | Refresh selected public contrib availability; method files remain package-owned |
 
 Core options: `--data-dir <dir>` (`--root` and `--data-root` aliases), `--contribs a,b`, `--exclude-contrib a,b`, `--yes`, `--force`, `--dry-run`, `--packet-only`, `--root-setup`.
 
