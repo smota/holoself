@@ -2,6 +2,16 @@
 
 A project link is complete only when configuration, agent startup activation, and context resolution pass end to end.
 
+MCP is an optional second activation surface for Codex, AGY, and Claude Code. It is a client-launched STDIO subprocess, not a service, and never replaces the link or bounded instruction fallback. Configure it separately only after link activation:
+
+```bash
+holoself mcp configure --project . --dry-run
+holoself mcp configure --project . --yes
+holoself mcp status --project .
+```
+
+The preview is collision-aware and names exact client files. Generated configuration is not proof of client discovery; record native evidence in the [platform matrix](../reference/platform-verification.md).
+
 ## Configure and activate
 
 ```bash

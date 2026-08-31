@@ -1,6 +1,6 @@
 # Status and roadmap
 
-Current version: 0.7.0. Product is usable from repository checkout; npm registry package is not yet published.
+Current version: 0.8.0. Product is usable from repository checkout; npm registry package is not yet published.
 
 ## Available
 
@@ -12,11 +12,13 @@ Current version: 0.7.0. Product is usable from repository checkout; npm registry
 - Deterministic local index and federated search
 - Non-mutating overlap/conflict/stale reports
 - Migration, packet export, and legacy live mount
+- Project-bound local STDIO MCP with six bounded tools and collision-aware client configuration
 
 ## Next
 
 - Improve setup recommendations and generated-view reproducibility
 - Expand validation and integration fixtures
+- Complete the remaining native MCP retrieval and failure-path matrix before considering MCP the cross-platform default
 - Add documentation-derived CLI checks
 - Add optional SQLite/FTS acceleration
 - Improve field-level privacy authoring

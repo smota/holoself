@@ -413,6 +413,36 @@ function packetFormat(data,adapter='generic'){
   const receipt=`Context receipt: ${data.context_receipt.context_hash} (${data.context_receipt.cache.hit?'cache hit':'fresh resolution'})\nContext gate: ${data.selection.context_need}; budget: ${data.selection.budget}; estimated tokens: ${data.selection.estimated_tokens}; selected sources: ${data.selection.selected_count}`
   return `# ${title}\n\nPacket ID: ${metadata.packet_id}\n${receipt}\nGenerated: ${metadata.generated_at}\nExpires: ${metadata.expires_at||'not applicable (live local resolution)'}\nHost mode: ${metadata.host_mode}\nLens: ${data.lens}\nLens source: ${data.lens_resolution.source}\nLens base: ${data.lens_resolution.base_lens}\nTask: ${data.task || '(none)'}\nPrivacy: access-filtered. Publication requires disclosure=publish-approved; readability alone is never approval. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n${metadata.source_hashes.map(source=>`- ${source.kind}:${source.path} ${source.sha256} (${source.freshness})`).join('\n')||'- None'}\n\n${docs.map(d=>`## ${d.owner}: ${d.path}\n\nAccess lenses: ${(d.metadata.access_lenses||[]).join(', ')}\nDisclosure: ${d.metadata.disclosure}\nSensitivity: ${d.metadata.sensitivity}\nDocument role: ${d.metadata.document_role}\nPublication allowed: ${d.metadata.publication_allowed?'yes':'no'}\n\n${d.content}`).join('\n\n')}\n\n## Restrictions\n\n${data.restrictions.map(x=>`- ${x.source}: ${x.reason}`).join('\n') || '- None'}\n`
 }
+function withoutPrivatePaths(value){
+  if(Array.isArray(value))return value.map(withoutPrivatePaths)
+  if(!value||typeof value!=='object')return value
+  const clean={}
+  for(const [key,item] of Object.entries(value)){
+    if(['absolute_path','_path','source_project_path'].includes(key))continue
+    if(key==='path'&&(value===value.self||value===value.project))continue
+    clean[key]=withoutPrivatePaths(item)
+  }
+  return clean
+}
+function mcpContextData(project,options={}){
+  const link=readLink(project),requestedLens=options.lens||link.default_lens,allowedLenses=new Set([link.default_lens,...(link.secondary_lenses||[])])
+  if(!allowedLenses.has(requestedLens)){const error=new Error(`lens is not granted by this project link: ${requestedLens}`);error.code='LENS_NOT_GRANTED';throw error}
+  const data=contextData({
+    project,
+    task:options.task,
+    lens:requestedLens,
+    budget:options.budget||'standard',
+    temporal:options.temporal||'current',
+    manifest:Boolean(options.manifest),
+    sources:options.source_ids||[],
+    noCache:true
+  })
+  if(options.source_ids?.length){const selected=new Set(data.sources.map(source=>source.source_id)),missing=options.source_ids.filter(id=>!selected.has(id));if(missing.length)throw new Error(`source handles are unavailable under the requested link/lens/lifecycle: ${missing.join(', ')}`)}
+  const clean=withoutPrivatePaths(data)
+  clean.self={documents:clean.self.documents}
+  clean.project={name:data.project.name,documents:clean.project.documents}
+  return clean
+}
 async function askConfirm(o,message){
   if(o.yes) return true
   if(!input.isTTY || !output.isTTY) throw new Error(`${message} Re-run with --yes to confirm.`)
@@ -521,6 +551,25 @@ function proposalProjectErrors(p,project){
   for(const source of p.source_files||[]){try{const path=assertContainedPath(project,resolve(project,source),'proposal source file');if(!existsSync(path)||!lstatSync(path).isFile())errors.push(`proposal source file not found: ${source}`)}catch(error){errors.push(error.message)}}return errors
 }
 function saveProposal(p,path=p._path){const errors=validateProposal(p);if(errors.length)throw new Error(`invalid proposal: ${errors.join('; ')}`);const clean={...p};delete clean._path;atomicWrite(path,proposalText(clean))}
+function createProposal(project,input){
+  const link=readLink(project);if(link.proposals!=='enabled')throw new Error('proposals are not enabled for link')
+  const sourceFiles=input.source_files||[];if(!sourceFiles.length)throw new Error('proposal requires at least one source file')
+  for(const source of sourceFiles){const path=assertContainedPath(project,resolve(project,source),'proposal source file');if(!existsSync(path)||lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())throw new Error(`source file not found or unsafe: ${source}`)}
+  const p={schema_version:2,proposal_id:randomUUID(),title:`Review reusable context from ${basename(project)}`,source_project:basename(project),source_project_path:slash(project),source_files:sourceFiles,status:'pending',created_at:new Date().toISOString(),provenance:sourceFiles.map(x=>`${basename(project)}:${x}`),changes:[{change_id:'claim',target:input.target||'context/claims.md',operation:'append_claim',proposal_type:input.proposal_type||'new_fact',claim:input.claim,evidence:input.evidence||`Source project files: ${sourceFiles.join(', ')}`,confidence:input.confidence||'unverified',visibility:input.visibility||'private'}]}
+  const errors=validateProposal(p);if(errors.length)throw new Error(errors.join('; '));createLinkDirs(project,{preserveReadme:true});saveProposal(p,proposalFile(project,p.proposal_id));return p
+}
+function proposalPreviewData(project,id){
+  const p=findProposal(project,id);if(p.status!=='pending')throw new Error(`proposal is ${p.status}, expected pending`)
+  const projectErrors=proposalProjectErrors(p,project);if(projectErrors.length)throw new Error(`proposal provenance validation failed: ${projectErrors.join('; ')}`)
+  const link=readLink(project),grouped=new Map(),approvedAt='<commit-time>',previews=[]
+  for(const change of proposalChanges(p)){
+    const target=safeTarget(link.path,change.target),before=grouped.get(target)?.before??(existsSync(target)?readFileSync(target,'utf8'):'---\naccess_lenses: [general, career, publishing, technical, leadership, interview, private]\ndisclosure: review-required\nsensitivity: personal\ndocument_role: evidence\n---\n')
+    if(claims(before).some(x=>normalize(x)===normalize(change.claim)))throw new Error(`proposal duplicates an existing canonical claim: ${change.change_id}`)
+    const block=`\n\n<!-- holoself-claim visibility=${change.visibility} -->\n## Approved proposal ${p.proposal_id}/${change.change_id}\n\n${change.claim}\n\n- Evidence: ${change.evidence}\n- Confidence: ${change.confidence}\n- Visibility: ${change.visibility}\n- Provenance: ${p.provenance.join('; ')}\n- Approved: ${approvedAt}\n<!-- /holoself-claim -->\n`,current=grouped.get(target)?.after??before,after=current.trimEnd()+block
+    grouped.set(target,{target,before,after});previews.push({change_id:change.change_id,target:slash(relative(link.path,target)),before_sha256:hash(before),after_sha256:hash(after),preview:block.trim()})
+  }
+  return {proposal:p,link,grouped,changes:previews,preview_hash:hash(JSON.stringify(previews))}
+}
 function stateProposal(project,p,state,details={}){
   if(!UUID_RE.test(p.proposal_id))throw new Error('proposal_id must be a UUID')
   const self=readLink(project).path,dir=assertContainedPath(self,join(self,'proposals',state),'proposal archive'),archive=assertContainedPath(self,join(dir,`${p.proposal_id}.yaml`),'proposal archive'),receiptDir=assertContainedPath(self,join(self,'proposals','receipts'),'proposal receipts'),receipt=assertContainedPath(self,join(receiptDir,`${p.proposal_id}-${state}.json`),'proposal receipt');if(existsSync(archive)||existsSync(receipt))throw new Error(`proposal archive or receipt collision: ${archive}`)
@@ -551,7 +600,7 @@ function indexInputHash(project,link=readLink(project),registry=loadLensRegistry
   return hash(JSON.stringify({lens_registry_hash:registry.registry_hash,project_context:link.project_context,state:state.sort((a,b)=>`${a[0]}:${a[1]}`.localeCompare(`${b[0]}:${b[1]}`))}))
 }
 function indexFreshness(project,index,link=readLink(project)){const registry=loadLensRegistry(link.path),actual=indexInputHash(project,link,registry);return {fresh:index.lens_registry_hash===registry.registry_hash&&index.input_state_hash===actual,expected:index.input_state_hash||null,actual,lens_registry_hash:registry.registry_hash}}
-function buildIndex(project,changed=false){
+function buildIndex(project,changed=false,persist=true){
   const link=readLink(project),registry=loadLensRegistry(link.path),path=join(indexRoot(project),'index.json');let old={entries:[]};const warnings=[]
   if(changed&&existsSync(path)){try{const parsed=JSON.parse(readFileSync(path,'utf8'));if(parsed.schema_version===5&&parsed.privacy_policy_version===4&&parsed.lens_registry_hash===registry.registry_hash)old=parsed}catch{}}
   const oldByPath=new Map((old.entries||[]).map(x=>[`${x.source_kind}:${x.file}`,x])),entries=[];let skippedSecrets=0
@@ -583,13 +632,13 @@ function buildIndex(project,changed=false){
   if(assertionErrors.length)throw new Error(`index post-build assertions failed: ${assertionErrors.join('; ')}`)
   const buildAssertions={status:'passed',checks:['include-policy','exclude-policy','required-includes','forbidden-excludes','secret-pattern-scan'],included_project_files:projectEntries.length}
   const index={schema_version:5,privacy_policy_version:4,lens_registry_hash:registry.registry_hash,engine:'deterministic-json',source_of_truth:'Markdown',generated_at:new Date().toISOString(),input_state_hash:indexInputHash(project,link,registry),project_context_hash:hash(JSON.stringify(link.project_context)),project:slash(project),self:slash(link.path),skipped_secret_files:skippedSecrets,warnings,build_assertions:buildAssertions,entries}
-  ensureDir(indexRoot(project));atomicWrite(path,JSON.stringify(index,null,2)+'\n');return index
+  if(persist){ensureDir(indexRoot(project));atomicWrite(path,JSON.stringify(index,null,2)+'\n')}return index
 }
-function readIndex(project,auto=true){
-  const path=join(indexRoot(project),'index.json');if(!existsSync(path)){if(auto)return buildIndex(project);throw new Error(`index missing: ${path}`)}
-  let index;try{index=JSON.parse(readFileSync(path,'utf8'))}catch{if(auto)return buildIndex(project);throw new Error(`index is invalid JSON: ${path}`)}
-  if(index.schema_version!==5||index.privacy_policy_version!==4||typeof index.lens_registry_hash!=='string'||index.engine!=='deterministic-json'||!Array.isArray(index.entries)||index.build_assertions?.status!=='passed'){if(auto)return buildIndex(project);throw new Error(`index schema is stale or invalid: ${path}`)}
-  const freshness=indexFreshness(project,index);if(!freshness.fresh){if(auto)return buildIndex(project);throw new Error(`index content is stale: ${path}`)}return index
+function readIndex(project,auto=true,persist=true){
+  const path=join(indexRoot(project),'index.json');if(!existsSync(path)){if(auto)return buildIndex(project,false,persist);throw new Error(`index missing: ${path}`)}
+  let index;try{index=JSON.parse(readFileSync(path,'utf8'))}catch{if(auto)return buildIndex(project,false,persist);throw new Error(`index is invalid JSON: ${path}`)}
+  if(index.schema_version!==5||index.privacy_policy_version!==4||typeof index.lens_registry_hash!=='string'||index.engine!=='deterministic-json'||!Array.isArray(index.entries)||index.build_assertions?.status!=='passed'){if(auto)return buildIndex(project,false,persist);throw new Error(`index schema is stale or invalid: ${path}`)}
+  const freshness=indexFreshness(project,index);if(!freshness.fresh){if(auto)return buildIndex(project,false,persist);throw new Error(`index content is stale: ${path}`)}return index
 }
 function searchIndex(index,query,lens='general',registry=null,resolution=null,temporal='current'){
   const terms=[...tokenize(query)],results=[],behaviorLens=resolution?.base_lens||lens
@@ -647,6 +696,36 @@ export function ecosystemValidationErrors(root,project=null){
     walk(base)
   }
   return errors
+}
+
+export function holoselfMcpStatus(projectInput){
+  const project=resolve(projectInput),link=readLink(project),health=healthStatus(project,link,{})
+  let context='valid',contextError=null
+  try{contextData({project,manifest:true,budget:'small',noCache:true})}catch{context='broken';contextError='Context validation failed closed; run holoself link doctor locally.'}
+  return {
+    schema_version:1,
+    state:health.state,
+    project:{name:basename(project),linked:true},
+    self:{available:existsSync(link.path),access:link.access},
+    link:{default_lens:link.default_lens,secondary_lenses:link.secondary_lenses,proposals:link.proposals,index:link.index},
+    context:{state:context,...(contextError?{error:contextError}:{})},
+    pending_proposals:listProposalData(project).filter(p=>p.status==='pending').length,
+    protocol:{transport:'stdio',authority:'.holoself/link.yaml'}
+  }
+}
+export function holoselfMcpContext(project,options={}){return mcpContextData(resolve(project),options)}
+export function holoselfMcpSearch(project,input){
+  const linked=resolve(project),link=readLink(linked),registry=loadLensRegistry(link.path),lens=input.lens||link.default_lens,allowedLenses=new Set([link.default_lens,...(link.secondary_lenses||[])]);if(!allowedLenses.has(lens)){const error=new Error(`lens is not granted by this project link: ${lens}`);error.code='LENS_NOT_GRANTED';throw error}const resolution=resolveLens(registry,lens),index=readIndex(linked,true,false)
+  let results=searchIndex(index,input.query,lens,registry,resolution,input.temporal||'current')
+  if(input.federated){const seen=new Set();results=results.filter(item=>{const key=`${item.provenance}:${item.matching_passage}`;if(seen.has(key))return false;seen.add(key);return true})}
+  return {query:input.query,lens,federated:Boolean(input.federated),results:results.slice(0,input.limit||10)}
+}
+export function holoselfMcpCreateProposal(project,input){
+  const p=createProposal(resolve(project),input),clean={...p};delete clean.source_project_path;return clean
+}
+export function holoselfMcpPreviewProposal(project,id){
+  const preview=proposalPreviewData(resolve(project),id)
+  return {proposal_id:preview.proposal.proposal_id,status:preview.proposal.status,changes:preview.changes,preview_hash:preview.preview_hash,requires_human_approval:true,canonical_write_performed:false}
 }
 
 async function activateLinkedProject(o,project,link,verb='Activate'){
@@ -721,9 +800,7 @@ export async function runEcosystem(o){
     const project=projectPath(o),link=readLink(project);if(link.proposals!=='enabled')throw new Error('proposals are not enabled for link')
     const candidates=analysis(project).findings.filter(x=>x.classification==='Candidate for self');const claim=o.claim || (candidates[0]?`Review reusable context from ${candidates[0].project_file}`:null);if(!claim)throw new Error('propose requires --claim <text> when no candidate is detected')
     const sourceFiles=o.sourceFiles?.length?o.sourceFiles:(candidates[0]?[candidates[0].project_file]:[]);if(!sourceFiles.length)throw new Error('propose requires --source-file <path>')
-    for(const source of sourceFiles){const path=resolve(project,source),rel=relative(project,path);if(rel.startsWith('..')||isAbsolute(rel))throw new Error(`source file escapes project: ${source}`);if(!existsSync(path)||!lstatSync(path).isFile())throw new Error(`source file not found: ${source}`)}
-    const p={schema_version:2,proposal_id:randomUUID(),title:`Review reusable context from ${basename(project)}`,source_project:basename(project),source_project_path:slash(project),source_files:sourceFiles,status:'pending',created_at:new Date().toISOString(),provenance:sourceFiles.map(x=>`${basename(project)}:${x}`),changes:[{change_id:'claim',target:o.targetFile||'context/claims.md',operation:'append_claim',proposal_type:o.proposalType||'new_fact',claim,evidence:o.evidence||`Source project files: ${sourceFiles.join(', ')}`,confidence:o.confidence||'unverified',visibility:o.visibility||'private'}]}
-    const errors=validateProposal(p);if(errors.length)throw new Error(errors.join('; '));createLinkDirs(project,{preserveReadme:true});saveProposal(p,proposalFile(project,p.proposal_id));console.log(JSON.stringify(p,null,2));return true
+    const p=createProposal(project,{claim,source_files:sourceFiles,target:o.targetFile,proposal_type:o.proposalType,evidence:o.evidence,confidence:o.confidence,visibility:o.visibility});console.log(JSON.stringify(p,null,2));return true
   }
   if(o.command==='proposals'){
     const project=projectPath(o),action=sub;if(action==='list'){console.log(JSON.stringify(listProposalData(project).map(({_path,...p})=>p),null,2));return true}if(action==='audit'){const scan=scanProposalStore(project);console.log(JSON.stringify({managed:scan.managed.map(({_path,...p})=>p),diagnostics:scan.diagnostics},null,2));if(scan.diagnostics.some(x=>x.severity==='error'))process.exitCode=1;return true}
@@ -732,11 +809,8 @@ export async function runEcosystem(o){
     if(!['approve','reject','defer','supersede'].includes(action))throw new Error('proposals requires list, audit, show, approve, reject, defer, or supersede')
     if(p.status!=='pending')throw new Error(`proposal is ${p.status}, expected pending`)
     if(action==='approve'){
-      const projectErrors=proposalProjectErrors(p,project);if(projectErrors.length)throw new Error(`proposal provenance validation failed: ${projectErrors.join('; ')}`)
-      const link=readLink(project),changes=proposalChanges(p),archive=join(link.path,'proposals','approved',`${p.proposal_id}.yaml`);if(existsSync(archive))throw new Error(`proposal archive collision: ${archive}`);const preErrors=ecosystemValidationErrors(link.path,project);if(preErrors.length)throw new Error(`pre-approval validation failed: ${preErrors.join('; ')}`)
-      const grouped=new Map(),approvedAt='<commit-time>',previews=[]
-      for(const change of changes){const target=safeTarget(link.path,change.target),before=grouped.get(target)?.before??(existsSync(target)?readFileSync(target,'utf8'):'---\naccess_lenses: [general, career, publishing, technical, leadership, interview, private]\ndisclosure: review-required\nsensitivity: personal\ndocument_role: evidence\n---\n');if(claims(before).some(x=>normalize(x)===normalize(change.claim)))throw new Error(`proposal duplicates an existing canonical claim: ${change.change_id}`);const block=`\n\n<!-- holoself-claim visibility=${change.visibility} -->\n## Approved proposal ${p.proposal_id}/${change.change_id}\n\n${change.claim}\n\n- Evidence: ${change.evidence}\n- Confidence: ${change.confidence}\n- Visibility: ${change.visibility}\n- Provenance: ${p.provenance.join('; ')}\n- Approved: ${approvedAt}\n<!-- /holoself-claim -->\n`,current=grouped.get(target)?.after??before,after=current.trimEnd()+block;grouped.set(target,{target,before,after});previews.push({change_id:change.change_id,target:slash(relative(link.path,target)),before_sha256:hash(before),after_sha256:hash(after),preview:block.trim()})}
-      const previewHash=hash(JSON.stringify(previews));console.log(o.json?JSON.stringify({proposal_id:p.proposal_id,changes:previews,preview_hash:previewHash},null,2):`Affected files: ${[...grouped.keys()].join(', ')}\nPreview hash: ${previewHash}\n--- proposed diff ---\n${previews.map(x=>`--- ${x.change_id}: ${x.target} ---\n+${x.preview.replaceAll('\n','\n+')}`).join('\n')}`)
+      const prepared=proposalPreviewData(project,p.proposal_id),{link,grouped}=prepared,changes=proposalChanges(p),archive=join(link.path,'proposals','approved',`${p.proposal_id}.yaml`);if(existsSync(archive))throw new Error(`proposal archive collision: ${archive}`);const preErrors=ecosystemValidationErrors(link.path,project);if(preErrors.length)throw new Error(`pre-approval validation failed: ${preErrors.join('; ')}`)
+      const previews=prepared.changes,previewHash=prepared.preview_hash;console.log(o.json?JSON.stringify({proposal_id:p.proposal_id,changes:previews,preview_hash:previewHash},null,2):`Affected files: ${[...grouped.keys()].join(', ')}\nPreview hash: ${previewHash}\n--- proposed diff ---\n${previews.map(x=>`--- ${x.change_id}: ${x.target} ---\n+${x.preview.replaceAll('\n','\n+')}`).join('\n')}`)
       if(o.digest&&o.digest!==previewHash){const error=new Error('proposal preview is stale');error.code='STALE_PREVIEW';throw error}if(!await askConfirm(o,'Approve proposal and apply grouped canonical self changes?')){console.log('Cancelled.');return true}
       const proposalBefore=readFileSync(p._path),receipt=join(link.path,'proposals','receipts',`${p.proposal_id}-approved.json`),commitTime=new Date().toISOString(),appliedChanges=previews.map(item=>({...item,after_sha256:hash(grouped.get(safeTarget(link.path,item.target)).after.replaceAll('<commit-time>',commitTime))}));try{for(const item of grouped.values())atomicWrite(item.target,item.after.replaceAll('<commit-time>',commitTime));stateProposal(project,p,'approved',{preview_sha256:previewHash,applied_changes:appliedChanges.map(({change_id,target,before_sha256,after_sha256})=>({change_id,target,before_sha256,after_sha256}))});const errors=ecosystemValidationErrors(link.path,project);if(errors.length)throw new Error(`post-approval validation failed: ${errors.join('; ')}`)}catch(error){for(const item of grouped.values())atomicWrite(item.target,item.before);atomicWrite(p._path,proposalBefore);if(existsSync(archive))rmSync(archive,{force:true});if(existsSync(receipt))rmSync(receipt,{force:true});throw error}console.log(`[ok] approved ${p.proposal_id}; ${changes.length} change(s), validation passed`);return true
     }

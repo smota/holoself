@@ -77,6 +77,8 @@ When project instructions or `.holoself/BOOTSTRAP.md` indicate an activated link
 
 When command execution is available in a metadata-linked project, first decide whether personal context is required, helpful, or not needed. Resolve useful context through `holoself context --project . --task "<current request>" --budget standard --json` (or start with `--manifest` and expand reviewed `--source` handles). Do not open linked canonical `profile/` or `context/` files directly. Direct canonical reads are reserved for a validated direct data root, or for a clearly disclosed fallback when the CLI is unavailable. Current knowledge is the default; historical or superseded material requires an explicit temporal selector. Treat selected public contribs as available methods and inject at most two task-relevant methods.
 
+When the host exposes the project-bound Holoself MCP tools, prefer `holoself_context_manifest` followed by the smallest needed `holoself_context_get` source set. Use `holoself_status` for health and `holoself_search` for indexed retrieval. MCP is only the interaction adapter: `.holoself/link.yaml` remains authority, and CLI/bootstrap remains the fallback. Never request or infer alternate roots through a tool. `holoself_proposal_create` may create a project-local pending proposal; approval and canonical writes remain a separate human-reviewed CLI/Workbench action.
+
 - **load:** read bootstrap and link, select configured lens, apply privacy, and preserve sources;
 - **status:** report configured link, activation markers, bootstrap, self reachability, and warnings;
 - **search:** use local deterministic index where available;

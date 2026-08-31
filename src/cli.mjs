@@ -82,6 +82,7 @@ function parse(args){
     else if(a==='--expires-hours') { const value=Number(requiredValue(args,i++,a));if(!Number.isFinite(value)||value<=0||value>720)throw new Error('--expires-hours must be a number greater than 0 and at most 720');o.expiresHours=value }
     else if(a==='--port') { const value=Number(requiredValue(args,i++,a));if(!Number.isInteger(value)||value<0||value>65535)throw new Error('--port must be between 0 and 65535');o.port=value }
     else if(a==='--restricted-host') o.restrictedHost=true
+    else if(a==='--claude-project-dir') o.claudeProjectDir=true
     else if(a==='--claim') o.claim=requiredValue(args,i++,a)
     else if(a==='--evidence') o.evidence=requiredValue(args,i++,a)
     else if(a==='--target-file') o.targetFile=requiredValue(args,i++,a)
@@ -315,13 +316,13 @@ function isHoloselfLink(p, root){
   try { return resolve(dirname(p), readlinkSync(p)) === resolve(root) } catch { return false }
 }
 function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init | doctor | validate | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] [--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  skill status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens list|show|validate [id] [--root <self-root>]\n  link add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  link skill migrate-global --project <dir> [--skill-home <dir>] [--dry-run|--yes]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n  proposals list|show|approve|reject|defer [id] --project <dir>\n  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill auto|project|global|none --no-activate.\nProject filters: --project-include/--project-exclude and --project-assert-include/--project-assert-exclude <globs>.
-Efficiency: context supports --budget small|standard|deep|unbounded, --manifest, repeatable --source, and --temporal current|historical|superseded|all.\nInstruction consolidation: instructions render|audit --project <dir>.\nSafety confirmations: --yes. Packet adapters: --adapter pi|claude|codex|generic|obsidian|restricted-host.\n`) }
+Efficiency: context supports --budget small|standard|deep|unbounded, --manifest, repeatable --source, and --temporal current|historical|superseded|all.\nInstruction consolidation: instructions render|audit --project <dir>.\nSafety confirmations: --yes. Packet adapters: --adapter pi|claude|codex|generic|obsidian|restricted-host.\nMCP: mcp [--project <linked-project>] | mcp configure|status --project <dir> [--platform codex|agy|claude].\n`) }
 async function confirm(o,message){if(o.yes)return true; if(!input.isTTY||!output.isTTY) throw new Error(`${message} Re-run with --yes to confirm.`); const rl=createInterface({input,output}); try { const answer=await rl.question(`${message} Type "yes" to continue: `); return answer.trim().toLowerCase()==='yes' } finally { rl.close() }}
 export async function run(argv){
   const o=parse(argv)
   if(o.version){console.log(o.json?JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION}):`Holoself ${VERSION}`);return}
   if(o.command==='capabilities'){
-    console.log(JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION,interface:'local-cli',contextSchemaVersion:1,commands:['doctor','context','search','propose','proposals','instructions','knowledge','link','skill'],contextFeatures:['need-gate','budgets','manifest','source-handles','lifecycle','receipts','persistent-cache','task-contrib-routing'],proposalSchemaVersions:[1,2],indexSchemaVersion:5,globalSkillSupported:true},null,2));return
+    console.log(JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION,interface:'local-cli',contextSchemaVersion:1,commands:['doctor','context','search','propose','proposals','instructions','knowledge','link','skill','mcp'],contextFeatures:['need-gate','budgets','manifest','source-handles','lifecycle','receipts','persistent-cache','task-contrib-routing'],proposalSchemaVersions:[1,2],indexSchemaVersion:5,mcp:{transport:'stdio',projectBound:true,linkAuthority:true,tools:['holoself_status','holoself_context_manifest','holoself_context_get','holoself_search','holoself_proposal_create','holoself_proposal_preview']},globalSkillSupported:true},null,2));return
   }
   if(o.help||!o.command){help();return}
   const root=o.root
@@ -329,6 +330,17 @@ export async function run(argv){
     const {startWebServer}=await import('./web-server.mjs');const app=await startWebServer({project:o.project||process.cwd(),root:o.rootExplicit?root:undefined,port:o.port??0});console.log(`Holoself Workbench: ${app.url}\nData root: ${app.root}${app.project?`\nLinked project: ${app.project}`:''}`)
     if(!o.noOpen){const {spawn}=await import('node:child_process');const command=process.platform==='win32'?'cmd':process.platform==='darwin'?'open':'xdg-open';const args=process.platform==='win32'?['/c','start','',app.url]:[app.url];spawn(command,args,{detached:true,stdio:'ignore',windowsHide:true}).unref()}
     return
+  }
+  if(o.command==='mcp'){
+    const action=o.args[0]
+    if(!action){const {startMcpServer}=await import('./mcp-server.mjs');await startMcpServer({project:o.project,requireClaudeProject:o.claudeProjectDir});return}
+    if(!o.project)throw new Error(`mcp ${action} requires --project <linked-project>`)
+    const {applyMcpConfiguration,mcpConfigurationPlan,mcpConfigurationStatus}=await import('./mcp-config.mjs')
+    if(action==='status'){console.log(JSON.stringify(mcpConfigurationStatus(o.project,{platforms:o.platforms||[]}),null,2));return}
+    if(action!=='configure')throw new Error('mcp requires no subcommand, status, or configure')
+    const plan=mcpConfigurationPlan(o.project,{platforms:o.platforms||[]}),publicPlan={...plan,_changes:undefined};console.log(JSON.stringify({configuration_plan:publicPlan},null,2));if(o.dryRun)return
+    if(!await confirm(o,`Configure local STDIO MCP files for ${plan.changes.map(change=>change.platform).join(', ')} in ${o.project}?`))return
+    console.log(JSON.stringify(applyMcpConfiguration(o.project,{platforms:o.platforms||[]}),null,2));return
   }
   if(o.command==='data-root'){console.log(root);return}
   if(o.command==='knowledge'){

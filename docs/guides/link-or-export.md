@@ -3,6 +3,7 @@
 | Need | Use |
 |---|---|
 | Independent project reads canonical context through lenses | `link add --project --self` metadata project link |
+| Verified agent client needs typed, on-demand access | metadata link plus local `mcp configure` |
 | Inspect-first integration assistant | `link setup --project` |
 | Portable or air-gapped generated copy | `export --target` snapshot |
 | Self-contained generated packet without fallback files | `export --packet-only` snapshot |
@@ -11,6 +12,8 @@
 ## Metadata project link
 
 Recommended mode. Creates a real project `.holoself/` directory containing `link.yaml`, local index, proposals, reports, Bootstrap, and runtime metadata. It points to canonical self without copying self documents. `access: read` permits resolution; it never grants publication permission.
+
+MCP is not a fourth data mode. It is an interaction adapter layered on this metadata link. If unavailable, the same link continues through BOOTSTRAP, skill, CLI, or a reviewed snapshot.
 
 ## Snapshot
 

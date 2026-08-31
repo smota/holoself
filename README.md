@@ -40,6 +40,7 @@ approved reusable knowledge
 | Context packets and JSON adapters | Available |
 | Proposal/review workflow | Available |
 | Deterministic local index and federated search | Available |
+| Local project-bound STDIO MCP | Available; preferred per platform after native verification |
 | Overlap/conflict/stale reports | Available |
 | Legacy packet export and filesystem junction | Supported compatibility path |
 | SQLite/FTS acceleration | Planned, optional |
@@ -87,9 +88,19 @@ node bin/holoself.mjs context \
 
 `link add` writes project-local metadata under `.holoself/`, detects agent platforms, generates `.holoself/BOOTSTRAP.md`, and injects bounded startup pointers into detected instruction files after confirmation. It does not copy canonical self files. See [Activated project links](docs/guides/activated-links.md).
 
+For verified MCP-capable clients, preview and activate typed on-demand access after linking:
+
+```bash
+holoself mcp configure --project C:/work/my-project --dry-run
+holoself mcp configure --project C:/work/my-project --yes
+```
+
+The client starts `holoself mcp` as a local STDIO subprocess for that project. It is not a service. The explicit link remains authority; BOOTSTRAP/skill/CLI remain the fallback. See [Local MCP integration](docs/guides/local-mcp.md).
+
 ### Three distinct delivery modes
 
 - **Metadata project link — recommended:** `link add|status|remove|setup|activate|deactivate|repair|doctor --project ...` creates `.holoself/link.yaml`, activates configured startup pointers, and maintains local index, proposal, and report directories.
+- **Local MCP — preferred interaction where verified:** the agent client launches Holoself on demand and calls bounded typed tools; this still requires the metadata link and coexists with startup instructions.
 - **Snapshot:** `export` or `context --snapshot` creates reviewed generated context for portable or sandboxed use. It is not live and can become stale.
 - **Legacy live mount:** `link --target ...` creates a filesystem symlink/junction from project `.holoself` to complete data root. It remains compatibility-only.
 
@@ -127,6 +138,8 @@ Approval prints target, evidence, affected files, and proposed diff before writi
 - [Context efficiency and receipts](docs/concepts/context-efficiency.md)
 - [Knowledge lifecycle](docs/concepts/knowledge-lifecycle.md)
 - [CLI reference](docs/reference/cli.md)
+- [Local MCP integration](docs/guides/local-mcp.md)
+- [MCP tools](docs/reference/mcp-tools.md)
 - [Threat model](docs/trust/threat-model.md)
 - [Status and roadmap](docs/contributing/status-and-roadmap.md)
 - [Privacy policy](PRIVACY.md)

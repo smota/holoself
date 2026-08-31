@@ -9,6 +9,7 @@ Private profile/context, evidence, third-party data, employer-confidential mater
 - Operating system and filesystem permissions
 - AI tool granted project or self-root access
 - Project `.holoself` metadata
+- Agent-client MCP configuration and the client-launched STDIO subprocess
 - Generated packets and indexes
 - Private sync or Git provider chosen by user
 
@@ -23,6 +24,9 @@ Private profile/context, evidence, third-party data, employer-confidential mater
 | Stale or contradictory copies | Deterministic analysis and freshness metadata | Semantic classification is heuristic |
 | Private packet committed | Warnings and private-by-default guidance | Git policy is user-controlled |
 | Malformed config weakens policy | Strict fields and fail-closed parsing | Future schema migration needs care |
+| MCP client selects the wrong project | Fixed startup binding, mandatory safe link, path-free tools, ambiguity rejection | A compromised client with broad filesystem access can bypass MCP |
+| MCP leaks roots or excessive output | Manifest-first retrieval, source handles, output caps, absolute-path stripping | Selected content remains private and client-visible |
+| Model writes canonical self | MCP exposes only project-local pending proposal creation; approval is absent | User or another unrestricted tool can still edit files directly |
 
 ## Out of scope
 

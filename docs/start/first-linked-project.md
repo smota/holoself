@@ -32,6 +32,18 @@ node bin/holoself.mjs analyze all --project C:/work/project
 
 Reports recommend actions and do not mutate project files. Canonical self changes require proposals and approval.
 
+## Optional MCP interaction
+
+On Codex, AGY, or Claude Code, preview project-local MCP configuration after the link is healthy:
+
+```bash
+holoself mcp configure --project C:/work/project --dry-run
+holoself mcp configure --project C:/work/project --yes
+holoself mcp status --project C:/work/project
+```
+
+MCP is preferred only after the platform/version passes a native smoke test. The link remains authority, and activated instructions/skill/CLI remain available when MCP is unavailable.
+
 ## Remove configuration
 
 ```bash

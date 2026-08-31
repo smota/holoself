@@ -8,6 +8,8 @@ Holoself models one whole person: identity, work context, preferences, voice, th
 
 Self owns identity/preferences, durable career facts, approved stories, decisions, and reusable knowledge. Projects own execution artifacts: applications, research, interview notes, posts, calendars, publishing performance, templates, and project strategy. Reusable insight discovered in project enters self only through reviewed proposal.
 
+For verified clients, local STDIO MCP is the preferred interaction adapter after the link exists. It improves tool discovery and on-demand context selection but does not replace link authority, project ownership, or review-before-save. BOOTSTRAP, the public skill, and CLI continue as the fallback.
+
 Project link grants read access:
 
 ```yaml
@@ -70,6 +72,10 @@ holoself propose --project <path> --claim "..." --evidence "..." --source-file f
 holoself proposals list|show|approve|reject|defer [id] --project <path>
 holoself index [status|rebuild] --project <path> [--changed]
 holoself search "regulated AI" --project <path> [--federated]
+holoself mcp configure --project <path> [--platform codex|agy|claude] --dry-run
+holoself mcp configure --project <path> [--platform codex|agy|claude] --yes
+holoself mcp status --project <path>
+holoself mcp --project <path> # normally launched by the client
 ```
 
 Safety invariants: no automatic deletion, relocation, publication, external action, or canonical write; declared compensation/employer-confidential content is filtered from publishing output; recognized secret-like filenames and content patterns are excluded from indexes; provenance appears on every result and accepted claim. Pattern matching cannot guarantee detection of every secret, so indexes remain private and review is required. Unknown CLI options and malformed existing link YAML fail closed before target selection or mutation.

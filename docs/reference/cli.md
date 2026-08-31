@@ -25,6 +25,7 @@ holoself <command> [options]
 | `migrate --from <dir>` | Copy supported PersonalOS data after confirmation |
 | `export --target <dir>` | Create reviewable project packet snapshot |
 | `upgrade` | Refresh selected public contrib availability; method files remain package-owned |
+| `mcp` | Run the local project-bound STDIO MCP server; normally client-launched |
 
 Core options: `--data-dir <dir>` (`--root` and `--data-root` aliases), `--contribs a,b`, `--exclude-contrib a,b`, `--yes`, `--force`, `--dry-run`, `--packet-only`, `--root-setup`.
 
@@ -62,9 +63,14 @@ proposals list --project <dir>
 proposals show|approve|reject|defer <id> --project <dir> [--yes]
 index [status|rebuild] --project <dir> [--changed]
 search <query> --project <dir> [--federated] [--lens <lens>]
+mcp configure --project <dir> [--platform codex|agy|claude] [--dry-run] [--yes]
+mcp status --project <dir> [--platform codex|agy|claude]
+mcp [--project <dir>]
 ```
 
 `context` defaults to packet output unless `--json` is supplied. `--self-only` applies the selected lens and task while excluding linked-project documents, which lets bounded consumers request personal context without duplicating subject data they already select themselves. `--snapshot --yes` writes a reviewed project-only fallback; `--restricted-host` applies publication-safe filtering and adds default 24-hour expiry metadata. `--expires-hours` accepts values above 0 through 720. Link setup supports `--project-include`, `--project-exclude`, `--project-assert-include`, and `--project-assert-exclude`. `index` without subcommand builds/updates index. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation. Global skill installation is separately confirmed; project migration validates the global copy before removing managed local copies.
+
+`mcp configure` first prints exact project-local file actions and expected hashes. Without `--dry-run`, it requires confirmation or `--yes`. Existing divergent `holoself` server entries and malformed markers fail closed. Bare `mcp` uses explicit `--project`, trusted `CLAUDE_PROJECT_DIR`, or unambiguous cwd and requires a safe `.holoself/link.yaml`; tools cannot supply paths. See [MCP tools](mcp-tools.md).
 
 ## Legacy live mount
 

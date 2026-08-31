@@ -1,6 +1,10 @@
 # Startup adapters and packet formatters
 
-Holoself has two separate integration surfaces.
+Holoself has three separate integration surfaces.
+
+## Local MCP adapter
+
+For Codex, AGY, and Claude Code, `holoself mcp` is a third surface: the client launches a project-bound STDIO subprocess and discovers six typed tools. It shares the CLI domain core and keeps `.holoself/link.yaml` as authority. Configuration records are not verification; promote a platform only after the native evidence in [platform verification](../reference/platform-verification.md) passes. BOOTSTRAP and skill activation remain the fallback.
 
 ## Startup adapters
 

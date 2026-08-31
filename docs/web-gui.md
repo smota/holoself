@@ -27,6 +27,8 @@ The Workbench turns the existing model into seven predictable areas:
 
 The conceptual flow remains Self → Lens → Project → Proposal → Approval. Projects keep their artifacts. Self keeps approved reusable knowledge.
 
+Workbench-launched harness conversations and client-launched MCP are complementary. Workbench remains an explicit eager-context/GUI workflow; MCP lets a verified external client request typed context on demand. Both use the same link and deterministic domain rules, and neither makes canonical proposal approval model-callable.
+
 ## Architecture and trust boundary
 
 The dependency-free Node HTTP server serves static HTML/CSS/JavaScript and a fixed local API. Mutations require a random per-process token and same-origin requests. It adds a restrictive Content Security Policy, body/output bounds, loopback-only binding, contained file access, and direct process spawning with `shell: false`. There is no generic command endpoint.

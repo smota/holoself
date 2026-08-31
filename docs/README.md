@@ -23,6 +23,7 @@
 - [Synthetic career and publishing example](guides/synthetic-linked-projects.md)
 - [Indexing and search](guides/indexing-and-search.md)
 - [Runtime adapters](guides/runtime-adapters.md)
+- [Local MCP integration](guides/local-mcp.md)
 - [Migration](guides/migration.md)
 
 ## Reference
@@ -30,6 +31,16 @@
 - [CLI](reference/cli.md)
 - [Filesystem layout](reference/filesystem-layout.md)
 - [Schemas](reference/schemas.md)
+- [MCP tools](reference/mcp-tools.md)
+- [MCP platform verification](reference/platform-verification.md)
+
+## Decisions
+
+- [Local MCP architecture](decisions/local-mcp-architecture.md)
+
+## Releases
+
+- [Holoself 0.8.0](releases/0.8.0.md)
 
 ## Trust
 

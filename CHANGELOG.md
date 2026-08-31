@@ -4,6 +4,36 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+## [0.8.0] — 2026-08-31
+
+Holoself can now meet AI tools inside an already linked project. A local MCP integration gives supported clients typed, on-demand access to bounded self-context without introducing a daemon, hosted account, or second source of truth.
+
+### Context where you work, only when it is useful
+
+- Codex, AGY, and Claude Code can be configured from one previewed `holoself mcp configure` workflow.
+- Each client starts a project-bound STDIO subprocess; Holoself does not open a port or keep a background service running.
+- Status, manifest, context, and search tools return structured, size-bounded results and reuse the same lens, privacy, lifecycle, and provenance rules as the CLI.
+- Manifest-first retrieval lets an AI inspect what is available before requesting selected sources, reducing unnecessary context loading.
+
+### Explicit control remains the default
+
+- `.holoself/link.yaml` remains the project authorization boundary and the only pointer to `HOLOSELF_DATA`.
+- MCP tools accept no filesystem paths, cannot broaden the linked lens, and redact private roots from outputs and errors.
+- Read tools do not create cache or index files. Search can rebuild a stale index in memory without changing canonical data.
+- An AI may create a project-local pending proposal and preview its effect, but it cannot approve it or write canonical self-context.
+- BOOTSTRAP instructions, the shared skill, CLI, reviewed snapshots, and Workbench remain available as deterministic fallbacks.
+
+### Safer setup and recovery
+
+- Configuration is project-local, collision-aware, idempotent, and previewable before it writes Codex, AGY, or Claude Code files.
+- Existing divergent entries, malformed managed markers, unsafe roots, and symlink or junction parents are refused instead of overwritten.
+- A failed multi-client configuration restores existing files byte for byte and removes files created by the failed transaction.
+- `holoself mcp status` distinguishes generated configuration from proven native client behavior.
+
+### Platform status at release
+
+Codex and Claude Code have verified native server discovery and status invocation. AGY has verified native discovery in a registered synthetic project; non-interactive invocation remains subject to its normal MCP approval policy. MCP is therefore activated but not yet promoted over the explicit link, shared skill, and CLI as Holoself's cross-platform default.
+
 ## [0.7.0] — 2026-08-31
 
 Holoself is now easier to use day to day: you can manage your context through a local Workbench, install its AI skill once instead of copying it into every project, and give AI tools smaller, more relevant context with a clear record of what was shared.
@@ -139,6 +169,7 @@ Holoself v0.5.0 establishes the local-first architecture and public distribution
 - Test suite covers initialization, validation, migration safeguards, export refresh and packet-only mode, link safety, contrib selection, and private Markdown boundaries.
 - Known limitations: Holoself does not automatically install skills, synchronize data, or provide remote storage; project exports require manual review and each project must be exported separately.
 
+[0.8.0]: https://github.com/smota/holoself/releases/tag/v0.8.0
 [0.7.0]: https://github.com/smota/holoself/releases/tag/v0.7.0
 [0.6.0]: https://github.com/smota/holoself/releases/tag/v0.6.0
 [0.5.0]: https://github.com/smota/holoself/releases/tag/v0.5.0
