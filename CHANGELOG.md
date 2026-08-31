@@ -4,14 +4,79 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
-## [0.7.0] — 2026-08-28
+## [0.7.0] — 2026-08-31
 
-- Adds `capabilities --json` and `--version --json` as a small, stable discovery contract for agent-neutral local consumers.
-- Adds `context --self-only`, allowing bounded consumers to load Holoself context without redundantly including linked-project documents.
+Holoself is now easier to use day to day: you can manage your context through a local Workbench, install its AI skill once instead of copying it into every project, and give AI tools smaller, more relevant context with a clear record of what was shared.
 
-- Adds validated user-level Holoself skill installation with `skill status|install --scope user`.
-- Adds `--install-skill global` and runtime schema 2 global installation records.
-- Adds transactional `link skill migrate-global` cleanup for redundant project skill copies, including untracked generated installations, rollback, and project-override health reporting.
+### A local Workbench for managing your context
+
+The optional Holoself Workbench provides a visual interface for the main workflows:
+
+- See whether your self-context and linked projects are healthy.
+- Browse independent project spaces and understand their purpose and boundaries.
+- Safely edit knowledge and privacy annotations without manipulating raw metadata.
+- Review, approve, defer, reject, or supersede proposed knowledge.
+- Configure lenses and personal lens instructions.
+- Start context-aware conversations through detected local AI tools.
+- Follow specific recovery actions when a project is degraded.
+
+The Workbench runs only on your computer, binds to `127.0.0.1`, requires no hosted account, and does not replace the CLI or Markdown source files.
+
+### More relevant context with less unnecessary loading
+
+Holoself now decides whether personal context is required, helpful, or unnecessary for a task.
+
+When context is useful, it:
+
+- Selects sources based on the task, lens, privacy rules, and knowledge lifecycle.
+- Uses bounded `small`, `standard`, or `deep` budgets.
+- Loads current knowledge by default instead of mixing in outdated material.
+- Can return a compact manifest first and expand only selected sources.
+- Limits automatic framework injection to the most relevant methods.
+- Reuses cached selections when the underlying sources have not changed.
+
+Every selection includes a receipt describing what was selected, the source hashes, estimated size, applied lens and budget, and whether anything was truncated—without copying private document bodies into the receipt.
+
+### Clear lifecycle for knowledge
+
+Personal knowledge can now be marked as current, historical, or superseded. Historical information remains available when explicitly requested, but it no longer appears in normal current-context requests.
+
+Reviewed cleanup is also available. Cleanup plans contain paths, reasons, operations, and hashes—not private document contents. Applying a plan requires the exact approved digest, rejects stale inputs, and produces an immutable receipt. Proposal archives remain protected.
+
+### Install the Holoself skill once
+
+Holoself can install its shared skill at user level instead of creating another copy inside every project.
+
+Existing linked projects can be migrated to this global model through a previewed, transactional workflow. Holoself validates the global installation before removing managed project copies and rolls back if the migration fails.
+
+User-created project overrides and unmanaged file collisions are preserved and reported for review rather than silently overwritten.
+
+### Easier integration with AI tools
+
+Holoself now exposes a small, stable machine-readable interface:
+
+- `capabilities --json` describes the supported local interface.
+- `--version --json` reports product and version information.
+- `context --self-only` supplies personal context without redundantly including documents already managed by the requesting project or tool.
+
+This makes integration more predictable while keeping Holoself independent of any single AI application.
+
+### Safer context-aware conversations
+
+Workbench connectors can detect supported local CLI, terminal, and desktop tools. Each conversation resolves bounded, lens-filtered context before launching the configured tool.
+
+Executable paths and arguments remain structured, linked spaces are allowlisted, and there is no generic remote-command endpoint.
+
+### Privacy and control remain foundational
+
+- Canonical knowledge stays in local Markdown.
+- The CLI performs no network requests.
+- The Workbench is loopback-only and optional.
+- Stale edits are rejected rather than overwriting newer changes.
+- Writes are hash-guarded, validated, and rolled back on failure.
+- Durable AI discoveries still require explicit proposal approval.
+- Global installation, project migration, cleanup, and corrective actions remain previewed and confirmation-gated.
+- Project artifacts remain owned by their projects; only approved reusable knowledge belongs in self-context.
 
 ## [0.6.0] — 2026-08-24
 
