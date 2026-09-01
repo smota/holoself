@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Validate release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          package_version="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+          source_version="$(node --input-type=module -e "import('./src/version.mjs').then(({ VERSION }) => process.stdout.write(VERSION))")"
+
+          if [[ "$version" != "$package_version" || "$version" != "$source_version" ]]; then
+            echo "Tag $GITHUB_REF_NAME, package version $package_version, and source version $source_version must match." >&2
+            exit 1
+          fi
+
+          grep -Fq "## [$version]" CHANGELOG.md
+          test -f "docs/releases/$version.md"
+
+      - name: Run repository verification
+        run: npm run verify
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "GitHub release $GITHUB_REF_NAME already exists."
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "Holoself $GITHUB_REF_NAME" \
+              --generate-notes \
+              --verify-tag
+          fi
