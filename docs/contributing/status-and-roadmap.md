@@ -1,6 +1,6 @@
 # Status and roadmap
 
-Current version: 0.8.0. Product is usable from repository checkout; npm registry package is not yet published.
+Current version: 0.8.0. Install the npm package as `holoself-ai`, or run the product directly from a repository checkout.
 
 ## Available
 
