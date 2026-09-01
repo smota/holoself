@@ -88,6 +88,8 @@ node bin/holoself.mjs doctor --data-dir C:/private/my-self
 node bin/holoself.mjs validate --data-dir C:/private/my-self
 ```
 
+These commands use the source-checkout form because the npm registry package is not published yet. Throughout the documentation, `node bin/holoself.mjs` means “run this checkout directly,” while `holoself` means the same CLI through a package bin available on `PATH`. MCP clients must use the installed `holoself` form because they launch the command outside this shell. See [CLI invocation and reference](docs/reference/cli.md#invocation).
+
 Install the declarative agent skill separately when useful:
 
 ```bash
@@ -135,7 +137,7 @@ holoself mcp configure --project C:/work/my-project --dry-run
 holoself mcp configure --project C:/work/my-project --yes
 ```
 
-The client starts `holoself mcp` as a local STDIO subprocess for that project. It is not a service. The explicit link remains authority; BOOTSTRAP/skill/CLI remain the fallback. See [Local MCP integration](docs/guides/local-mcp.md).
+First confirm that `holoself --version` works in the environment used by the client. The client starts `holoself mcp` as a local STDIO subprocess for that project. It is not a service. The explicit link remains authority; BOOTSTRAP/skill/CLI remain the fallback. See [Local MCP integration](docs/guides/local-mcp.md).
 
 ### Three distinct delivery modes
 

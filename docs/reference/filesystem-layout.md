@@ -13,8 +13,8 @@
   reference/
   me/
   contribs/local/        # private extensions; public defaults remain in the product package
-  contribs/local/
-  proposals/{pending,approved,rejected,deferred}/
+  proposals/{pending,approved,rejected,deferred,superseded,receipts}/
+  history/
   exports/
 ```
 
@@ -24,9 +24,12 @@
 <project>/.holoself/
   link.yaml
   README.md
+  BOOTSTRAP.md             # after instruction activation
+  runtime.json             # after instruction activation
   index/
   proposals/
   reports/
+  runtime/                 # optional reviewed context snapshots
 ```
 
 Self root owns approved reusable context and the optional custom-lens registry. Project owns `.holoself` operational and review artifacts. A missing `lenses/` directory is valid and is never created by read-only lens inspection. Indexes and packets are generated. Markdown profile/context remains canonical.

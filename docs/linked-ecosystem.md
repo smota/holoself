@@ -1,6 +1,6 @@
 # Linked Holoself ecosystem contract
 
-This compatibility overview remains stable for existing links. For task-oriented documentation, start with [Concepts in five minutes](start/concepts-in-five-minutes.md), [First linked project](start/first-linked-project.md), and [CLI reference](reference/cli.md).
+This compatibility overview remains stable for existing links. For task-oriented documentation, start with [Concepts in five minutes](start/concepts-in-five-minutes.md), [First linked project](start/first-linked-project.md), and [CLI reference](reference/cli.md). Command examples use the installed `holoself` shorthand described in the [invocation section](reference/cli.md#invocation).
 
 ## Core model and ownership
 
@@ -53,7 +53,7 @@ Proposals follow `schemas/proposal.schema.json`. UUIDs, filenames, allowed field
 
 ## Local indexing and search
 
-Markdown remains source of truth. Each linked project owns rebuildable `.holoself/index/index.json` schema v4/privacy-policy v3, containing paths, headings, SHA-256 content hashes, input/config state hashes, timestamps, redacted privacy-policy metadata, visibility-annotated links/tags/claims, provenance, and passed post-build assertions. Search verifies freshness and auto-rebuilds when selected inputs or link policy change. `index status` reports `stale` without rebuilding. Optional `project_context.assert_include` and `assert_exclude` patterns make builds fail when expected sources are absent or forbidden sources survive. Search reapplies file, claim, field, sensitivity, and publishing compensation filters. Credential-like filenames, explicit secret sensitivity, private keys, tokens, connection strings, and common secret content patterns are excluded. Dependency-free deterministic JSON is current engine. SQLite/FTS can be added as optional acceleration later, but cannot become source of truth. Index is local, ignorable, independently versioned, and safe to delete/rebuild.
+Markdown remains source of truth. Each linked project owns rebuildable `.holoself/index/index.json` schema v5/privacy-policy v4, containing paths, headings, SHA-256 content hashes, input/config state hashes, timestamps, redacted privacy-policy metadata, visibility-annotated links/tags/claims, provenance, and passed post-build assertions. Search verifies freshness and auto-rebuilds when selected inputs or link policy change. `index status` reports `stale` without rebuilding. Optional `project_context.assert_include` and `assert_exclude` patterns make builds fail when expected sources are absent or forbidden sources survive. Search reapplies file, claim, field, sensitivity, and publishing compensation filters. Credential-like filenames, explicit secret sensitivity, private keys, tokens, connection strings, and common secret content patterns are excluded. Dependency-free deterministic JSON is current engine. SQLite/FTS can be added as optional acceleration later, but cannot become source of truth. Index is local, ignorable, independently versioned, and safe to delete/rebuild.
 
 Federated search reads linked self and project entries in place; it does not centralize Markdown. Results include source, section, passage, provenance, visibility, and freshness.
 
@@ -69,7 +69,8 @@ holoself context --project <path> --format packet --adapter claude
 holoself context --project <path> --snapshot --restricted-host --expires-hours 24 --yes
 holoself analyze overlap|conflicts|stale|all --project <path>
 holoself propose --project <path> --claim "..." --evidence "..." --source-file file.md
-holoself proposals list|show|approve|reject|defer [id] --project <path>
+holoself proposals list|audit --project <path>
+holoself proposals show|approve|reject|defer|supersede <id> --project <path> [--yes]
 holoself index [status|rebuild] --project <path> [--changed]
 holoself search "regulated AI" --project <path> [--federated]
 holoself mcp configure --project <path> [--platform codex|agy|claude] --dry-run

@@ -27,7 +27,7 @@ Use repeatable `--platform codex|agy|claude` to select clients. Holoself writes 
 
 Codex and AGY absolute bindings are intentionally deterministic local configuration. Do not commit them when a path identifies a private host or user. Claude's project file is path-portable. Existing divergent `holoself` entries and malformed managed markers are refused rather than overwritten.
 
-The `holoself` executable must be on the client process PATH. From a source checkout, a managed runtime installation may point the command at that checkout; otherwise install the released package before configuration.
+The `holoself` executable must be on the client process PATH. From a source checkout, use a reviewed local or managed package-bin installation that points at that checkout. A registry installation is not currently available. Confirm `holoself --version` in the client environment before applying configuration; running `node bin/holoself.mjs` in a terminal proves only that the checkout works. See [CLI invocation](../reference/cli.md#invocation).
 
 ## Runtime behavior
 

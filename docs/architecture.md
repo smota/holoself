@@ -40,8 +40,9 @@ Holoself is a local-first, Markdown-first whole-person context protocol. Public 
 ├── topics/                     # bounded explorations; .current selects one
 ├── reference/                  # private/local reference material
 ├── me/                         # local self-model activation (for example contribs.md)
-├── contribs/local/             # private local extensions only; public methods stay package-owned
-├── contribs/local/             # user-only contribs; never packaged
+├── contribs/local/             # private user extensions; public methods stay package-owned
+├── proposals/                  # terminal review archives and immutable receipts
+├── history/                    # lifecycle and cleanup history
 └── exports/                    # generated, reviewable export staging/output
 ```
 

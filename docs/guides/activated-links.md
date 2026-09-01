@@ -2,6 +2,8 @@
 
 A project link is complete only when configuration, agent startup activation, and context resolution pass end to end.
 
+Examples use `holoself` where an installed package bin is required and `node bin/holoself.mjs` for a direct source checkout. Both execute the same CLI; see [CLI invocation](../reference/cli.md#invocation).
+
 MCP is an optional second activation surface for Codex, AGY, and Claude Code. It is a client-launched STDIO subprocess, not a service, and never replaces the link or bounded instruction fallback. Configure it separately only after link activation:
 
 ```bash

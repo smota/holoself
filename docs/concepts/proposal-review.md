@@ -15,6 +15,7 @@ Schema-v2 proposals group one or more typed `append_claim` changes under one rev
 ```bash
 node bin/holoself.mjs propose --project C:/work/project --claim "..." --evidence "source evidence" --source-file notes.md
 node bin/holoself.mjs proposals list --project C:/work/project
+node bin/holoself.mjs proposals audit --project C:/work/project
 node bin/holoself.mjs proposals show <id> --project C:/work/project
 node bin/holoself.mjs proposals approve <id> --project C:/work/project --yes
 ```

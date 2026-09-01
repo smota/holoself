@@ -14,6 +14,8 @@ node bin/holoself.mjs --help
 
 Node.js 20+ is required.
 
+This guide uses `node bin/holoself.mjs` to run the checkout directly. The shorter `holoself` form is the same CLI through a package bin on `PATH`; see [CLI invocation](../reference/cli.md#invocation).
+
 ## 2. Initialize private context
 
 Default location is `~/.holoself`. Override with `HOLOSELF_HOME` or `--data-dir`; CLI option wins.
