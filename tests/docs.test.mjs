@@ -15,8 +15,18 @@ async function markdownFiles(dir){
   return out
 }
 
+async function documentationFiles(){
+  return [
+    join(root,'README.md'),
+    join(root,'CONTRIBUTING.md'),
+    join(root,'PRIVACY.md'),
+    join(root,'CHANGELOG.md'),
+    ...await markdownFiles(join(root,'docs'))
+  ]
+}
+
 test('documentation relative links resolve',async()=>{
-  const files=[join(root,'README.md'),join(root,'PRIVACY.md'),...await markdownFiles(join(root,'docs'))]
+  const files=await documentationFiles()
   const missing=[]
   for(const file of files){
     const text=await readFile(file,'utf8')
@@ -29,6 +39,22 @@ test('documentation relative links resolve',async()=>{
   assert.deepEqual(missing,[])
 })
 
+test('every documentation page is reachable from a public entry point',async()=>{
+  const files=await documentationFiles(),known=new Set(files),edges=new Map(files.map(file=>[file,[]]))
+  for(const file of files){
+    const text=await readFile(file,'utf8')
+    for(const match of text.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)){
+      const href=match[1].split('#')[0]
+      if(!href||/^(?:https?:|mailto:)/.test(href))continue
+      const target=resolve(dirname(file),decodeURIComponent(href))
+      if(known.has(target))edges.get(file).push(target)
+    }
+  }
+  const entries=['README.md','CONTRIBUTING.md','PRIVACY.md','CHANGELOG.md'].map(file=>join(root,file)),queue=[...entries],visited=new Set()
+  while(queue.length){const file=queue.shift();if(visited.has(file))continue;visited.add(file);queue.push(...edges.get(file).filter(target=>!visited.has(target)))}
+  assert.deepEqual(files.filter(file=>!visited.has(file)).map(file=>file.slice(root.length+1)),[])
+})
+
 test('public docs use supported checkout install and current ecosystem terms',async()=>{
   const files=[join(root,'README.md'),...await markdownFiles(join(root,'docs'))]
   const text=(await Promise.all(files.map(file=>readFile(file,'utf8')))).join('\n')
@@ -39,6 +65,25 @@ test('public docs use supported checkout install and current ecosystem terms',as
   assert.match(text,/Markdown remains source of truth/)
   const readme=await readFile(join(root,'README.md'),'utf8')
   assert.match(readme,/init --data-dir C:\/private\/my-self\ndoctor --data-dir C:\/private\/my-self|init --data-dir C:\/private\/my-self[\s\S]*doctor --data-dir C:\/private\/my-self[\s\S]*validate --data-dir C:\/private\/my-self/)
+})
+
+test('documentation command notation and implementation versions stay current',async()=>{
+  const files=await documentationFiles(),text=(await Promise.all(files.map(file=>readFile(file,'utf8')))).join('\n')
+  const [map,cli,indexing,ecosystem]=await Promise.all([
+    readFile(join(root,'docs','README.md'),'utf8'),
+    readFile(join(root,'docs','reference','cli.md'),'utf8'),
+    readFile(join(root,'docs','guides','indexing-and-search.md'),'utf8'),
+    readFile(join(root,'docs','linked-ecosystem.md'),'utf8')
+  ])
+  assert.match(map,/## Command notation/)
+  assert.match(cli,/Both command forms execute `bin\/holoself\.mjs`/)
+  assert.match(cli,/knowledge cleanup/)
+  assert.match(cli,/instructions render\|audit/)
+  assert.doesNotMatch(text,/HOLOSELF_DATA/)
+  assert.doesNotMatch(text,/mcp configure --apply/)
+  assert.doesNotMatch(text,/^holoself mcp (?:configure|status)(?![^\n]*--project)/m)
+  assert.match(indexing,/schema v5\/privacy-policy v4/)
+  assert.match(ecosystem,/schema v5\/privacy-policy v4/)
 })
 
 test('documentation provides audience paths, common workflows, and a Workbench first run',async()=>{

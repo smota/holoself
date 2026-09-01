@@ -12,6 +12,10 @@ Use the shortest path that fits your goal. You do not need to read the documenta
 
 If you are evaluating Holoself, the core contract is: **projects own execution artifacts; self owns approved reusable personal knowledge; AI tools receive only context permitted by the selected link, lens, lifecycle, and task.**
 
+## Command notation
+
+`node bin/holoself.mjs` runs the CLI directly from a repository checkout. `holoself` runs the same entry point through a package bin on `PATH`; this installed form is required when an MCP client launches Holoself. The npm registry package is not published yet, so checkout-first guides use the explicit Node form. See [CLI invocation and reference](reference/cli.md#invocation).
+
 ## Start
 
 - [Quickstart](start/quickstart.md)
@@ -76,6 +80,7 @@ If you are evaluating Holoself, the core contract is: **projects own execution a
 ## Contributing
 
 - [Development](contributing/development.md)
+- [Release process](contributing/releases.md)
 - [Status and roadmap](contributing/status-and-roadmap.md)
 
 Compatibility entry points remain at [architecture.md](architecture.md), [linked-ecosystem.md](linked-ecosystem.md), [migration.md](migration.md), [ownership.md](ownership.md), and [usage.md](usage.md).

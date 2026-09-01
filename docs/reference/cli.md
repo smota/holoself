@@ -1,6 +1,13 @@
 # CLI reference
 
-Run as `holoself` when installed globally, or from a repository checkout as `node bin/holoself.mjs`.
+## Invocation
+
+Both command forms execute `bin/holoself.mjs` and expose the same features:
+
+- `node bin/holoself.mjs ...` runs the current repository checkout directly. This is the default in checkout-first setup and development guides while the npm registry package is unpublished.
+- `holoself ...` uses a package bin available on `PATH`. Use this form only after verifying `holoself --version`; it is required for MCP client configuration because the client launches `holoself mcp` outside the setup shell.
+
+Examples in compact references, generated project instructions, and MCP documentation use the installed shorthand. They do not describe a different CLI.
 
 ```text
 holoself <command> [options]
@@ -25,7 +32,10 @@ holoself <command> [options]
 | `migrate --from <dir>` | Copy supported PersonalOS data after confirmation |
 | `export --target <dir>` | Create reviewable project packet snapshot |
 | `upgrade` | Refresh selected public contrib availability; method files remain package-owned |
+| `web` | Start the optional loopback-only Workbench |
 | `mcp` | Run the local project-bound STDIO MCP server; normally client-launched |
+| `knowledge cleanup` | Build or apply a digest-bound lifecycle cleanup plan |
+| `instructions render|audit` | Render or audit consolidated project instructions |
 
 Core options: `--data-dir <dir>` (`--root` and `--data-root` aliases), `--contribs a,b`, `--exclude-contrib a,b`, `--yes`, `--force`, `--dry-run`, `--packet-only`, `--root-setup`.
 
@@ -52,6 +62,8 @@ link setup --project <dir> [--self <dir> --yes]
 skill status --scope user [--platform <id>] [--skill-home <dir>]
 skill install --scope user [--platform <id>] [--skill-home <dir>] [--dry-run] [--force] [--yes]
 context [--project <dir>] [--self <dir>] [--lens <lens>] [--task <text>] [--self-only]
+        [--budget small|standard|deep|unbounded] [--manifest] [--source <handle>]
+        [--temporal current|historical|superseded|all] [--no-cache]
         [--json | --format packet] [--adapter pi|claude|codex|generic|obsidian|restricted-host]
         [--restricted-host] [--expires-hours 24]
         [--snapshot | --output <project-contained-path>] [--yes]
@@ -59,13 +71,16 @@ analyze overlap|conflicts|stale|all --project <dir>
 propose --project <dir> [--claim <text>] [--evidence <text>]
         [--source-file <relative-path>] [--target-file <relative-path>]
         [--proposal-type <type>] [--confidence <value>] [--visibility <value>]
-proposals list --project <dir>
-proposals show|approve|reject|defer <id> --project <dir> [--yes]
+proposals list|audit --project <dir>
+proposals show|approve|reject|defer|supersede <id> --project <dir> [--yes]
 index [status|rebuild] --project <dir> [--changed]
 search <query> --project <dir> [--federated] [--lens <lens>]
 mcp configure --project <dir> [--platform codex|agy|claude] [--dry-run] [--yes]
 mcp status --project <dir> [--platform codex|agy|claude]
 mcp [--project <dir>]
+instructions render|audit --project <dir> [--adapter generic] [--json]
+knowledge cleanup [--root <self-root>] [--output <plan.json>]
+knowledge cleanup [--root <self-root>] --apply <plan.json> --digest <sha256> --yes
 ```
 
 `context` defaults to packet output unless `--json` is supplied. `--self-only` applies the selected lens and task while excluding linked-project documents, which lets bounded consumers request personal context without duplicating subject data they already select themselves. `--snapshot --yes` writes a reviewed project-only fallback; `--restricted-host` applies publication-safe filtering and adds default 24-hour expiry metadata. `--expires-hours` accepts values above 0 through 720. Link setup supports `--project-include`, `--project-exclude`, `--project-assert-include`, and `--project-assert-exclude`. `index` without subcommand builds/updates index. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation. Global skill installation is separately confirmed; project migration validates the global copy before removing managed local copies.
@@ -89,4 +104,4 @@ This is a filesystem symlink/junction mechanism, not metadata project link. It e
 - CLI performs no network requests.
 - Paths resolve to absolute local paths.
 
-Authoritative short form: `node bin/holoself.mjs --help`.
+Verify the source checkout with `node bin/holoself.mjs --help`, or a PATH installation with `holoself --help`.

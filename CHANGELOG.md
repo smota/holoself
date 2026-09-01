@@ -17,7 +17,7 @@ Holoself can now meet AI tools inside an already linked project. A local MCP int
 
 ### Explicit control remains the default
 
-- `.holoself/link.yaml` remains the project authorization boundary and the only pointer to `HOLOSELF_DATA`.
+- `.holoself/link.yaml` remains the project authorization boundary and the only pointer to the canonical self root.
 - MCP tools accept no filesystem paths, cannot broaden the linked lens, and redact private roots from outputs and errors.
 - Read tools do not create cache or index files. Search can rebuild a stale index in memory without changing canonical data.
 - An AI may create a project-local pending proposal and preview its effect, but it cannot approve it or write canonical self-context.

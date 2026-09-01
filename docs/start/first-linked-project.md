@@ -42,7 +42,7 @@ holoself mcp configure --project C:/work/project --yes
 holoself mcp status --project C:/work/project
 ```
 
-MCP is preferred only after the platform/version passes a native smoke test. The link remains authority, and activated instructions/skill/CLI remain available when MCP is unavailable.
+This step intentionally uses the installed command form: confirm `holoself --version` works in the client's environment first. MCP is preferred only after the platform/version passes a native smoke test. The link remains authority, and activated instructions/skill/CLI remain available when MCP is unavailable. See [CLI invocation](../reference/cli.md#invocation).
 
 ## Remove configuration
 
