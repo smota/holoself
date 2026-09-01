@@ -2,9 +2,9 @@
 
 A Space is an independent project folder linked to canonical self. The project keeps its instructions, indexes, proposals, reports, and conversations; the self root keeps approved reusable knowledge.
 
-![Spaces showing real degraded catalog entries](../assets/workbench/spaces.png)
+![Spaces showing three real activated projects](../assets/workbench/spaces.png)
 
-The screenshot deliberately shows real degraded entries. Their catalog records still exist, but their project-side `link.yaml` files are missing. Workbench keeps them visible so the break can be understood and repaired; it does not silently treat them as healthy.
+The screenshot shows three real projects linked from their current folders under `C:\Users\samue\work`. Each link is activated and passes its Space health checks. A missing index is reported separately because indexes are rebuildable project artifacts, not a broken link.
 
 ## Link or discover a project
 
@@ -41,8 +41,6 @@ Choose the least-broad lens that fits the project's purpose. Linking does not co
 2. Use **Health details** or run `holoself link doctor --project <path>`.
 3. Prefer the specific corrective action offered on the card.
 4. Re-open the card and use **Preview context** before resuming work.
-
-![Health details preserving the exact real link finding](../assets/workbench/space-health.png)
 
 If the project folder was intentionally retired, use **Remove link** only after confirming the exact Space. If it moved, relink the intended folder; do not create a second canonical self root to make the warning disappear.
 
