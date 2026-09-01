@@ -41,6 +41,21 @@ test('public docs use supported checkout install and current ecosystem terms',as
   assert.match(readme,/init --data-dir C:\/private\/my-self\ndoctor --data-dir C:\/private\/my-self|init --data-dir C:\/private\/my-self[\s\S]*doctor --data-dir C:\/private\/my-self[\s\S]*validate --data-dir C:\/private\/my-self/)
 })
 
+test('documentation provides audience paths, common workflows, and a Workbench first run',async()=>{
+  const [map,useCases,workbench,architecture]=await Promise.all([
+    readFile(join(root,'docs','README.md'),'utf8'),
+    readFile(join(root,'docs','guides','common-use-cases.md'),'utf8'),
+    readFile(join(root,'docs','web-gui.md'),'utf8'),
+    readFile(join(root,'docs','architecture.md'),'utf8')
+  ])
+  for(const audience of ['Regular user','Advanced user','Data architect'])assert.match(map,new RegExp(audience))
+  for(const workflow of ['Give an AI project relevant context','Use Holoself visually','Reuse a project discovery','Find prior knowledge','Connect a supported AI client','Share a reviewed snapshot','Diagnose a degraded linked project'])assert.match(useCases,new RegExp(workflow))
+  assert.match(workbench,/## First run/)
+  for(const area of ['Overview','Spaces','Lenses','Knowledge','Review','Conversations','Setup'])assert.match(workbench,new RegExp(`\\| ${area} \\|`))
+  assert.match(architecture,/## Architecture at a glance/)
+  for(const boundary of ['Authoritative location','Read authorization','Generated retrieval','Durable discovery'])assert.match(architecture,new RegExp(boundary))
+})
+
 test('skill documents validated resolution for every supported project mode',async()=>{
   const skill=await readFile(join(root,'skills','holoself','SKILL.md'),'utf8')
   for(const phrase of ['Direct data root','Metadata project link','Exported project packet or snapshot','Legacy live mount','Environment root','Default root','Secret-pattern filtering is defense in depth, not guarantee'])assert.match(skill,new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')))

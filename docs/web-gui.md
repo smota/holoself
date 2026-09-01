@@ -13,6 +13,36 @@ Canonical root contains `config.json`, `profile/`, `context/`, `topics/`, and re
 
 It binds only to `127.0.0.1`, opens no hosted account, uses no remote application service, and has no runtime dependencies beyond Node.js 20. Stop it with Ctrl+C. All CLI workflows continue to work without it.
 
+## First run
+
+Before launching, initialize and validate a canonical self root as shown in the [quickstart](start/quickstart.md). Then:
+
+```bash
+node bin/holoself.mjs web --root C:/private/my-self
+```
+
+Use this first-run path:
+
+1. On **Overview**, confirm the header says `Canonical root · Ready`. Read any warning before continuing.
+2. Open **Knowledge** and verify that the generated identity and preferences files are visible. Edit their content only after reviewing the annotation fields; Workbench protects frontmatter and structured section markers.
+3. Open **Spaces** and choose **Link a folder** to connect an independent project. Select the least-broad lens that fits the project's purpose.
+4. Return to the space and use **Preview context**. Confirm the selected sources and restrictions match what the project should receive.
+5. Use **Review** only when a project has proposed reusable knowledge. Preview the exact target and evidence before approving, deferring, or rejecting it.
+
+You do not need to configure a connector to browse knowledge, manage spaces, or review proposals. **Conversations** and **Open here** are optional conveniences for detected local tools. If Workbench reports a space as Degraded, follow the specific corrective action or run `link doctor`; do not work around a failed privacy or path check.
+
+### What each area is for
+
+| Area | Use it for | It does not do |
+|---|---|---|
+| Overview | Readiness and next actions | Replace validation |
+| Spaces | Linked-project health, bounded context, and local launches | Move project artifacts into self |
+| Lenses | Read scope, sensitivity access, and response guidance | Grant publication approval |
+| Knowledge | Human editing of canonical annotated Markdown | Accept AI discoveries automatically |
+| Review | Exact, evidence-backed proposal decisions | Let an AI approve its own proposal |
+| Conversations | Context-aware turns through a detected local CLI | Provide a hosted chat service |
+| Setup | Root details, detected tools, and optional connector settings | Install or authenticate external tools for you |
+
 ## Product and information architecture
 
 The Workbench turns the existing model into seven predictable areas:

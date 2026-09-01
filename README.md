@@ -52,6 +52,16 @@ approved reusable knowledge
 
 Requirements: Node.js 20+ and a private location for personal context.
 
+Choose the path that matches what you want to do:
+
+| I want to… | Start with |
+|---|---|
+| Set up Holoself and see it working | [Quickstart](docs/start/quickstart.md) |
+| Manage context visually | [Workbench](docs/web-gui.md#first-run) |
+| Give an AI project relevant context | [First linked project](docs/start/first-linked-project.md) |
+| Solve a specific everyday task | [Common use cases](docs/guides/common-use-cases.md) |
+| Integrate or assess the data model | [Architecture](docs/architecture.md#architecture-at-a-glance) |
+
 ```bash
 git clone https://github.com/smota/holoself.git
 cd holoself
@@ -66,11 +76,17 @@ Install the declarative agent skill separately when useful:
 npx skills add smota/holoself --skill holoself
 ```
 
-The skill contains instructions, not personal data. See [Quickstart](docs/start/quickstart.md) and [Concepts in five minutes](docs/start/concepts-in-five-minutes.md).
+The skill contains instructions, not personal data. The quickstart below works without installing it.
 
-## Optional Web GUI
+## Optional Workbench
 
-Launch local Workbench from product code with explicit canonical data root: `holoself web --root C:/path/to/my-self` (or `node bin/holoself.mjs web --root ...` from source checkout). Canonical root contains `config.json`, profile/context/topics Markdown, and needs no `.holoself/link.yaml`. Optional `--project <linked-project>` adds project context. The GUI includes annotation-safe knowledge forms, lens instruction overrides, correctable Degraded spaces, and extensible detected CLI/terminal/GUI connectors with Open Here actions. See [Web GUI](docs/web-gui.md).
+Workbench is the easiest way to browse your context, understand linked projects, review proposed knowledge, and see what needs attention. It is local and optional; Markdown and the CLI remain the source of truth and control surface.
+
+```bash
+node bin/holoself.mjs web --root C:/private/my-self
+```
+
+It opens on `127.0.0.1` and requires no hosted account. Start with [the first-run Workbench tour](docs/web-gui.md#first-run). Advanced connector and trust-boundary details remain in the same guide.
 
 ## Link an independent project
 
@@ -139,6 +155,7 @@ Approval prints target, evidence, affected files, and proposed diff before writi
 - [Knowledge lifecycle](docs/concepts/knowledge-lifecycle.md)
 - [CLI reference](docs/reference/cli.md)
 - [Local MCP integration](docs/guides/local-mcp.md)
+- [Common use cases](docs/guides/common-use-cases.md)
 - [MCP tools](docs/reference/mcp-tools.md)
 - [Threat model](docs/trust/threat-model.md)
 - [Status and roadmap](docs/contributing/status-and-roadmap.md)

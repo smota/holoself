@@ -1,5 +1,32 @@
 # Holoself architecture
 
+## Architecture at a glance
+
+Holoself separates authority from delivery. Canonical self Markdown is the durable authority for approved reusable personal knowledge. Independent projects remain authoritative for their own work. A project metadata link grants read scope; it does not transfer ownership or grant write access. Lenses, lifecycle state, task relevance, and privacy policy narrow what a consumer receives. Project discoveries return only as pending proposals, and a human review is required before canonical self changes.
+
+| Concern | Authoritative location | Enforcement |
+|---|---|---|
+| Approved reusable self knowledge | Canonical self root | Validated Markdown metadata, lifecycle, provenance, and explicit review |
+| Project execution artifacts | Independent project | Path containment and project-owned `.holoself/` operational state |
+| Read authorization | Project `.holoself/link.yaml` | Known lens allowlist, same-root validation, task/privacy filtering |
+| Generated retrieval | Context packet, MCP result, or local index | Bounded selection, source hashes, restrictions, receipts; rebuildable and non-authoritative |
+| Durable discovery | Project-local pending proposal | Contained evidence, exact preview hash, explicit approve/reject/defer decision |
+
+```text
+canonical self Markdown
+        │ link + lens + lifecycle + task + privacy
+        ▼
+bounded context result ─────► AI tool in an independent project
+                                      │ evidence-backed discovery
+                                      ▼
+                               pending proposal
+                                      │ human review
+                                      ▼
+                         approved canonical self change
+```
+
+There is no hosted control plane, background synchronization service, or second canonical database. The Workbench, CLI, project-bound MCP server, packets, and indexes are different interfaces over the same ownership and policy rules.
+
 Holoself is a local-first, Markdown-first whole-person context protocol. Public code and contribs ship in this repository; a user's profile and context live only in private data root. See [documentation map](README.md), [whole-person context](concepts/whole-person-context.md), [ownership](concepts/ownership.md), and [filesystem reference](reference/filesystem-layout.md).
 
 ## Data-root layout
