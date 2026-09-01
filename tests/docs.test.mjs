@@ -55,10 +55,11 @@ test('every documentation page is reachable from a public entry point',async()=>
   assert.deepEqual(files.filter(file=>!visited.has(file)).map(file=>file.slice(root.length+1)),[])
 })
 
-test('public docs use supported checkout install and current ecosystem terms',async()=>{
+test('public docs use supported npm install and current ecosystem terms',async()=>{
   const files=[join(root,'README.md'),...await markdownFiles(join(root,'docs'))]
   const text=(await Promise.all(files.map(file=>readFile(file,'utf8')))).join('\n')
-  assert.doesNotMatch(text,/npm install -g holoself-ai/)
+  assert.match(text,/npm install --global holoself-ai/)
+  assert.doesNotMatch(text,/npm (?:registry )?package (?:is |remains )?(?:not |un)published|not published yet/i)
   assert.doesNotMatch(text,/no secrets in index/i)
   assert.match(text,/link add --project/)
   assert.match(text,/proposal review/i)

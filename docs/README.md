@@ -14,7 +14,7 @@ If you are evaluating Holoself, the core contract is: **projects own execution a
 
 ## Command notation
 
-`node bin/holoself.mjs` runs the CLI directly from a repository checkout. `holoself` runs the same entry point through a package bin on `PATH`; this installed form is required when an MCP client launches Holoself. The npm registry package is not published yet, so checkout-first guides use the explicit Node form. See [CLI invocation and reference](reference/cli.md#invocation).
+Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `node bin/holoself.mjs` runs the same CLI directly from a repository checkout. The installed form is required when an MCP client launches Holoself. See [CLI invocation and reference](reference/cli.md#invocation).
 
 ## Start
 

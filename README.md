@@ -64,7 +64,7 @@ flowchart LR
 | SQLite/FTS acceleration | Planned, optional |
 | Embedding/vector search | Planned, optional |
 | Hosted sync or account | Not provided |
-| npm registry package | Not published yet |
+| npm registry package | Available as [`holoself-ai`](https://www.npmjs.com/package/holoself-ai) |
 
 ## Start here
 
@@ -81,14 +81,13 @@ Choose the path that matches what you want to do:
 | Integrate or assess the data model | [Architecture](docs/architecture.md#architecture-at-a-glance) |
 
 ```bash
-git clone https://github.com/smota/holoself.git
-cd holoself
-node bin/holoself.mjs init --data-dir C:/private/my-self
-node bin/holoself.mjs doctor --data-dir C:/private/my-self
-node bin/holoself.mjs validate --data-dir C:/private/my-self
+npm install --global holoself-ai
+holoself init --data-dir C:/private/my-self
+holoself doctor --data-dir C:/private/my-self
+holoself validate --data-dir C:/private/my-self
 ```
 
-These commands use the source-checkout form because the npm registry package is not published yet. Throughout the documentation, `node bin/holoself.mjs` means “run this checkout directly,” while `holoself` means the same CLI through a package bin available on `PATH`. MCP clients must use the installed `holoself` form because they launch the command outside this shell. See [CLI invocation and reference](docs/reference/cli.md#invocation).
+These commands install the `holoself` package bin on `PATH`. A repository checkout remains supported through `node bin/holoself.mjs`; both forms execute the same CLI. MCP clients use the installed `holoself` form because they launch the command outside this shell. See [CLI invocation and reference](docs/reference/cli.md#invocation).
 
 Install the declarative agent skill separately when useful:
 
@@ -109,7 +108,7 @@ Workbench is the easiest way to browse your context, understand linked projects,
 <p align="center"><em>A local overview of spaces, knowledge health, proposals, and recent conversations.</em></p>
 
 ```bash
-node bin/holoself.mjs web --root C:/private/my-self
+holoself web --root C:/private/my-self
 ```
 
 It opens on `127.0.0.1` and requires no hosted account. Start with the [screen-by-screen Workbench tour](docs/workbench/index.md). Architecture, connector, and trust-boundary details remain in the [Workbench reference](docs/web-gui.md).
@@ -117,12 +116,12 @@ It opens on `127.0.0.1` and requires no hosted account. Start with the [screen-b
 ## Link an independent project
 
 ```bash
-node bin/holoself.mjs link add \
+holoself link add \
   --project C:/work/my-project \
   --self C:/private/my-self \
   --lens career
 
-node bin/holoself.mjs context \
+holoself context \
   --project C:/work/my-project \
   --task "prepare interview" \
   --json
@@ -169,20 +168,20 @@ Never substitute one mode for another without reviewing privacy exposure. Startu
 
 ```bash
 # Inspect the validated lens vocabulary and project context
-node bin/holoself.mjs lens list --root C:/private/my-self
-node bin/holoself.mjs context --project C:/work/my-project --lens career --format packet --adapter claude
+holoself lens list --root C:/private/my-self
+holoself context --project C:/work/my-project --lens career --format packet --adapter claude
 
 # Produce non-mutating ownership/conflict recommendations
-node bin/holoself.mjs analyze all --project C:/work/my-project
+holoself analyze all --project C:/work/my-project
 
 # Propose reusable knowledge, then review it
-node bin/holoself.mjs propose --project C:/work/my-project --claim "..." --evidence "..." --source-file notes.md
-node bin/holoself.mjs proposals show <id> --project C:/work/my-project
-node bin/holoself.mjs proposals approve <id> --project C:/work/my-project --yes
+holoself propose --project C:/work/my-project --claim "..." --evidence "..." --source-file notes.md
+holoself proposals show <id> --project C:/work/my-project
+holoself proposals approve <id> --project C:/work/my-project --yes
 
 # Build and query disposable local indexes
-node bin/holoself.mjs index rebuild --project C:/work/my-project
-node bin/holoself.mjs search "regulated AI" --project C:/work/my-project --federated
+holoself index rebuild --project C:/work/my-project
+holoself search "regulated AI" --project C:/work/my-project --federated
 ```
 
 Approval prints target, evidence, affected files, and proposed diff before writing. Automation must pass `--yes` explicitly.

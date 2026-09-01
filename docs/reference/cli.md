@@ -4,8 +4,8 @@
 
 Both command forms execute `bin/holoself.mjs` and expose the same features:
 
-- `node bin/holoself.mjs ...` runs the current repository checkout directly. This is the default in checkout-first setup and development guides while the npm registry package is unpublished.
-- `holoself ...` uses a package bin available on `PATH`. Use this form only after verifying `holoself --version`; it is required for MCP client configuration because the client launches `holoself mcp` outside the setup shell.
+- `holoself ...` uses the `holoself-ai` package bin installed from npm and available on `PATH`. Verify it with `holoself --version`; this form is required for MCP client configuration because the client launches `holoself mcp` outside the setup shell.
+- `node bin/holoself.mjs ...` runs the current repository checkout directly. Use it for development or checkout-based evaluation without a global package installation.
 
 Examples in compact references, generated project instructions, and MCP documentation use the installed shorthand. They do not describe a different CLI.
 

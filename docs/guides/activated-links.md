@@ -59,7 +59,7 @@ holoself link skill migrate-global --project . --yes
 
 Migration validates every required global skill before changing the project, repairs the bounded activation metadata, removes generated project copies, records runtime schema 2 with `skillInstallPolicy: "global"`, and rolls back on failure. User-authored content outside managed skill markers is preserved; the remaining local file is reported as a project override and keeps `link doctor` degraded until the user relocates or reviews it.
 
-`link status` and `link doctor` report project and global skill installation separately from instruction activation. Under global policy, `doctor` also rejects unexpected project overrides. They report whether this process was invoked from the source checkout or a package bin; running `node bin/holoself.mjs` does **not** mean a global `holoself` command is installed. The npm package remains unpublished, so use the documented source-checkout invocation.
+`link status` and `link doctor` report project and global skill installation separately from instruction activation. Under global policy, `doctor` also rejects unexpected project overrides. They report whether this process was invoked from the source checkout or a package bin; running `node bin/holoself.mjs` does **not** mean a global `holoself` command is installed. Install `holoself-ai` from npm and verify `holoself --version` before configuring clients that launch the package bin.
 
 ## Project context boundaries
 
