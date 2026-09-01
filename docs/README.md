@@ -6,7 +6,7 @@ Use the shortest path that fits your goal. You do not need to read the documenta
 
 | Audience | Recommended path | What it answers |
 |---|---|---|
-| Regular user | [Quickstart](start/quickstart.md) → [Workbench](web-gui.md#first-run) → [Common use cases](guides/common-use-cases.md) | How do I start, use my context, and stay in control? |
+| Regular user | [Quickstart](start/quickstart.md) → [Workbench tour](workbench/index.md) → [Common use cases](guides/common-use-cases.md) | How do I start, use my context, and stay in control? |
 | Advanced user | [First linked project](start/first-linked-project.md) → [Activated links](guides/activated-links.md) → [Local MCP](guides/local-mcp.md) → [CLI reference](reference/cli.md) | How do I automate bounded context, search, review, and integration? |
 | Data architect | [Concepts in five minutes](start/concepts-in-five-minutes.md) → [Architecture](architecture.md#architecture-at-a-glance) → [Ownership](concepts/ownership.md) → [Lenses and privacy](concepts/lenses-and-privacy.md) → [Threat model](trust/threat-model.md) | Where is authority, how does data flow, and which controls enforce the boundary? |
 
@@ -38,6 +38,18 @@ If you are evaluating Holoself, the core contract is: **projects own execution a
 - [Local MCP integration](guides/local-mcp.md)
 - [Common use cases](guides/common-use-cases.md)
 - [Migration](guides/migration.md)
+
+## Workbench
+
+- [Guided tour and launch](workbench/index.md)
+- [Overview](workbench/overview.md)
+- [Spaces](workbench/spaces.md)
+- [Lenses](workbench/lenses.md)
+- [Knowledge](workbench/knowledge.md)
+- [Review](workbench/review.md)
+- [Conversations](workbench/conversations.md)
+- [Setup and connectors](workbench/setup.md)
+- [Architecture and trust boundary](web-gui.md)
 
 ## Reference
 

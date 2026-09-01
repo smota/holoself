@@ -57,7 +57,7 @@ Choose the path that matches what you want to do:
 | I want to… | Start with |
 |---|---|
 | Set up Holoself and see it working | [Quickstart](docs/start/quickstart.md) |
-| Manage context visually | [Workbench](docs/web-gui.md#first-run) |
+| Manage context visually | [Workbench guided tour](docs/workbench/index.md) |
 | Give an AI project relevant context | [First linked project](docs/start/first-linked-project.md) |
 | Solve a specific everyday task | [Common use cases](docs/guides/common-use-cases.md) |
 | Integrate or assess the data model | [Architecture](docs/architecture.md#architecture-at-a-glance) |
@@ -86,7 +86,7 @@ Workbench is the easiest way to browse your context, understand linked projects,
 node bin/holoself.mjs web --root C:/private/my-self
 ```
 
-It opens on `127.0.0.1` and requires no hosted account. Start with [the first-run Workbench tour](docs/web-gui.md#first-run). Advanced connector and trust-boundary details remain in the same guide.
+It opens on `127.0.0.1` and requires no hosted account. Start with the [screen-by-screen Workbench tour](docs/workbench/index.md). Architecture, connector, and trust-boundary details remain in the [Workbench reference](docs/web-gui.md).
 
 ## Link an independent project
 
@@ -160,7 +160,8 @@ Approval prints target, evidence, affected files, and proposed diff before writi
 - [Threat model](docs/trust/threat-model.md)
 - [Status and roadmap](docs/contributing/status-and-roadmap.md)
 - [Privacy policy](PRIVACY.md)
-- [Optional Web GUI](docs/web-gui.md)
+- [Workbench guided tour](docs/workbench/index.md)
+- [Workbench architecture and trust boundary](docs/web-gui.md)
 
 ## Development
 

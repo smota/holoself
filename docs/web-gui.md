@@ -2,6 +2,8 @@
 
 Holoself Workbench is the optional, local Web GUI for Holoself. Launch product code with an explicit canonical data root:
 
+For a screen-by-screen user guide with real Workbench screenshots, start with the [guided Workbench tour](workbench/index.md). This page remains the architecture, connector, and trust-boundary reference.
+
 ```bash
 cd C:/Code/holoself
 node bin/holoself.mjs web --root C:/Cowork/holoself-sam
@@ -21,13 +23,13 @@ Before launching, initialize and validate a canonical self root as shown in the 
 node bin/holoself.mjs web --root C:/private/my-self
 ```
 
-Use this first-run path:
+Use this first-run path. The linked pages explain each screen and its recovery states in detail:
 
-1. On **Overview**, confirm the header says `Canonical root · Ready`. Read any warning before continuing.
-2. Open **Knowledge** and verify that the generated identity and preferences files are visible. Edit their content only after reviewing the annotation fields; Workbench protects frontmatter and structured section markers.
-3. Open **Spaces** and choose **Link a folder** to connect an independent project. Select the least-broad lens that fits the project's purpose.
+1. On [**Overview**](workbench/overview.md), confirm the header says `Canonical root · Ready`. Read any warning before continuing.
+2. Open [**Knowledge**](workbench/knowledge.md) and verify that the generated identity and preferences files are visible. Edit their content only after reviewing the annotation fields; Workbench protects frontmatter and structured section markers.
+3. Open [**Spaces**](workbench/spaces.md) and choose **Link a folder** to connect an independent project. Select the least-broad lens that fits the project's purpose.
 4. Return to the space and use **Preview context**. Confirm the selected sources and restrictions match what the project should receive.
-5. Use **Review** only when a project has proposed reusable knowledge. Preview the exact target and evidence before approving, deferring, or rejecting it.
+5. Use [**Review**](workbench/review.md) only when a project has proposed reusable knowledge. Preview the exact target and evidence before approving, deferring, rejecting, or superseding it.
 
 You do not need to configure a connector to browse knowledge, manage spaces, or review proposals. **Conversations** and **Open here** are optional conveniences for detected local tools. If Workbench reports a space as Degraded, follow the specific corrective action or run `link doctor`; do not work around a failed privacy or path check.
 

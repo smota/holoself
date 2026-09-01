@@ -29,7 +29,7 @@ In Workbench:
 4. **Review** previews pending knowledge changes before a decision.
 5. **Setup** shows detected connectors and advanced configuration.
 
-Workbench stays on `127.0.0.1`. Stop it with Ctrl+C. See the [first-run tour](../web-gui.md#first-run).
+Workbench stays on `127.0.0.1`. Stop it with Ctrl+C. See the [screen-by-screen tour](../workbench/index.md).
 
 ## Reuse a project discovery without silently changing memory
 
