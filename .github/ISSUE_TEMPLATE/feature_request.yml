@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest a focused improvement to Holoself
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the user need without including personal or sensitive context.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed outcome
+      description: What should become easier, safer, or possible?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional existing workflows or smaller changes that may address the need.
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Contribution boundaries
+      options:
+        - label: This request preserves local-first operation and explicit review of durable context changes.
+          required: true
