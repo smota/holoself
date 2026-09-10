@@ -10,7 +10,14 @@ export const TRUST_INVARIANTS=[
   'Never modify canonical self directly; use proposal/review for durable self changes.',
   'Readable context is not publication approval; publishing requires explicit disclosure approval.'
 ]
-const hash=text=>createHash('sha256').update(text).digest('hex')
+const rawHash=text=>createHash('sha256').update(text).digest('hex')
+export const instructionHash=text=>rawHash(text.replaceAll('\r\n','\n'))
+// Accept legacy byte hashes as well as normalized hashes without ignoring content edits.
+export function instructionHashMatches(text,expected){
+  const normalized=text.replaceAll('\r\n','\n')
+  return [normalized,text,normalized.replaceAll('\n','\r\n')].some(value=>rawHash(value)===expected)
+}
+const hash=instructionHash
 
 export function bootstrapText(link){
   return `# Holoself startup\n\nRun \`holoself context --project . --task "<current request>" --budget standard --json\`; do not read linked canonical files directly.\nDefault lens: \`${link.default_lens}\`. The command applies privacy, relevance, lifecycle, and budget policy.\n${TRUST_INVARIANTS.join('\n')}\n`
