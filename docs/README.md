@@ -71,6 +71,7 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 
 - [Context and lenses specification](specifications/context-and-lenses-vnext.md)
 - [Context and lenses implementation plan and C-00 evidence](specifications/context-and-lenses-implementation-plan.md)
+- [C-02 research: catalog and freshness](specifications/c02-research-catalog-and-freshness.md)
 
 ## Releases
 

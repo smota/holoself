@@ -223,7 +223,7 @@ function privacyValueValid(key,value,registry=null){
   if(key==='field_visibility')return value&&typeof value==='object'&&!Array.isArray(value)&&Object.values(value).every(item=>typeof item==='string'&&VISIBILITIES.includes(item))
   if(key==='knowledge_status')return typeof value==='string'&&KNOWLEDGE_STATUSES.includes(value)
   if(key==='temporal_scope')return typeof value==='string'&&TEMPORAL_SCOPES.includes(value)
-  if(['valid_from','valid_until','review_after'].includes(key))return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))
+  if(['valid_from','valid_until','review_after'].includes(key))return typeof value==='string'&&/^(?:\d{4}-\d{2}-\d{2}|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))$/.test(value)&&!Number.isNaN(Date.parse(value.includes('T')?value:value+'T00:00:00.000Z'))
   if(key==='supersedes')return Array.isArray(value)&&value.every(item=>typeof item==='string'&&Boolean(item.trim()))
   if(key==='superseded_by')return typeof value==='string'&&Boolean(value.trim())
   return true
@@ -237,7 +237,11 @@ function canonicalPrivacyMetadataErrors(metadata,registry=null){
     else if(!privacyValueValid(key,metadata[key],registry)&&!errors.some(error=>error.startsWith(`invalid ${key} `)))errors.push(`invalid ${key} value`)
   }
   if(metadata.visibility==='public-safe'&&metadata.public_safe===false)errors.push('conflicting legacy privacy metadata: visibility public-safe with public_safe false')
-  if(metadata.valid_from&&metadata.valid_until&&Date.parse(metadata.valid_from)>Date.parse(metadata.valid_until))errors.push('valid_from must not be after valid_until')
+  if(metadata.valid_from&&metadata.valid_until){
+    const from=Date.parse(metadata.valid_from.includes('T')?metadata.valid_from:metadata.valid_from+'T00:00:00.000Z')
+    const until=Date.parse(metadata.valid_until.includes('T')?metadata.valid_until:metadata.valid_until+'T23:59:59.999Z')
+    if(from>until)errors.push('valid_from must not be after valid_until')
+  }
   if(metadata.knowledge_status==='superseded'&&!metadata.superseded_by)errors.push('superseded knowledge must name superseded_by')
   return [...new Set(errors)]
 }

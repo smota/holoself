@@ -36,9 +36,18 @@
     },
     "knowledge_status": { "enum": ["current", "historical", "superseded"], "default": "current" },
     "temporal_scope": { "enum": ["current", "time-bounded", "historical", "timeless"], "default": "current" },
-    "valid_from": { "type": ["string", "null"], "format": "date" },
-    "valid_until": { "type": ["string", "null"], "format": "date" },
-    "review_after": { "type": ["string", "null"], "format": "date" },
+    "valid_from": {
+      "type": ["string", "null"],
+      "pattern": "^(?:\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2}))$"
+    },
+    "valid_until": {
+      "type": ["string", "null"],
+      "pattern": "^(?:\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2}))$"
+    },
+    "review_after": {
+      "type": ["string", "null"],
+      "pattern": "^(?:\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2}))$"
+    },
     "supersedes": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
     "superseded_by": { "type": ["string", "null"], "minLength": 1 }
   },

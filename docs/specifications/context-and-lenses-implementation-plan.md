@@ -324,13 +324,211 @@ Escopo: R-06/R-07/R-11, A-03/A-04; V-01/V-02/V-07/V-08/V-11. Entrada: C-01 aprov
 |---|---|---|---|
 | T02-R | A | Rastrear buildIndex/readIndex/indexInputHash, seleção e caches; comparar opções locais JSON/SQLite e suporte do runtime pelos arquivos/dependências. | C-01; evidências e custo de invalidação. |
 | T02-S | Q | Fechar D-02/D-06 e preparar decisão D-08: schema fonte/trecho/revisão, escrita atômica e disputa, cache keys, limite/evicção, expiração, reconciliação, integridade e crash recovery. Congelar p95/IO/cache após baseline e decisão D-08. | R; contrato inclui espaço/política/revisão necessários a C-03/C-04; números de latência/cache ausentes bloqueiam D. |
-| T02-V | CO | Revisar D-08, TOCTOU, cache após revogação, hash com mesmo stat, perda de watcher, dois processos e corrupção. | T02-S + T03-S + T03-V; cenários explícitos, contratos compatíveis e decisão do usuário se houver alteração de V-01; só então liberar D. |
+| T02-V | CO | Revisar D-08, TOCTOU, cache após revogação, hash com mesmo stat, perda de watcher, dois processos e corrupção. | Aprovado por Claude Opus em 2026-09-20 (Rodada 5, status: approved). Libera T02-D1. |
 | T02-D1 | S | Implementar armazenamento derivado, atualização incremental, exclusão/rename e concorrência; reconstrução explícita. | V; tests de escrita concorrente, crash e reconstrução equivalente. |
 | T02-D2 | T | Integrar busca/manifesto/expansão direta e cache limitado ao catálogo; eliminar varreduras de corpos do caminho quente. | D1; V-01 conforme decisão D-08 registrada, expiração sem modificação e invalidadores por dimensão. |
 | T02-D3 | L | Automatizar benchmark reprodutível e relatórios de leituras, bytes, p50/p95, hits e espaço em disco. | V, harness C-00; medir D1/D2 final sem alterar thresholds. |
 | T02-F | Q | Exercitar escalas e falhas: consulta repetida satisfaz V-01 na versão decidida em D-08; manifesto válido zero corpos; expansão k lê no máximo k fontes selecionadas mais alterações necessárias; falhas não servem revisão indevida. | D1–D3; V-01 e V-02 reportados separadamente, limites congelados satisfeitos e nenhum ganho por perder evidência. |
 
-Arquivos iniciais: funções de índice em `src/ecosystem.mjs`, `src/context-selection.mjs`, `schemas/index.schema.json`, `tests/efficiency.test.mjs`. O backend escolhido precisa demonstrar atomicidade e compatibilidade; menor quantidade de código não substitui esse teste.
+Arquivos iniciais: funções de índice em `src/ecosystem.mjs`, `src/context-selection.mjs`, `schemas/catalog.schema.json`, `schemas/context-decision-cache.schema.json`, `tests/efficiency.test.mjs`. O backend escolhido precisa demonstrar atomicidade e compatibilidade; menor quantidade de código não substitui esse teste.
+
+### 6.1 Contrato detalhado C02-CONTRACT-1 v5 — catálogo incremental, lazy reading e cache governado
+
+Estado: proposta v5 consolidada por Q incorporando integralmente os achados H-19..H-21, M-18..M-20 e L-20..L-23 da Revisão 3 de Claude Opus em T02-V.
+
+#### 6.1.1 Arquitetura do Catálogo Particionado e Aposentadoria do Motor Legado (R-06, A-03, D-02, B-8, H-7, H-14, M-16, M-17, M-18, L-10, L-21, L-23)
+1. **Decisão D-02 e Caminhos Canônicos Normativos (L-10):**
+   - Adota-se o **Catálogo Determinístico JSON Particionado** sob os caminhos canônicos absolutos:
+     - Self: `<selfRoot>/.holoself/catalog/catalog.json` (apenas fontes canônicas de `self`).
+     - Project: `<projectDir>/.holoself/catalog/catalog.json` (apenas fontes locais do projeto).
+     - Cache de decisão: `<projectDir>/.holoself/runtime/context-cache/`.
+   - *Fundamentação técnica:* Mantém 100% de compatibilidade com o runtime declarado (`engines: {"node": ">=20"}`), prescinde de compilação C++ ou dependências externas (`package.json` limpo), e satisfaz I-01 (catálogo derivado e descartável).
+2. **Particionamento Real e Desacoplamento do Self (M-1, H-7, H-14, M-18):**
+   - O catálogo do self contém `space_id: "self"`, `lens_registry_hash`, e compulsoriamente **`project_context_hash: null`**. As fontes canônicas do self são universais para a pessoa e independem de políticas de inclusão de projetos específicos, eliminando o *thrashing* de invalidação entre projetos concorrentes vinculados ao mesmo self.
+   - O catálogo do projeto contém `space_id: "<projectId>"`, `lens_registry_hash` e compulsoriamente **`project_context_hash: sha256(canonicalJson(link.project_context))`**.
+   - A verificação de `link.project_context` é **escopada estritamente ao catálogo de projeto**; para a partição do self e partições de contribs, o validador assevera compulsoriamente `catalog.project_context_hash === null` (H-14, M-18).
+3. **Aposentadoria e Remoção Definitiva do Motor Legado `.holoself/index/index.json` (B-8, M-17, L-11, L-21):**
+   - O índice monolítico legado (`schema_version: 5`) em `.holoself/index/index.json` e seu schema `schemas/index.schema.json` são **formalmente descontinuados, aposentados e removidos do repositório**.
+   - As interfaces `buildIndex`, `readIndex`, `searchIndex` e os comandos CLI `holoself index status` e `holoself index rebuild` passam a operar internamente sobre o novo Catálogo Particionado (`schemas/catalog.schema.json`).
+   - Na inicialização ou migração para C-02, o diretório legado `.holoself/index/` é limpo e removido do projeto vinculado, eliminando o vazamento de corpos do self em texto claro no diretório do projeto. A remoção executa com retry e backoff; se persistir bloqueada no Windows por processos concorrentes, aborta a inicialização fail-closed com erro `LEGACY_INDEX_PURGE_FAILED` e diagnóstico claro (M-17).
+4. **Schema Estrito e Artefato Sensível (B-2, M-4, M-16, M-18, M-20, L-23):**
+   - Schema JSON formal e normativo definido em `schemas/catalog.schema.json` com vocabulário estrito sincronizado com `src/annotations.mjs`.
+   - Discrimina `project_context_hash` via condicional `if/then/else` (`null` para `space_id: "self" | "contrib"`; string sha256 de 64 hex para projetos) e exige a presença do campo em `required` (M-18).
+   - O catálogo armazena para cada fonte: `source_kind` (`"canonical" | "project" | "contrib"`, M-20), `source_ref`, `file`, `size`, `modified_ms`, `mtime_ns`, `ino`, `dev`, `source_text_hash`, metadados normalizados completos (`frontmatter`), seções com títulos, `section_id` e visibilidade já classificada, claims, tags, links e `estimated_tokens`.
+   - Permissões em disco: criados com modo `0o600`. Em Windows (onde o sistema mapeia apenas o bit de leitura), registra-se como mitigante estrutural o isolamento de processo e a alocação do self fora de qualquer repositório de projeto (M-16).
+   - Validação formal executada pela função dedicada `validateCatalogSchema` em `src/ecosystem.mjs` / `src/catalog.mjs` (L-23).
+
+#### 6.1.2 Proposta de Gate Cruzado: `SourceRef` e `SubjectSpacePolicyRev` (B-4, R-01, A-01, A-03, H-9, H-10, M-15, M-20, L-7, L-12)
+Em cumprimento à dependência cruzada entre T02-S e T03-S para C-03/C-04:
+1. **Definição Canônica de `SourceRef` (M-20):**
+   ```json
+   {
+     "space_id": "self" | "<project-id>" | "<peer-id>" | "contrib",
+     "source_id": "hs-[0-9a-f]{20}",
+     "revision": "<sha256-of-source-bytes>",
+     "section_id": "<heading-slug> | null"
+   }
+   ```
+   - Canonicalização estrita de `rel_path` e `source_id` (H-9, L-12, M-20):
+     - Para `self` e `project`: `canonical_rel_path = slash(relative(root, path)).normalize('NFC')` (com `.toLowerCase()` no Windows para case-folding).
+     - Para `contrib`: `canonical_rel_path = slash(relative(PACKAGE_ROOT, path)).normalize('NFC')` (com `.toLowerCase()` no Windows para case-folding; `space_id = "contrib"`).
+     - `source_id = hs-${sha256(space_id + "\0" + canonical_rel_path).slice(0, 20)}`.
+   - Regra estrita de revisão (L-7): `source_ref.revision === source_text_hash`.
+   - Unicidade e estabilidade de seção (H-10, M-15): cada seção em `sections[]` possui `section_id = slug(heading)` gerado por `heading.toLowerCase().normalize('NFC').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'section'`, com sufixo numérico posicional para colisões (`slug`, `slug-2`).
+2. **Definição de `SubjectSpacePolicyRev`:**
+   ```json
+   {
+     "subject": { "kind": "owner:direct" | "client:linked", "identity_id": "<sha256>" },
+     "space_id": "self" | "<project-id>" | "contrib",
+     "policy_revision": "<sha256(registry_hash + link_hash)>",
+     "allowed_lenses": ["..."]
+   }
+   ```
+
+#### 6.1.3 Invariantes de Entrega, Manifesto e Resolução Soberana da Decisão D-08 / V-01 (B-1, B-5, B-6, H-8, H-15, H-18, H-19, M-9)
+1. **Registro da Decisão D-08 do Usuário (B-5):**
+   - O usuário autorizou em 2026-09-20 a adoção formal da **Opção (b) / Verificação na Entrega** (Opção c arquitetural), estabelecendo a distinção soberana:
+     - Descoberta na consulta repetida: **0 releituras de corpo** (todas as $N-k$ fontes descartadas não são abertas nem lidas, resolvendo E-01 e E-02).
+     - Entrega na consulta repetida: exatamente **$k$ leituras** ($k \le 10$) dos corpos entregues para reavaliação de ACL, conferência de hash e redação intra-corpo.
+     - Manifesto quente: **0 leituras de corpo**.
+     - Expansão quente de $k$ handles: **$k$ leituras de corpo**.
+2. **Contadores Contábeis e Invariante de Entrega com Redação Reexecutada (INV-ENTREGA) (H-8, H-15, H-19, M-9):**
+   - Ficam formalmente estabelecidos três contadores de leitura:
+     - `bodyReads`: leituras de corpos Markdown para montagem e entrega de contexto ao agente.
+     - `catalog_reads`: leituras de corpos para indexação inicial ou reconciliação de stat no catálogo dentro de `ensureCatalog`.
+     - `reconcile_reads`: leituras adicionais decorrentes de divergência concorrente de hash na entrega.
+   - Em regime warm estável (zero alteração no corpus), T02-F assevera compulsoriamente: `catalog_reads = 0` e `reconcile_reads = 0`.
+   - Toda fonte selecionada para entrega tem seu corpo lido diretamente do arquivo Markdown:
+     a) O frontmatter é reparseado a partir do buffer recém-lido;
+     b) A ACL de acesso da lente ativa é reavaliada contra a identidade do chamador;
+     c) Os portões documentais por lente são reavaliados (`employer-confidential` bloqueado se não autorizado, `document_role: evidence` exige `publication_allowed` sob lentes de publicação);
+     d) A redação intra-documento é compulsoriamente reexecutada via `filterClaimVisibility` (remoção de blocos `<!-- holoself-claim visibility=private -->`) e `filterFieldVisibility` (remoção de seções/campos por visibilidade e blocos de compensação sob lente `publishing`) (H-19);
+     e) O hash do buffer cru recém-lido é confrontado com `source_text_hash` do catálogo;
+     f) Se o hash divergir: o sistema executa no máximo **2 iterações de reconciliação** (H-8). Se persistir divergente, a fonte é omitida da resposta com motivo seguro: `source concurrently modified; omitted fail-closed`. As leituras de divergência são reportadas em `reconcile_reads`;
+     g) Se a ACL ou portão documental divergir: a fonte é imediatamente omitida com motivo opaco (`restricted by policy`);
+     h) **O `content` entregue na resposta de contexto é obrigatoriamente derivado do buffer redigido — nunca do buffer cru validado por hash (H-19).**
+3. **Invariante de Manifesto (INV-MANIFESTO) e Qualificação de Frescor (B-6, H-18):**
+   - O manifesto (`manifest: true`) retorna exclusivamente metadados (`content: ''`).
+   - `ensureCatalog` valida o frescor por stat `(size, mtime_ns, ino, dev)`. Se qualquer stat divergir ou for incerto, a fonte é obrigatoriamente reconciliada (lida e reparseada) **antes** de emitir o manifesto. Fontes não comprovadas são omitidas fail-closed.
+   - *Qualificação de risco residual (H-18):* O manifesto garante frescor sob qualquer divergência observável de stat `(size, mtime_ns, ino, dev)`. Registra-se como risco residual legítimo da Opção (b) autorizada pelo usuário que alterações que preservem integralmente a tupla de stat no modo manifesto (onde k=0 corpos são lidos) não são detectadas sem releitura integral de corpos.
+
+#### 6.1.4 Cache de Decisão Livre de Corpos e Imunidade a Revogação (H-1, H-21, M-2, M-3, M-12, M-13, M-14, L-22, L-23)
+1. **Natureza do Cache Persistente:**
+   - O cache persistente grava **estritamente a decisão de seleção**, nunca corpos, resumos nem caminhos absolutos (`schemas/context-decision-cache.schema.json`).
+   - O campo `receipt` é estritamente tipado com `context_hash`, `task_hash`, `lens`, `budget`, `temporal`, `source_ids` e `source_hashes`.
+   - Admite `budget: "unbounded"` (M-13) e `lens: string | null` (M-14) conforme contratos de runtime.
+   - Reside em `<projectDir>/.holoself/runtime/context-cache/`, eliminando qualquer risco de vazamento de dados pessoais no projeto.
+2. **Chave Canônica de Cache Completa (H-21, M-3, L-14, L-20):**
+   ```javascript
+   catalog_hash = sha256(canonicalJson({
+     self: selfCatalog.sources.map(s => [s.source_ref.source_id, s.source_ref.revision]),
+     project: projectCatalog.sources.map(s => [s.source_ref.source_id, s.source_ref.revision])
+   }))
+   contrib_selection_hash = sha256(canonicalJson(
+     Array.isArray(config?.selectedContribs)
+       ? [...config.selectedContribs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+       : []
+   ))
+   requested_source_ids = Array.isArray(options.sources) && options.sources.length
+     ? [...options.sources].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+     : null
+   cacheKey = sha256(canonicalJson({
+     catalog_hash,
+     lens_registry_hash: registry.registry_hash,
+     contrib_selection_hash,
+     identity_id,
+     lens,
+     allowed_lenses: [...identity.allowedLenses].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+     task_hash,
+     temporal,
+     include_history: Boolean(options.includeHistory),
+     budget,
+     manifest: Boolean(options.manifest),
+     requested_source_ids,
+     cursor: options.cursor || null
+   }))
+   ```
+3. **Expurgo de Cache Legado por Validação de Schema (L-22):**
+   - Na inicialização ou carregamento de cache, todo arquivo em `<projectDir>/.holoself/runtime/context-cache/` que não contenha `schema_version: 2` válido conforme `schemas/context-decision-cache.schema.json` é imediatamente expurgado, garantindo que entradas legadas sem versão contendo corpos em texto claro sejam eliminadas.
+4. **Validação Formal de Schema (L-23):**
+   - Validação executada por `validateDecisionCacheSchema` em `src/ecosystem.mjs` / `src/catalog.mjs`.
+
+#### 6.1.5 Frescor por Stat Robusto, TOCTOU e Validação Bidirecional (H-2, H-3, H-4, H-14, M-7, L-6, L-8, L-23)
+1. **Tupla de Frescor Estrita (H-2, L-6, L-8):**
+   - Avalia `statSync(file, { bigint: true })` usando a tupla completa: `(size, mtime_ns, ino, dev)`, com `ino` e `dev` normalizados como strings decimais (`stat.ino.toString(10)`).
+   - A comparação de frescor valida conjuntamente `size`, `mtimeNs`, `ino` e `dev` (L-6).
+2. **Confronto de Registro de Lentes e Configuração de Projeto (H-3, H-14):**
+   - `ensureCatalog` compara obrigatoriamente `registry.registry_hash === catalog.lens_registry_hash`.
+   - A validação de `hash(canonicalJson(link.project_context)) === catalog.project_context_hash` aplica-se **exclusivamente ao catálogo do projeto**; para o catálogo do self e de contribs, assevera-se `catalog.project_context_hash === null` (H-14).
+3. **Sequência Anti-TOCTOU `stat -> read -> re-stat` (H-4):**
+   - Em toda indexação ou atualização:
+     1. `s0 = statSync(file, { bigint: true })`
+     2. `text = readFileSync(file, 'utf8')`
+     3. `s1 = statSync(file, { bigint: true })`
+     4. Se `s0.size !== s1.size || s0.mtimeNs !== s1.mtimeNs || s0.ino !== s1.ino || s0.dev !== s1.dev`: retry limitado (máx. 2). Persistindo, omite a fonte fail-closed sem gravar mtime falso no catálogo.
+4. **Tratamento de TOCTOU na Entrega (M-7):**
+   - Se um arquivo for deletado entre catálogo e entrega: `ENOENT` é capturado, a fonte é omitida com motivo opaco (`source unavailable at delivery`) e o catálogo local é atualizado, sem derrubar a requisição global.
+
+#### 6.1.6 Concorrência, Escrita Atômica e Resiliência Windows (H-5, H-11, H-16, M-10, L-1, L-2, L-9, L-20)
+1. **Helper Unificado `atomicWriteFile` (H-5, M-10, L-1):**
+   - Gravação em temporário `${target}.tmp-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}` com modo explícito `0o600`.
+   - Flush síncrono com `fsyncSync(fd)` antes de fechar o descritor.
+   - `renameSync` atômico para o destino final, seguido de `fsync` do diretório pai onde suportado pela plataforma.
+2. **Tratamento de Bloqueios no Windows (`EPERM` / `EBUSY`):**
+   - Retry com backoff exponencial curto (3 tentativas: 20ms, 50ms, 100ms) para superar bloqueios transitórios de antivírus e processos concorrentes.
+3. **Determinismo, Ordenação por Code-Unit Global e JSON Canônico (H-11, H-16, L-2, L-9, L-20):**
+   - A proibição de `localeCompare` é estendida a **toda ordenação que participe de hashes, decisões de seleção ou cursores**: `catalog.sources`, claims, tags, links, tokens, `requested_source_ids`, `allowed_lenses` e `stateHash` devem utilizar o comparador binário de UTF-16 code-unit `(a < b ? -1 : a > b ? 1 : 0)` (H-16, L-20).
+   - `canonicalJson` ordena chaves recursivamente por code-unit lexicográfico em mapeamentos YAML e metadados antes do cálculo de hash.
+   - `generated_at` é anotado e excluído do hash do catálogo, garantindo digest idêntico byte a byte.
+4. **Limpeza Segura de Temporários:**
+   - Varredura restrita a arquivos `.tmp-*` com mais de 5 minutos de idade e cujo PID emissor não esteja ativo (`try { process.kill(pid, 0) } catch`).
+
+#### 6.1.7 Governança de Cache, Configuração e Expiração Fail-Closed (B-3, H-6, H-17, H-20, M-8, M-11, L-3, L-4, L-13, L-16)
+1. **Superfície de Configuração de Cache (V-11, L-16):**
+   - `HOLOSELF_CACHE_MAX_ENTRIES`: default 256 arquivos.
+   - `HOLOSELF_CACHE_MAX_BYTES`: default 20.971.520 B (20 MiB).
+   - Precedência: Environment > `link.yaml` (`cache_limit_entries`, `cache_limit_bytes`) > Defaults. Validação fail-safe com adoção de default e avisos em caso de valor inválido.
+2. **Evicção LRU Confiável com Touch Resiliente (M-11, L-3):**
+   - Evicção LRU por `mtime`. Em cache hit, tenta `utimesSync(cacheFile, now, now)` com captura segura de falha (`try/catch`), garantindo que sistemas somente-leitura ou bloqueios transitórios não abortem a entrega de contexto.
+   - Temporários `.tmp-*` são estritamente excluídos da contagem e da evicção de cache.
+3. **Gramática Unificada e Sentinela Fail-Closed de `valid_until` (H-6, H-17, H-20, M-8, L-13):**
+   - Gramática canônica: aceita data ISO `YYYY-MM-DD` ou data-hora ISO com timezone `YYYY-MM-DDTHH:mm:ss(.\d+)?(Z|[+-]HH:mm)` (H-20).
+   - Normalização determinística: datas `YYYY-MM-DD` sem horário são interpretadas como `23:59:59.999Z` (final do dia UTC), garantindo que a fonte continue válida durante o dia declarado sem expirar prematuramente na autoria e viabilizando o cache warm em corpora datados (H-20).
+   - Conversão para `valid_until_epoch_ms`:
+     - Se `valid_until` for ausente ou `null`: fica fora do cálculo de `min(valid_until_epoch_ms)` e grava `null` na ausência total (M-8).
+     - Se presente e parseável: convertido para timestamp UTC numérico em milissegundos.
+     - Se presente mas ilegível ou malformado: **fail-closed atribuindo sentinela `valid_until_epoch_ms = 0`** (expirado imediatamente, H-17, H-20).
+   - Alinhamento de runtime (H-20): `dateValue` em `src/context-selection.mjs` adota a mesma normalização de final de dia e retorna sentinela `0` em valores inválidos, garantindo que fontes malformadas expirem fail-closed de forma consistente tanto na seleção temporal quanto no cache.
+   - Comparação numérica: `if (cached.valid_until_epoch_ms !== null && Date.now() >= cached.valid_until_epoch_ms) return cacheMiss()`.
+
+#### 6.1.8 Limites Quantitativos Congelados (B-3, B-5, B-7, H-15, M-9, M-19)
+Orçamentos congelados após decisão D-08 autorizada, condicionados a regime warm estável (zero divergência de stat):
+
+| Cenário | Corpus $N$ | Orçamento `bodyReads` (Entrega) | Orçamento `catalog_reads` (Indexação) | Orçamento `metadataOps` | p95 Latência (Alvo) | Condição de Regime |
+|---|---|---|---|---|---|---|
+| **CLI Context Cold** | 100 / 1.000 / 10.000 | **$\le k$** ($k \le 10$) | **$\le N$** (primeira indexação) | $\le 2N + 20$ | $\le 150\text{ ms} / 1.000\text{ ms} / 6.000\text{ ms}$ | Frio / reconstrução |
+| **CLI Context Warm (Repetido)** | 100 / 1.000 / 10.000 | **$\le k$** ($k \le 10$ entregues) | **0** | $\le N + 20$ | $\le 40\text{ ms} / 120\text{ ms} / 600\text{ ms}$ | `catalog_reads = 0`, `reconcile_reads = 0` |
+| **Manifest Warm** | 100 / 1.000 / 10.000 | **0** (zero leituras) | **0** | $\le N + 20$ | $\le 30\text{ ms} / 80\text{ ms} / 400\text{ ms}$ | `catalog_reads = 0`, `reconcile_reads = 0` |
+| **Expansão Warm ($k$ handles)** | 100 / 1.000 / 10.000 | **$\le k$** (apenas pedidos) | **0** | $\le k + 10$ | $\le 20\text{ ms} / 30\text{ ms} / 50\text{ ms}$ | `catalog_reads = 0`, `reconcile_reads = 0` |
+| **Busca Índice Warm** | 100 / 1.000 / 10.000 | **0** (zero leituras) | **0** | $\le N + 20$ (frescor validado) | $\le 30\text{ ms} / 80\text{ ms} / 400\text{ ms}$ | `catalog_reads = 0`, `reconcile_reads = 0` |
+
+#### 6.1.9 Busca Integrada e Contribs (B-2, B-7, M-6, M-20)
+1. **Busca Integrada com Frescor:**
+   - A busca (`searchIndex`) executa compulsoriamente `ensureCatalog` antes de pesquisar, garantindo que o índice de seções e claims reflita o estado corrente com orçamento $\le N + 20$.
+   - Trechos entregues respeitam a visibilidade computada durante a catalogação; proíbe aplicação de filtros em texto truncado.
+2. **Modelo de Catálogo para Contribs Representável (M-6, M-20):**
+   - Métodos reutilizáveis (`contribs`) são indexados em partição em memória com `space_id: "contrib"`, `source_kind: "contrib"`, derivada de `PACKAGE_ROOT/contribs`.
+   - Cada método reutilizável possui `SourceRef` em conformidade estrita com `schemas/catalog.schema.json` e `schemas/context-decision-cache.schema.json`:
+     `source_id = hs-${sha256("contrib\0" + slash(relative(PACKAGE_ROOT, path)).normalize('NFC')).slice(0, 20)}`.
+   - Seções, claims e tokens são catalogados uma única vez na inicialização sem I/O repetido.
+
+#### 6.1.10 Pontos de Aplicação dos Validadores Formais de Schema (L-23)
+- O validador de catálogo `validateCatalogSchema` e o validador de cache `validateDecisionCacheSchema` residem formalmente em `src/ecosystem.mjs` (ou módulo de catálogo correspondente).
+- São executados compulsoriamente na emissão/leitura de catálogos e caches e cobertos diretamente por testes em `tests/efficiency.test.mjs` e `tests/ecosystem.test.mjs`.
+
+
+
+
 
 ## 7. C-03 — lentes como perspectivas e migração
 

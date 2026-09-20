@@ -6,12 +6,31 @@ import { basename } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { applyCleanupPlan, buildCleanupPlan } from '../src/cleanup.mjs'
-import { contextNeed, selectContextRecords, sourceId } from '../src/context-selection.mjs'
+import { contextNeed, selectContextRecords, sourceId, dateValue, temporalDisposition } from '../src/context-selection.mjs'
 import { runHarness } from '../src/harnesses.mjs'
 import { run } from '../src/cli.mjs'
 
 const temp=()=>mkdtempSync(join(tmpdir(),'holoself-efficiency-'))
 const record=(path,content,metadata={},kind='self')=>({kind,path,content,metadata,source_hash:`hash-${path}`,document_role:'content'})
+
+test('valid_until supports date-only end-of-day normalization and sentinel 0 fail-closed',()=>{
+  assert.equal(dateValue('2026-09-20',true),Date.parse('2026-09-20T23:59:59.999Z'))
+  assert.equal(dateValue('2026-09-20T12:00:00Z',true),Date.parse('2026-09-20T12:00:00Z'))
+  assert.equal(dateValue('not-a-date',true),0)
+  assert.equal(dateValue('',true),null)
+  assert.equal(dateValue(null,true),null)
+
+  const validDoc=temporalDisposition({knowledge_status:'current',valid_until:'2026-09-20'},'',{now:'2026-09-20T10:00:00.000Z',temporal:'current'})
+  assert.equal(validDoc.include,true)
+
+  const expiredDoc=temporalDisposition({knowledge_status:'current',valid_until:'2026-09-20'},'',{now:'2026-09-21T00:00:00.000Z',temporal:'current'})
+  assert.equal(expiredDoc.include,false)
+  assert.equal(expiredDoc.status,'historical')
+
+  const malformedDoc=temporalDisposition({knowledge_status:'current',valid_until:'corrupted-date'},'',{now:'2026-09-20T10:00:00.000Z',temporal:'current'})
+  assert.equal(malformedDoc.include,false)
+  assert.equal(malformedDoc.status,'historical')
+})
 
 test('context selection is bounded, manifest-first, lifecycle-aware, and handle-addressable',()=>{
   const records=[record('context/current.md','career evidence '.repeat(2000)),record('context/history.md','career history',{knowledge_status:'historical',temporal_scope:'historical'}),record('context/old.md','superseded claim',{knowledge_status:'superseded',superseded_by:'claim-new'}),record('Context/project.md','career project',{},'project')]

@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/catalog.schema.json",
+  "title": "Holoself deterministic incremental catalog",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "space_id",
+    "lens_registry_hash",
+    "project_context_hash",
+    "generated_at",
+    "sources"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "space_id": { "type": "string" },
+    "lens_registry_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "project_context_hash": { "type": ["string", "null"] },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source_kind",
+          "source_ref",
+          "file",
+          "size",
+          "modified_ms",
+          "mtime_ns",
+          "ino",
+          "dev",
+          "source_text_hash",
+          "frontmatter",
+          "sections",
+          "claims",
+          "tags",
+          "links",
+          "estimated_tokens"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "source_kind": {
+            "type": "string",
+            "enum": ["canonical", "project", "contrib"]
+          },
+          "source_ref": {
+            "type": "object",
+            "required": ["space_id", "source_id", "revision", "section_id"],
+            "additionalProperties": false,
+            "properties": {
+              "space_id": { "type": "string" },
+              "source_id": { "type": "string", "pattern": "^hs-[0-9a-f]{20}$" },
+              "revision": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "section_id": { "type": ["string", "null"] }
+            }
+          },
+          "file": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0 },
+          "modified_ms": { "type": "number" },
+          "mtime_ns": { "type": "string", "pattern": "^[0-9]+$" },
+          "ino": { "type": "string", "pattern": "^[0-9]+$" },
+          "dev": { "type": "string", "pattern": "^[0-9]+$" },
+          "source_text_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "frontmatter": {
+            "type": "object",
+            "required": [
+              "access_lenses",
+              "disclosure",
+              "sensitivity",
+              "document_role",
+              "publication_allowed",
+              "task_include",
+              "task_exclude",
+              "visibility",
+              "field_visibility",
+              "knowledge_status",
+              "temporal_scope"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "access_lenses": { "type": "array", "items": { "type": "string" } },
+              "disclosure": { "type": "string", "enum": ["internal-only", "review-required", "publish-approved"] },
+              "sensitivity": {
+                "type": "string",
+                "enum": [
+                  "public",
+                  "none",
+                  "personal",
+                  "application-private",
+                  "compensation-confidential",
+                  "third-party-personal",
+                  "recruiter-confidential",
+                  "employer-confidential",
+                  "restricted"
+                ]
+              },
+              "document_role": { "type": "string", "enum": ["policy", "evidence", "content"] },
+              "publication_allowed": { "type": "boolean" },
+              "task_include": { "type": "array", "items": { "type": "string" } },
+              "task_exclude": { "type": "array", "items": { "type": "string" } },
+              "visibility": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] },
+              "public_safe": { "type": ["boolean", "null"] },
+              "confidence": { "type": ["string", "null"] },
+              "exclude_lenses": { "type": "array", "items": { "type": "string" } },
+              "field_visibility": {
+                "type": "object",
+                "additionalProperties": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] }
+              },
+              "knowledge_status": { "type": "string", "enum": ["current", "historical", "superseded"] },
+              "temporal_scope": { "type": "string", "enum": ["current", "time-bounded", "historical", "timeless"] },
+              "valid_from": {
+                "type": ["string", "null"],
+                "pattern": "^(?:\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2}))$"
+              },
+              "valid_until": {
+                "type": ["string", "null"],
+                "pattern": "^(?:\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2}))$"
+              },
+              "valid_until_epoch_ms": { "type": ["integer", "null"] },
+              "review_after": {
+                "type": ["string", "null"],
+                "pattern": "^(?:\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2}))$"
+              },
+              "supersedes": { "type": "array", "items": { "type": "string" } },
+              "superseded_by": { "type": ["string", "null"] }
+            }
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["section_id", "heading", "visibility", "disclosure", "claim", "snippet"],
+              "additionalProperties": false,
+              "properties": {
+                "section_id": { "type": "string" },
+                "heading": { "type": "string" },
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] },
+                "disclosure": { "type": "string", "enum": ["internal-only", "review-required", "publish-approved"] },
+                "claim": { "type": "boolean" },
+                "snippet": { "type": "string" }
+              }
+            }
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["text", "visibility"],
+              "additionalProperties": false,
+              "properties": {
+                "text": { "type": "string" },
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] }
+              }
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["value", "visibility"],
+              "additionalProperties": false,
+              "properties": {
+                "value": { "type": "string" },
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] }
+              }
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["value", "visibility"],
+              "additionalProperties": false,
+              "properties": {
+                "value": { "type": "string" },
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] }
+              }
+            }
+          },
+          "estimated_tokens": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "if": {
+    "properties": { "space_id": { "enum": ["self", "contrib"] } }
+  },
+  "then": {
+    "properties": { "project_context_hash": { "type": "null" } }
+  },
+  "else": {
+    "properties": { "project_context_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+  }
+}

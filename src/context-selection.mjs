@@ -17,10 +17,10 @@ export function estimateTokens(chars){return Math.ceil(Number(chars||0)/4)}
 export function tokenize(text){return [...new Set((String(text).toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]).filter(token=>!STOPWORDS.has(token)))]}
 export function contextNeed(task=''){const tokens=new Set(tokenize(task));if(['identity','career','leadership','voice','preference','personal','interview','application','holoself'].some(x=>tokens.has(x)))return 'required';if(['format','rename','compile','lint','test','syntax','install'].some(x=>tokens.has(x)))return 'not-needed';return task?'helpful':'not-needed'}
 
-function dateValue(value){if(typeof value!=='string'||!value.trim())return null;const parsed=Date.parse(value);return Number.isNaN(parsed)?null:parsed}
+export function dateValue(value,isEnd=false){if(typeof value!=='string'||!value.trim())return null;const str=value.trim(),iso=/^\d{4}-\d{2}-\d{2}$/.test(str)?(str+(isEnd?'T23:59:59.999Z':'T00:00:00.000Z')):str,parsed=Date.parse(iso);return Number.isNaN(parsed)?0:parsed}
 export function temporalDisposition(metadata={},task='',options={}){
   const declaredStatus=KNOWLEDGE_STATUSES.includes(metadata.knowledge_status)?metadata.knowledge_status:'current'
-  const now=options.now?Date.parse(options.now):Date.now(),until=dateValue(metadata.valid_until),status=declaredStatus==='current'&&until!==null&&until<now?'historical':declaredStatus
+  const now=options.now?Date.parse(options.now):Date.now(),until=dateValue(metadata.valid_until,true),status=declaredStatus==='current'&&until!==null&&until<now?'historical':declaredStatus
   const scope=TEMPORAL_SCOPES.includes(metadata.temporal_scope)?metadata.temporal_scope:(status==='current'?'current':'historical')
   const taskTokens=new Set(tokenize(task)),temporal=options.temporal||'current',historyRequested=Boolean(options.includeHistory)||temporal!=='current'||['history','historical','previous','past','superseded','archive','timeline'].some(token=>taskTokens.has(token))
   if(!['current','historical','superseded','all'].includes(temporal))throw new Error(`invalid temporal selector: ${temporal}`)
