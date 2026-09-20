@@ -15,7 +15,7 @@ async function linkedFixture(){
   const self=await temp(),project=await temp()
   await run(['init','--root',self])
   await mkdir(join(project,'Context'),{recursive:true})
-  await run(['link','add','--project',project,'--self',self,'--lens','publishing','--yes'])
+  await run(['link','add','--project',project,'--self',self,'--lens','publishing','--secondary-lenses','career','--yes'])
   return {self,project}
 }
 

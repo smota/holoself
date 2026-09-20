@@ -20,7 +20,7 @@ async function fixture(){
   await mkdir(join(project,'Context'),{recursive:true})
   await writeFile(join(project,'Context','career-profile.md'),'# Career profile\n\nLed 25 engineers in regulated AI.\n')
   await writeFile(join(project,'README.md'),'# Project\n\nRegulated AI execution workspace.\n')
-  await run(['link','add','--project',project,'--self',self,'--lens','career','--yes'])
+  await run(['link','add','--project',project,'--self',self,'--lens','career','--secondary-lenses','publishing,general','--yes'])
   return {self,project}
 }
 

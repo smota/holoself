@@ -67,6 +67,11 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 
 - [Local MCP architecture](decisions/local-mcp-architecture.md)
 
+## Development specifications
+
+- [Context and lenses specification](specifications/context-and-lenses-vnext.md)
+- [Context and lenses implementation plan and C-00 evidence](specifications/context-and-lenses-implementation-plan.md)
+
 ## Releases
 
 - [Holoself 0.8.0](releases/0.8.0.md)

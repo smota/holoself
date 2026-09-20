@@ -17,7 +17,7 @@ test('machine-readable capabilities and version are stable', async()=>{
 
 test('self-only context excludes project documents for bounded consumers', async()=>{
   const root=await temp(),project=await temp();await run(['init','--root',root]);await writeFile(join(project,'notes.md'),'# Project-only marker\n')
-  await run(['link','add','--project',project,'--self',root,'--no-activate','--yes'])
+  await run(['link','add','--project',project,'--self',root,'--lens','career','--no-activate','--yes'])
   const packet=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','career','--self-only','--json'])))
   assert.ok(packet.self.documents.length>0);assert.deepEqual(packet.project.documents,[]);assert.ok(packet.sources.every(source=>source.kind==='self'))
 })

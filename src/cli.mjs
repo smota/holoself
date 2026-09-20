@@ -2,6 +2,7 @@ import {
   existsSync, lstatSync, mkdirSync, readFileSync, readdirSync,
   renameSync, rmSync, symlinkSync, unlinkSync, readlinkSync, writeFileSync, cpSync
 } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join, resolve, relative, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -59,6 +60,7 @@ function parse(args){
     else if(a==='--task') o.task=requiredValue(args,i++,a)
     else if(a==='--budget') o.budget=requiredValue(args,i++,a)
     else if(a==='--temporal') o.temporal=requiredValue(args,i++,a)
+    else if(a==='--cursor') o.cursor=requiredValue(args,i++,a)
     else if(a==='--source') { o.sources=o.sources||[];o.sources.push(requiredValue(args,i++,a)) }
     else if(a==='--manifest') o.manifest=true
     else if(a==='--include-history') o.includeHistory=true
@@ -351,6 +353,9 @@ export async function run(argv){
   if(await runEcosystem(o)) return
   if(o.command==='init'){
     ensureDir(root); for(const name of ['context','topics','reference','me','exports','history']) ensureDir(join(root,name));for(const state of ['pending','approved','rejected','deferred','superseded'])ensureDir(join(root,'proposals',state)); ensureDir(join(root,'contribs','local')); ensureDir(join(root,'profile'))
+    ensureDir(join(root,'.holoself','runtime'))
+    const cursorKeyPath=join(root,'.holoself','runtime','.cursor.key')
+    if(!existsSync(cursorKeyPath))try{writeFileSync(cursorKeyPath,randomBytes(32),{mode:0o600})}catch{}
     if(!existsSync(join(root,'topics','.current'))) atomicWrite(join(root,'topics','.current'),'')
     if(!existsSync(join(root,'reference','README.md'))) atomicWrite(join(root,'reference','README.md'),'# Private reference\n\nKeep private reference material here. It is never published as a public contrib.\n')
     if(!existsSync(join(root,'me','contribs.md'))) atomicWrite(join(root,'me','contribs.md'),'# Local self-model extensions\n\nList private contrib paths here when needed.\n')

@@ -1,8 +1,9 @@
-import { createHash } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 export const CONTEXT_BUDGETS=Object.freeze({small:8_000,standard:24_000,deep:64_000,unbounded:Number.MAX_SAFE_INTEGER})
+export const ENVELOPE_BYTE_CAPS=Object.freeze({small:16_384,standard:49_152,deep:131_072,unbounded:Number.MAX_SAFE_INTEGER})
 export const KNOWLEDGE_STATUSES=Object.freeze(['current','historical','superseded'])
 export const TEMPORAL_SCOPES=Object.freeze(['current','time-bounded','historical','timeless'])
 
@@ -34,7 +35,7 @@ export function relevanceScore(record,task){
   if(!task)return record.document_role==='policy'?4:1
   const wanted=tokenize(task),pathTokens=new Set(tokenize(record.path)),contentTokens=new Set(tokenize(record.content)),headingTokens=new Set(tokenize((record.content.match(/^#{1,3}\s+.+$/gm)||[]).join(' ')))
   let score=0
-  for(const token of wanted){if(pathTokens.has(token))score+=6;if(headingTokens.has(token))score+=3;if(contentTokens.has(token))score+=1}
+  for(const token of wanted){if(pathTokens.has(token))score+=6;if(headingTokens.has(token))score+=3;if(contentTokens.has(token))score+=2}
   if(record.document_role==='policy')score+=2
   if(/^profile\/(?:identity|work-context|preferences|voice|thinking|change)\.md$/i.test(record.path))score+=2
   if(record.kind==='contrib')score=Math.max(0,score-2)
@@ -61,9 +62,15 @@ function contradictionDigest(records){
   for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++)if(items[i].headings.some(value=>items[j].headings.includes(value))&&items[i].numbers.length&&items[j].numbers.length&&items[i].numbers.some(value=>!items[j].numbers.includes(value)))pairs.push([items[i].id,items[j].id])
   const provenance=items.map(({id,supersedes,superseded_by})=>({id,supersedes,superseded_by}));return {schema_version:1,digest:hash(JSON.stringify(provenance)),supersession_edges:provenance.reduce((sum,item)=>sum+item.supersedes.length+Number(Boolean(item.superseded_by)),0),potential_conflicts:pairs.length,source_pairs:pairs.slice(0,20)}
 }
+export function buildCursor(identityId,lens,budgetName,manifest,selfId,taskHash,temporalVal,nextOffset,stateHash,cursorSecret){
+  const payloadToSign=`v1|${identityId}|${lens}|${budgetName}|${manifest?'true':'false'}|${selfId||''}|${taskHash}|${temporalVal}|${nextOffset}|${stateHash}`
+  const sig=cursorSecret?createHmac('sha256',cursorSecret).update(payloadToSign).digest('hex'):hash(payloadToSign)
+  return Buffer.from(JSON.stringify({p:{v:1,identity_id:identityId,lens,budget:budgetName,manifest:Boolean(manifest),self_id:selfId||'',task_hash:taskHash,temporal:temporalVal,offset:nextOffset,state_hash:stateHash},sig})).toString('base64url')
+}
 export function selectContextRecords(records,options={}){
   const budgetName=options.budget||'standard',budgetChars=CONTEXT_BUDGETS[budgetName]
   if(!budgetChars)throw new Error(`invalid context budget: ${budgetName}`)
+  const envelopeCap=ENVELOPE_BYTE_CAPS[budgetName]||ENVELOPE_BYTE_CAPS.standard
   const requested=new Set(options.sources||[]),temporalExcluded=[],candidates=[]
   for(const record of records){
     const temporal=temporalDisposition(record.metadata,options.task,{includeHistory:options.includeHistory,temporal:options.temporal,now:options.now})
@@ -73,34 +80,88 @@ export function selectContextRecords(records,options={}){
     candidates.push({...record,task_relevance:score,source_id:id,knowledge_status:temporal.status,temporal_scope:temporal.scope})
   }
   candidates.sort((a,b)=>{
-    if(requested.size)return a.path.localeCompare(b.path)
-    return b.task_relevance-a.task_relevance||a.path.localeCompare(b.path)
+    if(requested.size)return a.path.localeCompare(b.path)||a.source_id.localeCompare(b.source_id)
+    return b.task_relevance-a.task_relevance||a.path.localeCompare(b.path)||a.source_id.localeCompare(b.source_id)
   })
-  const selected=[],omitted=[];let chars=0
-  for(const record of candidates){
-    if(options.task&&!requested.size&&record.kind==='project'&&record.task_relevance<=0&&record.document_role!=='policy'){omitted.push({source:record.path,reason:'no meaningful task relevance'});continue}
-    if(record.kind==='contrib'&&selected.filter(item=>item.kind==='contrib').length>=2){omitted.push({source:record.path,reason:'contrib selection limit reached'});continue}
-    if(options.manifest){selected.push({...record,content:'',manifest_only:true,truncated:false});continue}
-    const remaining=budgetChars-chars
-    if(remaining<160){omitted.push({source:record.path,reason:`context budget ${budgetName} exhausted`});continue}
-    const result=excerpt(record.content,options.task,remaining)
-    if(!result.content.trim()){omitted.push({source:record.path,reason:'empty after filtering'});continue}
-    selected.push({...record,content:result.content,truncated:result.truncated});chars+=result.content.length
+
+  const taskHash=hash(String(options.task||''))
+  const temporalVal=options.temporal||'current'
+  const identityId=options.identityId||'anonymous'
+  const stateHash=hash(JSON.stringify([options.registryHash||'',options.allowedLenses||[],candidates.map(c=>[c.source_id,c.source_hash])]))
+
+  let startOffset=0
+  if(options.cursor){
+    let parsed
+    try{parsed=JSON.parse(Buffer.from(options.cursor,'base64url').toString('utf8'))}catch{const err=new Error('malformed cursor');err.code='CURSOR_INVALID';throw err}
+    if(!parsed?.p||!parsed?.sig||typeof parsed.sig!=='string'){const err=new Error('invalid cursor format');err.code='CURSOR_INVALID';throw err}
+    const p=parsed.p
+    if(p.v!==1||p.identity_id!==identityId||p.lens!==options.lens||p.task_hash!==taskHash||p.temporal!==temporalVal){const err=new Error('cursor parameter mismatch');err.code='CURSOR_INVALID';throw err}
+    if(options.cursorSecret){
+      const expectedPayload=`v1|${p.identity_id}|${p.lens}|${p.budget}|${p.manifest}|${p.self_id}|${p.task_hash}|${p.temporal}|${p.offset}|${p.state_hash}`
+      const expectedSig=createHmac('sha256',options.cursorSecret).update(expectedPayload).digest('hex')
+      const sigBuf=Buffer.from(parsed.sig),expBuf=Buffer.from(expectedSig)
+      if(sigBuf.length!==expBuf.length||!timingSafeEqual(sigBuf,expBuf)){const err=new Error('invalid cursor signature');err.code='CURSOR_INVALID';throw err}
+    }
+    if(p.state_hash!==stateHash){const err=new Error('cursor state expired due to changes; restart from offset 0');err.code='CURSOR_INVALID';throw err}
+    startOffset=Number.isInteger(p.offset)&&p.offset>=0?p.offset:0
   }
-  const receiptInput={budget:budgetName,task_hash:hash(String(options.task||'')),lens:options.lens||null,sources:selected.map(record=>[record.source_id,record.source_hash,record.truncated])}
+
+  const selected=[],omitted=[];let chars=0,nextCursor=null,isTruncated=false
+  if(options.manifest){
+    const PAGE_SIZE=10
+    let curr=startOffset
+    while(curr<candidates.length&&selected.length<PAGE_SIZE){
+      const record=candidates[curr]
+      const approxBytes=Buffer.byteLength(JSON.stringify({source_id:record.source_id,path:record.path,kind:record.kind,metadata:record.metadata}))
+      if(approxBytes>envelopeCap){
+        omitted.push({source:record.path,reason:'source exceeds envelope budget'})
+        curr++;isTruncated=true;break
+      }
+      selected.push({...record,content:'',manifest_only:true,truncated:false})
+      curr++
+    }
+
+    if(curr<candidates.length){
+      nextCursor=buildCursor(identityId,options.lens,budgetName,true,options.selfId,taskHash,temporalVal,curr,stateHash,options.cursorSecret)
+    }else{
+      nextCursor=null
+    }
+  }else{
+    for(const record of candidates){
+      if(options.task&&!requested.size&&record.kind==='project'&&record.task_relevance<=0&&record.document_role!=='policy'){omitted.push({source:record.path,reason:'no meaningful task relevance'});continue}
+      if(record.kind==='contrib'&&selected.filter(item=>item.kind==='contrib').length>=2){omitted.push({source:record.path,reason:'contrib selection limit reached'});continue}
+      const remaining=budgetChars-chars
+      if(remaining<160){omitted.push({source:record.path,reason:`context budget ${budgetName} exhausted`});isTruncated=true;continue}
+      const result=excerpt(record.content,options.task,remaining)
+      if(!result.content.trim()){omitted.push({source:record.path,reason:'empty after filtering'});continue}
+      selected.push({...record,content:result.content,truncated:result.truncated})
+      chars+=result.content.length
+      if(result.truncated)isTruncated=true
+    }
+  }
+
+  const receiptInput={budget:budgetName,task_hash:taskHash,lens:options.lens||null,sources:selected.map(record=>[record.source_id,record.source_hash,record.truncated])}
+  const serializedContentBytes=Buffer.byteLength(JSON.stringify(selected))
+  const estimatedTokensTotal=Math.ceil(serializedContentBytes/4)
+
   return {
     records:selected,
     omitted,
     temporalExcluded,
+    candidates,
+    startOffset,
+    taskHash,
+    temporalVal,
+    stateHash,
     selection:{
-      schema_version:1,context_need:contextNeed(options.task),budget:budgetName,budget_chars:budgetChars===Number.MAX_SAFE_INTEGER?null:budgetChars,manifest_only:Boolean(options.manifest),temporal:options.temporal||'current',candidate_count:records.length,eligible_count:candidates.length,selected_count:selected.length,omitted_count:omitted.length+temporalExcluded.length,content_chars:chars,estimated_tokens:estimateTokens(chars),truncated_sources:selected.filter(record=>record.truncated).map(record=>record.source_id),selected_sources:selected.map(record=>record.source_id),temporal_excluded:temporalExcluded.length,contrib_sources:selected.filter(record=>record.kind==='contrib').map(record=>record.source_id),contradiction_digest:contradictionDigest(selected)
+      schema_version:1,context_need:contextNeed(options.task),budget:budgetName,budget_chars:budgetChars===Number.MAX_SAFE_INTEGER?null:budgetChars,manifest_only:Boolean(options.manifest),temporal:temporalVal,candidate_count:records.length,eligible_count:candidates.length,selected_count:selected.length,omitted_count:omitted.length+temporalExcluded.length,content_chars:chars,estimated_tokens:estimateTokens(chars),estimated_tokens_total_heuristic:estimatedTokensTotal,truncated:isTruncated||selected.some(r=>r.truncated),truncated_sources:selected.filter(record=>record.truncated).map(record=>record.source_id),selected_sources:selected.map(record=>record.source_id),temporal_excluded:temporalExcluded.length,contrib_sources:selected.filter(record=>record.kind==='contrib').map(record=>record.source_id),contradiction_digest:contradictionDigest(selected),next_cursor:nextCursor
     },
-    receipt:{schema_version:1,context_hash:hash(JSON.stringify(receiptInput)),task_hash:receiptInput.task_hash,lens:receiptInput.lens,budget:budgetName,temporal:options.temporal||'current',source_ids:selected.map(record=>record.source_id),source_hashes:selected.map(record=>record.source_hash)}
+    receipt:{schema_version:1,context_hash:hash(JSON.stringify(receiptInput)),task_hash:receiptInput.task_hash,lens:receiptInput.lens,budget:budgetName,temporal:temporalVal,source_ids:selected.map(record=>record.source_id),source_hashes:selected.map(record=>record.source_hash)}
   }
 }
 
 const CACHE=new Map()
-function cacheKey(records,options={}){const state=records.map(record=>[sourceId(record),record.source_hash,record.content.length]);return hash(JSON.stringify({state,task:options.task||'',lens:options.lens||'',budget:options.budget||'standard',manifest:Boolean(options.manifest),sources:options.sources||[],temporal:options.temporal||'current',history:Boolean(options.includeHistory)}))}
+function cacheKey(records,options={}){const state=records.map(record=>[sourceId(record),record.source_hash,record.content.length]);return hash(JSON.stringify({state,task:options.task||'',lens:options.lens||'',budget:options.budget||'standard',manifest:Boolean(options.manifest),sources:options.sources||[],temporal:options.temporal||'current',history:Boolean(options.includeHistory),cursor:options.cursor||null}))}
 export function cachedSelection(records,options={}){
   const key=cacheKey(records,options)
   if(CACHE.has(key))return {...structuredClone(CACHE.get(key)),cache:{key,hit:true}}

@@ -1,8 +1,9 @@
 import {
-  existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync,
+  existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync,
   rmSync, statSync, writeFileSync
 } from 'node:fs'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
@@ -10,7 +11,7 @@ import { stdin as input, stdout as output } from 'node:process'
 import { activateProject, activationPlan, activationStatus, auditInstructions, bootstrapText, deactivateProject, globalSkillStatus, installGlobalSkills, migrateProjectSkillsToGlobal, preflightActivation, readRuntime } from './adapters.mjs'
 import { BUILTIN_LENS_IDS, lensIdStructurallyValid, loadLensRegistry, resolveLens } from './lenses.mjs'
 import { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES } from './annotations.mjs'
-import { cachedSelection, KNOWLEDGE_STATUSES, persistentSelection, TEMPORAL_SCOPES, temporalDisposition } from './context-selection.mjs'
+import { buildCursor, cachedSelection, ENVELOPE_BYTE_CAPS, KNOWLEDGE_STATUSES, persistentSelection, TEMPORAL_SCOPES, temporalDisposition } from './context-selection.mjs'
 
 export { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES }
 export const LENSES = BUILTIN_LENS_IDS
@@ -34,6 +35,7 @@ const COMPENSATION_RE = /(?:\b(?:compensation|salary|base\s+pay|pay\s+(?:band|ra
 const PACKAGE_ROOT=resolve(fileURLToPath(new URL('..',import.meta.url)))
 
 function pathExists(path){try{lstatSync(path);return true}catch{return false}}
+function safeRealpath(p){try{return realpathSync(p)}catch{return resolve(p)}}
 function ensureDir(path){ mkdirSync(path,{recursive:true}) }
 function atomicWrite(path, content){
   ensureDir(dirname(path)); const temp=`${path}.tmp-${process.pid}-${Date.now()}`
@@ -43,8 +45,46 @@ function slash(path){ return path.replaceAll('\\','/') }
 function hash(text){ return createHash('sha256').update(text).digest('hex') }
 function projectPath(o){ return resolve(o.project || o.target || process.cwd()) }
 function assertContainedPath(root,target,label='path'){
-  const boundary=resolve(root),path=resolve(target),rel=relative(boundary,path);if(rel.startsWith('..')||isAbsolute(rel))throw new Error(`${label} escapes root`)
-  let current=path;while(current!==boundary){if(pathExists(current)&&lstatSync(current).isSymbolicLink())throw new Error(`${label} traverses symlink: ${current}`);current=dirname(current)}return path
+  const rootReal=safeRealpath(root),targetReal=safeRealpath(target)
+  const normRoot=slash(rootReal).replace(/\/+$/,''),normTarget=slash(targetReal)
+  const cmpRoot=process.platform==='win32'?normRoot.toLowerCase():normRoot
+  const cmpTarget=process.platform==='win32'?normTarget.toLowerCase():normTarget
+  if(cmpTarget!==cmpRoot&&!cmpTarget.startsWith(cmpRoot+'/'))throw new Error(`${label} escapes root`)
+  let current=targetReal
+  while(current!==rootReal){
+    if(pathExists(current)&&lstatSync(current).isSymbolicLink())throw new Error(`${label} traverses symlink: ${current}`)
+    const parent=dirname(current)
+    if(parent===current)break
+    current=parent
+  }
+  return targetReal
+}
+function isCanonicalSelf(path){
+  if(!pathExists(path))return false
+  const real=safeRealpath(path)
+  try{const st=lstatSync(real);if(!st.isDirectory()||st.isSymbolicLink())return false}catch{return false}
+  return existsSync(join(real,'config.json'))&&existsSync(join(real,'profile'))&&existsSync(join(real,'context'))
+}
+function findLinkUpwards(startDir){
+  let current=resolve(startDir)
+  while(true){
+    const candidate=linkPath(current)
+    if(pathExists(candidate))return {projectDir:current,linkFilePath:candidate}
+    const parent=dirname(current)
+    if(parent===current)break
+    current=parent
+  }
+  return null
+}
+function getOrCreateCursorSecret(selfRoot){
+  const keyPath=join(selfRoot,'.holoself','runtime','.cursor.key')
+  try{if(existsSync(keyPath))return readFileSync(keyPath)}catch{}
+  if(!globalThis.__HOLOSELF_CURSOR_KEY__)globalThis.__HOLOSELF_CURSOR_KEY__=randomBytes(32)
+  return globalThis.__HOLOSELF_CURSOR_KEY__
+}
+function getIdentityId(identity,cursorSecret){
+  const raw=`${identity.kind}:${identity.project||''}:${[...(identity.allowedLenses||[])].sort().join(',')}`
+  return createHmac('sha256',cursorSecret).update(raw).digest('hex').slice(0,16)
 }
 function linkPath(project){ return join(project,'.holoself','link.yaml') }
 function quote(value){ return JSON.stringify(value ?? '') }
@@ -329,7 +369,7 @@ function filterFieldVisibility(body,metadata,lens,source,restrictions,resolution
     return true
   }).join('\n')
 }
-function sourceRecords(root,kind,lens,task,adapter,link=null,registry=null,resolution=null,selectionOptions={}){
+function sourceRecords(root,kind,lens,task,adapter,link=null,registry=null,resolution=null,selectionOptions={},identityKind='owner:direct'){
   const records=[]; const restrictions=[],warnings=[]
   let files
   if(kind==='self')files=canonicalFiles(root,{includeHistory:selectionOptions.includeHistory||selectionOptions.temporal&&selectionOptions.temporal!=='current'})
@@ -338,13 +378,23 @@ function sourceRecords(root,kind,lens,task,adapter,link=null,registry=null,resol
     const text=readFileSync(path,'utf8'),rel=slash(relative(root,path));let parsed
     try{parsed=frontmatter(text,{tolerant:kind==='project',registry})}catch(error){restrictions.push({source:rel,reason:'invalid canonical privacy metadata; excluded fail-closed'});warnings.push(`${rel}: ${error.message}`);continue}
     const {metadata,body,warnings:documentWarnings}=parsed;for(const warning of documentWarnings)warnings.push(`${rel}: ${warning}`)
-    if(secretFile(path,root)||SECRET_RE.test(text)||['secret','credential','credentials'].includes(metadata.sensitivity)){ restrictions.push({source:rel,reason:'secret-like content excluded'}); continue }
+    if(secretFile(path,root)||SECRET_RE.test(text)||['secret','credential','credentials'].includes(metadata.sensitivity)){
+      if(kind==='project')restrictions.push({source:rel,reason:'secret-like content excluded'})
+      continue
+    }
     if(kind==='self'){
       const metadataErrors=canonicalPrivacyMetadataErrors(metadata,registry)
       if(metadataErrors.length){restrictions.push({source:rel,reason:'invalid canonical privacy metadata; excluded fail-closed'});warnings.push(`${rel}: ${metadataErrors.join('; ')}`);continue}
     }
     if(!VISIBILITIES.includes(visibility(metadata))){ restrictions.push({source:rel,reason:`unsupported visibility: ${visibility(metadata)}`}); continue }
-    if(!allowed(metadata,lens,adapter,task,resolution)){const customDenied=resolution?.source==='registry'&&SENSITIVITY_LENSES[metadata.sensitivity]&&!resolution.sensitivity_access.includes(metadata.sensitivity),reason=!taskAllowed(metadata,task)?`task selector excludes ${task||'(unspecified task)'}`:customDenied||SENSITIVITY_LENSES[metadata.sensitivity]&&!SENSITIVITY_LENSES[metadata.sensitivity].includes(lens)?`sensitivity ${metadata.sensitivity} excludes ${lens} lens`:`access_lenses exclude ${lens} lens`;restrictions.push({source:rel,reason});continue}
+    if(!allowed(metadata,lens,adapter,task,resolution)){
+      if(kind==='self'&&(metadata.sensitivity==='restricted'||secretFile(path,root))){
+        if(identityKind==='owner:direct')restrictions.push({source:rel,reason:`sensitivity ${metadata.sensitivity} excludes ${lens} lens`})
+      }else{
+        const customDenied=resolution?.source==='registry'&&SENSITIVITY_LENSES[metadata.sensitivity]&&!resolution.sensitivity_access.includes(metadata.sensitivity),reason=!taskAllowed(metadata,task)?`task selector excludes ${task||'(unspecified task)'}`:customDenied||SENSITIVITY_LENSES[metadata.sensitivity]&&!SENSITIVITY_LENSES[metadata.sensitivity].includes(lens)?`sensitivity ${metadata.sensitivity} excludes ${lens} lens`:`access_lenses exclude ${lens} lens`;restrictions.push({source:rel,reason})
+      }
+      continue
+    }
     const safeMetadata=privacyMetadata(metadata,registry),behaviorLens=resolution?.base_lens||lens
     if(behaviorLens==='publishing'&&safeMetadata.sensitivity==='employer-confidential'&&safeMetadata.document_role!=='policy'){restrictions.push({source:rel,reason:'employer-confidential content excluded from publishing context'});continue}
     if(behaviorLens==='publishing'&&safeMetadata.document_role==='evidence'&&!safeMetadata.publication_allowed){restrictions.push({source:rel,reason:`evidence disclosure ${safeMetadata.disclosure} is not publish-approved`});continue}
@@ -359,52 +409,259 @@ function sourceRecords(root,kind,lens,task,adapter,link=null,registry=null,resol
   }
   return {records,restrictions,warnings}
 }
-function contribRecords(self){
+function contribRecords(self,lens='general',resolution=null){
   let config,catalog;try{config=JSON.parse(readFileSync(join(self,'config.json'),'utf8'));catalog=JSON.parse(readFileSync(join(PACKAGE_ROOT,'contribs','catalog.json'),'utf8'))}catch{return []}
   const selected=new Set(Array.isArray(config.selectedContribs)?config.selectedContribs:[]),records=[]
-  for(const entry of catalog.contribs||[]){if(!selected.has(entry.id))continue;const path=join(PACKAGE_ROOT,'contribs',entry.path);if(!existsSync(path)||lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())continue;const content=readFileSync(path,'utf8'),metadata={access_lenses:['general','career','technical','leadership','publishing','interview','private'],disclosure:'internal-only',document_role:'policy',publication_allowed:false,visibility:'private',sensitivity:'none',knowledge_status:'current',temporal_scope:'timeless'};records.push({kind:'contrib',path:`contribs/${entry.path}`,absolute_path:path,...metadata,public_safe:false,confidence:null,freshness:new Date(statSync(path).mtimeMs).toISOString(),source_hash:hash(content),content:content.trim(),metadata,contrib:{id:entry.id,title:entry.title,domain:entry.domain,type:entry.type}})}
+  const effectiveLens=resolution?.base_lens||lens
+  for(const entry of catalog.contribs||[]){
+    if(!selected.has(entry.id))continue
+    const path=join(PACKAGE_ROOT,'contribs',entry.path)
+    if(!existsSync(path)||lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())continue
+    const content=readFileSync(path,'utf8')
+    const declaredLenses=['general','career','technical','leadership','publishing','interview','private']
+    if(!declaredLenses.includes(effectiveLens)&&!declaredLenses.includes(lens))continue
+    const sensitivity=entry.sensitivity||'none'
+    if(resolution?.source==='registry'){
+      if(sensitivity==='restricted')continue
+      if(SENSITIVITY_LENSES[sensitivity]&&!resolution.sensitivity_access.includes(sensitivity))continue
+    }else{
+      if(SENSITIVITY_LENSES[sensitivity]&&!SENSITIVITY_LENSES[sensitivity].includes(effectiveLens))continue
+    }
+    const metadata={access_lenses:[lens,effectiveLens,...declaredLenses],disclosure:'internal-only',document_role:'policy',publication_allowed:false,visibility:'private',sensitivity,knowledge_status:'current',temporal_scope:'timeless'}
+    records.push({kind:'contrib',path:`contribs/${entry.path}`,absolute_path:path,...metadata,public_safe:false,confidence:null,freshness:new Date(statSync(path).mtimeMs).toISOString(),source_hash:hash(content),content:content.trim(),metadata,contrib:{id:entry.id,title:entry.title,domain:entry.domain,type:entry.type}})
+  }
   return records
 }
 function resolvedContextAssertions(records,lens,task,adapter,link,resolution=null){
   const errors=[],projectPaths=records.filter(record=>record.kind==='project').map(record=>record.path)
   for(const record of records){if(!allowed(record.metadata,lens,adapter,task,resolution))errors.push(`${record.kind}:${record.path}: policy rejected after resolution`);if(SECRET_RE.test(record.content))errors.push(`${record.kind}:${record.path}: secret-like content survived filtering`)}
   for(const path of projectPaths){if(!matchesAny(path,link?.project_context?.include||['**/*.md']))errors.push(`project:${path}: outside include policy`);if(matchesAny(path,link?.project_context?.exclude||DEFAULT_PROJECT_EXCLUDES))errors.push(`project:${path}: matched exclude policy`)}
-  if(errors.length)throw new Error(`context leakage validation failed: ${errors.join('; ')}`)
+  if(errors.length){const error=new Error(`context leakage validation failed: ${errors.length} source(s) rejected`);error.code='CONTEXT_LEAKAGE_DETECTED';error.details=errors;throw error}
   return {status:'passed',checks:['privacy-policy-reapplied','secret-pattern-scan','project-include-exclude-reapplied'],selected_sources:records.length}
 }
 function contextData(o){
-  const project=projectPath(o); let link=null; let self=o.self ? resolve(o.self) : null
-  if(!self&&pathExists(linkPath(project))){link=readLink(project);self=link.path}
-  self=self || o.root
-  if(!existsSync(self)) throw new Error(`self path not found: ${self}`)
-  const registry=loadLensRegistry(self),lens=o.lens || link?.default_lens || 'general',resolution=resolveLens(registry,lens)
+  if(o.identity!==undefined){const err=new Error('identity not accepted from caller');err.code='IDENTITY_NOT_ACCEPTED_FROM_CALLER';throw err}
+  const surface=o.surface||(o.project?'cli-linked':'cli-direct')
+
+  const cwd=process.cwd()
+  let project=o.project?resolve(o.project):null
+  let link=null
+  let self=null
+  let identity=null
+
+  if(project){
+    const candidateLink=linkPath(project)
+    if(!pathExists(candidateLink)){
+      const err=new Error(`project is not linked to any Holoself canonical root: ${project}`)
+      err.code='LINK_REQUIRED'
+      throw err
+    }
+    link=readLink(project)
+    self=link.path
+    if(!existsSync(self)){const err=new Error(`self path not found: ${self}`);err.code='SELF_ROOT_MISSING';throw err}
+    if(o.self||o.rootExplicit){
+      const callerSelf=resolve(o.self||o.root)
+      const cmpCaller=process.platform==='win32'?slash(safeRealpath(callerSelf)).toLowerCase():slash(safeRealpath(callerSelf))
+      const cmpLink=process.platform==='win32'?slash(safeRealpath(link.path)).toLowerCase():slash(safeRealpath(link.path))
+      if(cmpCaller!==cmpLink){
+        const err=new Error('supplied self root does not match canonical link root')
+        err.code='SELF_ROOT_NOT_CANONICAL'
+        throw err
+      }
+    }
+    identity={
+      kind:'client:linked',
+      project,
+      self:link.path,
+      allowedLenses:new Set([link.default_lens,...(link.secondary_lenses||[])])
+    }
+  }else{
+    const found=findLinkUpwards(cwd)
+    if(found){
+      project=found.projectDir
+      link=readLink(project)
+      self=link.path
+      if(!existsSync(self)){const err=new Error(`self path not found: ${self}`);err.code='SELF_ROOT_MISSING';throw err}
+      if(o.self||o.rootExplicit){
+        const callerSelf=resolve(o.self||o.root)
+        const cmpCaller=process.platform==='win32'?slash(safeRealpath(callerSelf)).toLowerCase():slash(safeRealpath(callerSelf))
+        const cmpLink=process.platform==='win32'?slash(safeRealpath(link.path)).toLowerCase():slash(safeRealpath(link.path))
+        if(cmpCaller!==cmpLink){
+          const err=new Error('supplied self root does not match canonical link root')
+          err.code='SELF_ROOT_NOT_CANONICAL'
+          throw err
+        }
+      }
+      identity={
+        kind:'client:linked',
+        project,
+        self:link.path,
+        allowedLenses:new Set([link.default_lens,...(link.secondary_lenses||[])])
+      }
+    }else{
+      if(surface==='mcp'||surface==='web'){
+        const err=new Error('mcp and web surfaces require a linked project')
+        err.code='LINK_REQUIRED'
+        throw err
+      }
+      const envRoot=process.env.HOLOSELF_HOME||join(homedir(),'.holoself')
+      const targetSelf=resolve(o.self||(o.rootExplicit?o.root:null)||envRoot)
+      try{
+        assertContainedPath(targetSelf,cwd,'caller working directory')
+      }catch{
+        const err=new Error('caller is outside canonical self root and has no link')
+        err.code='LINK_REQUIRED'
+        throw err
+      }
+      if(!isCanonicalSelf(targetSelf)){
+        const err=new Error(`self path lacks canonical profile/context layout: ${targetSelf}`)
+        err.code='SELF_ROOT_NOT_CANONICAL'
+        throw err
+      }
+      self=targetSelf
+      project=cwd
+      identity={
+        kind:'owner:direct',
+        project:null,
+        self:targetSelf,
+        allowedLenses:null
+      }
+    }
+  }
+
+  const registry=loadLensRegistry(self)
+  const lens=o.lens||link?.default_lens||'general'
+
+  switch(identity.kind){
+    case 'owner:direct':
+      if(!registry.byId.has(lens)){
+        const error=new Error(`unknown lens requested: ${lens}`)
+        error.code='UNKNOWN_LENS'
+        throw error
+      }
+      break
+    case 'client:linked':
+      if(!identity.allowedLenses.has(lens)){
+        const error=new Error(`unknown lens or lens is not granted by this project link: ${lens}`)
+        error.code='LENS_NOT_GRANTED'
+        throw error
+      }
+      break
+    default:{
+      const error=new Error('unrecognized caller identity kind')
+      error.code='UNRECOGNIZED_IDENTITY'
+      throw error
+    }
+  }
+
+  const resolution=resolveLens(registry,lens)
+  if(resolution.id!==lens){
+    const error=new Error('lens resolution mismatch')
+    error.code='LENS_RESOLUTION_MISMATCH'
+    throw error
+  }
+
   const adapter=o.restrictedHost?'restricted-host':(o.adapter||'generic')
-  const selfData=sourceRecords(self,'self',lens,o.task,adapter,link,registry,resolution,o)
-  const local=!o.selfOnly && existsSync(project) && resolve(project)!==resolve(self) ? sourceRecords(project,'project',lens,o.task,adapter,link,registry,resolution) : {records:[],restrictions:[],warnings:[]}
-  const candidates=[...selfData.records,...local.records,...(o.task?contribRecords(self):[])]
-  const selectionOptions={task:o.task,lens,budget:o.budget||'standard',manifest:o.manifest,sources:o.sources||[],temporal:o.temporal||'current',includeHistory:o.includeHistory},cacheDir=link&&!o.noCache?join(project,'.holoself','runtime','context-cache'):null,selected=cacheDir?persistentSelection(candidates,selectionOptions,cacheDir):cachedSelection(candidates,selectionOptions)
-  const records=selected.records,sources=records.map(({content,metadata,absolute_path,...source})=>source)
+  const selfData=sourceRecords(self,'self',lens,o.task,adapter,link,registry,resolution,o,identity.kind)
+  const local=!o.selfOnly&&existsSync(project)&&resolve(project)!==resolve(self)?sourceRecords(project,'project',lens,o.task,adapter,link,registry,resolution,o,identity.kind):{records:[],restrictions:[],warnings:[]}
+  const candidates=[...selfData.records,...local.records,...(o.task?contribRecords(self,lens,resolution):[])]
+
+  const cursorSecret=getOrCreateCursorSecret(self)
+  const identityId=getIdentityId(identity,cursorSecret)
+  const selfId=hash(slash(safeRealpath(self))).slice(0,16)
+  const allowedLensesList=identity.allowedLenses?[...identity.allowedLenses].sort():[...registry.byId.keys()].sort()
+  const budgetName=o.budget||'standard'
+
+  const selectionOptions={
+    task:o.task,
+    lens,
+    budget:budgetName,
+    manifest:o.manifest,
+    sources:o.sources||[],
+    temporal:o.temporal||'current',
+    includeHistory:o.includeHistory,
+    cursor:o.cursor||null,
+    cursorSecret,
+    identityId,
+    selfId,
+    registryHash:registry.registry_hash,
+    allowedLenses:allowedLensesList
+  }
+
+  const cacheDir=link&&!o.noCache?join(project,'.holoself','runtime','context-cache'):null
+  const selected=cacheDir?persistentSelection(candidates,selectionOptions,cacheDir):cachedSelection(candidates,selectionOptions)
+  const records=[...selected.records],sources=records.map(({content,metadata,absolute_path,...source})=>source)
   const warnings=[...(selfData.warnings||[]),...(local.warnings||[])]
-  if(!link && !o.self && resolve(self)!==resolve(project)) warnings.push('No project link found; resolved explicit/default self root.')
+  if(!link&&!o.self&&resolve(self)!==resolve(project))warnings.push('No project link found; resolved explicit/default self root.')
   const generatedAt=new Date().toISOString(),restrictedHost=Boolean(o.snapshot||o.restrictedHost||adapter==='restricted-host'),expiresAt=restrictedHost?new Date(Date.parse(generatedAt)+(o.expiresHours||24)*60*60*1000).toISOString():null
   const validation=resolvedContextAssertions(records,lens,o.task,adapter,link,resolution)
   const selfRecords=records.filter(record=>record.kind==='self'),localRecords=records.filter(record=>record.kind==='project'),methodRecords=records.filter(record=>record.kind==='contrib')
-  return {
-    self:{path:slash(resolve(self)),documents:selfRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))},
+
+  const isLinked=identity.kind==='client:linked'
+  const selfProjection=isLinked
+    ?{documents:selfRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))}
+    :{path:slash(resolve(self)),documents:selfRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))}
+
+  const projectProjection=isLinked
+    ?{name:basename(project),documents:localRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))}
+    :{path:slash(project),name:basename(project),documents:localRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))}
+
+  const result={
+    self:selfProjection,
     lens,
     lens_resolution:{schema_version:resolution.schema_version,id:resolution.id,title:resolution.title,source:resolution.source,base_lens:resolution.base_lens,sensitivity_access:[...resolution.sensitivity_access]},
-    project:{path:slash(project),name:basename(project),documents:localRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))},
+    project:projectProjection,
     methods:{documents:methodRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only,contrib:r.contrib}))},
-    task:o.task || null,
+    task:o.task||null,
     packet_metadata:{schema_version:2,packet_id:randomUUID(),generated_at:generatedAt,expires_at:expiresAt,host_mode:restrictedHost?'restricted-host-snapshot':'live-local',lens_registry_hash:registry.registry_hash,source_hash_algorithm:'sha256',source_hashes:sources.map(source=>({kind:source.kind,path:source.path,sha256:source.source_hash,freshness:source.freshness}))},
     sources,
     restrictions:[...selfData.restrictions,...local.restrictions,...selected.omitted,...selected.temporalExcluded],
     warnings,
     validation,
-    selection:selected.selection,
+    selection:{...selected.selection},
     context_receipt:{...selected.receipt,cache:selected.cache},
-    proposals:listProposalData(project).filter(p=>p.status==='pending')
+    proposals:(isLinked&&project)?listProposalData(project).filter(p=>p.status==='pending'):[]
   }
+
+  const envelopeCap=ENVELOPE_BYTE_CAPS[budgetName]||ENVELOPE_BYTE_CAPS.standard
+  const isMcp=surface==='mcp'
+  const measurePayload=res=>{
+    if(isMcp)return Buffer.byteLength(JSON.stringify({content:[{type:'text',text:JSON.stringify(res,null,2)}],structuredContent:{data:res}}))
+    return Buffer.byteLength(JSON.stringify(res,null,2)+'\n')
+  }
+
+  let payloadBytes=measurePayload(result)
+  if(o.manifest&&payloadBytes>envelopeCap){
+    const candidateList=selected.candidates||candidates
+    const startOffset=selected.startOffset||0
+    while(records.length>0&&payloadBytes>envelopeCap){
+      const removed=records.pop()
+      result.restrictions.push({source:removed.path,reason:'source exceeds envelope budget'})
+      result.sources=records.map(({content,metadata,absolute_path,...s})=>s)
+      result.self.documents=records.filter(r=>r.kind==='self').map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))
+      result.project.documents=records.filter(r=>r.kind==='project').map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))
+      result.methods.documents=records.filter(r=>r.kind==='contrib').map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only,contrib:r.contrib}))
+      result.packet_metadata.source_hashes=result.sources.map(s=>({kind:s.kind,path:s.path,sha256:s.source_hash,freshness:s.freshness}))
+      result.selection.selected_count=records.length
+      result.selection.selected_sources=records.map(r=>r.source_id)
+      result.selection.omitted_count=result.restrictions.length
+      result.selection.truncated=true
+      payloadBytes=measurePayload(result)
+    }
+    result.selection.estimated_tokens_total_heuristic=Math.ceil(payloadBytes/4)
+    let nextOffset=startOffset+records.length
+    if(records.length===0&&startOffset<candidateList.length){
+      nextOffset=startOffset+1
+      result.selection.truncated=true
+    }
+    if(nextOffset<candidateList.length){
+      result.selection.next_cursor=buildCursor(identityId,lens,budgetName,Boolean(o.manifest),selfId,selected.taskHash,selected.temporalVal,nextOffset,selected.stateHash,cursorSecret)
+    }else{
+      result.selection.next_cursor=null
+    }
+  }
+
+  return result
 }
 function packetFormat(data,adapter='generic'){
   const labels={pi:'Pi context packet',claude:'Claude Code context packet',codex:'Codex context packet',generic:'Holoself context packet',obsidian:'Obsidian/Claude context packet','restricted-host':'Restricted-host Holoself context packet'}
@@ -425,16 +682,21 @@ function withoutPrivatePaths(value){
   return clean
 }
 function mcpContextData(project,options={}){
+  if(options.surface!==undefined){const err=new Error('surface not accepted from request');err.code='SURFACE_NOT_ACCEPTED_FROM_REQUEST';throw err}
+  if(options.identity!==undefined){const err=new Error('identity not accepted from caller');err.code='IDENTITY_NOT_ACCEPTED_FROM_CALLER';throw err}
   const link=readLink(project),requestedLens=options.lens||link.default_lens,allowedLenses=new Set([link.default_lens,...(link.secondary_lenses||[])])
-  if(!allowedLenses.has(requestedLens)){const error=new Error(`lens is not granted by this project link: ${requestedLens}`);error.code='LENS_NOT_GRANTED';throw error}
+  if(!allowedLenses.has(requestedLens)){const error=new Error(`unknown lens or lens is not granted by this project link: ${requestedLens}`);error.code='LENS_NOT_GRANTED';throw error}
   const data=contextData({
+    ...options,
     project,
+    surface:'mcp',
     task:options.task,
     lens:requestedLens,
     budget:options.budget||'standard',
     temporal:options.temporal||'current',
     manifest:Boolean(options.manifest),
-    sources:options.source_ids||[],
+    sources:options.source_ids||options.sources||[],
+    cursor:options.cursor||null,
     noCache:true
   })
   if(options.source_ids?.length){const selected=new Set(data.sources.map(source=>source.source_id)),missing=options.source_ids.filter(id=>!selected.has(id));if(missing.length)throw new Error(`source handles are unavailable under the requested link/lens/lifecycle: ${missing.join(', ')}`)}
@@ -701,7 +963,7 @@ export function ecosystemValidationErrors(root,project=null){
 export function holoselfMcpStatus(projectInput){
   const project=resolve(projectInput),link=readLink(project),health=healthStatus(project,link,{})
   let context='valid',contextError=null
-  try{contextData({project,manifest:true,budget:'small',noCache:true})}catch{context='broken';contextError='Context validation failed closed; run holoself link doctor locally.'}
+  try{contextData({project,manifest:true,budget:'small',noCache:true,surface:'internal-health'})}catch{context='broken';contextError='Context validation failed closed; run holoself link doctor locally.'}
   return {
     schema_version:1,
     state:health.state,

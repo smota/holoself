@@ -23,7 +23,8 @@ const baseContextProperties={
   task:{type:'string',minLength:1,maxLength:500,description:'The current task; used only for deterministic relevance selection.'},
   lens:{type:'string',minLength:1,maxLength:80,description:'A built-in or canonical custom lens ID.'},
   budget:{type:'string',enum:BUDGETS,default:'standard'},
-  temporal:{type:'string',enum:TEMPORAL,default:'current'}
+  temporal:{type:'string',enum:TEMPORAL,default:'current'},
+  cursor:{type:'string',minLength:1,maxLength:4096,description:'Opaque pagination cursor from previous manifest request.'}
 }
 const objectSchema=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false})
 const resultSchema=objectSchema({schema_version:{type:'integer'},data:{type:'object'},error:{type:'object'}})
