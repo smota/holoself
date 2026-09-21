@@ -101,13 +101,6 @@ export function atomicWriteFile(targetPath, content, { mode = 0o600 } = {}){
     try { rmSync(tmpPath, { force: true }) } catch {}
     throw lastErr
   }
-  if(process.platform !== 'win32'){
-    try {
-      const parentFd = openSync(targetDir, 'r')
-      try { fsyncSync(parentFd) } catch {}
-      closeSync(parentFd)
-    } catch {}
-  }
 }
 
 export function purgeLegacyIndex(projectDir){
