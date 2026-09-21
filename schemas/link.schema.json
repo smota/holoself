@@ -15,8 +15,9 @@
         "access": { "const": "read" },
         "proposals": { "enum": ["enabled", "disabled"] },
         "index": { "const": "local" },
-        "default_lens": { "description": "Structurally valid lens id; the CLI requires it to resolve from built-ins or the linked self registry.", "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40 },
-        "secondary_lenses": { "type": "array", "items": { "description": "Structurally valid lens id; runtime semantic validation requires a known id.", "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40 }, "uniqueItems": true }
+        "default_lens": { "description": "Structurally valid lens id; the CLI requires it to resolve from built-ins or the linked self registry.", "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40, "not": { "const": "private" } },
+        "secondary_lenses": { "type": "array", "items": { "description": "Structurally valid lens id; runtime semantic validation requires a known id.", "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40, "not": { "const": "private" } }, "uniqueItems": true },
+        "binding_salt": { "type": "string", "pattern": "^[0-9a-f]{32}$" }
       }
     },
     "project_context": {

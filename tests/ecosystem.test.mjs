@@ -20,14 +20,14 @@ async function fixture(){
   await mkdir(join(project,'Context'),{recursive:true})
   await writeFile(join(project,'Context','career-profile.md'),'# Career profile\n\nLed 25 engineers in regulated AI.\n')
   await writeFile(join(project,'README.md'),'# Project\n\nRegulated AI execution workspace.\n')
-  await run(['link','add','--project',project,'--self',self,'--lens','career','--yes'])
+  await run(['link','add','--project',project,'--self',self,'--lens','career','--secondary-lenses','publishing,general','--yes'])
   return {self,project}
 }
 
 test('linked configuration is project-local metadata and never copies self',async()=>{
   const {self,project}=await fixture();const yaml=await readFile(join(project,'.holoself','link.yaml'),'utf8')
   assert.match(yaml,/self_context:/);assert.match(yaml,/access: "read"/);assert.match(yaml,/default_lens: "career"/)
-  for(const dir of ['index','proposals','reports'])assert.equal((await stat(join(project,'.holoself',dir))).isDirectory(),true)
+  for(const dir of ['catalog','proposals','reports'])assert.equal((await stat(join(project,'.holoself',dir))).isDirectory(),true)
   await assert.rejects(access(join(project,'.holoself','profile')))
   const status=JSON.parse(await capture(()=>run(['link','status','--project',project])))
   assert.equal(status.self_context.path.replaceAll('\\','/'),self.replaceAll('\\','/'));assert.equal(status.self_exists,true)
@@ -75,7 +75,7 @@ test('terminal legacy proposal records preserve folded text and external evidenc
 test('deterministic index supports changed/rebuild/search and skips secrets',async()=>{
   const {project}=await fixture();await writeFile(join(project,'secret.md'),'# Secret\n\napi_key = abcdefghijklmnop\n')
   const built=JSON.parse(await capture(()=>run(['index','rebuild','--project',project])));assert.equal(built.engine,'deterministic-json');assert.equal(built.skipped_secret_files,1)
-  const raw=await readFile(join(project,'.holoself','index','index.json'),'utf8');assert.doesNotMatch(raw,/abcdefghijklmnop/);assert.match(raw,/content_hash/);assert.match(raw,/sections/)
+  const raw=await readFile(join(project,'.holoself','catalog','catalog.json'),'utf8');assert.doesNotMatch(raw,/abcdefghijklmnop/);assert.match(raw,/source_text_hash/);assert.match(raw,/sections/)
   const found=JSON.parse(await capture(()=>run(['search','regulated AI','--project',project,'--federated'])));assert.ok(found.results.length>0);assert.ok(found.results.every(x=>x.provenance&&x.visibility&&x.freshness))
   await run(['index','--project',project,'--changed']);const status=JSON.parse(await capture(()=>run(['index','status','--project',project])));assert.equal(status.status,'ready')
 })
@@ -124,7 +124,7 @@ test('index and search enforce claim, field, compensation, metadata, and secret 
   await writeFile(join(project,'Context','role.md'),'# Role\n\nMy annual compensation totals USD 200000 plus bonus and equity.\n')
   await writeFile(join(project,'credentials-notes.md'),'# Credentials\n\nfilename secret phrase\n');await writeFile(join(project,'.env.md'),'# Environment\n\ninternal credential phrase\n');await writeFile(join(project,'bearer.md'),'# Auth\n\nAuthorization: Bearer abcdefghijklmnopqrstuvwxyz\n')
   const built=JSON.parse(await capture(()=>run(['index','rebuild','--project',project])));assert.ok(built.skipped_secret_files>=3)
-  const raw=await readFile(join(project,'.holoself','index','index.json'),'utf8');assert.doesNotMatch(raw,/home_address|10 Secret Street|filename secret phrase|internal credential phrase|abcdefghijklmnopqrstuvwxyz/);assert.match(raw,/"schema_version": 5/)
+  const raw=await readFile(join(project,'.holoself','catalog','catalog.json'),'utf8');assert.doesNotMatch(raw,/home_address|10 Secret Street|filename secret phrase|internal credential phrase|abcdefghijklmnopqrstuvwxyz/);assert.match(raw,/"schema_version": 2/)
   const generalClaim=JSON.parse(await capture(()=>run(['search','private unicorn','--project',project,'--lens','general'])));assert.equal(generalClaim.results.length,0)
   const privateClaim=JSON.parse(await capture(()=>run(['search','private unicorn','--project',project,'--lens','private'])));assert.ok(privateClaim.results.length>0)
   const field=JSON.parse(await capture(()=>run(['search','golden package','--project',project,'--lens','general'])));assert.equal(field.results.length,0)

@@ -1,0 +1,716 @@
+{
+  "schema_version": 1,
+  "dataset_version": 1,
+  "label_digest": "47e5812f687d535418eb00d4f09e2138bf5281ef30272e9c7aba5c9eb7c14c81",
+  "reviewed_by": "coordinator before product evaluation",
+  "cases": [
+    {
+      "id": "q-en-personal-1",
+      "language": "en",
+      "class": "personal",
+      "task": "Describe my identity using my recorded priorities",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-personal-1"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-personal-1"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-en-personal-2",
+      "language": "en",
+      "class": "personal",
+      "task": "Plan my next career step using recorded experience",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-personal-2"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-personal-2"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-en-personal-3",
+      "language": "en",
+      "class": "personal",
+      "task": "Prepare my leadership example from recorded evidence",
+      "lens": "career",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-personal-3"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-personal-3"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-en-personal-4",
+      "language": "en",
+      "class": "personal",
+      "task": "Write an introduction in my personal voice",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-personal-4"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-personal-4"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-en-personal-5",
+      "language": "en",
+      "class": "personal",
+      "task": "Explain my recorded preference for collaboration",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-personal-5"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-personal-5"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-en-personal-6",
+      "language": "en",
+      "class": "personal",
+      "task": "Prepare my interview answer from the recorded story",
+      "lens": "career",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-personal-6"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-personal-6"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-en-mechanical-1",
+      "language": "en",
+      "class": "mechanical",
+      "task": "Format this JSON object: {\"x\":1}",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-mechanical-1"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-en-mechanical-2",
+      "language": "en",
+      "class": "mechanical",
+      "task": "Rename the variable x to item in this snippet",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-mechanical-2"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-en-mechanical-3",
+      "language": "en",
+      "class": "mechanical",
+      "task": "Fix the syntax in this code: let x = ;",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-mechanical-3"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-en-mechanical-4",
+      "language": "en",
+      "class": "mechanical",
+      "task": "Sort these three integers: 3, 1, 2",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-mechanical-4"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-en-mechanical-5",
+      "language": "en",
+      "class": "mechanical",
+      "task": "Convert this literal timestamp to ISO notation",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-mechanical-5"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-en-mechanical-6",
+      "language": "en",
+      "class": "mechanical",
+      "task": "Indent this supplied CSS rule",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-mechanical-6"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-en-ambiguous-1",
+      "language": "en",
+      "class": "ambiguous",
+      "task": "Compare these options for my next step",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-ambiguous-1"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-ambiguous-1"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    },
+    {
+      "id": "q-en-ambiguous-2",
+      "language": "en",
+      "class": "ambiguous",
+      "task": "Help me choose an approach to the meeting",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-ambiguous-2"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-ambiguous-2"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    },
+    {
+      "id": "q-en-ambiguous-3",
+      "language": "en",
+      "class": "ambiguous",
+      "task": "Improve this draft for the conversation",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-ambiguous-3"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-ambiguous-3"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    },
+    {
+      "id": "q-en-ambiguous-4",
+      "language": "en",
+      "class": "ambiguous",
+      "task": "Suggest how to proceed this week",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-ambiguous-4"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-ambiguous-4"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    },
+    {
+      "id": "q-en-ambiguous-5",
+      "language": "en",
+      "class": "ambiguous",
+      "task": "What should I emphasize in this answer?",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-ambiguous-5"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-ambiguous-5"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    },
+    {
+      "id": "q-en-ambiguous-6",
+      "language": "en",
+      "class": "ambiguous",
+      "task": "Review this decision with the available context",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-en-ambiguous-6"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-en-ambiguous-6"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-personal-1",
+      "language": "pt",
+      "class": "personal",
+      "task": "Descreva minha identidade usando minhas prioridades registradas",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-personal-1"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-personal-1"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-personal-2",
+      "language": "pt",
+      "class": "personal",
+      "task": "Planeje meu próximo passo de carreira com minha experiência registrada",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-personal-2"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-personal-2"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-personal-3",
+      "language": "pt",
+      "class": "personal",
+      "task": "Prepare meu exemplo de liderança com as evidências registradas",
+      "lens": "career",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-personal-3"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-personal-3"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-personal-4",
+      "language": "pt",
+      "class": "personal",
+      "task": "Escreva uma apresentação com minha voz pessoal",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-personal-4"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-personal-4"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-personal-5",
+      "language": "pt",
+      "class": "personal",
+      "task": "Explique minha preferência registrada de colaboração",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-personal-5"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-personal-5"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-personal-6",
+      "language": "pt",
+      "class": "personal",
+      "task": "Prepare minha resposta de entrevista com a história registrada",
+      "lens": "career",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-personal-6"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-personal-6"
+      ],
+      "expectedNeed": [
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-mechanical-1",
+      "language": "pt",
+      "class": "mechanical",
+      "task": "Formate este objeto JSON: {\"x\":1}",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-mechanical-1"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-pt-mechanical-2",
+      "language": "pt",
+      "class": "mechanical",
+      "task": "Renomeie a variável x para item neste trecho",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-mechanical-2"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-pt-mechanical-3",
+      "language": "pt",
+      "class": "mechanical",
+      "task": "Corrija a sintaxe deste código: let x = ;",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-mechanical-3"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-pt-mechanical-4",
+      "language": "pt",
+      "class": "mechanical",
+      "task": "Ordene estes três números inteiros: 3, 1, 2",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-mechanical-4"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-pt-mechanical-5",
+      "language": "pt",
+      "class": "mechanical",
+      "task": "Converta este horário literal para notação ISO",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-mechanical-5"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-pt-mechanical-6",
+      "language": "pt",
+      "class": "mechanical",
+      "task": "Indente esta regra CSS fornecida",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-mechanical-6"
+      ],
+      "expectedNeed": [
+        "not-needed"
+      ]
+    },
+    {
+      "id": "q-pt-ambiguous-1",
+      "language": "pt",
+      "class": "ambiguous",
+      "task": "Compare estas opções para meu próximo passo",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-ambiguous-1"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-ambiguous-1"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-ambiguous-2",
+      "language": "pt",
+      "class": "ambiguous",
+      "task": "Ajude a escolher uma abordagem para a reunião",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-ambiguous-2"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-ambiguous-2"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-ambiguous-3",
+      "language": "pt",
+      "class": "ambiguous",
+      "task": "Melhore este rascunho para a conversa",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-ambiguous-3"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-ambiguous-3"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-ambiguous-4",
+      "language": "pt",
+      "class": "ambiguous",
+      "task": "Sugira como prosseguir nesta semana",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-ambiguous-4"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-ambiguous-4"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-ambiguous-5",
+      "language": "pt",
+      "class": "ambiguous",
+      "task": "O que devo enfatizar nesta resposta?",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-ambiguous-5"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-ambiguous-5"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    },
+    {
+      "id": "q-pt-ambiguous-6",
+      "language": "pt",
+      "class": "ambiguous",
+      "task": "Revise esta decisão com o contexto disponível",
+      "lens": "general",
+      "budget": "deep",
+      "requiredMarkers": [
+        "C00_REQUIRED_q-pt-ambiguous-6"
+      ],
+      "forbiddenMarkers": [
+        "C00_FORBIDDEN_RESTRICTED"
+      ],
+      "optionalMarkers": [
+        "C00_OPTIONAL_q-pt-ambiguous-6"
+      ],
+      "expectedNeed": [
+        "helpful",
+        "required"
+      ]
+    }
+  ]
+}

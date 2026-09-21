@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "cycle": "C-00",
+  "baseline_commit": "1217e7c5241fcd3bc9a8aa1a6e759f6e16c78a95",
+  "contract": "C00-CONTRACT-1",
+  "contract_sha256": "5BD850B7B8B543EF130CDF97EA1016FB1BD4714FCE5947848A80630E71794AD9",
+  "contract_hash_scope": "UTF-8 text from heading 4.1 inclusive to heading 4.5 exclusive in implementation plan, as supplied before D1",
+  "hash_attestation": "Coordinator computed; Claude reviewed content but did not independently hash it",
+  "reviews": [
+    {
+      "task": "T00-R",
+      "provider": "agy",
+      "requested_model": "gemini-3.8-flash-medium",
+      "session_id": "144ac5f7-2d04-4099-bc91-740f48a4fdd8",
+      "status": "rejected-by-coordinator",
+      "reason": "Incorrect E/V ID mapping, false claim that noCache disables memory cache, optimizations outside C00 scope",
+      "duration_seconds": 19.368848,
+      "input_tokens": 69672,
+      "output_tokens": 4851,
+      "reported_cost_usd": null
+    },
+    {
+      "task": "T00-R",
+      "provider": "agy",
+      "requested_model": "gemini-3.1-pro-high",
+      "session_id": "715df0af-bb6c-4e3d-9a04-40348d06823b",
+      "status": "accepted-with-corrections-confirmed",
+      "reason": "Correct evidence map and cache path; speculative revocation/expiry claims withdrawn in follow-up",
+      "duration_seconds": 32.7148391,
+      "input_tokens": 64048,
+      "output_tokens": 3627,
+      "reported_cost_usd": null
+    },
+    {
+      "task": "T00-R",
+      "provider": "agy",
+      "requested_model": "gemini-3.1-pro-high",
+      "session_id": "600375d8-d50a-42c0-aa66-d0bce6f18e3d",
+      "status": "corrections-confirmed",
+      "reason": "V07/V08 unverified until measured; V10 not-implemented, no stub pass; D08 remains open",
+      "duration_seconds": 13.3376463,
+      "input_tokens": 6028,
+      "output_tokens": 1301,
+      "reported_cost_usd": null
+    },
+    {
+      "task": "T00-V",
+      "provider": "Claude Code",
+      "requested_model": "sonnet",
+      "resolved_review_model": "claude-sonnet-5",
+      "session_id": "57381c16-593c-442f-8aff-51ffcc85843c",
+      "status": "approved-with-conditions",
+      "conditions": ["Explicit realpath/junction cleanup", "Explicit raw fd unsupported detection"],
+      "duration_ms": 82927,
+      "input_tokens": 4,
+      "cache_creation_input_tokens": 35522,
+      "cache_read_input_tokens": 11156,
+      "output_tokens": 6967,
+      "reported_total_cost_usd": 0.2152232
+    },
+    {
+      "task": "T00-V",
+      "provider": "Claude Code",
+      "requested_model": "sonnet",
+      "resolved_review_model": "claude-sonnet-5",
+      "session_id": "3d2b5334-3585-4d00-8e6f-ea6541cd9f79",
+      "status": "approved",
+      "reason": "Both conditions closed; child-process versus worker-thread clarification confirmed",
+      "duration_ms": 14434,
+      "input_tokens": 4,
+      "cache_creation_input_tokens": 21574,
+      "cache_read_input_tokens": 12238,
+      "output_tokens": 1122,
+      "reported_total_cost_usd": 0.1011216
+    }
+  ],
+  "transport_notes": [
+    "AGY stream-json requires event:user with message role/content, no CLI prompt; earlier malformed attempts produced no research and were discarded",
+    "Model names for agy were selected explicitly; usage and cost are provider-reported and not independently billed",
+    "Claude total cost includes provider-reported ancillary Haiku usage; substantive reviews resolved to Sonnet 5"
+  ]
+}

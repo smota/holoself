@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/migration-plan.schema.json",
+  "title": "Holoself policy migration plan",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "plan_id",
+    "generated_at",
+    "self_root",
+    "include_linked",
+    "entries",
+    "summary"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "plan_id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "generated_at": { "type": "string" },
+    "self_root": { "type": "string" },
+    "include_linked": { "type": "boolean" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "space_id",
+          "before_sha256",
+          "after_sha256",
+          "needs_migration",
+          "changes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "space_id": { "type": "string" },
+          "before_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "after_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "needs_migration": { "type": "boolean" },
+          "changes": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "before_metadata": { "type": "object" },
+          "after_metadata": { "type": "object" },
+          "before_text": { "type": "string" },
+          "after_text": { "type": "string" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "total_scanned",
+        "modified_files",
+        "unmodified_files",
+        "coverage_loss",
+        "non_amplification_verified"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "total_scanned": { "type": "integer", "minimum": 0 },
+        "modified_files": { "type": "integer", "minimum": 0 },
+        "unmodified_files": { "type": "integer", "minimum": 0 },
+        "coverage_loss": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "non_amplification_verified": { "type": "boolean" }
+      }
+    }
+  }
+}

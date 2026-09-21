@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/migration-receipt.schema.json",
+  "title": "Holoself policy migration receipt",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "plan_id",
+    "status",
+    "applied_at",
+    "reverted_at",
+    "narrowing_confirmed",
+    "entries"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "receipt_id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "plan_id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "status": { "type": "string", "enum": ["applied", "reverted", "partially-reverted"] },
+    "applied_at": { "type": "string" },
+    "reverted_at": { "type": ["string", "null"] },
+    "narrowing_confirmed": { "type": "boolean" },
+    "applied_entries_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "space_id",
+          "before_sha256",
+          "after_sha256",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "space_id": { "type": "string" },
+          "before_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "after_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "before_text": { "type": "string" },
+          "after_text": { "type": "string" },
+          "status": { "type": "string", "enum": ["applied", "reverted", "skipped"] }
+        }
+      }
+    }
+  }
+}

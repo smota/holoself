@@ -23,13 +23,15 @@ const baseContextProperties={
   task:{type:'string',minLength:1,maxLength:500,description:'The current task; used only for deterministic relevance selection.'},
   lens:{type:'string',minLength:1,maxLength:80,description:'A built-in or canonical custom lens ID.'},
   budget:{type:'string',enum:BUDGETS,default:'standard'},
-  temporal:{type:'string',enum:TEMPORAL,default:'current'}
+  temporal:{type:'string',enum:TEMPORAL,default:'current'},
+  cursor:{type:'string',minLength:1,maxLength:4096,description:'Opaque pagination cursor from previous manifest request.'}
 }
 const objectSchema=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false})
 const resultSchema=objectSchema({schema_version:{type:'integer'},data:{type:'object'},error:{type:'object'}})
 
 export const MCP_TOOLS=[
   {name:`${TOOL_PREFIX}status`,title:'Holoself status',description:'Check the fixed linked project, explicit link authority, context health, and pending proposals without revealing private root paths.',inputSchema:objectSchema({}),outputSchema:resultSchema,annotations:{title:'Holoself status',readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}},
+  {name:`${TOOL_PREFIX}context`,title:'Holoself context',description:'Resolve and deliver privacy-filtered, lens-scoped context for the current task in a single round-trip. Manifest and get remain optional for fine-grained inspection.',inputSchema:objectSchema({...baseContextProperties,source_ids:{type:'array',minItems:1,maxItems:16,uniqueItems:true,items:{type:'string',pattern:'^hs-[A-Za-z0-9_-]{8,}$'}}},['task']),outputSchema:resultSchema,annotations:{title:'Holoself context',readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}},
   {name:`${TOOL_PREFIX}context_manifest`,title:'Holoself context manifest',description:'Return bounded source handles, metadata, restrictions, and a deterministic receipt. It does not return source bodies.',inputSchema:objectSchema(baseContextProperties),outputSchema:resultSchema,annotations:{title:'Holoself context manifest',readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}},
   {name:`${TOOL_PREFIX}context_get`,title:'Holoself context get',description:'Resolve only the requested manifest source handles through the link, lens, lifecycle, and privacy gates.',inputSchema:objectSchema({...baseContextProperties,source_ids:{type:'array',minItems:1,maxItems:16,uniqueItems:true,items:{type:'string',pattern:'^hs-[A-Za-z0-9_-]{8,}$'}}},['source_ids']),outputSchema:resultSchema,annotations:{title:'Holoself context get',readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}},
   {name:`${TOOL_PREFIX}search`,title:'Holoself search',description:'Search the deterministic local privacy-filtered index for the fixed linked project.',inputSchema:objectSchema({query:{type:'string',minLength:1,maxLength:500},lens:{type:'string',minLength:1,maxLength:80},temporal:{type:'string',enum:TEMPORAL,default:'current'},federated:{type:'boolean',default:false},limit:{type:'integer',minimum:1,maximum:20,default:10}},['query']),outputSchema:resultSchema,annotations:{title:'Holoself search',readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}},
@@ -65,6 +67,8 @@ function resolveBoundProject(projectInput,env=process.env,cwd=process.cwd()){
   if(resolved.length!==1)fail(`ambiguous project binding from ${candidates.map(([source])=>source).join(' and ')}`,'PROJECT_BINDING_AMBIGUOUS')
   const [project,source]=resolved[0]
   if(!isAbsolute(project)||!existsSync(project)||lstatSync(project).isSymbolicLink()||!lstatSync(project).isDirectory())fail('project binding is not a safe local directory','PROJECT_BINDING_INVALID')
+  const holoselfDir=join(project,'.holoself')
+  if(existsSync(holoselfDir)&&lstatSync(holoselfDir).isSymbolicLink())fail('project has a legacy filesystem junction mount; run holoself link setup to migrate to a bounded link','LEGACY_MOUNT_DETECTED')
   const link=join(project,'.holoself','link.yaml')
   if(!existsSync(link)||lstatSync(link).isSymbolicLink()||!lstatSync(link).isFile())fail('fixed project has no safe .holoself/link.yaml','LINK_REQUIRED')
   holoselfMcpStatus(project)
@@ -88,6 +92,7 @@ function callTool(project,name,args){
   const tool=MCP_TOOLS.find(item=>item.name===name);if(!tool)fail(`unknown tool: ${name}`,'TOOL_NOT_FOUND')
   validateObject(args||{},tool.inputSchema)
   if(name===`${TOOL_PREFIX}status`)return holoselfMcpStatus(project)
+  if(name===`${TOOL_PREFIX}context`)return holoselfMcpContext(project,{...args,manifest:false})
   if(name===`${TOOL_PREFIX}context_manifest`)return holoselfMcpContext(project,{...args,manifest:true})
   if(name===`${TOOL_PREFIX}context_get`)return holoselfMcpContext(project,{...args,manifest:false})
   if(name===`${TOOL_PREFIX}search`)return holoselfMcpSearch(project,args)

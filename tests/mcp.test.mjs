@@ -28,7 +28,7 @@ test('MCP handshake, tool discovery, stdout framing, and annotations are determi
   const {project}=await fixture(),m=session(project)
   assert.equal(m.output[0].result.protocolVersion,'2025-11-25');assert.equal(m.output[0].result.capabilities.tools.listChanged,false)
   m.accept(JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/list',params:{}}));const tools=m.output.at(-1).result.tools
-  assert.deepEqual(tools.map(tool=>tool.name),MCP_TOOLS.map(tool=>tool.name));assert.equal(tools.length,6)
+  assert.deepEqual(tools.map(tool=>tool.name),MCP_TOOLS.map(tool=>tool.name));assert.equal(tools.length,7)
   assert.ok(tools.every(tool=>tool.inputSchema.additionalProperties===false&&tool.annotations.openWorldHint===false))
   m.accept('{bad json');assert.equal(m.output.at(-1).error.code,-32700)
 })
@@ -56,8 +56,15 @@ test('MCP status and context preserve link authority without exposing absolute p
   assert.match(selected.self.documents.find(document=>document.source_id===source.source_id).content,/MCP parity marker/)
   const cli=JSON.parse(await capture(()=>run(['context','--project',project,'--task','parity marker','--budget','small','--source',source.source_id,'--json'])))
   assert.equal(selected.context_receipt.context_hash,cli.context_receipt.context_hash);assert.deepEqual(selected.restrictions,cli.restrictions)
-  const escalated=m.call(5,'holoself_context_manifest',{lens:'private'}).result;assert.equal(escalated.isError,true);assert.match(escalated.structuredContent.error.message,/not granted/)
-  for(const lens of ['/srv/private/self','\\\\server\\share\\private']){const shaped=m.call(6,'holoself_context_manifest',{lens}).result;assert.equal(shaped.isError,true);assert.doesNotMatch(shaped.structuredContent.error.message,/srv|server|share/)}
+  const direct=m.call(5,'holoself_context',{task:'career parity marker',budget:'standard'}).result.structuredContent.data
+  assert.equal(direct.status,'complete')
+  assert.ok(direct.self.documents.length>0)
+  assert.ok(direct.self.documents.some(doc=>doc.content.includes('MCP parity marker')))
+  const mechanical=m.call(6,'holoself_context',{task:'format this JSON object: {"x":1}',budget:'small'}).result.structuredContent.data
+  assert.equal(mechanical.status,'not-needed')
+  assert.equal(mechanical.self.documents.length,0)
+  const escalated=m.call(7,'holoself_context_manifest',{lens:'private'}).result;assert.equal(escalated.isError,true);assert.match(escalated.structuredContent.error.message,/not granted/)
+  for(const lens of ['/srv/private/self','\\\\server\\share\\private']){const shaped=m.call(8,'holoself_context_manifest',{lens}).result;assert.equal(shaped.isError,true);assert.doesNotMatch(shaped.structuredContent.error.message,/srv|server|share/)}
 })
 
 test('MCP broken-state diagnostics redact bound private paths on successful and failed tools',async()=>{

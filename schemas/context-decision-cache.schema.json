@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/context-decision-cache.schema.json",
+  "title": "Holoself context decision cache (content-free)",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "catalog_hash",
+    "lens_registry_hash",
+    "contrib_selection_hash",
+    "identity_id",
+    "lens",
+    "allowed_lenses",
+    "task_hash",
+    "temporal",
+    "include_history",
+    "budget",
+    "manifest",
+    "requested_source_ids",
+    "cursor",
+    "links_register_hash",
+    "source_refs",
+    "receipt",
+    "state_hash",
+    "valid_until_epoch_ms",
+    "estimated_tokens_total"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 3 },
+    "catalog_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "lens_registry_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "contrib_selection_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "links_register_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "identity_id": { "type": "string" },
+    "lens": { "type": ["string", "null"] },
+    "allowed_lenses": { "type": "array", "items": { "type": "string" } },
+    "task_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "temporal": { "type": "string", "enum": ["current", "historical", "superseded", "all"] },
+    "include_history": { "type": "boolean" },
+    "budget": { "type": "string", "enum": ["small", "standard", "deep", "unbounded"] },
+    "manifest": { "type": "boolean" },
+    "requested_source_ids": {
+      "type": ["array", "null"],
+      "items": { "type": "string", "pattern": "^hs-[0-9a-f]{20}$" }
+    },
+    "cursor": { "type": ["string", "null"] },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["space_id", "source_id", "revision", "section_id"],
+        "additionalProperties": false,
+        "properties": {
+          "space_id": { "type": "string" },
+          "source_id": { "type": "string", "pattern": "^hs-[0-9a-f]{20}$" },
+          "revision": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "section_id": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "required": ["schema_version", "context_hash", "task_hash", "lens", "budget", "temporal", "source_ids", "source_hashes"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "const": 1 },
+        "context_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "task_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "lens": { "type": ["string", "null"] },
+        "budget": { "type": "string", "enum": ["small", "standard", "deep", "unbounded"] },
+        "temporal": { "type": "string", "enum": ["current", "historical", "superseded", "all"] },
+        "source_ids": { "type": "array", "items": { "type": "string", "pattern": "^hs-[0-9a-f]{20}$" } },
+        "source_hashes": { "type": "array", "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+      }
+    },
+    "state_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "valid_until_epoch_ms": { "type": ["integer", "null"] },
+    "estimated_tokens_total": { "type": "integer", "minimum": 0 }
+  }
+}

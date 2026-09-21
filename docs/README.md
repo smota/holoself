@@ -42,6 +42,7 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 - [Local MCP integration](guides/local-mcp.md)
 - [Common use cases](guides/common-use-cases.md)
 - [Migration](guides/migration.md)
+- [Adoption and rollback runbook](guides/adoption-and-rollback-runbook.md)
 
 ## Workbench
 
@@ -66,6 +67,17 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 ## Decisions
 
 - [Local MCP architecture](decisions/local-mcp-architecture.md)
+
+## Development specifications
+
+- [Context and lenses specification](specifications/context-and-lenses-vnext.md)
+- [Context and lenses implementation plan and C-00 evidence](specifications/context-and-lenses-implementation-plan.md)
+- [C-02 research: catalog and freshness](specifications/c02-research-catalog-and-freshness.md)
+- [C-03 research: lenses and migration](specifications/c03-research-lenses-and-migration.md)
+- [C-04 research: federation](specifications/c04-research-federation.md)
+- [C-05 research: single query, instructions, and Workbench](specifications/c05-research-single-query-and-experience.md)
+- [C-06 research: traceability and readiness](specifications/c06-research-traceability-and-readiness.md)
+- [Before-after report: C-00 to C-06](reports/before-after-c00-to-c06.md)
 
 ## Releases
 

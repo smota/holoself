@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { VERSION } from './version.mjs'
-import { LINK_START, LINK_END, auditInstructions, bootstrapText, canonicalSection, instructionEvidence, overlaySection } from './instructions.mjs'
+import { LINK_START, LINK_END, auditInstructions, bootstrapText, canonicalSection, instructionEvidence, instructionHash, instructionHashMatches, overlaySection } from './instructions.mjs'
 
 export { LINK_START, LINK_END, auditInstructions, bootstrapText }
 const SKILL_START='<!-- holoself-skill-start schema=1 -->'
@@ -112,7 +112,7 @@ export function activationPlan(project,options={}){
   return {canonical,adapters:mapped,skills,globalSkills,writes:unique(['.holoself/BOOTSTRAP.md','.holoself/runtime.json',...mapped.map(x=>x.file),...skills.map(x=>x.file)])}
 }
 function markerInfo(text,start=LINK_START,end=LINK_END){const starts=[];const ends=[];let i=-1;while((i=text.indexOf(start,i+1))>=0)starts.push(i);i=-1;while((i=text.indexOf(end,i+1))>=0)ends.push(i);if(!starts.length&&!ends.length)return {state:'inactive'};if(starts.length!==1||ends.length!==1||ends[0]<starts[0])return {state:'malformed'};const finish=ends[0]+end.length;return {state:'active',start:starts[0],end:finish,block:text.slice(starts[0],finish)}}
-function managedBlockHash(text){const info=markerInfo(text);return info.state==='active'?createHash('sha256').update(info.block).digest('hex'):null}
+function managedBlockHash(text){const info=markerInfo(text);return info.state==='active'?instructionHash(info.block):null}
 export function managedMarkerState(path){if(!existsSync(path))return 'missing';if(lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())return 'unsafe';return markerInfo(readFileSync(path,'utf8')).state}
 function nextMarkedContent(old,section){const info=markerInfo(old);if(info.state==='malformed')throw new Error('malformed Holoself markers');return info.state==='active'?old.slice(0,info.start)+section.trimEnd()+old.slice(info.end):(old.trimEnd()?old.trimEnd()+'\n\n':'')+section}
 export function injectMarker(project,rel,section,dryRun=false){const p=safeProjectFile(project,rel,'instruction write'),state=managedMarkerState(p);if(state==='unsafe'||state==='malformed')throw new Error(`${p} has unsafe or malformed Holoself markers`);const existed=existsSync(p),old=existed?readFileSync(p,'utf8'):'',next=nextMarkedContent(old,section);if(!dryRun&&next!==old)atomicWrite(p,next);return next===old?'unchanged':state==='active'?'updated':existed?'appended':'created'}

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile, lstat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { run } from '../src/cli.mjs'
@@ -60,4 +60,38 @@ test('Workbench discovers canonical linked projects and lazily browses local fol
 test('Workbench requires explicit root when cwd has no project link',async()=>{
   const productCwd=await temp()
   await assert.rejects(startWebServer({project:productCwd,port:0}),/requires --root/)
+})
+test('Workbench detects legacy mount, suggests migration setup, and migrates to metadata link', async () => {
+  const self = await temp(), project = await temp(), productCwd = await temp()
+  await run(['init', '--root', self])
+  await run(['link', '--root', self, '--target', project, '--yes'])
+  assert.equal((await lstat(join(project, '.holoself'))).isSymbolicLink(), true)
+
+  await writeFile(join(self, 'context', 'linked-projects.md'), `# Linked projects\n\n## Legacy-Project\n\n- Path: \`${project}\`\n- Lens: general\n`)
+
+  const app = await startWebServer({ project: productCwd, root: self, port: 0 })
+  try {
+    const session = (await (await fetch(`${app.url}/api/session`)).json()).data
+    const spacesRes = await (await fetch(`${app.url}/api/spaces`)).json()
+    const space = spacesRes.data.find(s => resolve(s.path) === resolve(project))
+    assert.ok(space)
+    assert.equal(space.status.state, 'legacy-mount')
+    assert.equal(space.status.mode, 'legacy-mount')
+    assert.ok(space.corrections.some(c => c.id === 'setup'))
+
+    const migrateRes = await fetch(`${app.url}/api/spaces/${space.id}/setup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-holoself-token': session.token }
+    })
+    assert.equal(migrateRes.status, 200)
+
+    assert.equal((await lstat(join(project, '.holoself'))).isSymbolicLink(), false)
+    assert.equal((await lstat(join(project, '.holoself'))).isDirectory(), true)
+
+    const updatedSpaces = await (await fetch(`${app.url}/api/spaces`)).json()
+    const updated = updatedSpaces.data.find(s => resolve(s.path) === resolve(project))
+    assert.equal(updated.status.mode, 'metadata-link')
+  } finally {
+    await new Promise(resolveClose => app.server.close(resolveClose))
+  }
 })
