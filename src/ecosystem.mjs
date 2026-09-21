@@ -2963,11 +2963,7 @@ export async function runEcosystem(o){
         return true
       }
       const selfExists=existsSync(link.path)
-      let schemaErrors=[]
-      if(selfExists){
-        const reg=loadLensRegistry(link.path)
-        schemaErrors=linkSchemaErrors(link,reg)
-      }
+      let schemaErrors=link._schemaErrors||[]
       if(schemaErrors.length){
         console.log(JSON.stringify({healthy:false,state:'broken',errors:schemaErrors},null,2))
         return true
