@@ -12,11 +12,9 @@ const checks = [
   ['capabilities', ['bin/holoself.mjs', 'capabilities', '--json']]
 ]
 for (const [name, args] of checks) {
-  const result = spawnSync(node, args, { cwd: root, encoding: 'utf8', shell: false, windowsHide: true, stdio: 'pipe' })
+  const result = spawnSync(node, args, { cwd: root, shell: false, windowsHide: true, stdio: 'inherit' })
   if (result.status !== 0) {
-    if (result.stdout) process.stderr.write(result.stdout)
-    if (result.stderr) process.stderr.write(result.stderr)
-    process.stderr.write(`[!!] ${name} failed (exit code ${result.status}, signal ${result.signal || 'none'})\n`)
+    process.stderr.write(`\n[!!] ${name} failed (exit code ${result.status}, signal ${result.signal || 'none'})\n`)
     process.exit(result.status || 1)
   }
   process.stdout.write(`[ok] ${name}\n`)
