@@ -141,7 +141,7 @@ function getIdentityId(identity,cursorSecret){
   return createHmac('sha256',cursorSecret).update(raw).digest('hex').slice(0,16)
 }
 function linkPath(project){ return join(project,'.holoself','link.yaml') }
-function canonicalSpaceId(projectDir){
+export function canonicalSpaceId(projectDir){
   const real=safeRealpath(projectDir)
   const norm=slash(real).normalize('NFC')
   const canonical=process.platform==='win32'?norm.toLowerCase():norm

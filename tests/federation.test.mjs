@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { run } from '../src/cli.mjs'
 import {
+  canonicalSpaceId,
   contextData,
   holoselfMcpSearch,
   readIndex,
@@ -24,11 +25,6 @@ async function capture(fn) {
     console.log = old
   }
   return out
-}
-
-function canonicalSpaceId(dir) {
-  const norm = dir.replaceAll('\\', '/').toLowerCase()
-  return 'hs-space-' + createHash('sha256').update('project\0' + norm).digest('hex').slice(0, 16)
 }
 
 async function setupFederationFixture() {
