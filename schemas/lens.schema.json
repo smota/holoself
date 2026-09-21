@@ -9,7 +9,7 @@
     "schema_version": { "const": 1 },
     "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40, "not": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] } },
     "title": { "type": "string", "minLength": 1, "pattern": "\\S" },
-    "base_lens": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview", "private"] },
+    "base_lens": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview"] },
     "sensitivity_access": {
       "type": "array",
       "uniqueItems": true,

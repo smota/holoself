@@ -13,7 +13,7 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": { "const": 2 },
     "space_id": { "type": "string" },
     "lens_registry_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "project_context_hash": { "type": ["string", "null"] },
@@ -74,6 +74,7 @@
               "task_include",
               "task_exclude",
               "visibility",
+              "read_scope",
               "field_visibility",
               "knowledge_status",
               "temporal_scope"
@@ -101,6 +102,7 @@
               "task_include": { "type": "array", "items": { "type": "string" } },
               "task_exclude": { "type": "array", "items": { "type": "string" } },
               "visibility": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] },
+              "read_scope": { "type": "string", "enum": ["shared", "local", "restricted"] },
               "public_safe": { "type": ["boolean", "null"] },
               "confidence": { "type": ["string", "null"] },
               "exclude_lenses": { "type": "array", "items": { "type": "string" } },
@@ -124,7 +126,18 @@
                 "pattern": "^(?:\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2}))$"
               },
               "supersedes": { "type": "array", "items": { "type": "string" } },
-              "superseded_by": { "type": ["string", "null"] }
+              "superseded_by": { "type": ["string", "null"] },
+              "contrib": {
+                "type": "object",
+                "required": ["id"],
+                "additionalProperties": false,
+                "properties": {
+                  "id": { "type": "string" },
+                  "title": { "type": "string" },
+                  "domain": { "type": "string" },
+                  "type": { "type": "string" }
+                }
+              }
             }
           },
           "sections": {
@@ -180,6 +193,23 @@
             }
           },
           "estimated_tokens": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "ignored_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "size", "modified_ms", "mtime_ns", "ino", "dev", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "file": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0 },
+          "modified_ms": { "type": "number" },
+          "mtime_ns": { "type": "string", "pattern": "^[0-9]+$" },
+          "ino": { "type": "string", "pattern": "^[0-9]+$" },
+          "dev": { "type": "string", "pattern": "^[0-9]+$" },
+          "reason": { "type": "string" }
         }
       }
     }

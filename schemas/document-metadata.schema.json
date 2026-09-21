@@ -26,6 +26,10 @@
       "type": "object",
       "additionalProperties": { "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] }
     },
+    "read_scope": {
+      "description": "Access scope decoupling access grant from perspective lens.",
+      "enum": ["shared", "local", "restricted"]
+    },
     "visibility": {
       "description": "Legacy compatibility field. Prefer access_lenses.",
       "enum": ["private", "linked-projects", "career", "publishing", "public-safe"]

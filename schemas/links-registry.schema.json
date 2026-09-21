@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/links-registry.schema.json",
+  "title": "Holoself sovereign links registry",
+  "type": "object",
+  "required": ["schema_version", "links"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "project_id",
+          "project_path",
+          "binding_salt",
+          "allowed_lenses",
+          "status",
+          "attested_by",
+          "created_at",
+          "updated_at",
+          "revoked_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "pattern": "^hs-space-[0-9a-f]{16}$" },
+          "project_path": { "type": "string", "minLength": 1 },
+          "binding_salt": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+          "allowed_lenses": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+              "maxLength": 40,
+              "not": { "const": "private" }
+            }
+          },
+          "status": { "type": "string", "enum": ["active", "revoked"] },
+          "attested_by": { "type": ["string", "null"] },
+          "created_at": { "type": "string" },
+          "updated_at": { "type": "string" },
+          "revoked_at": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

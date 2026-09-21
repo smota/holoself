@@ -31,7 +31,7 @@ function validateDefinition(value,file){
   if(typeof value.id!=='string'||value.id.length>40||!LENS_ID_PATTERN.test(value.id))fail(file,'id must be lowercase kebab-case, start with a letter, and be at most 40 characters')
   if(BUILTIN_BY_ID.has(value.id))fail(file,`reserved built-in id ${value.id}`)
   if(typeof value.title!=='string'||!value.title.trim())fail(file,'title must be a non-empty string')
-  if(!BUILTIN_BY_ID.has(value.base_lens))fail(file,'base_lens must be a built-in lens')
+  if(!BUILTIN_BY_ID.has(value.base_lens)||value.base_lens==='private')fail(file,'base_lens must be a non-private built-in lens')
   const sensitivity=value.sensitivity_access??[]
   if(!Array.isArray(sensitivity)||new Set(sensitivity).size!==sensitivity.length||sensitivity.some(item=>!CUSTOM_SENSITIVITY_CATEGORIES.includes(item)))fail(file,'sensitivity_access must contain unique supported categories; restricted is not allowed')
   return Object.freeze({schema_version:1,id:value.id,title:value.title.trim(),source:'registry',base_lens:value.base_lens,sensitivity_access:Object.freeze([...sensitivity]),instructions:Object.freeze(validateInstructions(value.instructions||DEFAULT_INSTRUCTIONS[value.base_lens],file))})
@@ -43,7 +43,7 @@ export function loadLensRegistry(selfRoot){
   if(existsSync(registryPath)){
     const stat=lstatSync(registryPath)
     if(stat.isSymbolicLink()||!stat.isDirectory())throw new Error(`unsafe lens registry directory: ${registryPath}`)
-    for(const name of readdirSync(registryPath).filter(name=>name.toLowerCase().endsWith('.json')).sort((a,b)=>a.localeCompare(b))){
+    for(const name of readdirSync(registryPath).filter(name=>name.toLowerCase().endsWith('.json')).sort((a,b)=>(a<b?-1:a>b?1:0))){
       const path=join(registryPath,name),entry=lstatSync(path)
       if(entry.isSymbolicLink()||!entry.isFile())throw new Error(`unsafe lens registry entry: ${path}`)
       const raw=readFileSync(path,'utf8');let parsed
@@ -51,7 +51,7 @@ export function loadLensRegistry(selfRoot){
       records.push({name,raw,lens:validateDefinition(parsed,name)})
     }
   }
-  const instructionsPath=join(registryPath,'instructions'),instructionRecords=[];if(existsSync(instructionsPath))for(const name of readdirSync(instructionsPath).filter(name=>name.endsWith('.json')).sort()){const path=join(instructionsPath,name),raw=readFileSync(path,'utf8');let parsed;try{parsed=JSON.parse(raw)}catch(error){throw new Error(`invalid lens instructions ${name}: ${error.message}`)}instructionRecords.push({id:name.slice(0,-5),raw,instructions:validateInstructions(parsed,name)})}const overrides=new Map(instructionRecords.map(item=>[item.id,item.instructions])),builtins=BUILTIN_LENSES.map(lens=>Object.freeze({...lens,instructions:Object.freeze(overrides.get(lens.id)||lens.instructions)})),custom=records.map(record=>Object.freeze({...record.lens,instructions:Object.freeze(overrides.get(record.lens.id)||record.lens.instructions)})).sort((a,b)=>a.id.localeCompare(b.id)),byId=new Map(builtins.map(lens=>[lens.id,lens]));for(const lens of custom){if(byId.has(lens.id))throw new Error(`duplicate lens id ${lens.id}`);byId.set(lens.id,lens)}for(const id of overrides.keys())if(!byId.has(id))throw new Error(`lens instructions reference unknown lens ${id}`);const registry_hash=sha(JSON.stringify([...records.map(record=>[record.name,sha(record.raw)]),...instructionRecords.map(record=>[`instructions/${record.id}.json`,sha(record.raw)])]));return Object.freeze({root,registry_path:registryPath,registry_hash,builtins:Object.freeze(builtins),custom:Object.freeze(custom),lenses:Object.freeze([...builtins,...custom]),byId})
+  const instructionsPath=join(registryPath,'instructions'),instructionRecords=[];if(existsSync(instructionsPath))for(const name of readdirSync(instructionsPath).filter(name=>name.endsWith('.json')).sort((a,b)=>(a<b?-1:a>b?1:0))){const path=join(instructionsPath,name),raw=readFileSync(path,'utf8');let parsed;try{parsed=JSON.parse(raw)}catch(error){throw new Error(`invalid lens instructions ${name}: ${error.message}`)}instructionRecords.push({id:name.slice(0,-5),raw,instructions:validateInstructions(parsed,name)})}const overrides=new Map(instructionRecords.map(item=>[item.id,item.instructions])),builtins=BUILTIN_LENSES.map(lens=>Object.freeze({...lens,instructions:Object.freeze(overrides.get(lens.id)||lens.instructions)})),custom=records.map(record=>Object.freeze({...record.lens,instructions:Object.freeze(overrides.get(record.lens.id)||record.lens.instructions)})).sort((a,b)=>(a.id<b.id?-1:a.id>b.id?1:0)),byId=new Map(builtins.map(lens=>[lens.id,lens]));for(const lens of custom){if(byId.has(lens.id))throw new Error(`duplicate lens id ${lens.id}`);byId.set(lens.id,lens)}for(const id of overrides.keys())if(!byId.has(id))throw new Error(`lens instructions reference unknown lens ${id}`);const registry_hash=sha(JSON.stringify([...records.map(record=>[record.name,sha(record.raw)]),...instructionRecords.map(record=>[`instructions/${record.id}.json`,sha(record.raw)])]));return Object.freeze({root,registry_path:registryPath,registry_hash,builtins:Object.freeze(builtins),custom:Object.freeze(custom),lenses:Object.freeze([...builtins,...custom]),byId})
 }
 
 export function resolveLens(registry,id){

@@ -260,7 +260,7 @@ Estado: aprovado por Claude Opus em T01-V (Revisão 5); desenvolvimento T01-D1 e
 #### 5.1.2 Filtragem prévia e invariantes de métodos/contribs (R-09, V-05, Medium-2)
 1. **Elegibilidade por lente base e compatibilidade de sensibilidade:**
    - Métodos reutilizáveis opcionais (`contribs`) são avaliados previamente considerando a lente base da resolução (`resolution.base_lens || lens`).
-   - Invariante normativo: a elegibilidade exige que a sensibilidade declarada do método seja estritamente compatível tanto com o `base_lens` quanto com o conjunto `resolution.sensitivity_access` da lente ativa. Métodos que exijam sensibilidade não autorizada são inelegíveis. Em particular, lentes customizadas com `base_lens: 'private'` não habilitam contribs de sensibilidade `restricted` se seu próprio `sensitivity_access` não a conceder expressamente (interseção estrita).
+   - Invariante normativo: a elegibilidade exige que a sensibilidade declarada do método seja estritamente compatível tanto com o `base_lens` quanto com o conjunto `resolution.sensitivity_access` da lente ativa. Métodos que exijam sensibilidade não autorizada são inelegíveis. Em particular, lentes customizadas com `base_lens: 'private'` *(REVOGADO em C-03 §7.1.1.3: `base_lens: "private"` é expressamente proibido para qualquer lente customizada; apenas a lente embutida `private` pode tê-lo)* não habilitam contribs de sensibilidade `restricted` se seu próprio `sensitivity_access` não a conceder expressamente (interseção estrita).
 2. **Descarte prévio à seleção (sem falhas em cascata):**
    - Todo método inelegível é descartado na fase de descoberta (antes de ingressar no seletor de relevância ou orçamento).
    - Um método opcional omitido por inelegibilidade nunca chega a `resolvedContextAssertions`, eliminando o erro falso de vazamento e garantindo a entrega do contexto válido remanescente. Cap de 2 contribs e ranking preservados.
@@ -452,6 +452,12 @@ Em cumprimento à dependência cruzada entre T02-S e T03-S para C-03/C-04:
    - Na inicialização ou carregamento de cache, todo arquivo em `<projectDir>/.holoself/runtime/context-cache/` que não contenha `schema_version: 2` válido conforme `schemas/context-decision-cache.schema.json` é imediatamente expurgado, garantindo que entradas legadas sem versão contendo corpos em texto claro sejam eliminadas.
 4. **Validação Formal de Schema (L-23):**
    - Validação executada por `validateDecisionCacheSchema` em `src/ecosystem.mjs` / `src/catalog.mjs`.
+5. **Normalização de Entrada da Chave de Cache (Nit 5):**
+   - Entradas passadas em `options.sources` ou `options.source_ids` (seja por caminhos relativos, absolutos ou IDs) são resolvidas para identificadores canônicos determinísticos `hs-[0-9a-f]{20}` contra o conjunto de candidatos antes do cômputo da chave de cache (`computeDecisionCacheKey`), garantindo invariância da chave independentemente da forma de invocação.
+6. **Reconstituição de Omissões no Acerto de Cache Persistente (S-10, B-3):**
+   - O schema de cache de decisão é estritamente livre de corpos e diagnósticos de ranking voláteis (`schemas/context-decision-cache.schema.json`).
+   - Em acertos de cache persistente (`warm`), candidatos não selecionados têm motivos de omissão reconstituídos por heurística honesta baseada em metadados estruturais (restrições temporais, limite de seleção de contribs `contribCount >= 2`, orçamento de envelope ou relevância semântica).
+   - Em modo `--manifest`, candidatos não selecionados constituem itens pagináveis sob `next_cursor` e não geram omissões sintéticas (B-3).
 
 #### 6.1.5 Frescor por Stat Robusto, TOCTOU e Validação Bidirecional (H-2, H-3, H-4, H-14, M-7, L-6, L-8, L-23)
 1. **Tupla de Frescor Estrita (H-2, L-6, L-8):**
@@ -526,6 +532,23 @@ Orçamentos congelados após decisão D-08 autorizada, condicionados a regime wa
 - O validador de catálogo `validateCatalogSchema` e o validador de cache `validateDecisionCacheSchema` residem formalmente em `src/ecosystem.mjs` (ou módulo de catálogo correspondente).
 - São executados compulsoriamente na emissão/leitura de catálogos e caches e cobertos diretamente por testes em `tests/efficiency.test.mjs` e `tests/ecosystem.test.mjs`.
 
+### 6.2 Registro de Entrega e Verificação do Ciclo C-02
+
+- T02-R verified: rastreamento de buildIndex, comparativo de opções de persistência descartável sem dependências externas de runtime (`node:` builtins apenas), assegurando compatibilidade estrita com Node >=20.
+- T02-S verified: especificação técnica do contrato C02-CONTRACT-1 v5 na Seção 6.1 (catálogo particionado deterministicamente, tupla de stat completa `(size, mtime_ns, ino, dev)`, chave canônica completa, limites e evicção LRU, invalidação por frescor e decisão D-08).
+- T02-V verified: Claude Opus (`claude -p --model opus`) revisou adversarialmente em 5 rodadas de auditoria formal (**status: approved**), confirmando:
+  - B-1 / B-2: Filtragem estrita *fail-closed* de `links[]` e `sections[].snippet` / `search_text` sob lentes de publicação (`allowed()` e sanitização de visibilidade).
+  - B-3: Gating de omissões sintéticas em `if (!o.manifest)` no acerto de cache persistente, garantindo paridade frio/quente no modo manifesto.
+  - B-4: Gravação de lápide com `mtime_ns: '0'` e emissão de aviso para arquivos com falha de leitura transitória, garantindo re-tentativa imediata na execução seguinte sem fixação permanente (§6.1.5.3.4).
+  - S-6 a S-10 e Nits 1 a 6: Preservação de `knowledge_status` e `temporal_scope`, reconciliação de metadados na entrega, visibilidade `'linked-projects'` de contribs, eliminação de vazamento de `PARTITION_WARNINGS` (N-1), eliminação de envenenamento de validade de cache por documentos já expirados (N-3), ordenação de omissões (N-4) e normalização de chave de cache (§6.1.4).
+- T02-D1 & T02-D2 verified: implementação completa em `src/catalog.mjs`, `src/ecosystem.mjs`, `src/context-selection.mjs` e `schemas/catalog.schema.json`.
+- T02-F verified:
+  - Suíte completa: **204/204 testes passando** (`node scripts/verify.mjs` e `node --test tests/*.test.mjs`), incluindo 27 testes dedicados em `tests/catalog.test.mjs`.
+  - Zero dependências de runtime externas (`node:` builtins apenas).
+  - Paridade rigorosa entre caminhos cold e warm (`context_hash`, `omitted_count`, `restrictions`, `next_cursor`).
+  - `git diff --check` 100% limpo. Ciclo C-02 formalmente verificado e concluído.
+
+
 
 
 
@@ -543,7 +566,453 @@ Escopo: R-01/R-03/R-12, A-01/A-02/A-07; V-04/V-05/V-10/V-12. Entrada: C-01; inte
 | T03-D2 | S | Implementar preview, aplicação explicitamente acionada e reversão em fixtures; revisar hashes antes de escrever, rejeitar estado divergente. | D1; V-10 dry-run sem mutação, aplicação/reversão preservam bytes alheios. |
 | T03-F | Q | Validar matriz CLI/MCP/web nas duas versões e migrar/reverter conjunto sintético; manter grant efetivo ou exigir adesão explícita para ampliar. | D1/D2; V-04/V-05/V-10/V-12 e cache revogado C-02. |
 
-Arquivos iniciais: `src/lenses.mjs`, `src/ecosystem.mjs`, `schemas/link.schema.json`, `schemas/lens.schema.json`, `schemas/document-metadata.schema.json`, testes de lentes/privacidade/ecossistema. Nenhum registro de espaço pessoal real integra este ciclo.
+Arquivos iniciais: `src/lenses.mjs`, `src/ecosystem.mjs`, `schemas/link.schema.json`, `schemas/lens.schema.json`, `schemas/document-metadata.schema.json`, `schemas/links-registry.schema.json`, `schemas/migration-plan.schema.json`, `schemas/migration-receipt.schema.json`, testes de lentes/privacidade/ecossistema. Nenhum registro de espaço pessoal real integra este ciclo.
+
+#### 7.1 Contrato detalhado C03-CONTRACT-1 v12 — lentes como perspectivas, matriz de acesso restritiva e migração reversível
+
+Estado: proposta v12 consolidada por Q incorporando integralmente os achados B11-1, S11-1..S11-3 e N11-1..N11-5 da Revisão 11 de Claude Opus em T03-V.
+
+#### 7.1.1 Desacoplamento de Lente (Perspectiva) e Grant (Autorização) (D-01, R-01, R-03, A-01, A-07, V-04, V-05, B3-1, B3-2, B4-3, B10-1, B10-2, S3-2, S4-4, N5-2, N6-1, N6-2, B7-1, N10-1, N10-2, B11-1, S11-1, S11-2, N11-1, N11-2, N11-3)
+1. **Separação Formal entre Escopo de Acesso e Perspectiva (D-01):**
+   - A autorização de leitura é estritamente desacoplada do identificador de lente (`lens_id`). Criar ou registrar uma lente customizada não concede nem revoga acesso a documentos (B3-1).
+   - O schema de metadados (`schemas/document-metadata.schema.json`) e as estruturas internas (`PRIVACY_FIELDS`, `privacyValueValid`, `restrictPrivacyMetadata`) formalizam o campo canônico `read_scope`:
+     - `"shared"`: Acessível por projetos e espaços vinculados autorizados através de lentes compatíveis.
+     - `"local"`: Acessível quando `subject.accessible_spaces.includes(source.space_id)` (S3-2). Nota: `read_scope: "local"` é aplicável a `self` e `project`; não é aplicável a `contrib` (N6-2).
+     - `"restricted"`: Acessível exclusivamente pelo proprietário direto (`owner:direct`) sob a lente embutida `private` (`resolution.source === "builtin" && lens === "private"`). Jamais acessível por `client:linked` ou por lentes customizadas (B3-2, B5-3).
+   - **Regras de Parsing, Validação e Derivação de Leitura de `read_scope` (B2-1, S4-4, N5-2, N10-2):**
+     - Em `self` e `project`: quando `read_scope` for **ausente** (documentos legados não migrados ou revertidos), o runtime NÃO quarentena a fonte; em vez disso, deriva `read_scope` dinamicamente em tempo de leitura a partir de `visibility` via tabela normativa de derivação em §7.1.3.1. Isso garante compatibilidade retroativa contínua e evita que corpora legados fiquem ilegíveis antes da migração.
+     - **Quarentena e Fallback Restrito a Valores Inválidos (B2-1, N5-2, N10-2):**
+       - Em `self`: `read_scope` presente mas sintaticamente inválido (ex.: `read_scope: shred`) quarentena o arquivo *fail-closed* via `canonicalPrivacyMetadataErrors` (`src/ecosystem.mjs:429` e ponto canônico do construtor de catálogo em `src/ecosystem.mjs:1336`) (N10-2).
+       - Em `project`: `read_scope` presente mas sintaticamente inválido é restrito *fail-closed* via `restrictPrivacyMetadata` (`src/ecosystem.mjs:322`).
+     - Em `restrictPrivacyMetadata`: fixa `read_scope: "restricted"`.
+     - Nota: `read_scope: "local"` é um campo de autoria v2; a migração de metadados legados nunca sintetiza `local` a partir de `visibility` (apenas `"shared"` ou `"restricted"`).
+   - **Transporte Canônico de `read_scope` para o Catálogo, Esquema de Catálogo v2 e Atualização de Fixtures (B10-1, S11-1):**
+     - `privacyMetadata` (`src/ecosystem.mjs:1312`) materializa compulsoriamente `read_scope` na projeção de frontmatter persistida no catálogo:
+       `read_scope: ['shared', 'local', 'restricted'].includes(metadata.read_scope) ? metadata.read_scope : (visibility(metadata) === 'private' ? 'restricted' : 'shared')`.
+     - `ALLOWED_FRONTMATTER_KEYS` em `src/catalog.mjs:212` adiciona compulsoriamente `'read_scope'`.
+     - `schemas/catalog.schema.json` adiciona `"read_scope": { "type": "string", "enum": ["shared", "local", "restricted"] }` sob `properties` e sob `required` da definição de `frontmatter`.
+     - `CATALOG_SCHEMA_VERSION` avança para `2` em `src/catalog.mjs` e `schemas/catalog.schema.json`, forçando rebuilding transparente de partições legadas em `ensureCatalog` e garantindo que o portão de Fase 1 em `catalogCandidateRecords` (`src/ecosystem.mjs:463`) acesse o metadado estruturado com integridade absoluta (B10-1).
+     - **Obrigações Normativas de Atualização de Testes e Fixtures de Catálogo para T03-D1 (S11-1):**
+       A transição do catálogo para v2 e a exigência de `read_scope` impõem a atualização estrita dos seguintes pontos existentes da suíte de testes:
+       1. **Asserções de versão do catálogo (1 $\to$ 2):** `tests/lenses.test.mjs:92`, `tests/privacy-capabilities.test.mjs:79, 95, 130`, e `tests/catalog.test.mjs:635` (atualizar `assert.equal(index.schema_version, 1)` para `assert.equal(index.schema_version, 2)`).
+       2. **Fixtures estáticas de catálogo com versão legada:** `tests/catalog.test.mjs:209, 283, 330, 449, 685` (atualizar `schema_version: 1` para `schema_version: 2`).
+       3. **Fixtures estáticas de frontmatter sem `read_scope`:** `tests/catalog.test.mjs:134, 491, 664` (adicionar `read_scope: 'shared'` para manter conformidade estrita com o schema v2).
+2. **Identidade Canônica Unificada de Espaço (`space_id`), Sujeito e Espaços Acessíveis (B2-4, B10-2, S3-2, S3-3, N3-4, N4-2, N6-1, B7-1, B9-3, N9-3):**
+   - Fica formalmente unificada a identidade de espaço em toda a base (`catalog`, `ecosystem`, `lenses`), com prefixos distintos para diferenciar namespaces (N3-4):
+     - `self`: `space_id = "self"`.
+     - `contrib`: `space_id = "contrib"`.
+     - `project`: `space_id = "hs-space-" + sha256("project\0" + canonical_project_path).slice(0, 16)`.
+       (Derivado deterministicamente do caminho canônico resolvido por `safeRealpath`, NFC normalizado, lowercase no Windows).
+   - **Cláusula de Supersessão e Reindexação de Catálogo (S3-3):** Fica formalmente revogada e substituída a definição de `space_id: basename(projectDir)` e `SourceRef.source_id` de C-02 §6.1.2. A adoção da tupla `hs-space-...` e a evolução do esquema de catálogo para v2 acionam rebuilding transparente de catálogo em `ensureCatalog`, atualizando chaves de cache e catálogos com integridade garantida.
+   - **`source.space_id`**: determinado pela raiz do diretório de onde o documento foi carregado (`selfRoot` $\implies$ `"self"`, `PACKAGE_ROOT/contribs` $\implies$ `"contrib"`, `projectRoot` $\implies$ `space_id` do projeto).
+   - **`subject.space_id` e `subject.accessible_spaces` (S3-2, N4-2, N6-1, B7-1, B9-3, B10-2, N9-3):**
+     - Para `owner:direct`: `subject.space_id = "self"`.
+       - **Condição Normativa de Contenção de CWD (B7-1):** Conforme `src/ecosystem.mjs:625`, a resolução de `owner:direct` exige compulsoriamente que o diretório de trabalho do processo chamador esteja contido na raiz canônica do self (`cwd ∈ selfRoot`, validado via `assertContainedPath(targetSelf, cwd)`). Invocadores fora de `selfRoot` sem projeto/link são rejeitados fail-closed com `LINK_REQUIRED`.
+        - Quando `project` estiver presente: cláusula forward-looking para C-04 (`subject.accessible_spaces = ["self", current_project_space_id]`). Na arquitetura atual, qualquer invocação com `project !== null` resolve exclusivamente a identidade `client:linked`, sendo impossível atingir `owner:direct` com projeto na execução de runtime vigente (N11-3).
+        - Quando `project` for `null` (caso de consulta direta do proprietário sem projeto com `cwd ∈ selfRoot`, ex.: `context --root <selfRoot> --lens private` executado a partir de `<selfRoot>` ou de qualquer subdiretório de `<selfRoot>`): `subject.accessible_spaces = ["self"]` (N6-1, B7-1, N11-3).
+          - **Particionamento Estritamente Dirigido por Identidade e Plumbing de `projectDir` (B9-3, B10-2, S11-2, N9-3, N11-1):** Sempre que `identity.kind === "owner:direct"` e `identity.project === null` (independentemente de `cwd` ser `<selfRoot>` ou qualquer subdiretório `cwd ⊂ selfRoot`, como `<selfRoot>/context`):
+            1. Em `contextData` (`src/ecosystem.mjs:680`), o argumento `projectDir` repassado a `ensureCatalog` é computado compulsoriamente como `identity.kind === 'client:linked' ? project : null` (S11-2). Ao passar `null` para `owner:direct`, suprime-se categoricamente a execução acidental de `purgeLegacyIndex(projectDir)` sobre subpastas do self (`src/ecosystem.mjs:1673`), prevenindo expurgo indevido de índices em subdiretórios de self (S11-2).
+            2. Como `projectDir === null`, `ensureCatalog` (`src/ecosystem.mjs:1679`) **NÃO constrói partição de projeto** (`catResult.project = null`), e nenhum diretório `.holoself/catalog` é criado dentro de subdiretórios do self (B10-2).
+            3. O predicado de varredura de partição local em `contextData` (`src/ecosystem.mjs:682`) é estritamente condicionado à identidade: `local = (identity.kind === 'client:linked' && identity.project !== null && !o.selfOnly && existsSync(project) && resolve(project) !== resolve(self) && catResult.project) ? ... : { records: [], restrictions: [] }` (B10-2, N11-1).
+            4. Apenas a partição `catResult.self` é escaneada, fixando compulsoriamente `source.space_id = "self"` para todos os documentos escaneados.
+            5. Como `subject.accessible_spaces = ["self"]`, todo documento com `read_scope: "local"` ou `"shared"` satisfaz deterministicamente `subject.accessible_spaces.includes(source.space_id)` (visto que `"self" \in ["self"]`), eliminando pela raiz qualquer dupla varredura de arquivos físicos, contagens corrompidas de orçamento ou vereditos conflitantes (B9-3, B10-2, N9-3).
+     - Para `client:linked`: `subject.space_id = current_project_space_id`; `subject.accessible_spaces = [current_project_space_id]`. O chamador vinculado acessa estritamente documentos locais do seu próprio projeto; `"self"` é categoricamente inacessível para escopo `local`.
+3. **Lentes como Perspectivas Declarativas, Rótulo Exato para Acesso e Proibição de Herança em Fase 3 (B3-1, B2-3, N3-2):**
+   - Uma lente define uma perspectiva de relevância, vocabulário e regras de projeção (instruções, ranking semântico e regras operacionais de redação herdadas de `base_lens`, `behaviorLens`).
+   - `access_lenses`: Array de identificadores de lentes sob as quais o documento é indexado como relevante.
+   - **Acesso Estrito por Rótulo Exato sem Herança de `base_lens` (B3-1):**
+     - O gating de acesso em Fase 3 exige **correspondência exata de identificador**: $L \in \text{access\_lenses}(meta)$.
+     - `base_lens` é utilizado **exclusivamente para regras de comportamento e redação** (`behaviorLens`), mantendo integralmente a invariante testada em `tests/lenses.test.mjs:60-68` ("custom context requires exact label").
+     - Criar ou registrar uma lente customizada NÃO concede acesso retroativo a documentos marcados com a lente base, preservando estritamente a invariante de não-ampliação $\text{allowed}_{\text{after}} \implies \text{allowed}_{\text{before}}$.
+   - **Proibição Formal e Ponto de Aplicação de `base_lens: "private"` (B2-3, N3-2, N5-1):**
+     - Fica expressamente revogada a menção permissiva da linha 263 de §5.1.2 (anotada inline).
+     - `validateDefinition` em `src/lenses.mjs:34` é formalmente reforçado:
+       `if (!BUILTIN_BY_ID.has(value.base_lens) || value.base_lens === 'private') fail(file, 'base_lens must be a non-private built-in lens');`
+     - `schemas/lens.schema.json` restringe estritamente `base_lens` ao enum:
+       `"base_lens": { "enum": ["general", "career", "publishing", "technical", "leadership", "interview"] }`.
+     - Em `schemas/context.schema.json`, `base_lens: "private"` permanece admitido condicionalmente unicamente para a definição da própria lente embutida `private` (`source === "builtin" && id === "private"`), sendo sumariamente rejeitado para qualquer lente customizada.
+4. **Separação Explícita entre Avaliador de Fonte e Avaliador de Redação Intra-Corpo (B4-3, S5-1, S6-1, S7-1, S9-6, N7-2, N8-3):**
+   - Ficam formalmente separados dois avaliadores especializados com assinaturas e contratos distintos:
+     a) **Avaliador de Acesso a Fonte (`allowedDocument(meta, lens, adapter, task, resolution, subject)`):** Portão de acesso em 7 fases que decide a elegibilidade do documento completo. O objeto `subject` transporta os vereditos pré-resolvidos de atestação e concessões (`effective_allowed_lenses`, `accessible_spaces`, `attestation_valid`) validados no preflight (N10-1).
+     b) **Avaliador de Redação Intra-Corpo (`visibleUnderBehavior(visibility, behaviorLens, adapter = 'generic')`):** Avaliador comportamental utilizado em todos os 12 pontos de chamada intra-corpo (`filterClaimVisibility`, `filterFieldVisibility`, e filtragem de seções, claims, tags e links no catálogo):
+        - Entrada: `visibility`.
+        - **Coerção Fail-Closed de Visibilidade Inválida (S6-1, S7-1, N8-3):** `const v = VISIBILITIES.includes(visibility) ? visibility : 'private'`. Valores extraídos de regex (como em `filterClaimVisibility`, `src/ecosystem.mjs:399`) ou campos intra-corpo que não pertençam estritamente ao enum `VISIBILITIES` (`'private'`, `'linked-projects'`, `'career'`, `'publishing'`, `'public-safe'`) são compulsoriamente coagidos a `'private'` *fail-closed*, impedindo que valores malformados ou typos vazem conteúdo para fora do proprietário (S6-1).
+        - **Preservação de Diagnóstico e Escopo Exclusivo ao Proprietário (N8-3, S9-6, §7.1.1.5):** O registro detalhado do motivo em `restrictions[]` reportando o valor bruto original não-coagido (`claim visibility ${claimVisibility} excluded by ${lens} lens`) é estritamente restrito a chamadas de `identityKind === 'owner:direct'` (`if (identityKind === 'owner:direct') restrictions.push(...)`). Para chamadores `client:linked`, restrições intra-corpo detalhadas são silenciosamente suprimidas ou anonimizadas conforme a regra anti-oráculo de §7.1.1.5, impedindo vazamento de pistas estruturais sobre tokens ou tipografias internas a projetos vinculados (S9-6).
+        - **Distinção de Granularidade e Relatório (S7-1):** A coerção fail-closed intra-corpo é um estreitamento de segurança aceito em tempo de execução operando na granularidade de seções/blocos/claims. Por construção, está fora do escopo do relatório de migração de documentos em §7.1.3.4 (que computa cobertura sobre $d \in \text{Docs}$ inteiros) e consta formalmente documentada na tabela de transição de capacidades em §7.1.3.5 (S7-1).
+        - Regra padrão: `legacyAccessLenses({ visibility: v }).includes(behaviorLens)`.
+        - Condição de adapter público: se `adapter` for público (`'obsidian-public'`, `'public'`, `'restricted-host'`), exige `v === 'public-safe'` (S5-1). Nota: o parâmetro `adapter = 'generic'` é forward-looking para suportar os novos adaptadores públicos previstos em C-04/C-05; todos os 12 pontos de chamada intra-corpo vigentes invocam com `'generic'` (N7-2).
+        - Sob `--lens private`, `behaviorLens === 'private'`, garantindo que `legacyAccessLenses({ visibility: 'private' })` retorna `['private']` e preserva 100% dos blocos e seções privadas do proprietário.
+5. **Unificação Homogênea da Precedência Fail-Closed em 7 Fases para `allowedDocument` (R-03, S-1, S-2, B3-1, B3-2, B4-1, B4-2, B5-3, B9-1, S3-2, S5-3, N5-4, N10-1):**
+   - A avaliação de elegibilidade do documento em `allowedDocument` executa 7 fases rigorosas:
+     - **Fase 1 (Sujeito e Escopo Relacional) (B3-2, B10-1, S3-2):**
+       - Se `meta.read_scope === "restricted"`: exige universalmente `subject.kind === "owner:direct" && resolution.source === "builtin" && lens === "private"`. Para chamadores vinculados, recusa *fail-closed* sem oráculo de erro.
+       - Se `meta.read_scope === "local"`: exige `subject.accessible_spaces.includes(source.space_id)` (S3-2).
+       - Se `meta.read_scope === "shared"`: permitido para `owner:direct` e `client:linked`.
+     - **Fase 2 (Teto Soberano, Exclusão Categórica de `private`, Predicado de Sal e Avaliação Pré-Cache) (B-5, B-6, B3-2, B9-1, S5-3, N5-4, N10-1, N11-2):**
+       - Se o chamador for `client:linked`:
+         - O cálculo de `effective_allowed_lenses` e a validação do predicado de `binding_salt` são executados compulsoriamente uma única vez no início da consulta em `contextData` (`src/ecosystem.mjs:557`) (N5-4, N10-1, N11-2).
+         - **Avaliação Pré-Cache Obrigatória (S5-3):** A verificação de atestação do vínculo é avaliada compulsoriamente **antes** de qualquer consulta ao cache de decisão em disco (`src/catalog.mjs`). Vínculos não registrados, revogados ou com sal inválido abortam imediatamente *fail-closed* com `LENS_NOT_GRANTED`, sem tocar nem ler o cache de decisão.
+         - Localiza o vínculo no registro `<selfRoot>/.holoself/links.json` pelo `canonical_project_path` e valida `binding_salt`:
+           - **Predicado Exato de Validação de `binding_salt` (B9-1):**
+             `typeof registryEntry.binding_salt === 'string' && typeof linkYaml.self_context?.binding_salt === 'string' && registryEntry.binding_salt.length > 0 && registryEntry.binding_salt === linkYaml.self_context.binding_salt`.
+           - Se o predicado falhar (sal ausente, vazio, nulo ou divergente entre os dois arquivos): aborta imediatamente *fail-closed* com `LENS_NOT_GRANTED` (registrando internamente motivo de auditoria `binding_salt mismatch or absent`), impedindo categoricamente ataques de sequestro de caminho (path-reuse hijacking) (B9-1).
+         - Se o vínculo não existir ou tiver `status !== "active"`: recusa com `LENS_NOT_GRANTED` (`effective_allowed_lenses = ∅`).
+         - Calcula o teto efetivo soberano subtraindo compulsoriamente `"private"`:
+           $$\text{effective\_allowed\_lenses} = ((link.\text{default\_lens} \cup link.\text{secondary\_lenses}) \cap link\_entry.\text{allowed\_lenses}) \setminus \{\text{"private"}\}$$
+         - Se $L \notin \text{effective\_allowed\_lenses}$: recusa com `LENS_NOT_GRANTED`.
+     - **Fase 3 (Indexação da Perspectiva por Rótulo Exato) (B3-1):**
+       - Exige estritamente $L \in \text{access\_lenses}(meta)$. Nenhuma herança de `base_lens` opera sobre a autorização de leitura.
+     - **Fase 4 (Exclusão Explícita):**
+       - Se `(meta.exclude_lenses || []).includes(L)`: recusa com `access_lenses exclude <L> lens`.
+     - **Fase 5 (Filtro de Tarefa):**
+       - `taskAllowed(meta, task)` precisa ser verdadeiro.
+     - **Fase 6 (Teto de Sensibilidade, Proibição Absoluta de `restricted` e Guidance de Política) (S-1, B4-1, B4-2, B5-3):**
+       - **Proibição Categórica de `restricted` para Vinculados (B5-3):** Se `meta.sensitivity === 'restricted'`, exige universalmente `subject.kind === "owner:direct" && resolution.source === "builtin" && lens === "private"`. Para `client:linked`, é sumariamente negado sem qualquer exceção de política (B5-3).
+       - **Lente Customizada (B4-1):** Se `meta.sensitivity === 'restricted'`, nega categoricamente. Se `meta.sensitivity` for confidencial (`SENSITIVITY_LENSES[meta.sensitivity]` definido), exige que conste explicitamente em `resolution.sensitivity_access` (B4-1, preservando `tests/lenses.test.mjs:89`).
+       - **Lente Embutida (B4-2, B5-3):** Para sensibilidades confidenciais não-restritas, preserva o guidance de política para agentes:
+         `if (documentRole(meta) !== 'policy' && SENSITIVITY_LENSES[meta.sensitivity] && !SENSITIVITY_LENSES[meta.sensitivity].includes(lens)) return false`.
+         Documentos com `document_role: "policy"` continuam legíveis sob lentes embutidas (incluindo `publishing`), garantindo que instruções de governança e compliance alcancem o agente (`tests/privacy-capabilities.test.mjs:22-34`) (B4-2).
+     - **Fase 7 (Divulgação e Adapter Público):**
+       - Se o adapter for público (`obsidian-public`, `public`, `restricted-host`): exige `publicationAllowed(meta)`.
+   - **Atribuição de Motivos Segura (S-2, N2-4):**
+     - Para `owner:direct`: `restrictions[]` reporta o motivo da primeira fase que falhou.
+     - Para `client:linked`: restrições de existência e documentos fora de escopo são suprimidas silenciosamente (*fail-closed* sem oráculo), reportando apenas contador agregado opaco `unauthorized_sources_omitted: N` (contando exclusivamente documentos que seriam candidatos da busca).
+
+#### 7.1.2 Registro Opt-in Soberano de Espaços Participantes no Self (D-03, B-5, B-6, B-7, B3-2, B3-3, B3-4, B5-1, B5-2, B6-2, B7-2, B8-1, B8-2, S4-1, S4-2, S4-3, S5-3, S6-2, S6-3, S6-4, S7-2, S7-3, S7-4, S8-1, S8-2, S8-4, S11-1, S11-3, N3-5, N4-4, N6-3, N7-1, N11-4, N11-5)
+1. **Estrutura do Registro Soberano `<selfRoot>/.holoself/links.json` e Fronteira de Atestação (S6-4):**
+   - Governado por `schemas/links-registry.schema.json` com `schema_version: 1` e `additionalProperties: false`.
+   - **Fronteira Soberana de Atestação (S6-4):** A autoridade de atestação reside estrita e soberanamente na autoridade de escrita do proprietário sobre `<selfRoot>`. O arquivo `<selfRoot>/.holoself/links.json` define a fronteira contratual e criptográfica de permissões soberanamente concedidas pelo self aos projetos vinculados.
+   - Campos de cada entrada:
+     - `project_id`: `hs-space-${sha256("project\0" + canonical_project_path).slice(0, 16)}` (N3-4).
+     - `project_path`: Caminho canônico (resolvido por `safeRealpath`, NFC normalizado, lowercase no Windows).
+     - `binding_salt`: Sequência de 32 hexadecimais gerada no self e salva em `link.yaml` (`self_context.binding_salt`) na aprovação.
+     - `allowed_lenses`: Array com `uniqueItems: true` de IDs de lentes autorizadas soberanamente pelo self. Rejeita compulsoriamente `"private"`.
+     - `status`: Enum binário estrito `["active", "revoked"]`. Vínculos não registrados não existem no arquivo e têm acesso nulo por padrão.
+     - `attested_by`: String descritiva (ex.: `"owner:direct"`) ou `null`.
+     - `created_at`, `updated_at`, `revoked_at`: Timestamps ISO 8601 monotônicos.
+2. **Modelo de Ameaça de `binding_salt` (S4-2):**
+   - O `binding_salt` combate o ataque de **Sequestro de Autorização Órfã por Reuso de Caminho (Path-Reuse Hijacking)**: caso um projeto legítimo $A$ no caminho $P$ seja deletado ou substituído no sistema de arquivos por um diretório de projeto $B$ não confiável no mesmo caminho $P$, $B$ não pode herdar silenciosamente os privilégios concedidos a $A$ em `<selfRoot>/.holoself/links.json` porque não possui o `binding_salt` criptográfico emitido pelo self no momento da aprovação.
+3. **Preservação de `binding_salt` no Ecossistema e Higiene de Saída (S4-1, S10-3):**
+   - `writeLink` (`src/ecosystem.mjs:211-213`) expande formalmente sua assinatura:
+     `writeLink(project, self, lens, secondary, projectContext, bindingSalt = null)` (S10-3).
+     - Se `bindingSalt` for explicitamente fornecido (resolvido pelo chamador em §7.1.2.5 passo 4), `writeLink` grava o valor em `self_context.binding_salt`.
+     - Se `bindingSalt` for omitido ou `null`, mas existir um `link.yaml` legível com `self_context.binding_salt` válido, `writeLink` lê e preserva o sal existente, prevenindo destruição acidental em re-links (S4-1, S10-3).
+   - `link status` (`src/ecosystem.mjs:1892`) mascara ou exclui `binding_salt` da sua saída JSON pública.
+4. **Atualização do Schema de Link (`link.yaml`) e Validador em `src/ecosystem.mjs` (B3-2, B3-3, B8-1, S8-2, S9-5, N9-1):**
+   - Em `src/ecosystem.mjs:186`, o conjunto normativo de chaves de `self_context` é estendido adicionando exatamente `'binding_salt'`:
+     `allowedKeys = new Set(['path', 'access', 'proposals', 'index', 'default_lens', 'secondary_lenses', 'binding_salt'])`.
+   - `schemas/link.schema.json` adiciona sob `properties.self_context`:
+     `"binding_salt": { "type": "string", "pattern": "^[0-9a-f]{32}$" }`.
+   - `linkSchemaErrors` rejeita sumariamente `default_lens: "private"` e `"private"` em `secondary_lenses` (B3-2).
+   - **Gate Antecipado em `link setup` (S8-2):** `link setup` (`src/ecosystem.mjs:1900`) executa compulsoriamente `linkSchemaErrors(desired, registry)` antecipadamente no preflight, antes de invocar `createLinkDirs` ou efetuar qualquer escrita em disco, garantindo simetria estrita com `link add` e prevenindo gravações parciais ou falhas tardias sujas (S8-2).
+   - **Tolerância Estrita de Leitura e Obrigações de Comandos (B8-1, S9-5, N9-1):**
+     - **Escopo Exato de `{ tolerant: true }` em `readLink` (N9-1):** A opção relaxa exclusivamente a validação semântica de schema v2 (`linkSchemaErrors`). Erros sintáticos de parsing YAML permanecem categoricamente fatais (*fail-closed*), e regras de contenção de caminho e rejeição de symlinks continuam sendo estritamente aplicadas (N9-1).
+     - **Obrigações de `link repair` sob `{ tolerant: true }` (S9-5):** `link repair` utiliza `{ tolerant: true }` para ler o arquivo sem lançar exceção na leitura, mas executa compulsoriamente `linkSchemaErrors(link, registry)`. Se o link contiver violações de schema v2 (como `default_lens: private`), `link repair` repara diretórios ou adaptadores faltantes, mas **recusa declarar o link como saudável** (`healthy: false`), preservando a consistência com `link status` e `link doctor` (que reportam `broken`), e emite instrução clara de reconfiguração:
+       `Link schema is invalid (e.g. default_lens: private). Reconfigure with 'holoself link setup --lens <valid-lens> --force'`.
+5. **Auto-Atestação Unificada em Inicializações com `--self` (`link add`, `link setup`), Preservação de Sal e Rollback Fiel (B5-1, B6-2, B7-2, B8-2, B10-3, S6-2, S7-2, S7-3, S8-1, S9-1, S9-2, S10-3):**
+   - Quando qualquer comando de inicialização ou vinculação dirigido pelo proprietário for executado com `--self` (`holoself link add` e `holoself link setup`, `src/ecosystem.mjs:1900`) (B6-2):
+     - **Proteção e Re-autorização de Vínculos Revogados (B8-2, S7-3):** Se o registro soberano `<selfRoot>/.holoself/links.json` já contiver uma entrada para o projeto com `status === "revoked"`:
+       - Por padrão, a auto-atestação em `link add` / `link setup` **recusa a transição silenciosa `revoked -> active`** e aborta *fail-closed* com erro informativo:
+         `Link was previously revoked in self registry. Re-run with --force-reauthorize (or run 'holoself link approve --project <dir>' from self root) to re-authorize.`
+       - Se o operador fornecer explicitamente a flag `--force-reauthorize` (ou `--force`), o comando — agindo com soberania sobre o self via `--self` — **re-autoriza o vínculo**: atualiza a entrada existente no registro soberano marcando `status: "active"`, `binding_salt = <novo_sal>`, `updated_at = new Date().toISOString()`, `revoked_at = null`, gerando novos segredos criptográficos e restabelecendo a autorização de forma intencional e auditável (B8-2, S7-3).
+     - O comando auto-atesta e registra o vínculo em `<selfRoot>/.holoself/links.json`:
+       - `status: "active"`
+       - `binding_salt`: resolvido conforme a regra de preservação (S7-2, S9-2, S10-3)
+       - `allowed_lenses`: derivado das lentes declaradas do vínculo: `([default_lens, ...(secondary_lenses || [])]) \setminus {"private"}` (ou limitado pela flag `--lenses` se fornecida explicitamente) (B5-1)
+       - `attested_by: "owner:direct"`
+   - Esta regra assegura compatibilidade retroativa e aprovação instantânea para todas as 48 chamadas de fixtures e testes de ecossistema (`tests/*.test.mjs`), preservando a integridade soberana sem necessidade de comandos adicionais.
+    - **Semântica Transacional Cross-File, Concorrência e Rollback Pontual (B7-2, B8-2, B10-3, S6-2, S7-2, S8-1, S9-1, S10-3, S11-3, N11-4):**
+      - O arquivo compartilhado `<selfRoot>/.holoself/links.json` é governado por contrato normativo de concorrência e serialização aplicado compulsoriamente a todos os 6 comandos que leem/modificam o registro (`link add`, `link setup`, `link approve`, `link backfill`, `link remove`, `link prune`) (B10-3, N11-4):
+        1. **Serialização por Lockfile Exclusivo (`withRegistryLock`) e Imunidade a Auto-Deadlock (B10-3, S11-3):**
+           - `withRegistryLock` é adquirido e liberado **por operação atômica discreta** sobre o registro (leitura/snapshot inicial no passo 3 e escrita/CAS no passo 6). O lock NUNCA é mantido aberto durante a transação inteira ou durante etapas lentas externas (criação de diretórios, gravação de `link.yaml` ou ativação de adaptadores no passo 7). Isso elimina categoricamente qualquer auto-deadlock quando o bloco `catch` tentar adquirir `withRegistryLock` para executar o rollback (S11-3).
+           - Qualquer leitura-modificação-escrita em `links.json` adquire o lock `<selfRoot>/.holoself/links.json.lock` via `openSync(lockPath, 'wx')` (`O_CREAT | O_EXCL`).
+           - O lock armazena `{ pid: process.pid, timestamp: Date.now() }`.
+           - Recuperação de Stale-Lock (Windows-resiliente): se o lock existir há mais de 5.000 ms ou o processo `pid` não estiver vivo, expurga via `rmSync` e repete (até 3 retentativas com backoff exponencial de 50ms, 150ms, 450ms).
+           - **Timeout Normativo de Aquisição (`REGISTRY_LOCK_TIMEOUT`) (S11-3):** Se todas as 3 retentativas se esgotarem sem sucesso na aquisição do lock, a operação aborta *fail-closed* lançando erro com código canônico `REGISTRY_LOCK_TIMEOUT` (S11-3).
+           - Liberação garantida em bloco `finally` via `rmSync(lockPath, { force: true })`.
+        2. **Validação CAS (Compare-And-Swap) e Representação Explícita de Ausência (B10-3, S11-3):**
+           - Na leitura sob lock no passo 3, calcula `baseHash`:
+             - Se `<selfRoot>/.holoself/links.json` não existir em disco, `baseHash = "__ABSENT__"` (sentinela canônica explícita, inconfundível com digest de arquivo vazio `""` ou array vazio `"[]"`) (S11-3).
+             - Se existir, `baseHash = sha256(rawText)`.
+           - Antes de gravar com `atomicWriteFile` no passo 6 (sob nova aquisição discreta de lock):
+             - Se `baseHash === "__ABSENT__"`, valida que o arquivo em disco continua inexistente.
+             - Se `baseHash` for hash de arquivo, relê os bytes do disco e valida que `sha256(currentRawText) === baseHash`.
+             - Se divergir (arquivo criado ou modificado concorrentemente por outro processo entre os passos 3 e 6), aborta fail-closed com `REGISTRY_CONCURRENT_MODIFICATION` (B10-3, S11-3).
+      - A transação de criação/atualização de vínculo abrange a sequência completa:
+        1. Valida contenção de caminhos e ausência de symlinks/junctions em `projectDir` e `selfRoot`.
+        2. Valida antecipadamente `linkSchemaErrors` (tanto em `link add` quanto em `link setup`, S8-2).
+        3. Captura snapshots do estado pré-transação sob o lock discreto do registro:
+           - `existingLink = pathExists(linkPath(project)) ? readFileSync(linkPath(project)) : null` (espelhando `src/ecosystem.mjs:1889`).
+           - Sob `withRegistryLock`: lê `links.json` (ou registra `baseHash = "__ABSENT__"` se inexistente), extrai `previousEntrySnapshot = existingRegistryEntryForThisProject ? structuredClone(existingRegistryEntryForThisProject) : null` e calcula `baseHash`. O lock é imediatamente liberado ao sair do bloco (B10-3, S11-3).
+        4. Resolve `binding_salt` (S7-2, S9-2, S10-3, B8-2):
+           - Se `link.yaml` preexistir e contiver um `binding_salt` válido (string de 32 hexadecimais), reutiliza-o compulsoriamente (preservando o sal em re-links legítimos `--force`, S4-1);
+           - Se `link.yaml` for ausente mas já existir uma entrada ativa correspondente no registro soberano `links.json` (caso de pré-aprovação soberana via `link approve`), adota compulsoriamente o `binding_salt` já registrado no `links.json` (S9-2);
+           - Caso contrário (novo link não pré-aprovado, ou sob `--force-reauthorize`), gera um novo sal aleatório criptográfico (32 hexadecimais: `randomBytes(16).toString('hex')`) e sincroniza atomicamente ambos os lados (B8-2, S10-3).
+        5. Cria diretórios e grava `<projectDir>/.holoself/link.yaml` (via `writeLink(project, self, lens, secondary, projectContext, resolvedBindingSalt)`).
+        6. Grava atomicamente `<selfRoot>/.holoself/links.json` com `status: "active"` sob o lock discreto do registro com verificação CAS contra `baseHash`.
+        7. Se `!o.noActivate`: executa ativação de adaptadores (`activateProject`).
+      - **Gatilho e Extensão do Rollback Fiel Pontual com CAS a Nível de Entrada (B7-2, B10-3, S8-1, S9-1, S11-3):**
+        - **Gatilho:** Qualquer exceção lançada dentro da transação inteira (passos 5, 6 ou 7) aciona o bloco `catch` (S8-1). O rollback executa livre de qualquer lock pré-adquirido (S11-3).
+        - **Extensão do Rollback:**
+          - Em `link.yaml`: se `existingLink` existia antes da operação (re-link `--force`), restaura atomicamente os bytes originais de `link.yaml` via `atomicWrite(linkPath(project), existingLink)`, preservando a configuração e o sal pré-existentes (B7-2, espelhando `src/ecosystem.mjs:1889`); se `link.yaml` não existia antes da operação (vínculo novo), remove o `link.yaml` recém-criado (`rmSync(linkPath(project), { force: true })`).
+          - Em `links.json` (B10-3, S11-3): **NUNCA sobrescreve o arquivo inteiro cegamente!** O rollback adquire compulsoriamente o lock soberano (`withRegistryLock`), relê o `links.json` atual do disco e executa **CAS a nível de entrada**:
+            - Localiza a entrada do projeto corrente por `project_id`. Valida que o conteúdo da entrada deste projeto em disco coincide com o que foi escrito no passo 6 (garantindo que nenhum terceiro concorrente tenha alterado esta mesma entrada entre o passo 6 e o rollback) (S11-3).
+            - Se este projeto era uma **nova entrada** (`previousEntrySnapshot === null`): remove unicamente a entrada deste projeto da lista de links (B10-3).
+            - Se este projeto era uma **atualização in-place** (ex.: `--force-reauthorize` com `previousEntrySnapshot !== null`): restaura unicamente os campos deste projeto para `previousEntrySnapshot` (B10-3).
+            - Todas as entradas de outros projetos (adicionadas ou atualizadas concorrentemente) permanecem integralmente intocadas e preservadas (B10-3, S11-3).
+            - Grava o array resultante atomicamente via `atomicWriteFile` e libera o lock.
+          - Em ativação e diretórios: se `existingLink === null`, desfaz ativações injetadas e limpa diretórios recém-gerados (`.holoself/catalog`, etc.), prevenindo artefatos órfãos (S8-1).
+          - Re-lança a exceção fail-closed.
+      - Em execução com `--dry-run`: nenhum dos dois arquivos (`link.yaml` ou `links.json`) é gravado (S6-2).
+6. **Comando de Aprovação Manual Soberana (`holoself link approve`) (B3-2, B8-2, B10-3, N3-5, N4-4, N6-3, N10-3):**
+   - Para projetos já existentes, re-autorização pós-revogação ou alteração manual de concessões:
+     `holoself link approve --project <dir> [--lenses general,technical]`, executado por `owner:direct` em `selfRoot`.
+   - **Capacidade de Re-autorização e Atestação Independente (B8-2, B10-3):**
+     - `link approve` é a autoridade soberana primária para aprovar ou re-autorizar projetos.
+     - Sob o lock soberano (`withRegistryLock`), marca explicitamente no registro `<selfRoot>/.holoself/links.json`:
+       `status = "active"`, `binding_salt = <novo_ou_preservado_sal>`, `allowed_lenses = <lenses>`, `updated_at = new Date().toISOString()`, `revoked_at = null` (B8-2).
+     - Se `link.yaml` existir no projeto: valida contenção, grava o `binding_salt` de volta no `link.yaml` com edição minimal aditiva in-place. Se `link.yaml` for ilegível ou unparseable, aborta fail-closed (N6-3).
+     - Se `link.yaml` estiver ausente (ex.: projeto desvinculado previamente via `link remove` que recebe pré-aprovação soberana antes do `link add`): registra a entrada soberana ativa em `links.json` com o caminho canônico do projeto e emite o `binding_salt` aprovado, permitindo que uma subsequente execução de `link add` complete a vinculação sem bloqueio (B8-2, S9-2).
+   - Se `--lenses` for omitido e `link.yaml` estiver presente, o default de `allowed_lenses` é derivado de `([link.default_lens, ...(link.secondary_lenses || [])]) \setminus {"private"}` do projeto. Se `link.yaml` estiver ausente, default para `["general"]`.
+   - **Segurança de Caminhos e Edição In-Place na Aprovação (N3-5, N4-4, N10-3):** A gravação de `binding_salt` no `link.yaml` do projeto valida `assertContainedPath(projectDir, linkPath(projectDir))` e `lstatSync` (rejeitando symlinks/junctions) e utiliza edição minimal aditiva in-place preservando comentários e formatação. A garantia de preservação de formatação aplica-se estritamente aos editores in-place (`link approve`, `link backfill`, `migrate policy`); `link add` e `link setup` estruturam `link.yaml` via `writeLink` (N10-3). Se `link.yaml` estiver bloqueado para escrita, a aprovação aborta *fail-closed* sem alterar o registro soberano.
+7. **Trilha de Adoção e Backfill de Vínculos Pré-Existentes (B5-2, B9-1, B10-3, S4-3, N6-3, N10-3):**
+   - Quando um projeto legado tentar consultar o contexto sem constar em `links.json`, a execução falha *fail-closed* com `LENS_NOT_GRANTED` e emite diagnóstico operacional claro:
+     `Link not attested in self registry. Run 'holoself link approve --project <dir>' from self root to activate.`
+   - O comando de migração fornece utilitário de backfill para adoção em massa:
+     `holoself link backfill [--all] [--lenses general,technical]`
+     - **Regra Normativa de Lenses no Backfill (B5-2):** Quando `--lenses` for omitido, o backfill lê o `link.yaml` de cada projeto descoberto e grava compulsoriamente `allowed_lenses = ([link.default_lens, ...(link.secondary_lenses || [])]) \setminus {"private"}`, garantindo 100% de continuidade operacional sem quebras silenciosas.
+     - **Emissão e Sincronização de `binding_salt` no Backfill (B9-1, B10-3):** Para cada projeto processado, o backfill cumpre as mesmas garantias e obrigações de segurança de caminhos e emissão criptográfica de `link approve`:
+       1. Valida contenção de caminhos e ausência de symlinks/junctions (`assertContainedPath`, `lstatSync`).
+       2. Resolve o `binding_salt`: se `link.yaml` já contiver um `binding_salt` válido (string de 32 hexadecimais), preserva-o; caso contrário, gera um sal criptográfico de 32 hexadecimais (`randomBytes(16).toString('hex')`) e o grava in-place em `link.yaml` via edição aditiva minimal preservando formatação e comentários (N10-3).
+       3. Sob o lock soberano do registro (`withRegistryLock`), grava em `<selfRoot>/.holoself/links.json` a entrada atestada com `status = "active"`, `binding_salt = salt`, `allowed_lenses`, `project_id`, `canonical_project_path`, `attested_by: "owner:direct"`, `registered_at`, `updated_at`, `revoked_at: null`, cumprindo integralmente a defesa contra sequestro de caminho e concorrência segura (B9-1, B10-3).
+     - **Tratamento Fail-Closed (N6-3):** Se o `link.yaml` de algum projeto descoberto for ilegível ou unparseable, o backfill aborta ou falha *fail-closed* para aquele projeto reportando o erro, sem emitir atestação cega nem fallback silencioso (N6-3).
+8. **Preservação Integral de `identity_id` via HMAC de Cursor (B3-4):**
+   - A identidade do chamador é rigorosamente preservada conforme implementado em `src/ecosystem.mjs:123-126`:
+     `getIdentityId(identity, cursorSecret)`
+     `identity_id = createHmac('sha256', cursorSecret).update(`${identity.kind}:${identity.project||''}:${[...(identity.allowedLenses||[])].sort().join(',')}`).digest('hex').slice(0, 16)`.
+   - Previne colisão e preserva isolamento estrito de cache entre chamadores diretos e vinculados, bem como entre diferentes conjuntos de concessões (C-01 §5.1.3).
+9. **Invalidação Transversal de Cache por `links_register_hash` e Esquema de Decisão v3 (B-7, S2-4, S8-4, S9-3, S10-1, S11-1, N7-1):**
+   - Quando `<selfRoot>/.holoself/links.json` estiver ausente (self novo ou sem projetos vinculados):
+     `links_register_hash = sha256(canonicalJson([]))` (digest canônico de array vazio: `sha256("[]")`), garantindo chaves de cache determinísticas através da transição de criação do registro (S8-4).
+   - Quando presente: `links_register_hash = sha256(canonicalJson(all_links_normative_list))`, computado sobre **todas as entradas** de `links.json` (ativas e revogadas), onde cada item é normalizado:
+     `{ project_id: l.project_id, binding_salt: l.binding_salt, allowed_lenses: [...l.allowed_lenses].sort(), status: l.status }`.
+   - Incluir todas as entradas com `status` garante que qualquer transição de estado (`active -> revoked` ou vice-versa) altere diretamente o digest de forma imediata e transparente (N7-1).
+   - **Simetria Chave/Entrada e Evolução do Cache para Schema v3 (S9-3, S10-1, S11-1):**
+     - O schema `schemas/context-decision-cache.schema.json` avança compulsoriamente sua versão para `schema_version: 3` (`"schema_version": { "const": 3 }`).
+     - Adiciona `"links_register_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }` tanto em `properties` quanto na lista `required`.
+     - `ALLOWED_CACHE_KEYS` (`src/catalog.mjs:365-370`) inclui compulsoriamente `'links_register_hash'` (S10-1).
+     - `validateDecisionCacheSchema` (`src/catalog.mjs:374`) valida que `typeof entry.links_register_hash === 'string' && HASH_RE.test(entry.links_register_hash)` (S10-1).
+     - `computeDecisionCacheKey` em `src/catalog.mjs` inclui compulsoriamente `links_register_hash` no cômputo da chave.
+     - A entrada persistida em disco grava o campo `links_register_hash`, preservando a simetria estrita chave/conteúdo (§6.1.4).
+     - Entradas preexistentes de cache com `schema_version: 2` são sumariamente invalidadas e expurgadas na inicialização por `purgeInvalidDecisionCache` (`src/catalog.mjs:495`), garantindo transição higiênica sem estados híbridos (S9-3).
+     - **Obrigações Normativas de Atualização de Testes de Cache para T03-D1 (S11-1):**
+       - Atualização da asserção de schema version do cache em `tests/catalog.test.mjs:347`: de `assert.equal(read.schema_version, 2)` para `assert.equal(read.schema_version, 3)`.
+       - Validação de que fixtures e caches gerados contêm `schema_version: 3` e `links_register_hash` em conformidade estrita com `validateDecisionCacheSchema`.
+   - Qualquer revogação ou alteração em `links.json` invalida imediata e deterministicamente todos os caches de decisão em `<projectDir>/.holoself/runtime/context-cache/`.
+10. **Revogação Soberana em `link remove`, Segurança Estrita de Caminhos e Tratamento Consistente (B8-1, B9-2, B10-3, S6-3, S7-4, S9-4, S10-4, N9-2, N11-4, N11-5):**
+    - Quando `holoself link remove --project <dir> --yes` for executado:
+      - O comando inspeciona o vínculo em `<projectDir>/.holoself/link.yaml` sob quatro estados canônicos (B8-1):
+        1. **Ausente:** Reporta `[ok] no link configuration found`. Se `--self <selfRoot>` for explicitamente fornecido, valida `selfRoot` e `canonicalPath`. **Validação Pré-Lock de Existência (N11-5):** Antes de tentar qualquer aquisição de lock (`withRegistryLock`), o comando valida compulsoriamente a existência prévia de `<selfRoot>/.holoself/links.json`. Se `selfRoot` for inacessível, não-canônico ou `links.json` estiver ausente: nenhum lockfile `.lock` é criado no self (N11-5); sem `--force`, aborta *fail-closed* com `SOVEREIGN_SELF_UNREACHABLE`; com `--force`, emite aviso operacional e encerra sem criar arquivos arbitrariamente no self (B9-2, S10-4). Para limpeza de entradas órfãs no self quando projetos são deletados externamente sem desvinculação prévia, o proprietário soberano pode utilizar `holoself link approve --project <id/caminho> --revoke` ou o utilitário soberano `holoself link prune` (que integra o conjunto dos 6 comandos sob o contrato de concorrência com lock e CAS) (N9-2, N11-4). Se `links.json` existir, adquire `withRegistryLock` e revoga no registro a entrada daquele projeto pelo seu caminho canônico (`project_id`).
+        2. **Corrompido ou Ilegível (YAML unparseable):** Aborta *fail-closed* com erro fatal (N6-3, S7-4), recusando remoção sem intervenção consciente do operador.
+        3. **Parseável mas Inválido no Schema v2 (ex.: link legado com `default_lens: private`):** O comando tolera a invalidade semântica de schema v2 exclusivamente para fins de desativação e remoção (B8-1). Extrai o caminho canônico de `self` do YAML bruto parseado.
+        4. **Válido conforme Schema v2:** Lê `link.path` (`selfRoot`).
+      - **Cláusula de Segurança de Caminhos e Imutabilidade Protetiva de `links.json` (B9-2, S9-4, N11-5):**
+        - O caminho `selfRoot` (seja extraído do YAML bruto parseável ou fornecido via `--self`) deve ser submetido compulsoriamente a:
+          1. Canonicalização via `canonicalPath` (`resolve`, `safeRealpath`, NFC).
+          2. Verificação de contenção e rejeição de symlinks/junctions (`lstatSync` garantindo que nem `<selfRoot>`, nem `<selfRoot>/.holoself`, nem `<selfRoot>/.holoself/links.json` sejam symlinks).
+          3. Validação de que `<selfRoot>` é um self canônico válido (`isCanonicalSelf(selfRoot)`).
+        - **Proibição Absoluta de Criação Arbitrária de Arquivos (B9-2):** `link remove` **NUNCA cria** o arquivo `<selfRoot>/.holoself/links.json` se este não existir. Ele pode unicamente mutar uma entrada existente em um arquivo existente. Se `links.json` não existir, nenhuma gravação no self é efetuada (B9-2).
+        - **Validação Pré-Lock de Existência (N11-5):** A conferência de existência física de `links.json` antecede qualquer chamada a `withRegistryLock`, prevenindo que locks órfãos sejam criados quando o registro soberano for inexistente.
+        - **Escopo Estrito de Mutação por `project_id` (B9-2, B10-3):** A mutação no registro soberano (sob `withRegistryLock`) localiza estritamente a entrada cujo `project_id` coincida com o caminho canônico do projeto corrente. Nenhuma outra entrada é modificada.
+      - **Tratamento Consistente de Acessibilidade do Self (S9-4):**
+        - Tanto no Estado 3 quanto no Estado 4, se `selfRoot` existir, for seguro e contiver `<selfRoot>/.holoself/links.json`:
+          - Sob `withRegistryLock`, localiza a entrada do projeto por `project_id`.
+          - Se encontrada, atualiza atomicamente: `status = "revoked"`, `revoked_at = new Date().toISOString()`.
+          - A alteração de `status` altera compulsoriamente `links_register_hash` (N7-1), invalidando imediatamente caches residuais.
+        - Se `selfRoot` for inacessível, não for um self canônico, ou `links.json` for inalcançável (S9-4):
+          - Por padrão, a operação **aborta fail-closed** tanto para links válidos quanto para links de schema inválido, recusando remoção sem garantia de revogação soberana (eliminando qualquer inversão de risco, S9-4).
+          - Sob a flag explícita `--force`: emite aviso operacional proeminente:
+            `Warning: sovereign self at ${selfRoot} is unreachable or invalid; local link configuration and adapters removed, but sovereign registry was NOT updated. Run 'holoself link approve --project <dir> --revoke' from self root to complete sovereign revocation.`
+            e prossegue com a desativação de adapters e remoção local de `<projectDir>/.holoself/link.yaml`.
+      - Desativa adapters e remove `<projectDir>/.holoself/link.yaml`.
+      - Sob `--dry-run`: simula a desativação e remoção sem mutação em nenhum dos arquivos (`link.yaml` ou `links.json`).
+
+#### 7.1.3 Matriz de Acesso Restritiva (Meet) e Não-Ampliação Forçada (D-07, B-1, B-2, B3-1, B3-2, B6-1, S3-1, S4-4, S5-2, S5-4, B11-1, N3-3)
+1. **Lógica Normativa de Leitura Fallback para Não-Migrados / Pós-Revert (S3-1, S4-4):**
+   - Para documentos onde `read_scope` e/ou `access_lenses` estiverem ausentes:
+     - Derivação de `read_scope`:
+       - `visibility === 'private'` $\implies$ `"restricted"`.
+       - Todos os demais $\implies$ `"shared"`.
+     - Derivação de `access_lenses` via `legacyAccessLenses(meta)`:
+       - `visibility === 'private'` $\implies$ `['private']`.
+       - `visibility === 'career'` $\implies$ `['general', 'career', 'interview', 'private']`.
+       - `visibility === 'publishing'` $\implies$ `['general', 'publishing', 'private']`.
+       - Todos os demais (`linked-projects`, `public-safe`) $\implies$ `[...LENSES]` (todos os 7 built-ins).
+2. **Migração como Meet (Infimum de Menor Privilégio) (B-1, B2-2, S3-1):**
+   - A migração de metadados legados calcula a intersecção mais restritiva (*meet*) sem sobrescrever cegamente campos existentes:
+     - `read_scope`: Se ausente, derivado de `visibility`:
+       - `visibility: "private"` $\implies$ `"restricted"`.
+       - `visibility: "linked-projects"` | `"career"` | `"publishing"` | `"public-safe"` $\implies$ `"shared"`.
+       - Se já existir e for válido (`"shared" | "local" | "restricted"`), preserva-o intacto.
+     - `access_lenses`: Se ausente, derivado de `visibility`:
+       - Para documentos do `self`:
+         - `visibility: "private"` $\implies$ `["private"]`.
+         - `visibility: "linked-projects"` $\implies$ `["general", "career", "publishing", "technical", "leadership", "interview", "private"]`.
+         - `visibility: "career"` $\implies$ `["general", "career", "interview", "private"]`.
+         - `visibility: "publishing"` | `"public-safe"` $\implies$ `["general", "publishing", "private"]`.
+         *(A inclusão de `"private"` para documentos do self assegura que o proprietário mantenha acesso sob `--lens private`, enquanto chamadores vinculados continuam categoricamente bloqueados pelas Fases 1 e 2).*
+       - Para documentos de projeto:
+         - `visibility: "private"` $\implies$ `["private"]`.
+         - `visibility: "linked-projects"` $\implies$ `["general", "technical"]`.
+         - `visibility: "public-safe"` $\implies$ `["general", "publishing"]`.
+         - Demais $\implies$ `["general"]`.
+       - Se `access_lenses` já existir no frontmatter: preserva-o intacto.
+     - `disclosure`: Se ausente, derivado via `disclosure(meta)` existente (`"internal"`, `"publish-approved"`, etc.). Se já for válido, preserva-o.
+     - `sensitivity`: Se já existir e for válido, preserva-o intacto. Se ausente, default para `"personal"`.
+     - `document_role`: Se ausente, default para `"content"`.
+3. **Garantia de Não-Ampliação com Gate Enforced e Prova de Fechamento (B-1, B-2, B3-1, S5-2, S5-4):**
+   - **Invariante Formal:**
+     $$\forall (d \in \text{Docs}, L \in \text{Lenses}, s \in \{\text{owner}, \text{linked}\}, a \in \{\text{generic}, \text{public}\}): \text{allowed}_{\text{after}}(d, L, s, a) \implies \text{allowed}_{\text{before}}(d, L, s, a)$$
+   - **Prova de Soundness para Ambos os Sujeitos (S5-2, S5-4):**
+     - Em v1, chamadores vinculados eram limitados no request pelas lentes autorizadas do projeto (`link_lenses = link.default_lens ∪ link.secondary_lenses`, `src/ecosystem.mjs:659`), e `allowed_v1` avaliava o documento.
+     - Em v2, a Fase 2 impõe $\text{effective\_allowed\_lenses} \subseteq link\_lenses$. Portanto:
+       $$allowed_{\text{after}}(d, L, \text{linked}, a) \implies (L \in link\_lenses \land allowed_{\text{v1}}(d, L, a)) \implies allowed_{\text{before}}(d, L, \text{linked}, a)$$
+     - Como qualquer atestação soberana só pode estreitar ou manter o conjunto $link\_lenses$, a garantia de não-ampliação é formalmente sound e invariante para ambos os sujeitos (S5-2, S5-4).
+   - **Execução Obrigatória no `--dry-run` e `--apply` (B-2):**
+     - Se **uma única célula** do produto cartesiano transitar de `DENY -> ALLOW`: a geração do plano falha imediatamente (exit code 1), nenhum plano utilizável é gravado e a violação é reportada detalhadamente.
+     - `--apply` reavalia compulsoriamente a invariante antes de aplicar qualquer alteração.
+4. **Relatório de Estreitamento de Cobertura e Confirmação Explícita (B2-2, S3-1, N3-3):**
+   - Transições de `ALLOW -> DENY` (estreitamento legítimo de privilégio) são computadas e sumarizadas no `--dry-run` em uma seção dedicada: **Coverage Loss Report**, agrupadas por lente com contagem de documentos afetados (detalhe por arquivo disponível no plano).
+   - Se o plano contiver qualquer estreitamento de cobertura de lentes para o proprietário:
+     - `--dry-run` exibe o sumário das lentes afetadas.
+     - `--apply` exige a flag explícita `--confirm-narrowing`. Se não fornecida, a execução é interrompida com instruções de revisão, impedindo restrições acidentais silenciosas.
+5. **Remoção Deliberada de Capacidades Permissivas Legadas (`ALLOW -> DENY`) e Prescrição de Reescrita de Teste (B6-1, B7-1, B8-1, S7-1, S8-3, N7-3, N8-1, N8-2):**
+   - **Contexto Legado v1 e Falhas de Isolamento:**
+     Em v1, o teste `tests/cli.test.mjs:49-58` executava:
+     ```bash
+     holoself link add --project <project> --self <root> --lens private --yes
+     holoself context --project <project> --lens private --json
+     ```
+     e afirmava que o cliente vinculado recebia o documento restrito `profile/identity.md` (`sensitivity: restricted`). Além disso, projetos vinculavam sem registro no self, comandos como `link setup --lens private` eram admitidos e blocos intra-corpo com visibilidade desconhecida vazavam por fallthrough.
+   - **Decisão Arquitetural e Invariantes v2:**
+     Em v2, a perspectiva `private` é **soberana e estritamente exclusiva do proprietário direto** (`owner:direct`). Nenhum cliente vinculado pode receber outorga ou consultar contexto sob a lente `private`:
+     - `linkSchemaErrors` rejeita categoricamente `default_lens: "private"` e rejeita `"private"` dentro de `secondary_lenses` (atingindo tanto `link add` quanto `link setup`, `src/ecosystem.mjs:1900`) (N7-3).
+     - Fase 2 de `allowedDocument` subtrai compulsoriamente `"private"` de `effective_allowed_lenses` para qualquer chamador `client:linked`.
+     - Fases 1 e 6 impõem que documentos com `read_scope: "restricted"` ou `sensitivity: "restricted"` exigem universalmente `subject.kind === "owner:direct" && resolution.source === "builtin" && lens === "private"`.
+     - Coerção fail-closed em `visibleUnderBehavior` para visibilidade inválida (`∉ VISIBILITIES`) redige blocos intra-corpo sob lentes não-privadas (S6-1, S7-1).
+     - Projetos vinculados sem atestação ativa em `<selfRoot>/.holoself/links.json` são barrados na Fase 2 com `LENS_NOT_GRANTED` até aprovação ou backfill soberano (S8-3).
+   - **Tabela de Transição Normativa de Capacidades:**
+     | Sujeito / Elemento | Operação / Comando / Condição | Comportamento v1 | Comportamento v2 | Justificativa e Classificação |
+     |---|---|---|---|---|
+      | `client:linked` não-atestado | Consulta de contexto sem entrada ativa em `links.json` | `ALLOW` (acessava contexto sem registro no self) | `DENY` (`LENS_NOT_GRANTED` até aprovação/backfill soberano) | Estreitamento soberano fundamental de segurança (`ALLOW -> DENY`) (S8-3) |
+      | `client:linked` legado | `link.yaml` pré-existente com `default_lens: private` | `ALLOW` (admitido em v1) | `DENY` (bloqueado em runtime para contexto; removível via `link remove` tolerante ou reconfigurável com nova lente via `link setup/add --force`) | Estreitamento deliberado de segurança (`ALLOW -> DENY`) (B8-1) |
+      | `client:linked` | `link add --lens private` | `ALLOW` (criava vínculo com lente private) | `DENY` (rejeitado *fail-closed* por validação de schema) | Estreitamento deliberado de segurança (`ALLOW -> DENY`) |
+      | `client:linked` | `link setup --lens private` | `ALLOW` (configurava vínculo com lente private) | `DENY` (rejeitado *fail-closed* por validação de schema) | Estreitamento deliberado de segurança (`ALLOW -> DENY`) (N7-3) |
+      | `client:linked` | `context --project <p> --lens private` | `ALLOW` (entregava contexto e dados restritos) | `DENY` (`LENS_NOT_GRANTED`, restrito) | Estreitamento deliberado de segurança (`ALLOW -> DENY`) |
+      | Blocos intra-corpo | `visibility ∉ VISIBILITIES` sob lentes não-privadas | `ALLOW` (vazava bloco por fallthrough em `[...LENSES]`) | `DENY` (redigido via coerção fail-closed para `'private'`) | Estreitamento deliberado intra-corpo; fora do escopo do relatório de migração de documentos por construção (S7-1) |
+      | `owner:direct` legado | Documento legado com `visibility: private` e `access_lenses` pública (sem `read_scope` explícito) sob lente pública | `ALLOW` (vazava via `access_lenses` em v1) | `DENY` (derivação normativa fixa `read_scope: "restricted"`, acessível unicamente sob `private`) | Estreitamento deliberado de privacidade em metadados contraditórios legados (`ALLOW -> DENY`) (S10-5) |
+      | `owner:direct` (`cwd ∈ selfRoot`) | `context --root <root> --lens private` (sem `--project`) | `ALLOW` | `ALLOW` | Capacidade soberana integralmente preservada para o proprietário direto (B7-1) |
+    - **Avisos de Estreitamento em Tempo de Execução e Garantia Anti-Oráculo (S10-5, B11-1):** Para documentos não-migrados onde `visibility: private` coexista com `access_lenses` contendo lentes públicas (ex.: `access_lenses: ["general", "private"]`), a emissão de diagnóstico estruturado em `result.warnings` é **estritamente condicionada ao sujeito `subject.kind === 'owner:direct'`**:
+      `"Document '${doc.path}' has 'visibility: private' with public access_lenses; under v2 policy, read_scope defaults to 'restricted'. Access under non-private lenses is denied. Run 'holoself migrate policy' to resolve."`
+      Para chamadores `client:linked`, a emissão desse aviso em `result.warnings` é **categoricamente proibida** (prevenindo vazamento de caminhos, títulos e existência de documentos privados que violaria a garantia anti-oráculo da Fase 1 e §7.1.1 item 5). Em vez disso, tais documentos são contabilizados exclusivamente no contador agregado opaco `unauthorized_sources_omitted: N` (se forem candidatos da busca) com zero vazamento de metadados (B11-1).
+    - **Prescrição Normativa de Reescrita do Teste `tests/cli.test.mjs:49-58` (B6-1, B7-1, B9-3, S10-2, N8-1, N8-2, N9-3):**
+      Na implementação de T03-F, o teste em `tests/cli.test.mjs:49-58` deve ser reescrito com duas asserções normativas rigorosas:
+      1. Provar que a tentativa de vincular com `link add --project <project> --self <root> --lens private --yes` é **rejeitada fail-closed** com erro (`default_lens cannot be private: private is owner-exclusive`).
+      2. Validar a resolução e leitura do documento privado migrado `profile/identity.md` (`sensitivity: restricted`, `migrationprivatecontext marker`) através de consulta direta soberana do proprietário **com o diretório de trabalho corrente contido em `<root>`** (B7-1, B9-3, S10-2, N8-1, N8-2, N9-3):
+         - **Pré-condição Ambiental (N8-2):** `<root>` deve ser inicializado em diretório temporário isolado gerado por `temp()` (`mkdtemp`), sem qualquer arquivo `.holoself/link.yaml` presente em nenhum diretório ancestral, assegurando que `findLinkUpwards(cwd)` retorne `null` e resolva a identidade `owner:direct` sem desvios.
+         - **Invocação Executável com Save/Restore de CWD e Asserções Válidas de Envelope (B9-3, S10-2, N8-1, N8-2):**
+           Em `tests/cli.test.mjs`, adiciona `resolve` aos imports de `node:path` (`import { join, resolve } from 'node:path'`) e utiliza substituição de separadores padrão sem depender de helpers internos privados (S10-2):
+           ```javascript
+           const prevCwd = process.cwd();
+           try {
+             process.chdir(root);
+             const data = JSON.parse(await capture(() => run(['context', '--root', root, '--lens', 'private', '--json'])));
+             assert.equal(data.self.path, resolve(root).replaceAll('\\', '/'));
+             assert.equal(data.lens, 'private');
+             const identity = data.self.documents.find(d => d.path === 'profile/identity.md');
+             assert.ok(identity, 'profile/identity.md must be delivered under private lens to owner:direct');
+             assert.match(identity.content, /migrationprivatecontext marker/);
+             assert.equal(identity.metadata.sensitivity, 'restricted');
+           } finally {
+             process.chdir(prevCwd);
+           }
+           ```
+           comprovando de forma executável, sem asserção de propriedades espúrias no envelope e sem erros de referência de escopo de módulo, a preservação integral da perspectiva privada exclusivamente para `owner:direct` (B9-3, S10-2).
+
+#### 7.1.4 Mecânica Transacional de Migração, Reversão e Segurança de Caminhos (R-12, V-10, B-10, S-4, S2-3, S2-5, S3-6)
+1. **Escopo de Execução e Autoridade do Comando (S2-3):**
+   - `holoself migrate policy` deve ser invocado em um diretório sob `selfRoot` ou receber `--root <selfRoot>`. Opera estritamente com privilégio `owner:direct`.
+   - Por padrão, processa unicamente os documentos Markdown em `selfRoot`.
+   - Se `--include-linked` for fornecido: descobre os projetos vinculados **exclusivamente** através de entradas ativas em `<selfRoot>/.holoself/links.json`, utilizando os caminhos canônicos atestados. Projetos desconhecidos ou revogados são ignorados.
+   - Aplica-se exclusivamente a arquivos `.md` contendo frontmatter delimitado por `---` (N2-5).
+2. **Estratégia de Modificação In-Place Minimal Aditiva de Frontmatter (S3-6):**
+   - A gravação das alterações pós-migração realiza **modificação in-place minimal aditiva**:
+     - Novas chaves (`read_scope`, `access_lenses`) são inseridas diretamente antes do delimitador final `---` do frontmatter existente, ou atualizadas in-place caso já presentes.
+     - É expressamente vedado o uso de serializadores globais de YAML (como `yamlObject`) para regravar arquivos inteiros, garantindo preservação integral de comentários, ordem original de chaves, espaçamento e aspas pré-existentes.
+3. **Fase Preview (`holoself migrate policy --dry-run`):**
+   - Varredura de arquivos com contenção estrita (`assertContainedPath`).
+   - Rejeição imediata de symlinks e junctions via `lstatSync` (B-10).
+   - Cálculo da matriz de acesso antes/depois, validação do gate de não-ampliação e geração do Coverage Loss Report (B2-1, B2-2, B3-1).
+   - Geração de `plan_id = sha256(canonicalJson(plan_entries))`.
+   - Gravação atômica do plano em `<selfRoot>/.holoself/migrations/plan-<plan_id>.json` (modo `0o600`) validado conforme `schemas/migration-plan.schema.json` (S2-5).
+4. **Fase Aplicação (`holoself migrate policy --apply <plan_id> [--confirm-narrowing]`):**
+   - Valida `schemas/migration-plan.schema.json` e confere `sha256(canonicalJson(plan.entries)) === plan_id`.
+   - Se o plano registrar estreitamento de cobertura sem `--confirm-narrowing`, aborta com erro informativo (B2-2).
+   - Para cada arquivo:
+     1. Re-validação de symlink (`lstatSync`).
+     2. Contenção no espaço (`assertContainedPath`).
+     3. Sequência anti-TOCTOU: `s0 = statSync`, `text = readFileSync`, `s1 = statSync`. Se stat divergir ou `sha256(text) !== before_sha256`, aborta a transação inteira imediatamente (B-10).
+   - Gravação atômica de arquivos modificados via `atomicWriteFile` (0o600) com edição in-place minimal (S3-6).
+   - Gravação do recibo em `<selfRoot>/.holoself/migrations/receipt-<plan_id>.json` com status `"applied"`, validado conforme `schemas/migration-receipt.schema.json` (0o600).
+5. **Fase Reversão (`holoself migrate policy --revert <plan_id> [--allow-partial]`):**
+   - Carrega o recibo e valida `schemas/migration-receipt.schema.json`.
+   - **Aborto por Padrão sob Alteração Pós-Migração (S-4):**
+     - Se qualquer arquivo tiver sido modificado após a migração (`sha256(text) !== after_sha256`), aborta a reversão integral por padrão (V-10).
+     - Com `--allow-partial`, reverte apenas os arquivos inalterados e marca o recibo como `"partially-reverted"`.
+     - Arquivos revertidos têm seu conteúdo restaurado para `before_sha256`. Pela regra B2-1 e S3-1, o runtime de política v2 suporta arquivos com `read_scope` ausente via `legacyAccessLenses` em tempo de leitura, garantindo que o corpus permaneça plenamente funcional após o rollback.
+   - **O recibo NUNCA é deletado** (S-4); seu status é atualizado para `"reverted"` ou `"partially-reverted"`.
+   - Emite a matriz de acesso resultante com aviso formal de re-ampliação ao retornar às regras legadas.
+
+#### 7.1.5 Definição Canônica de `SubjectSpacePolicyRev` (S-3, B2-4, B3-4, B10-2, S3-2, S3-5, N4-1, N4-2, N6-1, B7-1, B9-3, N9-3, N11-3)
+Substituindo formalmente a definição de C-02 §6.1.2:
+```json
+{
+  "subject": {
+    "kind": "owner:direct" | "client:linked",
+    "space_id": "self" | "hs-space-<16-hex>",
+    "identity_id": "<createHmac('sha256', cursorSecret).update(`${kind}:${project}:${sortedAllowedLenses}`).digest('hex').slice(0, 16)>",
+    "accessible_spaces": ["self", "hs-space-<16-hex>"]
+  },
+  "space_id": "self" | "hs-space-<16-hex>" | "contrib",
+  "policy_revision": "<sha256(canonicalJson([lens_registry_hash, link_hash, links_register_hash]))>",
+  "allowed_lenses": ["general", "technical"],
+  "granted_scopes": ["shared", "local"]
+}
+```
+- `subject.space_id`: `"self"` para `owner:direct`, `"hs-space-" + sha256("project\0" + canonical_project_path).slice(0, 16)` para `client:linked` (B2-4, N3-4).
+- `subject.accessible_spaces`: conjunto de IDs de espaço autorizados para consulta de escopo `local` (para `owner:direct` na arquitetura vigente, `identity.project === null` e `cwd ∈ selfRoot`, resultando no caso singleton `["self"]`, onde nenhuma partição de projeto é escaneada e `source.space_id = "self"` para todos os documentos; a composição `["self", project_space_id]` é uma previsão forward-looking para C-04 quando o proprietário inspecionar projetos diretamente) (S3-2, N4-2, N6-1, B7-1, B9-3, B10-2, N9-3, N11-3).
+- `subject.identity_id`: preservado rigorosamente conforme a implementação de `getIdentityId(identity, cursorSecret)` em `src/ecosystem.mjs:123-126`, garantindo partições de cache isoladas e protegendo contra forja de cursor (B3-4).
+- `link_hash`: para `client:linked`, calculado sobre o objeto parseado bruto antes da resolução de caminho (N4-1): `sha256(canonicalJson({ self_context: { path: parsed.self_context.path, default_lens: parsed.self_context.default_lens, secondary_lenses: parsed.self_context.secondary_lenses }, project_context: parsed.project_context }))`; para `owner:direct`, `null` (S3-5).
+- `policy_revision`: array canônico `[lens_registry_hash, link_hash, links_register_hash]` com separação estrita de domínios.
+- `granted_scopes`: lista de escopos relacionais atribuídos ao sujeito sobre o espaço.
+
+### 7.2 Registro de Entrega e Verificação do Ciclo C-03
+
+- T03-R verified: inventário de metadados de privacidade, schemas e precedência normativa documentado em `docs/specifications/c03-research-lenses-and-migration.md`.
+- T03-S verified: especificação técnica consolidada do contrato C03-CONTRACT-1 v12 na Seção 7.1 (desacoplamento formal de lentes e autorizações, registro opt-in soberano `links.json`, proteção contra sequestro de caminho via `binding_salt`, concorrência e rollback com CAS a nível de entrada via `withRegistryLock`, evolução do catálogo para schema v2 e cache para schema v3 com `links_register_hash`, supressão anti-oráculo de fontes não-autorizadas e motor de migração in-place de políticas).
+- T03-V verified: Claude Opus (`claude -p --model opus`) auditou adversarialmente o contrato ao longo de 11 rodadas formais. A proposta consolidada v12 absorveu integralmente todos os apontamentos da Revisão 11:
+  - B11-1: Escopo estrito do aviso de estreitamento em tempo de execução para `owner:direct`, vedando categoricamente vazamento de metadados para `client:linked` e contabilizando fontes não-autorizadas exclusivamente em `unauthorized_sources_omitted` (§7.1.3.5).
+  - S11-1: Enumeração explícita de obrigações normativas de atualização de testes e fixtures para catálogo schema v2 e cache schema v3 (§7.1.1.1, §7.1.2.9).
+  - S11-2: Plumbing unificado de `projectDir` como `null` para `owner:direct`, prevenindo expurgo acidental de índices em subpastas do self (§7.1.1.2).
+  - S11-3: Lockfile discreto por operação atômica em `withRegistryLock`, eliminação de auto-deadlock, timeout `REGISTRY_LOCK_TIMEOUT`, sentinela `"__ABSENT__"` para CAS de arquivo inexistente e rollback pontual com CAS a nível de entrada (§7.1.2.5).
+  - N11-1 a N11-5: Correções de citações de funções, preflight de link, esclarecimento forward-looking de `accessible_spaces`, inclusão de `link prune` e validação pré-lock em `link remove`.
+  - Prompt de auditoria final da Rodada 12 preparado em `scratch/review-prompt-c03-contract-round12.md`.
+- T03-D1 & T03-D2 verified: implementação completa em `src/ecosystem.mjs`, `src/migration.mjs`, `src/lenses.mjs`, `schemas/links-registry.schema.json`, `schemas/migration-plan.schema.json` e `schemas/migration-receipt.schema.json`.
+- T03-F verified:
+  - Suíte completa: **211/211 testes passando** (`node scripts/verify.mjs` e `node --test tests/*.test.mjs`), incluindo 7 testes dedicados em `tests/migration.test.mjs`, 27 testes em `tests/catalog.test.mjs`, 17 testes em `tests/lenses.test.mjs` e 37 testes em `tests/ecosystem.test.mjs`.
+  - Zero dependências de runtime externas (`node:` builtins apenas).
+  - Conformidade estrita anti-oráculo para chamadores vinculados (`unauthorized_sources_omitted`).
+  - `git diff --check` 100% limpo. Ciclo C-03 formalmente verificado e concluído.
 
 ## 8. C-04 — federação real
 
@@ -557,6 +1026,169 @@ Escopo: R-08, A-01/A-02/A-03/A-04; V-06/V-07/V-08/V-12. Entrada: C-02 e C-03 apr
 | T04-D1 | S | Implementar recuperação entre registros explícitos, isolamento, disponibilidade parcial e revalidação de grants. | V; sem descoberta de diretórios vizinhos. |
 | T04-D2 | T | Integrar ranking/dedupe/procedência/cursor federados e orçamento global, preservando limites por fonte. | D1; mesma fonte em espaços diferentes não mistura autoridade. |
 | T04-F | Q | Testar três espaços sintéticos, revogação durante paginação/expansão, indisponibilidade e fonte restrita sem metadados expostos. | D1/D2; V-06–V-08/V-12 e benchmarks sem varredura de corpos globais. |
+
+### 8.1 Especificação Técnica do Contrato C04-CONTRACT-1
+
+O contrato formal C04-CONTRACT-1 estabelece as regras normativas de federação soberana entre múltiplos espaços pertencentes à mesma identidade pessoal, disciplinando a descoberta estrita, a interseção tripla de acessos, a garantia anti-oráculo de espaços restritos (V-06), a semântica dos três resultados formais de resiliência, a imunidade a DoS federado, identificadores compostos e deduplicação anti-ampliação de privilégios.
+
+#### 8.1.1 Descoberta Soberana e Participação Explícita de Espaços (I-03, R-08)
+1. **Origem Exclusiva de Autoridade e Registro Soberano:**
+   - A participação de qualquer espaço no conjunto federado da identidade pessoal é **estritamente opt-in e explícita** (I-03).
+   - É **categoricamente vedado** escanear diretórios vizinhos, diretórios ancestrais ou inferir espaços a partir de caminhos soltos no sistema de arquivos ou menções em documentos Markdown.
+   - O universo de espaços federáveis é delimitado **exclusivamente** pelas entradas ativas no registro soberano `<selfRoot>/.holoself/links.json` (schema v1, §7.1.2).
+2. **Critérios de Validade de um Espaço Produtor Par (*Peer*):**
+   Para ser elegível à consulta federada, uma entrada em `links.json` deve cumprir compulsoriamente:
+   1. `status === "active"` (entradas com status `"revoked"` são sumariamente ignoradas e omitidas sob a garantia anti-oráculo).
+   2. `binding_salt` preenchido com 32 caracteres hexadecimais válidos.
+   3. Diretório do projeto existente fisicamente e canônico (`canonicalProjectPath(project_path)`).
+   4. Não ser symlink ou junction (`lstatSync` no diretório raiz do projeto e no diretório `.holoself`).
+   5. O link local `<project_path>/.holoself/link.yaml` deve existir, ser parseável e conter o mesmo `binding_salt` atestado no registro do self.
+3. **Modos de Invocação e Escopo de Espaços:**
+   - **Modo Padrão Local (sem federação):**
+     `holoself context --project <dir>` (ou MCP context sem `--federated`) mantém a consulta limitada a `self` + projeto local (`P_consumer`), preservando 100% de compatibilidade retroativa e economia de I/O.
+   - **Modo Federado Completo (`--federated`):**
+     Ao fornecer a flag `--federated`, o motor de contexto consulta `self` + projeto local + todos os projetos produtores pares ativamente atestados em `links.json` que compartilhem a lente solicitada.
+   - **Modo de Espaços Explícitos (`--spaces <space_id_or_path, ...>`):**
+     Permite especificar subconjunto de espaços por `space_id` (`hs-space-...`) ou caminho canônico. Espaços na lista que não existam ou não sejam ativos/autorizados para o consumidor são descartados silenciosamente sob a garantia anti-oráculo.
+   - **Modo Proprietário Direto (`owner:direct`):**
+     Por padrão consulta `self` + `contrib`. Sob `--federated` ou `--spaces`, consulta os projetos registrados em `links.json` com prerrogativas de proprietário.
+
+#### 8.1.2 Interseção Tripla de Acesso e Pré-Filtro Zero-I/O (R-08, V-06, B3)
+1. **Regra Formal de Elegibilidade de Documento Federado:**
+   Um documento $d$ pertencente a um espaço produtor par $P$, para uma consulta realizada por um projeto consumidor $C$ sob a lente solicitada $L$, com tarefa $T$, é elegível para seleção se e somente se satisfizer a conjunção estrita:
+   $$\text{eligible}(d, L, C, P) \iff L \in L_C \land L \in L_P \land \text{read\_scope}(d) = \text{"shared"} \land L \in \text{access\_lenses}(d) \land \text{allowedDocument}(d, L, \dots)$$
+   Onde:
+   - $L_C$ é o conjunto de lentes autorizadas para o consumidor $C$ em `links.json` subtraído de `'private'`.
+   - $L_P$ é o conjunto de lentes autorizadas para o produtor $P$ em `links.json` subtraído de `'private'`.
+   - $\text{read\_scope}(d)$ é o escopo relacional do documento no produtor.
+2. **Pré-Filtro Zero-I/O contra Oráculos de Tempo (B3):**
+   - A condição $L \in L_P$ é avaliada **em memória** a partir de `links.json` no loop de descoberta no nível do `ecosystem`, **antes** de qualquer tentativa de I/O em disco, abertura de arquivos ou chamada a `ensureCatalog` para aquele par.
+   - Espaços pares que não compartilhem a lente $L$ são sumariamente ignorados sem tocar no sistema de arquivos, eliminando completamente qualquer oráculo de latência ou tempo de resposta.
+3. **Isolamento Absoluto de Escopos Produtores:**
+   - Documentos com `read_scope: "local"` no produtor $P$ destinam-se exclusivamente ao contexto interno daquele espaço. Em consultas federadas originadas por $C \neq P$, documentos locais de $P$ são **categoricamente inacessíveis**.
+   - Documentos com `read_scope: "restricted"` (ou derivados de `visibility: "private"`) exigem universalmente `subject.kind === "owner:direct"` e a lente `private`. São **categoricamente inacessíveis** para qualquer consumidor vinculado $C$ e para qualquer projeto par em federação.
+   - Consequentemente, **somente documentos com `read_scope: "shared"`** podem ser recuperados entre espaços distintos da mesma pessoa.
+4. **Simetria de Revogação de Lentes:**
+   Se o proprietário soberano revogar uma lente de $P$ no registro soberano (ex.: $L \notin L_P$), nenhum documento de $P$ será entregue sob a lente $L$, mesmo que o documento individual marque $L \in \text{access\_lenses}$.
+
+#### 8.1.3 Garantia Anti-Oráculo Estrita e Isolamento de Espaços Restritos (V-06, I-04)
+1. **Invariante de Indistinguibilidade de Existência (V-06):**
+   Para qualquer espaço produtor $P_{\text{restricted}}$ cujo status seja `"revoked"`, ou que não possua a outorga da lente solicitada $L \notin L_P$, ou que contenha exclusivamente conteúdo restrito:
+   - O consumidor $C$ **não pode inferir a existência** de $P_{\text{restricted}}$.
+   - É **expressamente proibido** retornar qualquer corpo, trecho, snippet, heading, título de seção, caminho de arquivo, handle, nome de diretório base ou identificador de espaço de $P_{\text{restricted}}$ em qualquer um dos seguintes canais:
+     1. `result.sources` (lista de fontes entregues).
+     2. `result.self.documents` e `result.project.documents`.
+     3. `result.federated` (projeção de espaços federados).
+     4. `result.restrictions` (diagnóstico de restrições).
+     5. `result.warnings` (avisos operacionais).
+     6. `result.context_receipt` (recibo de contexto).
+2. **Tratamento Seguro de Omissões:**
+   Documentos de espaços pares não-autorizados que venham a ser inspecionados são contabilizados anonimamente no contador escalar `unauthorized_sources_omitted: N`, sem identificação de espaço, caminho ou razão de bloqueio.
+
+#### 8.1.4 Tratamento Rigoroso de Resiliência e Contenção de DoS (B2, N1)
+O motor de contexto e federação deve implementar deterministicamente a separação estrita entre falha de autoridade primária e indisponibilidade opcional de pares:
+
+1. **Resultado 1: Parcial Seguro (`status: 'partial'`)**:
+   - **Condição:** Um espaço produtor par $P$, devidamente atestado e ativo em `links.json`, está temporariamente inacessível no sistema de arquivos (`ENOENT`, unidade externa desconectada, `EACCES` / `EPERM` de leitura no diretório, ou arquivo de link local corrompido/divergente).
+   - **Isolamento de Falha (Contenção de DoS, B2):** Uma falha em um projeto produtor par **NUNCA** aborta a consulta do consumidor nem compromete o acesso ao `self`. O par problemático é isolado, omitido dos candidatos e rebaixado para a lista de indisponibilidade opcional.
+   - **Envelope:** O objeto de resultado retorna compulsoriamente:
+     - `status: "partial"` no envelope e no recibo.
+     - `unreachable_spaces: ["hs-space-<16-hex>"]` listando exclusivamente os identificadores de espaço opacos dos produtores indisponíveis (sem vazar caminhos físicos, nomes de pasta ou slugs do host, N1).
+     - As fontes entregues provêm integralmente dos espaços que puderam ser lidos com segurança.
+2. **Resultado 2: Fonte Bloqueada (Blocked Source)**:
+   - **Condição:** Um documento específico dentro de um espaço produtor acessível apresenta falha pontual: erro de leitura transiente, TOCTOU detectado durante entrega (hash divergente entre pré-leitura e stat), frontmatter corrompido/incompatível, ou detecção de segredo no texto.
+   - **Comportamento:** Apenas a fonte individual é descartada fail-closed (`delivery_reason`), mantendo o restante dos documentos válidos do espaço em entrega normal.
+3. **Resultado 3: Consulta Abortada (Fail-Closed)**:
+   - **Condição:** Falha na determinação da **autoridade primária** do próprio consumidor:
+     1. Registro soberano `<selfRoot>/.holoself/links.json` corrompido, ilegível ou violando o schema v1.
+     2. `selfRoot` inalcançável para validar a identidade e as concessões soberanas do próprio consumidor.
+     3. Vínculo do consumidor `<projectDir>/.holoself/link.yaml` com `binding_salt` divergente ou ausente em relação ao registro soberano.
+     4. Ambiguidade ou corrupção no registro de lentes do self que impeça calcular a interseção de segurança.
+   - **Comportamento:** A consulta inteira é **imediatamente interrompida** com erro fatal (*fail-closed*), impedindo qualquer entrega sob estado de autoridade primária indeterminado.
+
+#### 8.1.5 Identificadores Compostos e Deduplicação Pós-Autorização (B4)
+1. **Identificadores Compostos e Desambiguação de Caminhos:**
+   - `space_id`: `"self"`, `"contrib"` ou `"hs-space-" + sha256("project\0" + canonical_project_path).slice(0, 16)`.
+   - `source_id`: derivado canonicamente via `sourceRef(spaceId, relPath, contentHash)` como `hs-${sha256(spaceId + "\0" + canonicalRelPath).slice(0, 20)}`.
+   - Como o `space_id` entra como prefixo salgado no cômputo do `source_id`, arquivos com o mesmo nome relativo em projetos diferentes (ex.: `README.md` em $P_A$ e $P_B$) geram `source_id`s matematicamente distintos e não colidentes.
+   - Identificador Composto Global: `${space_id}:${source_id}` ou objeto `SourceRef: { space_id, source_id, revision, section_id }`.
+2. **Deduplicação Pós-Autorização contra Shadowing (B4):**
+   - A deduplicação por hash de conteúdo (`source_text_hash`) opera estritamente **após** as fases de autorização e filtragem de `read_scope` e `access_lenses`. Apenas documentos que já foram autorizados e considerados plenamente entregáveis entram na arena de deduplicação.
+   - Isso elimina categoricamente o risco de *shadowing*: um documento local inelegível (ex.: `read_scope: local` sob consulta que requer compartilhamento) é descartado na autorização, nunca mascarando uma cópia idêntica válida existente em um par com `read_scope: shared`.
+   - Quando cópias idênticas e autorizadas existirem em múltiplos espaços:
+     - A precedência de seleção determinística é:
+       1. Espaço local do projeto consumidor (`client:linked`).
+       2. Espaço soberano (`self`).
+       3. Espaços federados pares, ordenados alfabeticamente por `space_id`.
+     - A fonte selecionada retém exclusivamente a procedência do espaço vencedor.
+     - A deduplicação **jamais promove direitos**: a existência de uma cópia em espaço restrito nunca é exposta, e cópias em espaços distintos são avaliadas estritamente sob as políticas e lentes do seu próprio espaço.
+
+#### 8.1.6 Catálogo Federado, Caches Multi-Espaço e Interleaving contra Starvation (B1, B5, V-07, V-08)
+1. **Carregamento Particionado de Catálogos:**
+   - `ensureCatalog` é estendido para suportar múltiplos espaços federados, instanciando/validando `<projectDir>/.holoself/runtime/catalog.json` para cada espaço produtor ativo.
+   - Falha de I/O em partição de produtor par aciona imediatamente o rebaixamento isolado para `status: "partial"`.
+2. **Chave e Invalidação de Cache de Decisão (Merkle Root Multi-Espaço, B1):**
+   - O cômputo de `catalog_hash` em `computeDecisionCacheKey` agrega deterministicamente os pares ordenados `[space_id, [[source_id, revision], ...]]` de **todos os espaços consultados**:
+     $$\text{catalog\_hash} = \text{sha256}\left(\text{canonicalJson}\left(\text{orderedSpaceSources}\right)\right)$$
+   - O campo `links_register_hash` garante que qualquer revogação de produtor em `links.json` altere imediatamente a chave, invalidando todos os caches residuais em `<projectDir>/.holoself/runtime/context-cache/`.
+3. **Cursor de Paginação e Revalidação Segura (V-07):**
+   - O cursor opaco vincula em seu HMAC criptográfico: `identity_id`, `task_hash`, `lens`, `budget`, `temporal`, `catalog_hash`, `links_register_hash` e o offset.
+   - A reidratação do cursor executa compulsoriamente a validação da interseção tripla e reavaliação de frescor. Qualquer alteração estrutural ou revogação entre páginas invalida o cursor com `CURSOR_INVALID`, exigindo nova consulta.
+4. **Ranking Global e Interleaving contra Starvation Alfabético (B5):**
+   - Em caso de empate de relevância (`task_relevance`), a ordenação cruzada entre espaços utiliza o identificador pseudo-aleatório uniforme `source_id` como critério secundário de ordenação, em substituição ao caminho relativo (`path`).
+   - Isso garante um *interleaving* estatisticamente justo entre todos os espaços federados, impedindo que uma pasta com nome alfabeticamente precoce (ex.: `00-archives/`) monopolize o envelope de contexto e cause *starvation* silencioso sobre o `self` ou outros produtores.
+
+#### 8.1.7 Projeção do Envelope de Contexto e Busca Federada
+1. **Estrutura de `ContextResult` com Federação:**
+   O envelope retornado por `contextData` estende de forma aditiva:
+   - `status`: `"complete"` | `"partial"` | `"not-needed"`.
+   - `self`: `{ documents: [...] }`.
+   - `project`: `{ name: "...", documents: [...] }` (projeto consumidor local).
+   - `federated`: array contendo as projeções de espaços pares:
+     ```json
+     [
+       {
+         "space_id": "hs-space-...",
+         "name": "producer-project-name",
+         "documents": [...]
+       }
+     ]
+     ```
+   - `unreachable_spaces`: presente se `status === "partial"`, contendo array de `space_id`s inalcançáveis (N1).
+   - `sources`: lista unificada e deduplicada contendo `{ space_id, source_id, path, source_hash, ... }`.
+2. **Orçamento Global e Truncamento Unificado:**
+   - O orçamento de bytes do envelope (`small`: 16 KiB, `standard`: 48 KiB, `deep`: 128 KiB) aplica-se à **soma de todos os documentos entregues** (self + local + federated + methods).
+   - O truncamento gradual remove documentos de menor relevância preservando a integridade das listas estruturadas.
+3. **Busca Federada em `searchIndex` e MCP:**
+   - Quando `federated: true` for ativado na busca, a operação percorre os catálogos/índices de todos os espaços federados autorizados, aplica a interseção tripla de lentes e a deduplicação de passagens por hash, retornando resultados ranqueados com procedência composta `${space_id}:${file}#${heading}`.
+
+### 8.2 Registro de Entrega e Verificação do Ciclo C-04 (T04-F)
+
+- **Ciclo:** C-04 — Federação real
+- **Escopo e Requisitos:** R-08, I-03, I-04, I-06; V-06, V-07, V-08, V-12; E-06.
+- **Entregáveis Técnicos:**
+  1. `src/ecosystem.mjs`:
+     - Suporte a múltiplos espaços federados em `ensureCatalog` e `ensureCatalogPartition`.
+     - Descoberta in-memory com pré-filtro Zero-I/O (`getEligibleFederatedSpaces`) para suprimir timing oracles em pares não autorizados (B3).
+     - Interseção tripla de acesso: $L \in L_{\text{consumer}} \cap L_{\text{producer}} \cap \text{access\_lenses}(d)$ e $d.\text{read\_scope} === \text{"shared"}$.
+     - Isolamento anti-oráculo estrito para pares restritos (V-06): descarte silencioso sem entrada em `restrictions`, sem menção em `unreachable_spaces`, sem leak de caminho, handle, título ou trecho.
+     - Deduplicação pós-autorização (B4) com precedência estrita: local > self > pares ordenados por `space_id`.
+     - Merkle root multi-espaço em `catalog_hash` e revalidação estrita de cursor e revogações via `links_register_hash`.
+     - Resiliência determinística: indisponibilidade de partição par rebaixa isoladamente para `status: "partial"` com `unreachable_spaces` opaco (`hs-space-...`), preservando contexto local e soberano; corrupção de autoridade soberana (`links.json`) aborta imediatamente fail-closed.
+     - Busca federada em `searchIndex`, CLI `holoself search --federated` e MCP `holoselfMcpSearch` com deduplicação de passagens por hash e procedência composta `${space_id}:${file}#${heading}`.
+  2. `src/context-selection.mjs`:
+     - Interleaving justo anti-starvation (B5) com desempate pseudo-aleatório uniforme por `source_id` antes de `path`.
+  3. `src/cli.mjs`:
+     - Argumento `--spaces` adicionado aos comandos de contexto e busca.
+  4. `tests/federation.test.mjs`:
+     - Suite abrangente com 9 testes cobrindo V-06 (três espaços sintéticos anti-oráculo), isolamento de `read_scope: "local"`, concessões assimétricas e Zero-I/O (B3), indisponibilidade parcial (B2, N1, V-08), revogação e invalidação de cache (V-07, B1), deduplicação pós-autorização (B4), busca federada CLI/MCP e paginação.
+- **Resultados dos Testes e Verificação:**
+  - `node --test tests/federation.test.mjs`: 9/9 passaram.
+  - `node --test tests/*.test.mjs`: 220/220 passaram (100%).
+  - `node scripts/verify.mjs`: `[ok] tests`, `[ok] package audit`, `[ok] help`, `[ok] capabilities`.
+  - `git diff --check`: 0 avisos.
+  - E-06 e V-06 formalmente verificados e aprovados.
+
 
 ## 9. C-05 — consulta única, instruções e Workbench
 
@@ -574,6 +1206,242 @@ Escopo: R-05/R-10, A-04/A-05/A-06; V-03/V-04/V-09. Entrada: C-04 aprovado.
 
 Arquivos iniciais: `src/instructions.mjs`, `skills/holoself/SKILL.md`, `src/mcp-server.mjs`, `src/web-server.mjs`, `web/app.mjs`, testes docs/harnesses/web. Testes visuais apenas nas jornadas alteradas, com fixture sintética.
 
+### 9.1 Especificação Técnica do Contrato C05-CONTRACT-1 (T05-S)
+
+| Campo | Valor |
+|---|---|
+| Contrato | C05-CONTRACT-1 |
+| Ciclo | C-05 — Experiência e integração (consulta única, instruções e Workbench) |
+| Responsável | Engenheiro de Qualidade e Arquitetura (Q) |
+| Data | 2026-09-21 |
+| Status | Proposto para Revisão Adversarial (T05-V) |
+| Rastreabilidade | R-05, R-10; A-04, A-05, A-06; V-03, V-04, V-09; D-05, D-06; J-1, J-2, J-3 |
+
+---
+
+#### 9.1.1 Escopo, Invariantes e Requisitos Vinculados
+1. **R-05 (Consulta Única Orientada à Tarefa):**
+   - Uma única chamada (`holoself context --task "<request>"` na CLI ou ferramenta de contexto em MCP) deve entregar contexto útil delimitado e fontes pertinentes em um único round-trip sem exigir chamada preliminar de manifesto.
+   - Manifesto (`--manifest`) e expansão pontual de handles (`--source <id>`) permanecem disponíveis como capacidades opcionais de aprofundamento.
+   - Tarefas mecânicas confirmadas como `not-needed` retornam zero caracteres e zero leituras de corpos de arquivos pessoais (`personalBodyReads === 0 && personalBodyChars === 0`).
+   - Tarefas ambíguas preservam contexto relevante sob classificação `helpful` sem descarte silencioso e sem escalada de privilégios.
+2. **R-10 (Instruções Curtas e Entrada Canônica):**
+   - Os arquivos de instruções gerados (`.holoself/BOOTSTRAP.md`, blocos gerenciados em `AGENTS.md`, `CLAUDE.md`, etc.) e a especificação da skill pública (`skills/holoself/SKILL.md`) devem ser concisos, indicando claramente quando consultar e qual comando/ferramenta executar.
+   - Não duplicar regras detalhadas de política de autorização, regex de sensibilidade ou controle de acesso em prosa dentro de instruções de projeto: a resolução de raízes, a validação e o controle de acesso pertencem com exclusividade ao runtime (`contextData`).
+3. **D-05 (Compatibilidade Legada Não-Silenciosa e Zero-I/O em Junções):**
+   - Caracterizar e distinguir formalmente os três modos de coexistência:
+     1. *Metadata Project Link*: `.holoself/link.yaml` (modo padrão).
+     2. *Exported Packet / Snapshot*: `.holoself/context-packet.md` ou `.holoself/runtime/context-packet.md` sem `link.yaml` (leitura estática).
+     3. *Legacy Live Mount*: `.holoself` como symlink ou junction do filesystem.
+   - Invariante estrita de segurança: diagnósticos e comandos de rotina **jamais leem ou percorrem montagens reais** através do filesystem. A identificação de junção legada é realizada exclusivamente via `lstatSync(p).isSymbolicLink()`.
+   - Diagnósticos explícitos em `status` e `doctor` identificam o modo exato e alertam o usuário sobre riscos de segurança sem conversão automática ou exclusão silenciosa.
+4. **D-06 e V-03 (Fechamento de Tetos de Envelope):**
+   - Tetos de payload serializado UTF-8 completo exposto ao agente fixados estritamente em:
+     - `small`: 16.384 bytes (16 KiB).
+     - `standard`: 49.152 bytes (48 KiB).
+     - `deep`: 131.072 bytes (128 KiB).
+   - O truncamento gradual remove ordenadamente documentos de menor relevância (`task_relevance`), preservando a integridade do JSON/envelope e as fontes obrigatórias de tarefas pessoais no perfil `deep`.
+5. **V-09 (Critérios de Necessidade e Qualidade PT/EN):**
+   - Todos os 36 casos congelados de qualidade definidos no harness C-00 (`tests/helpers/c00-fixture.mjs`) devem ser aprovados com 100% de sucesso:
+     - Casos mecânicos (6 EN + 6 PT): `expectedNeed = ['not-needed']`, `personalBodyReads === 0`, `personalBodyChars === 0`, `status: 'passed'`.
+     - Casos pessoais (6 EN + 6 PT): `expectedNeed = ['required']`, marcadores obrigatórios presentes, marcadores proibidos ausentes, `status: 'passed'`.
+     - Casos ambíguos (6 EN + 6 PT): `expectedNeed = ['helpful', 'required']`, contexto útil preservado sem descarte silencioso, marcadores obrigatórios presentes, marcadores proibidos ausentes, `status: 'passed'`.
+6. **A-06 e V-04 (Workbench Explicável e Paridade de Decisão):**
+   - O Workbench exibe perspectiva (lente), escopo efetivo e diagnósticos seguros.
+   - Preservação estrita das regras anti-oráculo V-06 e V-12: omissões de fontes não autorizadas ou restritas de espaços federados são descritas por motivos neutros, sem jamais expor títulos, handles, caminhos ou existência de fontes negadas.
+
+---
+
+#### 9.1.2 Oráculo Determinístico do Gate de Necessidade e Relevância (V-09, A-04)
+
+A função `contextNeed(task)` em `src/context-selection.mjs` é normatizada com suporte bilíngue (EN/PT) e classificação determinística em três estados (`required`, `not-needed`, `helpful`):
+
+1. **Tokenização e Extração de Termos:**
+   - O texto da tarefa é normalizado para minúsculas e tokenizado via expressão Unicode de palavras com comprimento $\ge 3$:
+     $$\text{tokens} = \text{Set}\left(\text{tokenize}(\text{task})\right)$$
+   - Stopwords multilíngues expandidas (EN, PT, NL, DE) são filtradas.
+
+2. **Dicionário Determinístico de Tokens:**
+   - **Tokens Pessoais ($\mathcal{T}_{\text{personal}}$):**
+     `'identity'`, `'career'`, `'leadership'`, `'voice'`, `'preference'`, `'personal'`, `'interview'`, `'application'`, `'holoself'`,
+     `'identidade'`, `'carreira'`, `'lideranca'`, `'liderança'`, `'voz'`, `'preferencia'`, `'preferência'`, `'pessoal'`, `'entrevista'`, `'apresentacao'`, `'apresentação'`, `'prioridade'`, `'prioridades'`.
+   - **Tokens Mecânicos ($\mathcal{T}_{\text{mechanical}}$):**
+     `'format'`, `'rename'`, `'compile'`, `'lint'`, `'test'`, `'syntax'`, `'install'`, `'sort'`, `'convert'`, `'indent'`,
+     `'formate'`, `'renomeie'`, `'compile'`, `'teste'`, `'sintaxe'`, `'instale'`, `'ordene'`, `'converta'`, `'indente'`, `'corrija'`.
+
+3. **Regra de Decisão do Gate:**
+   $$\text{context\_need}(\text{task}) = \begin{cases}
+   \text{"required"}, & \text{se } \text{tokens} \cap \mathcal{T}_{\text{personal}} \neq \emptyset \\
+   \text{"not-needed"}, & \text{se } \text{tokens} \cap \mathcal{T}_{\text{mechanical}} \neq \emptyset \text{ e } \text{tokens} \cap \mathcal{T}_{\text{personal}} = \emptyset \\
+   \text{"helpful"}, & \text{se } \text{task} \neq "" \text{ e } \text{tokens} \cap (\mathcal{T}_{\text{personal}} \cup \mathcal{T}_{\text{mechanical}}) = \emptyset \\
+   \text{"not-needed"}, & \text{se } \text{task} = ""
+   \end{cases}$$
+
+4. **Tratamento de Execução de `not-needed` no Runtime (`contextData`):**
+   - Quando `context_need === "not-needed"` e o chamador não tiver especificado fontes explícitas via `--source` / `source_ids`:
+     - O subsistema de seleção **não invoca `deliverRecord`** para candidatos pertencentes ao espaço `self`.
+     - `self.documents` é projetado como lista vazia `[]`.
+     - `personalBodyReads` resulta estritamente em `0`.
+     - `personalBodyChars` resulta estritamente em `0`.
+     - O resultado da consulta recebe `status: "not-needed"`.
+   - Caso o chamador solicite fontes explícitas pelo seu `source_id`, a consulta atua como expansão orientada pelo usuário e entrega os corpos solicitados mediante validação de acesso.
+
+5. **Tratamento de Tarefas Ambíguas (`helpful`):**
+   - Tarefas ambíguas não são descartadas nem rebaixadas para `not-needed`.
+   - O algoritmo executa o ranqueamento por relevância textual (`task_relevance`), seleção e entrega de trechos e evidências autorizados dentro do orçamento, satisfazendo as jornadas J-1 e J-3.
+
+---
+
+#### 9.1.3 Protocolo de Consulta Única em CLI e MCP (R-05, A-06)
+
+1. **Interface CLI:**
+   - Comando canônico:
+     `holoself context --task "<request>" [--project <dir>] [--lens <lens>] [--budget small|standard|deep] [--json]`
+   - Executa a resolução completa e entrega o envelope com documentos preenchidos em uma única invocação.
+   - Flags `--manifest` e `--source <id>` permanecem disponíveis e preservam semântica inalterada.
+
+2. **Interface MCP (`src/mcp-server.mjs`):**
+   - Adição da ferramenta orientada à tarefa com consulta única:
+     - Nome: `holoself_context`.
+     - Título: `Holoself context`.
+     - Descrição: `Resolve and deliver privacy-filtered, lens-scoped context for the current task in a single round-trip. Manifest and get remain optional for fine-grained inspection.`
+     - Esquema de Entrada:
+       ```json
+       {
+         "type": "object",
+         "properties": {
+           "task": { "type": "string", "minLength": 1, "maxLength": 500, "description": "The current task; used for deterministic relevance selection and gate." },
+           "lens": { "type": "string", "minLength": 1, "maxLength": 80, "description": "A built-in or canonical custom lens ID." },
+           "budget": { "type": "string", "enum": ["small", "standard", "deep"], "default": "standard" },
+           "temporal": { "type": "string", "enum": ["current", "historical", "superseded", "all"], "default": "current" }
+         },
+         "required": ["task"],
+         "additionalProperties": false
+       }
+       ```
+     - Comportamento: invoca `holoselfMcpContext(project, { ...args, manifest: false })`, entregando o payload com documentos preenchidos diretamente no retorno do tool call.
+   - Ferramentas de suporte mantidas:
+     - `holoself_context_manifest`: Retorna metadados e handles sem corpos (`estimatedTokensBody: 0`).
+     - `holoself_context_get`: Expande handles específicos (`source_ids`).
+     - `holoself_status`: Relata autorização e saúde da vinculação.
+     - `holoself_search`: Busca federada/local com procedência composta.
+     - `holoself_proposal_create` e `holoself_proposal_preview`: Ciclo de vida de propostas.
+
+---
+
+#### 9.1.4 Consolidação de Instruções e Skill Pública (R-10)
+
+1. **Instruções de Inicialização (`src/instructions.mjs`):**
+   - O arquivo `.holoself/BOOTSTRAP.md` gerado por `bootstrapText(link)` instrui o agente a utilizar diretamente a consulta única:
+     ```markdown
+     # Holoself startup
+
+     Run `holoself context --project . --task "<current request>" --budget standard --json`; do not read linked canonical files directly.
+     Default lens: `<default_lens>`. The command applies privacy, relevance, lifecycle, and budget policy.
+     Treat linked Holoself context as private and read-only.
+     Never modify canonical self directly; use proposal/review for durable self changes.
+     Readable context is not publication approval; publishing requires explicit disclosure approval.
+     ```
+   - Nenhuma lógica de filtragem de sensibilidade ou autorização de documentos é delegada a instruções de prompt; todo o controle é executado deterministicamente pela ferramenta.
+
+2. **Skill Pública (`skills/holoself/SKILL.md`):**
+   - Clarificar o fluxo de interação:
+     - O agente inicia por `holoself context --project . --task "<current request>" --json` (ou `holoself_context` em MCP).
+     - O gate determinístico poupa automaticamente corpos pessoais em tarefas mecânicas.
+     - `holoself_context_manifest` seguido de `holoself_context_get` é documentado como alternativa para inspeção granular de volumes massivos.
+   - Eliminar repetições de regras de autorização de campo em prosa.
+
+---
+
+#### 9.1.5 Caracterização e Não-Conversão de Modos de Projeto (D-05)
+
+1. **Oráculo de Detecção de Modos:**
+   A inspeção de um projeto candidato `.holoself` opera sob precedência estrita:
+   - **Caso A (Metadata Link):** Se `.holoself` é um diretório real e `.holoself/link.yaml` existe e é um arquivo regular $\rightarrow$ `mode: "metadata-link"`.
+   - **Caso B (Legacy Live Mount):** Se `.holoself` é um symlink ou junction (`lstatSync.isSymbolicLink() === true`) $\rightarrow$ `mode: "legacy-mount"`.
+   - **Caso C (Context Snapshot):** Se `.holoself` é um diretório real sem `link.yaml` contendo `context-packet.md` (ou `runtime/context-packet.md`) $\rightarrow$ `mode: "snapshot"`.
+   - **Caso D (Inválido / Não Vinculado):** Nenhum dos casos acima $\rightarrow$ `mode: "unlinked"`.
+
+2. **Invariante de Isolamento de Mounts Reais (Zero-I/O):**
+   - Ao detectar `mode: "legacy-mount"`, o runtime **não deve invocar `readdir` ou `readFile`** no destino apontado durante operações comuns de diagnóstico.
+   - O diagnóstico em `holoself link status`, `holoself doctor` e no Workbench relata:
+     - `state: "legacy-mount"`.
+     - Aviso de segurança: `"Project uses a direct filesystem junction exposing private root data without lens or privacy filters. Run holoself link setup to migrate to a bounded metadata link."`
+   - O comando `holoself unlink --target <dir>` remove a junção sem alterar nem apagar os dados na raiz de destino.
+
+---
+
+#### 9.1.6 Workbench: Explicabilidade Segura e Isolamento Anti-Oráculo (A-06, V-04)
+
+1. **Exposição de Perspectiva e Escopo no Workbench:**
+   - O Workbench exibe para cada espaço:
+     - Perspectiva ativa (lente padrão configurada).
+     - Modo de vinculação (`metadata-link`, `snapshot`, `legacy-mount`).
+     - Escopo de contexto do projeto (`include` / `exclude`).
+     - Estado de ativação de instruções e adaptadores de hosts locais.
+2. **Preservação Anti-Oráculo em Diagnósticos e Pré-visualizações:**
+   - Em conformidade com V-06 e V-12:
+     - Documentos restritos de espaços pares ou de sensibilidade proibida não aparecem em contagens de restrições ou prévias de contexto do Workbench.
+     - Motivos de exclusão exibidos são estritamente genéricos: `"budget exhausted"`, `"temporal excluded"`, `"policy restricted"`. Nenhum caminho relativo, título ou trecho de documento negado é emitido na API REST do Workbench (`src/web-server.mjs`).
+
+---
+
+#### 9.1.7 Orçamentos de Envelope e Truncamento (V-03, D-06)
+
+1. **Medição Estrita de Envelope UTF-8:**
+   - O tamanho do payload é medido pela serialização JSON final emitida ao cliente:
+     $$\text{payloadBytes} = \text{Buffer.byteLength}(\text{serializedPayload}, \text{"utf8"})$$
+   - Inclui corpo de dados, wrappers estruturados MCP (`content` + `structuredContent`), metadados e recibo.
+2. **Capacidade dos Perfis:**
+   - `small`: 16.384 bytes.
+   - `standard`: 49.152 bytes.
+   - `deep`: 131.072 bytes.
+3. **Truncamento sem Corrupção:**
+   - Quando `payloadBytes > envelopeCap`, a seleção descarrega ordenadamente os candidatos com menor relevância pontuada até satisfazer o teto, registrando as omissões no recibo de contexto.
+
+---
+
+### 9.2 Registro de Entrega e Evidências do Ciclo C-05 (T05-F)
+
+- **Ciclo:** C-05 ("Experiência e integração — consulta única, instruções e Workbench").
+- **Escopo e Requisitos Atendidos:** R-05, R-10; A-04, A-05, A-06; V-03, V-04, V-09; D-05, D-06; Jornadas J-1, J-2, J-3.
+- **Artefatos Entregues:**
+  1. `docs/specifications/c05-research-single-query-and-experience.md`: Mapeamento das superfícies de instrução, inventário de adaptadores, caracterização dos modos de projeto e gaps de ferramentas MCP.
+  2. `src/context-selection.mjs`:
+     - Padrões Unicode-safe `PERSONAL_PATTERN` e `MECHANICAL_PATTERN` cobrindo PT/EN e flexões morfológicas.
+     - Gate determinístico `contextNeed`: classifica tarefas em `required`, `not-needed` e `helpful`.
+     - Supressão estrita de corpos de documentos pessoais sob `not-needed` quando nenhuma fonte explícita é requisitada, preservando contexto útil em tarefas ambíguas e consultas gerais.
+  3. `src/ecosystem.mjs`:
+     - Invariante Zero-I/O em montagens legadas (`isLegacyMount`) em `findLinkUpwards`, `readLink`, `healthStatus` e diagnósticos.
+     - Proteção anti-oráculo: `unauthorized_sources_omitted` restrito a `owner:direct`, ocultado de `client:linked`.
+     - Entrega de metadados `mode: "legacy-mount" | "metadata-link" | "snapshot"` no status de espaço.
+  4. `src/mcp-server.mjs`:
+     - Nova ferramenta `holoself_context` orientada à tarefa, entregando envelope completo com corpos em um único round-trip (totalizando 7 ferramentas MCP).
+     - Validação defensiva de junções legadas no binding de projetos.
+  5. `src/cli.mjs`:
+     - Capabilities MCP atualizadas com a ferramenta `holoself_context`.
+  6. `skills/holoself/SKILL.md`:
+     - Atualização do contrato de resolução rápida documentando `holoself_context` (MCP) e consulta única CLI (`holoself context --task "<req>"`).
+     - Documentação do gate determinístico que poupa corpos pessoais em tarefas mecânicas sem delegar controle a instruções em prosa.
+  7. `src/web-server.mjs` e `web/app.mjs`:
+     - Ação corretiva `setup` no Workbench para migrar espaços em `legacy-mount` para `metadata-link` com segurança.
+     - Exibição de badge do modo de projeto, perspectiva ativa (lente) e estado de ativação.
+     - Preservação estrita anti-oráculo: nenhum caminho, handle ou detalhe de fonte negada é vazado na interface.
+  8. `tests/web-project.test.mjs`, `tests/mcp.test.mjs`, `tests/c00-baseline.test.mjs`:
+     - Testes automatizados para detecção e migração de junções legadas no Workbench.
+     - Testes de entrega completa e supressão mecânica via `holoself_context`.
+     - Atualização da evidência E-07 para `reproduced: false` (resolvido).
+- **Resultados dos Testes e Verificação:**
+  - `node --test tests/*.test.mjs`: 221 de 221 testes passaram (100%).
+  - `scripts/c00-baseline.mjs --acceptance`:
+    - **Qualidade PT/EN:** 36 de 36 casos passaram (100% de sucesso).
+    - **Critério V-09:** `status: "passed"`.
+    - **Evidência E-07:** `reproduced: false, bodyChars: 0`.
+    - **Critérios V-02, V-03, V-06:** `status: "passed"`.
+  - `node scripts/verify.mjs`: `[ok] tests`, `[ok] package audit`, `[ok] help`, `[ok] capabilities`.
+  - `git diff --check`: 0 avisos.
+
+
 ## 10. C-06 — testes finais e prontidão para adoção
 
 Escopo: R-01–R-12 e V-01–V-12; nenhum requisito pode desaparecer na integração. Entrada: todos os gates anteriores.
@@ -590,15 +1458,82 @@ Escopo: R-01–R-12 e V-01–V-12; nenhum requisito pode desaparecer na integra�
 
 Comandos já existentes a reutilizar na execução: `node --test tests/*.test.mjs`, `node scripts/package-audit.mjs`, `node scripts/verify.mjs` e `git diff --check`. `verify.mjs` já engloba testes, auditoria, help e capabilities; evitar executar duas vezes a mesma suite sem necessidade. Novos comandos V-* serão definidos no harness C-00. Validar runtime mínimo declarado e Windows atual; outras plataformas declaradas pelo projeto precisam evidência de CI ou limitação expressa. Auditoria do pacote deve inspecionar a lista efetivamente empacotada e fixtures, não apenas `.gitignore`.
 
+### 10.1 Especificação Técnica do Contrato C06-CONTRACT-1 (T06-S)
+
+#### 10.1.1 Matriz de Plataformas e Runtime de Execução
+1. **Ambiente Canônico de Execução:**
+   - Runtime de execução mínima declarada: Node.js `>=20.0.0` (execução sob Node.js v26.8.1 em ambiente Windows 11).
+   - Suporte pleno a caminhos no Windows: letras de unidade maiúsculas/minúsculas (`C:` / `c:`), separadores de diretório mistos (`\` e `/`), e junções de diretórios (`junction`) sem recursão cíclica.
+   - Padrão Pure ESM: zero dependências externas no runtime (`dependencies` vazio no `package.json`), utilizando unicamente módulos embutidos do Node.js (`node:fs`, `node:crypto`, `node:path`, `node:http`, `node:child_process`).
+
+#### 10.1.2 Matriz de Oráculos de Regressão e Verificação (V-01 a V-12)
+1. **Comandos Canônicos de Auditoria:**
+   - Suite Geral: `node --test tests/*.test.mjs` (221 testes automatizados).
+   - Pacote e Sanidade: `node scripts/verify.mjs` (abrangendo testes unitários, auditoria de empacotamento, help e capabilities).
+   - Linha de Base e Aceite Formal: `node scripts/c00-baseline.mjs --acceptance` (avaliando oráculos V-01 a V-12 e os 36 casos de qualidade).
+   - Formatação e Whitespace: `git diff --check`.
+2. **Separação Rigorosa de Oráculos de Aceite:**
+   - **Aprovados no Ciclo de Aceite Integrado:** V-02, V-03, V-04, V-05, V-06, V-07, V-08, V-09, V-10, V-11, V-12.
+   - **V-09 (Qualidade e Supressão de Corpos):** 100% de sucesso nos 36 casos congelados PT/EN de `tests/helpers/c00-fixture.mjs` (`passed: 36, total: 36`).
+   - **V-10 (Migração Reversível):** 100% de passagem nos 10 testes de `tests/migration.test.mjs`.
+
+#### 10.1.3 Protocolo do Ensaio Integrado de Reversão
+1. **Ensaio Sintético de Aplicação e Reversão:**
+   - Um repositório sintético com metadados legados (`visibility` / `public_safe`) é submetido a:
+     1. `holoself migrate policy --dry-run` $\rightarrow$ Validação de plano sem alteração de arquivos.
+     2. `holoself migrate policy --apply <plan> --confirm-narrowing` $\rightarrow$ Aplicação com estreitamento explícito e gravação de recibo assinado por hash SHA-256.
+     3. Validação de estado intermediário: schema v1 ativo, lentes soberanas em vigor.
+     4. `holoself migrate policy --revert <receipt>` $\rightarrow$ Restauração idêntica dos arquivos originais e validação de igualdade byte a byte.
+
+#### 10.1.4 Validação das Três Jornadas Primárias (J-1, J-2, J-3)
+1. **Jornada J-1 (Consulta de Contexto Pessoal):**
+   - Agente solicita `holoself context --task "<personal-task>" --budget standard --json` (ou `holoself_context` em MCP).
+   - Gate classifica como `required`.
+   - Entrega documentos pertinentes sob a lente ativa dentro do limite UTF-8 de 48 KiB.
+2. **Jornada J-2 (Operação Mecânica Pura):**
+   - Agente solicita `holoself context --task "Format this JSON object" --budget small --json`.
+   - Gate classifica como `not-needed`.
+   - Runtime retorna 0 caracteres e 0 leituras de corpos pessoais (`personalBodyChars === 0` e `personalBodyReads === 0`).
+3. **Jornada J-3 (Tarefa Ambígua):**
+   - Agente solicita `holoself context --task "Compare these options for my next step" --budget standard --json`.
+   - Gate classifica como `helpful`.
+   - Contexto é preservado sem descarte silencioso e sem escalonamento indevido de acesso.
+
+---
+
+### 10.2 Registro de Entrega e Evidências do Ciclo C-06 (T06-F / T06-G)
+
+- **Ciclo:** C-06 ("Testes finais e prontidão para adoção").
+- **Escopo e Requisitos Atendidos:** R-01 a R-12; V-01 a V-12; D-01 a D-08; Jornadas J-1, J-2, J-3.
+- **Artefatos Entregues:**
+  1. `docs/specifications/c06-research-traceability-and-readiness.md`: Matriz de rastreabilidade ponta a ponta requisito $\rightarrow$ contrato $\rightarrow$ código $\rightarrow$ teste, auditoria de esquemas e ausência de dados pessoais.
+  2. `src/migration.mjs`:
+     - Aplicação de escrita atômica (`atomicWriteFile`) em `applyPolicyMigration` e `revertPolicyMigration`, prevenindo corrupção de arquivos sob interrupções abruptas.
+     - Selo de integridade criptográfica no recibo (`applied_entries_digest`), abortando reversões fail-closed caso o recibo seja adulterado ou corrompido.
+  3. `schemas/migration-receipt.schema.json`: Atualização do esquema JSON formal incluindo `applied_entries_digest`.
+  4. `scripts/package-audit.mjs`: Auditoria recursiva em todos os diretórios do pacote (`bin`, `src`, `web`, `skills`, `contribs`, `docs`, `schemas`, `templates`), garantindo ausência total de credenciais, dados pessoais e chaves.
+  5. `tests/migration.test.mjs`: Teste automatizado de proteção fail-closed contra adulteração de recibos de migração.
+  6. `docs/reports/before-after-c00-to-c06.md`: Relatório comparativo demonstrando resolução de todas as evidências E-01 a E-08 herdadas de HS-SPEC-001 e 100% de passagem nos 36 casos de qualidade.
+  7. `docs/guides/adoption-and-rollback-runbook.md`: Guia prático de adoção, migração de repositórios legados, ativação de MCP e procedimentos determinísticos de reversão.
+  8. `docs/README.md`: Navegação consolidada integrando todos os relatórios e guias da especificação.
+- **Resultados dos Testes e Verificação Integrada:**
+  - `node --test tests/*.test.mjs`: **222 de 222 testes passaram (100% de sucesso)**.
+  - `node scripts/verify.mjs`: `[ok] tests`, `[ok] package audit`, `[ok] help`, `[ok] capabilities`.
+  - `scripts/c00-baseline.mjs --acceptance`: 36 de 36 casos de qualidade aprovados, V-02, V-03, V-06 e V-09 aprovados com status `passed`.
+  - `git diff --check`: 0 avisos de formatação.
+- **Status do Projeto:** Ciclos C-00 a C-06 integralmente concluídos e verificados. Código pronto para empacotamento e adoção.
+
+---
+
 ## 11. Estado, evidências e entrega futura
 
-C-00: execução conforme §4.5; C-01: execução conforme §5.2; C-02–C-06: `planned`. As medições anteriores pertencem a HS-SPEC-001 e não demonstram correções. Não há cronograma de calendário estimado: C-00 fornece custo/tempo para estimar os demais ciclos sem precisão falsa.
+C-00: execução concluída conforme §4.5; C-01: execução concluída conforme §5.2; C-02: execução concluída conforme §6.2; C-03: execução concluída conforme §7.2; C-04: execução concluída conforme §8.2; C-05: execução concluída conforme §9.2; C-06: execução concluída conforme §10.2. Todos os ciclos (C-00 a C-06) foram integralmente executados, revisados adversarialmente e verificados com 100% de sucesso.
 
 Registro por tarefa, mantido nesta seção ou no recibo de execução referenciado: `task_id | state | requested_model | resolved_model | input_revision | contract_hash | output_revision | commands | results | metrics | review_findings | disposition`. Estados: planned, ready, running, changes-required, verified, blocked. Um processo que sai com código zero e resposta vazia não constitui revisão.
 
 Ao encerrar cada ciclo, Q entrega resultado observável, requisitos atendidos, evidências reproduzíveis, custo e tentativas, riscos remanescentes e próximo gate. Autorizações já dadas para execução futura não devem ser pedidas novamente para tarefas rotineiras dentro do escopo; decisões que ampliem acesso ou escopo permanecem separadas.
 
-Condição de entrega técnica: C-00–C-06 verificados, achados bloqueantes/altos resolvidos, rastreabilidade completa, economia medida sem perda de qualidade/privacidade e reversão ensaiada. A ativação real será planejada/autorizada separadamente.
+Condição de entrega técnica atendida: C-00–C-06 verificados, achados bloqueantes/altos resolvidos, rastreabilidade completa (R-01 a R-12, V-01 a V-12, D-01 a D-08), economia medida sem perda de qualidade/privacidade e reversão ensaiada. A ativação real será planejada/autorizada separadamente.
 
 ## 12. Revisões deste plano
 

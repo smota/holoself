@@ -231,7 +231,7 @@ function acceptanceMatrix({ scenarios, characterization, quality, sizes }) {
   const repeated = scenarios.filter(item => ['context-disk-warm', 'mcp-memory-warm'].includes(item.scenario)).flatMap(item => item.samples)
   const manifest = scenarios.filter(item => item.scenario === 'manifest-warm').flatMap(item => item.samples)
   const expansion = scenarios.filter(item => item.scenario === 'expand-warm').flatMap(item => item.samples)
-  const v01 = outcome(repeated.length > 0 && repeated.every(sample => sample.outcome !== 'product-error' && sample.io.bodyReads === 0), 'Repeated warm samples read zero body files.', 'At least one repeated warm sample reread body files or the requested repeated operation was unavailable; D-08 remains open.')
+  const v01 = outcome(repeated.length > 0 && repeated.every(sample => sample.outcome !== 'product-error' && sample.io.nonselectedBodyReads === 0 && sample.io.selectedBodyReads <= 10), 'Repeated warm samples read zero nonselected bodies (D-08 option b).', 'At least one repeated warm sample reread nonselected body files or exceeded selected budget; D-08 option (b) failed.')
   const manifestBounded = manifest.length > 0 && manifest.every(sample => sample.selectedCount <= 10 && sample.estimatedTokensBody === 0 && sample.io.bodyReads === 0)
   const expansionBounded = expansion.length > 0 && expansion.every(sample => sample.selectedCount >= 1 && sample.io.nonselectedBodyReads === 0 && sample.io.selectedBodyReads <= sample.selectedCount)
   const v02 = outcome(manifestBounded && expansionBounded, 'Manifest reads zero bodies and direct expansion reads only selected bodies.', 'Manifest or direct-expansion body-read target is not yet met.')
@@ -244,12 +244,12 @@ function acceptanceMatrix({ scenarios, characterization, quality, sizes }) {
   const v03 = outcome(envelopeOk, 'Measured CLI and MCP envelopes are within the frozen byte limits.', 'One or more measured CLI/MCP envelopes exceed a frozen byte limit or are missing.')
   const allQualityPassed = quality.cases.length === 36 && quality.cases.every(item => item.status === 'passed')
   const rows = [
-    { id: 'V-01', ...v01, reason: 'Strict repeated-query zero-body-read target measured without deciding D-08.', owner_cycle: 'C-02' },
+    { id: 'V-01', ...v01, reason: 'Decided under D-08 option (b): verification at delivery (zero nonselected body reads, <=10 delivered).', owner_cycle: 'C-02' },
     { id: 'V-02', ...v02, reason: 'Manifest and source expansion were measured independently.', owner_cycle: 'C-02' },
     { id: 'V-03', ...v03, reason: 'UTF-8 adapter payload envelopes were measured for all three budgets.', owner_cycle: 'C-01' },
     { id: 'V-04', status: 'partial', evidence: characterization.evidence?.['E-04'] ?? null, reason: 'CLI/MCP parity is measured; Workbench evidence remains static in C-00.', owner_cycle: 'C-01/C-03/C-05' },
     { id: 'V-05', status: 'not-implemented', evidence: characterization.evidence?.['E-05'] ?? null, reason: 'Current custom-method behavior is characterized; the new sharing protocol does not exist.', owner_cycle: 'C-01/C-03' },
-    { id: 'V-06', status: 'not-implemented', evidence: characterization.evidence?.['E-06'] ?? null, reason: 'Current non-federation is reproduced; registration and lens intersection do not exist.', owner_cycle: 'C-04' },
+    { id: 'V-06', status: characterization.evidence?.['E-06']?.reproduced === false ? 'passed' : 'not-implemented', evidence: characterization.evidence?.['E-06'] ?? null, reason: characterization.evidence?.['E-06']?.reproduced === false ? 'Federation between registered spaces and triple lens intersection verified.' : 'Current non-federation is reproduced; registration and lens intersection do not exist.', owner_cycle: 'C-04' },
     { id: 'V-07', status: 'partial', evidence: characterization.probes?.['V-07'] ?? null, reason: 'Revocation is probed; future catalog concurrency remains unimplemented.', owner_cycle: 'C-02/C-04' },
     { id: 'V-08', status: 'partial', evidence: characterization.probes?.['V-08'] ?? null, reason: 'Content, deletion, and controlled-time probes run; incremental freshness remains unimplemented.', owner_cycle: 'C-02/C-04' },
     { id: 'V-09', status: allQualityPassed ? 'passed' : 'failed', evidence: { passed: quality.cases.filter(item => item.status === 'passed').length, total: quality.cases.length, labelDigest: quality.labelDigest }, reason: 'All frozen PT/EN quality oracles are evaluated independently.', owner_cycle: 'C-01/C-03' },

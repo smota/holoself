@@ -56,6 +56,7 @@ function parse(args){
     else if(a==='--self') o.self=resolve(requiredValue(args,i++,a))
     else if(a==='--from') o.from=resolve(requiredValue(args,i++,a))
     else if(a==='--lens') o.lens=requiredValue(args,i++,a)
+    else if(a==='--lenses') o.lenses=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean)
     else if(a==='--secondary-lenses') o.secondaryLenses=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean)
     else if(a==='--task') o.task=requiredValue(args,i++,a)
     else if(a==='--budget') o.budget=requiredValue(args,i++,a)
@@ -67,8 +68,9 @@ function parse(args){
     else if(a==='--no-cache') o.noCache=true
     else if(a==='--format') o.format=requiredValue(args,i++,a)
     else if(a==='--output') o.output=resolve(requiredValue(args,i++,a))
-    else if(a==='--plan') o.plan=resolve(requiredValue(args,i++,a))
-    else if(a==='--apply') o.apply=resolve(requiredValue(args,i++,a))
+    else if(a==='--plan') o.plan=requiredValue(args,i++,a)
+    else if(a==='--apply') o.apply=requiredValue(args,i++,a)
+    else if(a==='--revert') o.revert=requiredValue(args,i++,a)
     else if(a==='--digest'||a==='--preview-hash') o.digest=requiredValue(args,i++,a)
     else if(a==='--adapter') o.adapter=requiredValue(args,i++,a)
     else if(a==='--activate') o.activate=requiredValue(args,i++,a)
@@ -100,12 +102,18 @@ function parse(args){
     else if(a==='--root-setup') o.rootSetup=true
     else if(a==='--force') o.force=true
     else if(a==='--dry-run') o.dryRun=true
+    else if(a==='--all') o.all=true
+    else if(a==='--revoke') o.revoke=true
+    else if(a==='--confirm-narrowing') o.confirmNarrowing=true
+    else if(a==='--allow-partial') o.allowPartial=true
+    else if(a==='--include-linked') o.includeLinked=true
     else if(a==='--packet-only') o.packetOnly=true
     else if(a==='--self-only') o.selfOnly=true
     else if(a==='--snapshot') o.snapshot=true
     else if(a==='--json') o.json=true
     else if(a==='--changed') o.changed=true
     else if(a==='--federated') o.federated=true
+    else if(a==='--spaces') o.spaces=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean)
     else if(a==='--help'||a==='-h') o.help=true
     else if(a==='--version'||a==='-v') o.version=true
     else if(a.startsWith('-')) throw new Error(`unknown option: ${a}`)
@@ -324,7 +332,7 @@ export async function run(argv){
   const o=parse(argv)
   if(o.version){console.log(o.json?JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION}):`Holoself ${VERSION}`);return}
   if(o.command==='capabilities'){
-    console.log(JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION,interface:'local-cli',contextSchemaVersion:1,commands:['doctor','context','search','propose','proposals','instructions','knowledge','link','skill','mcp'],contextFeatures:['need-gate','budgets','manifest','source-handles','lifecycle','receipts','persistent-cache','task-contrib-routing'],proposalSchemaVersions:[1,2],indexSchemaVersion:5,mcp:{transport:'stdio',projectBound:true,linkAuthority:true,tools:['holoself_status','holoself_context_manifest','holoself_context_get','holoself_search','holoself_proposal_create','holoself_proposal_preview']},globalSkillSupported:true},null,2));return
+    console.log(JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION,interface:'local-cli',contextSchemaVersion:1,commands:['doctor','context','search','propose','proposals','instructions','knowledge','link','skill','mcp'],contextFeatures:['need-gate','budgets','manifest','source-handles','lifecycle','receipts','persistent-cache','task-contrib-routing'],proposalSchemaVersions:[1,2],indexSchemaVersion:5,mcp:{transport:'stdio',projectBound:true,linkAuthority:true,tools:['holoself_status','holoself_context','holoself_context_manifest','holoself_context_get','holoself_search','holoself_proposal_create','holoself_proposal_preview']},globalSkillSupported:true},null,2));return
   }
   if(o.help||!o.command){help();return}
   const root=o.root
@@ -347,7 +355,7 @@ export async function run(argv){
   if(o.command==='data-root'){console.log(root);return}
   if(o.command==='knowledge'){
     if(o.args[0]!=='cleanup')throw new Error('knowledge requires cleanup')
-    if(o.apply){if(!o.yes)throw new Error('knowledge cleanup --apply requires --yes');const plan=JSON.parse(readFileSync(o.apply,'utf8')),result=applyCleanupPlan(root,plan,{expectedDigest:o.digest});console.log(JSON.stringify(result,null,2));return}
+    if(o.apply){if(!o.yes)throw new Error('knowledge cleanup --apply requires --yes');const plan=JSON.parse(readFileSync(resolve(o.apply),'utf8')),result=applyCleanupPlan(root,plan,{expectedDigest:o.digest});console.log(JSON.stringify(result,null,2));return}
     const plan=buildCleanupPlan(root);if(o.output){atomicWrite(o.output,JSON.stringify(plan,null,2)+'\n');console.log(JSON.stringify({status:'planned',plan_path:o.output,digest:plan.digest,operations:plan.operations,review_only:plan.review_only},null,2))}else console.log(JSON.stringify(plan,null,2));return
   }
   if(await runEcosystem(o)) return

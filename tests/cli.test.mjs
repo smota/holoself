@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile, mkdir, symlink, lstat, access, readdir, stat, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { run } from '../src/cli.mjs'
 
 async function temp(){return mkdtemp(join(tmpdir(),'holoself-'))}
@@ -46,16 +46,34 @@ test('migrate maps private reference and me without deleting source', async()=>{
   assert.equal(await readFile(join(root,'reference','private.md'),'utf8'),'private reference'); assert.equal(await readFile(join(root,'me','private.md'),'utf8'),'private me'); assert.equal(await readFile(join(source,'personal','profile','identity.md'),'utf8'),'private note')
 })
 
-test('untagged canonical migration validates and resolves through private context',async()=>{
-  const source=await temp(),root=await temp(),project=await temp();await mkdir(join(source,'profile'),{recursive:true});await writeFile(join(source,'profile','identity.md'),'migrationprivatecontext marker')
-  await run(['init','--root',root]);const migrationOutput=await capture(()=>run(['migrate','--root',root,'--from',source,'--yes']))
-  assert.match(migrationOutput,/tagged: 1 \(profile\/identity\.md\)/)
-  assert.match(await capture(()=>run(['validate','--root',root])),/is valid/)
-  await run(['link','add','--project',project,'--self',root,'--lens','private','--yes'])
-  const data=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','private','--json'])))
-  const identity=data.self.documents.find(document=>document.path==='profile/identity.md')
-  assert.ok(identity);assert.match(identity.content,/migrationprivatecontext marker/);assert.equal(identity.metadata.sensitivity,'restricted');assert.equal(identity.metadata.publication_allowed,false)
-})
+test('untagged canonical migration validates and resolves through private context', async () => {
+  const source = await temp(), root = await temp(), project = await temp();
+  await mkdir(join(source, 'profile'), { recursive: true });
+  await writeFile(join(source, 'profile', 'identity.md'), 'migrationprivatecontext marker');
+  await run(['init', '--root', root]);
+  const migrationOutput = await capture(() => run(['migrate', '--root', root, '--from', source, '--yes']));
+  assert.match(migrationOutput, /tagged: 1 \(profile\/identity\.md\)/);
+  assert.match(await capture(() => run(['validate', '--root', root])), /is valid/);
+
+  await assert.rejects(
+    run(['link', 'add', '--project', project, '--self', root, '--lens', 'private', '--yes']),
+    /default_lens cannot be private: private is owner-exclusive/
+  );
+
+  const prevCwd = process.cwd();
+  try {
+    process.chdir(root);
+    const data = JSON.parse(await capture(() => run(['context', '--root', root, '--lens', 'private', '--json'])));
+    assert.equal(data.self.path, resolve(root).replaceAll('\\', '/'));
+    assert.equal(data.lens, 'private');
+    const identity = data.self.documents.find(d => d.path === 'profile/identity.md');
+    assert.ok(identity, 'profile/identity.md must be delivered under private lens to owner:direct');
+    assert.match(identity.content, /migrationprivatecontext marker/);
+    assert.equal(identity.metadata.sensitivity, 'restricted');
+  } finally {
+    process.chdir(prevCwd);
+  }
+});
 
 test('link and unlink only manage symlink with explicit confirmation', async()=>{
   const root=await temp(), project=await temp(); await run(['init','--root',root]);
