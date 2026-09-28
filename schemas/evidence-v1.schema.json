@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/evidence-v1.schema.json",
+  "title": "D00 proposed evidence records v1 (not a runtime interface)",
+  "oneOf": [{"$ref":"#/$defs/source"},{"$ref":"#/$defs/revision"},{"$ref":"#/$defs/extraction"},{"$ref":"#/$defs/fidelity"},{"$ref":"#/$defs/interpretation"},{"$ref":"#/$defs/proposalEvidence"}],
+  "$defs": {
+    "id": {"type":"string","format":"uuid"},
+    "hash": {"type":"string","pattern":"^[0-9a-f]{64}$"},
+    "text": {"type":"string","minLength":1},
+    "time": {"type":"string","format":"date-time"},
+    "path": {"type":"string","allOf":[
+      {"pattern":"^(?!/)(?!.*[\\u0000-\\u001f\\u007f<>:\"|?*\\\\])(?!.*[. ](?:/|$))(?!.*//)[^/]+(?:/[^/]+)*$"},
+      {"pattern":"^(?!.*(?:^|/)(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9¹²³]|[Ll][Pp][Tt][1-9¹²³]|[Cc][Ll][Oo][Cc][Kk]\\$|[Cc][Oo][Nn][Ii][Nn]\\$|[Cc][Oo][Nn][Oo][Uu][Tt]\\$)(?:\\.[^/]*)?(?:/|$))"}
+    ]},
+    "actor": {"type":"object","additionalProperties":false,"required":["kind","id"],"properties":{"kind":{"enum":["human","agent","unknown"]},"id":{"$ref":"#/$defs/text"}}},
+    "policy": {
+      "type":"object","additionalProperties":false,"required":["revision","project_grants","access_lenses","disclosure","sensitivity"],
+      "properties": {
+        "revision":{"type":"integer","minimum":1},
+        "project_grants":{"type":"array","uniqueItems":true,"items":{"$ref":"#/$defs/id"}},
+        "access_lenses":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","pattern":"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$","maxLength":40}},
+        "disclosure":{"enum":["internal-only","review-required","publish-approved"]},
+        "sensitivity":{"enum":["public","none","personal","application-private","compensation-confidential","third-party-personal","recruiter-confidential","employer-confidential","restricted"]}
+      }
+    },
+    "source": {
+      "type":"object","additionalProperties":false,"required":["schema_version","kind","id","manifest_revision","label","media_type","author","location","policy","status"],
+      "properties": {
+        "schema_version":{"const":1},"kind":{"const":"source"},"id":{"$ref":"#/$defs/id"},"manifest_revision":{"type":"integer","minimum":1},
+        "label":{"$ref":"#/$defs/text"},"media_type":{"enum":["markdown","docx","pdf"]},"author":{"$ref":"#/$defs/actor"},
+        "location":{"$ref":"#/$defs/location"},"policy":{"$ref":"#/$defs/policy"},"status":{"enum":["registered","unavailable","withdrawn"]}
+      }
+    },
+    "location": {"type":"object","additionalProperties":false,"required":["root_id","relative_path"],"properties":{"root_id":{"$ref":"#/$defs/id"},"relative_path":{"$ref":"#/$defs/path"}}},
+    "revision": {
+      "type":"object","additionalProperties":false,"required":["schema_version","kind","id","source_id","operation_id","sha256","byte_length","captured_at","captured_location","storage"],
+      "properties": {
+        "schema_version":{"const":1},"kind":{"const":"revision"},"id":{"$ref":"#/$defs/id"},"source_id":{"$ref":"#/$defs/id"},"operation_id":{"$ref":"#/$defs/id"},
+        "sha256":{"$ref":"#/$defs/hash"},"byte_length":{"type":"integer","minimum":0},"captured_at":{"$ref":"#/$defs/time"},"captured_location":{"$ref":"#/$defs/location"},
+        "document_date":{"$ref":"#/$defs/text"},"event_date":{"$ref":"#/$defs/text"},"previous_revision_id":{"$ref":"#/$defs/id"},
+        "storage": {"oneOf":[
+          {"type":"object","additionalProperties":false,"required":["mode"],"properties":{"mode":{"const":"reference"}}},
+          {"type":"object","additionalProperties":false,"required":["mode","snapshot_path","consent_id"],"properties":{"mode":{"const":"snapshot"},"snapshot_path":{"$ref":"#/$defs/path"},"consent_id":{"$ref":"#/$defs/id"}}}
+        ]}
+      }
+    },
+    "locator": {"oneOf":[
+      {"type":"object","additionalProperties":false,"required":["format","line_start","line_end"],"properties":{"format":{"const":"markdown"},"line_start":{"type":"integer","minimum":1},"line_end":{"type":"integer","minimum":1}}},
+      {"type":"object","additionalProperties":false,"required":["format","part","structural_path"],"properties":{"format":{"const":"docx"},"part":{"$ref":"#/$defs/path"},"structural_path":{"$ref":"#/$defs/text"}}},
+      {"type":"object","additionalProperties":false,"required":["format","page"],"properties":{"format":{"const":"pdf"},"page":{"type":"integer","minimum":1},"bounds":{"type":"object","additionalProperties":false,"required":["x","y","width","height","page_width","page_height"],"properties":{"x":{"type":"number","minimum":0},"y":{"type":"number","minimum":0},"width":{"type":"number","minimum":0},"height":{"type":"number","minimum":0},"page_width":{"type":"number","exclusiveMinimum":0},"page_height":{"type":"number","exclusiveMinimum":0}}}}}
+    ]},
+    "reference": {
+      "type":"object","additionalProperties":false,"required":["source_id","revision_id","extraction_id","block_id","block_sha256","locator"],
+      "properties":{"source_id":{"$ref":"#/$defs/id"},"revision_id":{"$ref":"#/$defs/id"},"extraction_id":{"$ref":"#/$defs/id"},"block_id":{"$ref":"#/$defs/text"},"block_sha256":{"$ref":"#/$defs/hash"},"asset_sha256":{"$ref":"#/$defs/hash"},"locator":{"$ref":"#/$defs/locator"}}
+    },
+    "block": {
+      "type":"object","additionalProperties":false,"required":["id","type","content","content_sha256","locator","relations"],
+      "properties": {
+        "id":{"$ref":"#/$defs/text"},"type":{"enum":["heading","paragraph","question","answer","table","cell","figure","caption","note","utterance","gap"]},
+        "content":{"type":"string"},"content_sha256":{"$ref":"#/$defs/hash"},"locator":{"$ref":"#/$defs/locator"},"asset_path":{"$ref":"#/$defs/path"},"asset_sha256":{"$ref":"#/$defs/hash"},
+        "attributions":{"type":"array","uniqueItems":true,"items":{"type":"object","additionalProperties":false,"required":["role","label"],"properties":{"role":{"enum":["speaker","comment_author"]},"label":{"$ref":"#/$defs/text"}}}},
+        "relations":{"type":"array","uniqueItems":true,"items":{"type":"object","additionalProperties":false,"required":["type","target"],"properties":{"type":{"enum":["parent","answers","header","caption_of","speaker","adjacent","annotates","footnote_of"]},"target":{"$ref":"#/$defs/text"}}}}
+      },
+      "allOf":[{"if":{"required":["asset_path"]},"then":{"required":["asset_sha256"]}},{"if":{"required":["asset_sha256"]},"then":{"required":["asset_path"]}}]
+    },
+    "extraction": {
+      "type":"object","additionalProperties":false,"required":["schema_version","kind","id","source_id","revision_id","policy_revision","extractor","state","inventory","blocks","coverage","limitations"],
+      "properties": {
+        "schema_version":{"const":1},"kind":{"const":"extraction"},"id":{"$ref":"#/$defs/id"},"source_id":{"$ref":"#/$defs/id"},"revision_id":{"$ref":"#/$defs/id"},"policy_revision":{"type":"integer","minimum":1},
+        "previous_extraction_id":{"$ref":"#/$defs/id"},
+        "extractor":{"type":"object","additionalProperties":false,"required":["name","version","configuration_sha256"],"properties":{"name":{"$ref":"#/$defs/text"},"version":{"$ref":"#/$defs/text"},"configuration_sha256":{"$ref":"#/$defs/hash"}}},
+        "state":{"enum":["pending","complete","partial","failed","stale"]},"inventory":{"enum":["complete","incomplete"]},
+        "blocks":{"type":"array","items":{"$ref":"#/$defs/block"}},
+        "coverage":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["unit_id","disposition","block_ids"],"properties":{"unit_id":{"$ref":"#/$defs/text"},"disposition":{"enum":["extracted","preserved","unsupported","failed","omitted"]},"block_ids":{"type":"array","minItems":1,"uniqueItems":true,"items":{"$ref":"#/$defs/text"}}}}},
+        "limitations":{"type":"array","uniqueItems":true,"items":{"$ref":"#/$defs/text"}},"error_code":{"enum":["NO_TEXT","ENCRYPTED","MALFORMED","ACTIVE_CONTENT","LIMIT_EXCEEDED","TIMEOUT","DEPENDENCY_MISSING","SOURCE_CHANGED","POLICY_CHANGED"]}
+      },
+      "allOf":[
+        {"if":{"properties":{"state":{"const":"complete"}}},"then":{"properties":{"inventory":{"const":"complete"},"blocks":{"minItems":1},"coverage":{"minItems":1,"items":{"properties":{"disposition":{"enum":["extracted","preserved","unsupported"]}}}}}}},
+        {"if":{"properties":{"state":{"const":"failed"}}},"then":{"required":["error_code"]}}
+      ]
+    },
+    "fidelity": {
+      "type":"object","additionalProperties":false,"required":["schema_version","kind","id","reference","policy_revision","state"],
+      "properties":{"schema_version":{"const":1},"kind":{"const":"fidelity"},"id":{"$ref":"#/$defs/id"},"reference":{"$ref":"#/$defs/reference"},"policy_revision":{"type":"integer","minimum":1},"state":{"enum":["unchecked","checked","needs_correction"]},"reviewer":{"$ref":"#/$defs/actor"},"reviewed_at":{"$ref":"#/$defs/time"},"note":{"$ref":"#/$defs/text"}},
+      "allOf":[{"if":{"properties":{"state":{"enum":["checked","needs_correction"]}}},"then":{"required":["reviewer","reviewed_at"],"properties":{"reviewer":{"properties":{"kind":{"const":"human"}}}}}}]
+    },
+    "interpretation": {
+      "type":"object","additionalProperties":false,"required":["schema_version","kind","id","author","state","claims","limitations","counterpoints"],
+      "properties":{"schema_version":{"const":1},"kind":{"const":"interpretation"},"id":{"$ref":"#/$defs/id"},"author":{"$ref":"#/$defs/actor"},"state":{"enum":["candidate","proposed"]},"proposal_id":{"$ref":"#/$defs/id"},"claims":{"type":"array","minItems":1,"items":{"type":"object","additionalProperties":false,"required":["id","text","references"],"properties":{"id":{"$ref":"#/$defs/text"},"text":{"$ref":"#/$defs/text"},"references":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/reference"}}}}},"limitations":{"type":"array","items":{"$ref":"#/$defs/text"}},"counterpoints":{"type":"array","items":{"$ref":"#/$defs/text"}}},
+      "allOf":[{"if":{"properties":{"state":{"const":"proposed"}}},"then":{"required":["proposal_id"]}}]
+    },
+    "proposalEvidence": {
+      "type":"object","additionalProperties":false,"required":["schema_version","kind","proposal_id","proposal_sha256","interpretation_id","changes"],
+      "properties":{"schema_version":{"const":1},"kind":{"const":"proposal_evidence"},"proposal_id":{"$ref":"#/$defs/id"},"proposal_sha256":{"$ref":"#/$defs/hash"},"interpretation_id":{"$ref":"#/$defs/id"},"changes":{"type":"array","minItems":1,"items":{"type":"object","additionalProperties":false,"required":["change_id","claim_id","references","limitations"],"properties":{"change_id":{"$ref":"#/$defs/text"},"claim_id":{"$ref":"#/$defs/text"},"references":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/reference"}},"limitations":{"type":"array","items":{"$ref":"#/$defs/text"}}}}}}
+    }
+  }
+}
