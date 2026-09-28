@@ -1,5 +1,7 @@
 # D00 validation and initial independent review
 
+Current disposition: **human accepted**. On 2026-09-28 the user replied “Aprovado e aceito” to the explicit D00 acceptance request for delivery commit `54a29a4459c332b26b997dbd08823f96fcd0a923`. Recorded at 19:59 UTC in the originating Codex conversation. This accepts the D00 contract baseline and permits D01 to proceed. It does not certify unimplemented extraction, waive remaining D01 visual/resource/portability checks, or authorize release publication. Earlier pending statements below preserve the review history.
+
 Date: 2026-09-28. Scope: [D00 / issue #9](https://github.com/smota/holoself/issues/9), [contract v1](../specifications/evidence-contract-v1.md). This sanitized receipt records the **prior reviewed candidate only**. It does not accept the corrected candidate or authorize D01.
 
 ## Candidate and execution identity
