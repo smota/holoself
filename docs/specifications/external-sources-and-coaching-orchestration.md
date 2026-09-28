@@ -1,6 +1,6 @@
 # Orchestration plan for external evidence and coaching
 
-Status: execution active, 2026-09-28. D00 delivery `54a29a4459c332b26b997dbd08823f96fcd0a923` has independent review and explicit human acceptance. D01 is next. The planning/preflight descriptions below are historical; current evidence is in the [D00 validation and acceptance record](../reports/evidence-contract-d00-validation.md).
+Status: execution active, 2026-09-28. D00 delivery `54a29a4459c332b26b997dbd08823f96fcd0a923` has independent review and explicit human acceptance. D01 exploratory testing and read-only Claude review are complete; the corrected candidate passed, with no blocking review findings. See the [D01 validation receipt](../reports/evidence-extraction-d01-validation.md) and [spike report](../reports/evidence-extraction-d01-spike.md). D02 is next and remains a high-assurance candidate gate. Production qualification, including native Linux/macOS provider qualification and suspended Windows startup, remains open. The planning/preflight descriptions below are historical; the D00 contract evidence is in the [D00 validation and acceptance record](../reports/evidence-contract-d00-validation.md).
 
 Scope: [epic #8](https://github.com/smota/holoself/issues/8), all thirteen issues D00–D12. Product scope, acceptance criteria, hypotheses and rollback remain in the [development plan](external-sources-and-coaching-plan.md). This document assigns execution and review responsibilities; it does not change those requirements.
 

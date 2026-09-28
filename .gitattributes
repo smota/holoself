@@ -1,2 +1,3 @@
 tests/fixtures/evidence/*.pdf binary
 tests/fixtures/evidence/*.docx binary
+scripts/evidence-supervisor-linux.sh text eol=lf

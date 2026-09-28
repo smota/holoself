@@ -72,6 +72,8 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 
 - [External sources and coaching development plan](specifications/external-sources-and-coaching-plan.md)
 - [External sources and coaching orchestration plan](specifications/external-sources-and-coaching-orchestration.md)
+- [D01 local extraction feasibility spike](reports/evidence-extraction-d01-spike.md)
+- [D01 independent testing and review receipt](reports/evidence-extraction-d01-validation.md)
 - [Independent review of the orchestration plan](reports/external-sources-orchestration-review.md)
 - [Context and lenses specification](specifications/context-and-lenses-vnext.md)
 - [Context and lenses implementation plan and C-00 evidence](specifications/context-and-lenses-implementation-plan.md)
