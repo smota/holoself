@@ -1,0 +1,31 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://holoself.local/schemas/coaching-v1.schema.json",
+  "title":"D00 proposed coaching work v1 (not approved profile knowledge)",
+  "type":"object","additionalProperties":false,
+  "required":["schema_version","id","record_revision","kind","question_id","created_at","author","body","references"],
+  "properties": {
+    "schema_version":{"const":1},"id":{"$ref":"evidence-v1.schema.json#/$defs/id"},"record_revision":{"type":"integer","minimum":1},
+    "previous_record_sha256":{"$ref":"evidence-v1.schema.json#/$defs/hash"},"kind":{"enum":["question","session","action","review"]},
+    "question_id":{"$ref":"evidence-v1.schema.json#/$defs/id"},"session_id":{"$ref":"evidence-v1.schema.json#/$defs/id"},"action_id":{"$ref":"evidence-v1.schema.json#/$defs/id"},
+    "created_at":{"$ref":"evidence-v1.schema.json#/$defs/time"},"author":{"$ref":"evidence-v1.schema.json#/$defs/actor"},"body":{"$ref":"evidence-v1.schema.json#/$defs/text"},
+    "references":{"type":"array","items":{"$ref":"evidence-v1.schema.json#/$defs/reference"}},
+    "question_state":{"enum":["open","closed"]},"method_ids":{"type":"array","uniqueItems":true,"items":{"$ref":"evidence-v1.schema.json#/$defs/text"}},
+    "observations":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["kind","text","author","references"],"properties":{"kind":{"enum":["user_report","source_fact","hypothesis","intention"]},"text":{"$ref":"evidence-v1.schema.json#/$defs/text"},"author":{"$ref":"evidence-v1.schema.json#/$defs/actor"},"references":{"type":"array","items":{"$ref":"evidence-v1.schema.json#/$defs/reference"}}},"allOf":[{"if":{"properties":{"kind":{"const":"source_fact"}}},"then":{"properties":{"references":{"minItems":1}}}}]}},
+    "action_state":{"enum":["proposed","confirmed"]},
+    "confirmation":{"$ref":"#/$defs/decision"},
+    "execution_report":{"enum":["unknown","not_taken","reported_done"]},"outcome_state":{"enum":["unknown","reported","verified"]},"verification":{"$ref":"#/$defs/decision"}
+  },
+  "allOf": [
+    {"if":{"properties":{"record_revision":{"minimum":2}}},"then":{"required":["previous_record_sha256"]}},
+    {"if":{"properties":{"kind":{"const":"question"}}},"then":{"required":["question_state"]}},
+    {"if":{"properties":{"kind":{"const":"session"}}},"then":{"required":["observations"]}},
+    {"if":{"properties":{"kind":{"const":"action"}}},"then":{"required":["session_id","action_state"]}},
+    {"if":{"properties":{"kind":{"const":"review"}}},"then":{"required":["action_id","execution_report","outcome_state"]}},
+    {"if":{"required":["action_state"],"properties":{"action_state":{"const":"confirmed"}}},"then":{"required":["confirmation"]}},
+    {"if":{"required":["outcome_state"],"properties":{"outcome_state":{"const":"verified"}}},"then":{"required":["verification"],"properties":{"references":{"minItems":1}}}}
+  ],
+  "$defs": {
+    "decision":{"type":"object","additionalProperties":false,"required":["actor","at","record_sha256"],"properties":{"actor":{"type":"object","additionalProperties":false,"required":["kind","id"],"properties":{"kind":{"const":"human"},"id":{"$ref":"evidence-v1.schema.json#/$defs/text"}}},"at":{"$ref":"evidence-v1.schema.json#/$defs/time"},"record_sha256":{"$ref":"evidence-v1.schema.json#/$defs/hash"}}}
+  }
+}

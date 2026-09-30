@@ -2,6 +2,8 @@
 
 Machine-readable contracts:
 
+Proposed D00 contracts, not active runtime interfaces: [evidence v1](../../schemas/evidence-v1.schema.json) and [coaching v1](../../schemas/coaching-v1.schema.json). See their [decisions, coverage and acceptance boundaries](../specifications/evidence-contract-v1.md).
+
 - [`schemas/lens.schema.json`](../../schemas/lens.schema.json): private custom-lens definition
 - [`schemas/link.schema.json`](../../schemas/link.schema.json): project `self_context` link
 - [`schemas/adapter-capability.schema.json`](../../schemas/adapter-capability.schema.json): startup adapter capability evidence

@@ -1,0 +1,13 @@
+{
+  "name": "holoself-evidence-spike",
+  "private": true,
+  "description": "Source-only D01 extraction comparison; excluded from the product package",
+  "dependencies": {
+    "fast-xml-parser": "5.11.1",
+    "mammoth": "1.13.0",
+    "markdown-it": "14.3.2",
+    "pdfjs-dist": "4.10.38",
+    "pdfjs5": "npm:pdfjs-dist@5.5.207",
+    "yauzl": "3.4.0"
+  }
+}

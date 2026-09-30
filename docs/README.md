@@ -34,6 +34,7 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 
 ## Guides
 
+- [Local coaching sessions](guides/coaching.md)
 - [Activated project links](guides/activated-links.md)
 - [Link or export?](guides/link-or-export.md)
 - [Synthetic career and publishing example](guides/synthetic-linked-projects.md)
@@ -70,6 +71,16 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 
 ## Development specifications
 
+The D00–D03 evidence documents below record earlier research and experiments. The current coaching workflow is described in [Local coaching sessions](guides/coaching.md); it does not use the experimental native extraction runtime.
+
+- [External sources and coaching development plan](specifications/external-sources-and-coaching-plan.md)
+- [External sources and coaching orchestration plan](specifications/external-sources-and-coaching-orchestration.md)
+- [D01 local extraction feasibility spike](reports/evidence-extraction-d01-spike.md)
+- [D01 independent testing and review receipt](reports/evidence-extraction-d01-validation.md)
+- [D02 native provider prototype report](reports/evidence-native-provider-prototype.md)
+- [D03 extraction experiment, tranche 2](reports/evidence-extraction-d03-tranche2.md)
+- [D03 extraction experiment, tranche 3](reports/evidence-extraction-d03-tranche3.md)
+- [Independent review of the orchestration plan](reports/external-sources-orchestration-review.md)
 - [Context and lenses specification](specifications/context-and-lenses-vnext.md)
 - [Context and lenses implementation plan and C-00 evidence](specifications/context-and-lenses-implementation-plan.md)
 - [C-02 research: catalog and freshness](specifications/c02-research-catalog-and-freshness.md)
@@ -96,3 +107,5 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 - [Status and roadmap](contributing/status-and-roadmap.md)
 
 Compatibility entry points remain at [architecture.md](architecture.md), [linked-ecosystem.md](linked-ecosystem.md), [migration.md](migration.md), [ownership.md](ownership.md), and [usage.md](usage.md).
+
+- [Coaching course correction and validation](reports/coaching-course-correction.md): current local CLI delivery, retired experimental scope, and review evidence.
