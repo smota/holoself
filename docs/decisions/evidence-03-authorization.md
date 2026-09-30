@@ -1,6 +1,6 @@
 # ADR E03: Explicit evidence retrieval and revocation
 
-Status: proposed D00 contract, pending independent review and human acceptance. Issue: #9; date: 2026-09-28.
+Status: D00 contract accepted against commit `54a29a4`; D02 implementation remains candidate work. Issue: #9; date: 2026-09-28.
 
 ## Decision
 

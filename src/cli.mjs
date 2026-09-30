@@ -59,6 +59,18 @@ function parse(args){
     else if(a==='--lenses') o.lenses=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean)
     else if(a==='--secondary-lenses') o.secondaryLenses=requiredValue(args,i++,a).split(',').map(x=>x.trim()).filter(Boolean)
     else if(a==='--task') o.task=requiredValue(args,i++,a)
+    else if(a==='--question') o.question=requiredValue(args,i++,a)
+    else if(a==='--text') o.coachingText=requiredValue(args,i++,a)
+    else if(a==='--kind') o.coachingKind=requiredValue(args,i++,a)
+    else if(a==='--outcome') o.coachingOutcome=requiredValue(args,i++,a)
+    else if(a==='--expected-revision') o.expectedRevision=Number(requiredValue(args,i++,a))
+    else if(a==='--action-sequence') o.actionSequence=Number(requiredValue(args,i++,a))
+    else if(a==='--material-text') o.materialText=requiredValue(args,i++,a)
+    else if(a==='--material-status') o.materialStatus=requiredValue(args,i++,a)
+    else if(a==='--source-label') o.sourceLabel=requiredValue(args,i++,a)
+    else if(a==='--producer') o.producer=requiredValue(args,i++,a)
+    else if(a==='--limitations') o.limitations=requiredValue(args,i++,a)
+    else if(a==='--material-file') throw new Error('Document import is unsupported. Have an external tool extract the text, then use coaching material --material-text with source provenance.')
     else if(a==='--budget') o.budget=requiredValue(args,i++,a)
     else if(a==='--temporal') o.temporal=requiredValue(args,i++,a)
     else if(a==='--cursor') o.cursor=requiredValue(args,i++,a)
@@ -332,10 +344,26 @@ export async function run(argv){
   const o=parse(argv)
   if(o.version){console.log(o.json?JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION}):`Holoself ${VERSION}`);return}
   if(o.command==='capabilities'){
-    console.log(JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION,interface:'local-cli',contextSchemaVersion:1,commands:['doctor','context','search','propose','proposals','instructions','knowledge','link','skill','mcp'],contextFeatures:['need-gate','budgets','manifest','source-handles','lifecycle','receipts','persistent-cache','task-contrib-routing'],proposalSchemaVersions:[1,2],indexSchemaVersion:5,mcp:{transport:'stdio',projectBound:true,linkAuthority:true,tools:['holoself_status','holoself_context','holoself_context_manifest','holoself_context_get','holoself_search','holoself_proposal_create','holoself_proposal_preview']},globalSkillSupported:true},null,2));return
+    console.log(JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION,interface:'local-cli',contextSchemaVersion:1,commands:['doctor','context','search','propose','proposals','instructions','knowledge','link','skill','mcp','coaching'],coaching:{storage:'self-root/coaching/sessions',commands:['start','note','action','choose','review','material','resume'],externalTextOnly:true},contextFeatures:['need-gate','budgets','manifest','source-handles','lifecycle','receipts','persistent-cache','task-contrib-routing'],proposalSchemaVersions:[1,2],indexSchemaVersion:5,mcp:{transport:'stdio',projectBound:true,linkAuthority:true,tools:['holoself_status','holoself_context','holoself_context_manifest','holoself_context_get','holoself_search','holoself_proposal_create','holoself_proposal_preview']},globalSkillSupported:true},null,2));return
   }
-  if(o.help||!o.command){help();return}
+  if(!o.command || (o.help && o.command!=='coaching')){help();console.log('Coaching: coaching start --root <self-root> --question <text>; coaching note|action|choose|review|material <session-id> --root <self-root> --expected-revision <n> [options]; coaching resume [session-id] --root <self-root>. Use coaching --help for details.');return}
   const root=o.root
+  if(o.command==='coaching'){
+    if(o.help){console.log('Coaching commands:\n  start --root <self-root> --question <text>\n  note <id> --root <self-root> --expected-revision <n> --kind user_report|hypothesis|intention --text <text>\n  action <id> --root <self-root> --expected-revision <n> --text <text>\n  choose <id> --root <self-root> --expected-revision <n> --action-sequence <n>\n  review <id> --root <self-root> --expected-revision <n> --outcome done|partial|not_done --text <text>\n  material <id> --root <self-root> --expected-revision <n> --material-status imported|partial|failed --source-label <label> --producer <tool-or-person> [--material-text <already-extracted-text>] [--limitations <text>]\n  resume [id] --root <self-root>');return}
+    if(!o.rootExplicit || o.project || o.self || o.target)throw new Error('coaching requires explicit --root <self-root> and no linked-project selector')
+    const coaching=await import('./coaching.mjs'), command=o.args[0], id=o.args[1]
+    let result
+    if(command==='start') result=coaching.start(root,o.question)
+    else if(command==='note') result=coaching.note(root,id,o.expectedRevision,o.coachingKind,o.coachingText)
+    else if(command==='action') result=coaching.action(root,id,o.expectedRevision,o.coachingText)
+    else if(command==='choose') result=coaching.choose(root,id,o.expectedRevision,o.actionSequence)
+    else if(command==='review') result=coaching.review(root,id,o.expectedRevision,o.coachingOutcome,o.coachingText)
+    else if(command==='material') result=coaching.material(root,id,o.expectedRevision,{text:o.materialText,status:o.materialStatus,sourceLabel:o.sourceLabel,producer:o.producer,limitations:o.limitations})
+    else if(command==='resume') result=coaching.resume(root,id)
+    else throw new Error('coaching requires start, note, action, choose, review, material, or resume')
+    if(readConfig(root)?.evidence)console.error('[note] existing evidence binding detected; coaching leaves it untouched and does not read or migrate it')
+    console.log(JSON.stringify(result,null,2));return
+  }
   if(o.command==='web'){
     const {startWebServer}=await import('./web-server.mjs');const app=await startWebServer({project:o.project||process.cwd(),root:o.rootExplicit?root:undefined,port:o.port??0});console.log(`Holoself Workbench: ${app.url}\nData root: ${app.root}${app.project?`\nLinked project: ${app.project}`:''}`)
     if(!o.noOpen){const {spawn}=await import('node:child_process');const command=process.platform==='win32'?'cmd':process.platform==='darwin'?'open':'xdg-open';const args=process.platform==='win32'?['/c','start','',app.url]:[app.url];spawn(command,args,{detached:true,stdio:'ignore',windowsHide:true}).unref()}
