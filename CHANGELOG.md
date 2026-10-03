@@ -4,6 +4,16 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+## [0.10.0] — 2026-10-03
+
+- Keep context, search and indexing restricted to self records; domains own their indexing.
+- Store uniform lens definitions and project bindings in the self. Rename career to professional and publishing to public-voice; preserve owner-exclusive private access and proposal approval.
+- Retire publishing-specific filters and discover Workbench spaces from bindings.
+- Add digest-bound maintenance previews, receipts, replay checks and rollback for recoverable failures, preserving proposal history.
+- Correct explicit link approval and attestation backfill paths.
+
+Existing installations require a backed-up lens migration and project link repair. Consumers requesting legacy lens IDs must be updated. See [release notes](docs/releases/0.10.0.md).
+
 ## [0.9.0] — 2026-09-30
 
 Holoself 0.9.0 helps you bring relevant context into AI conversations and keep a local coaching history from a question through an action and its review.
