@@ -9,8 +9,9 @@ import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
-import { BUILTIN_LENS_IDS } from './lenses.mjs'
+import { DEFAULT_LENS_IDS, seedLensDefinitions } from './lenses.mjs'
 import { VERSION } from './version.mjs'
+import { buildLensMigrationPlan, buildTransformationPlan, applyTransformationPlan } from './maintenance.mjs'
 import { applyCleanupPlan, buildCleanupPlan } from './cleanup.mjs'
 
 export { VERSION } from './version.mjs'
@@ -20,7 +21,7 @@ const ROOT_START = '<!-- holoself-root-start -->'
 const ROOT_END = '<!-- holoself-root-end -->'
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const metadata=(access,disclosure='internal-only',sensitivity='personal',role='content')=>`---\naccess_lenses: [${access.join(', ')}]\ndisclosure: ${disclosure}\nsensitivity: ${sensitivity}\ndocument_role: ${role}\n---\n`
-const ALL_LENSES=BUILTIN_LENS_IDS
+const ALL_LENSES=DEFAULT_LENS_IDS
 const PROFILE_FILES = {
   'identity.md': metadata(ALL_LENSES)+'# Identity\n\nWrite a short description of who you are.\n',
   'preferences.md': metadata(ALL_LENSES,'internal-only','personal','policy')+'# Preferences\n\nDescribe how you prefer to work with AI tools.\n',
@@ -30,15 +31,15 @@ const PROFILE_FILES = {
   'change.md': metadata(ALL_LENSES,'internal-only','personal','policy')+'# Change compass\n\nDescribe current goals and patterns only if useful.\n'
 }
 const CONTEXT_FILES = {
-  'projects.md': metadata(['general','career','technical','leadership','private'])+'# Projects\n\nList active projects and their context.\n',
+  'projects.md': metadata(['general','professional','technical','leadership','private'])+'# Projects\n\nList active projects and their context.\n',
   'people.md': metadata(['general','leadership','private'])+'# People\n\nRecord useful relationship context with care.\n',
-  'decisions.md': metadata(['general','career','technical','leadership','private'])+'# Decisions\n\nRecord decisions, rationale, and date.\n',
-  'story-bank.md': metadata(['general','career','publishing','leadership','interview','private'],'review-required','personal','evidence')+'# Story bank\n\nKeep evidence-backed stories and examples.\n',
-  'career.md': metadata(['general','career','publishing','interview','private'],'review-required','personal','evidence')+'# Career\n\nKeep career context and evidence.\n',
+  'decisions.md': metadata(['general','professional','technical','leadership','private'])+'# Decisions\n\nRecord decisions, rationale, and date.\n',
+  'story-bank.md': metadata(['general','professional','public-voice','leadership','interview','private'],'review-required','personal','evidence')+'# Story bank\n\nKeep evidence-backed stories and examples.\n',
+  'career.md': metadata(['general','professional','public-voice','interview','private'],'review-required','personal','evidence')+'# Career\n\nKeep career context and evidence.\n',
   'admin.md': metadata(['general','private'])+'# Admin\n\nKeep relevant logistics and recurring details.\n',
-  'leadership.md': metadata(['general','career','publishing','leadership','interview','private'],'review-required')+'# Leadership\n\nKeep leadership and reflection context.\n',
-  'technical.md': metadata(['general','career','publishing','technical','interview','private'],'review-required')+'# Technical\n\nKeep technical context, constraints, and preferences.\n',
-  'publishing.md': metadata(['general','publishing','private'],'internal-only','personal','policy')+'# Publishing\n\nKeep publishing goals, audiences, and format preferences.\n'
+  'leadership.md': metadata(['general','professional','public-voice','leadership','interview','private'],'review-required')+'# Leadership\n\nKeep leadership and reflection context.\n',
+  'technical.md': metadata(['general','professional','public-voice','technical','interview','private'],'review-required')+'# Technical\n\nKeep technical context, constraints, and preferences.\n',
+  'publishing.md': metadata(['general','public-voice','private'],'internal-only','personal','policy')+'# Publishing\n\nKeep publishing goals, audiences, and format preferences.\n'
 }
 function defaultRoot(){ return process.env.HOLOSELF_HOME || join(homedir(), '.holoself') }
 function requiredValue(args, i, flag){
@@ -80,6 +81,8 @@ function parse(args){
     else if(a==='--no-cache') o.noCache=true
     else if(a==='--format') o.format=requiredValue(args,i++,a)
     else if(a==='--output') o.output=resolve(requiredValue(args,i++,a))
+    else if(a==='--binding-hash') o.bindingHash=requiredValue(args,i++,a)
+    else if(a==='--replacements') o.replacements=requiredValue(args,i++,a)
     else if(a==='--plan') o.plan=requiredValue(args,i++,a)
     else if(a==='--apply') o.apply=requiredValue(args,i++,a)
     else if(a==='--revert') o.revert=requiredValue(args,i++,a)
@@ -337,7 +340,7 @@ function isHoloselfLink(p, root){
   if(!lstatSync(p).isSymbolicLink()) return false
   try { return resolve(dirname(p), readlinkSync(p)) === resolve(root) } catch { return false }
 }
-function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init | doctor | validate | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] [--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  skill status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens list|show|validate [id] [--root <self-root>]\n  link add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  link skill migrate-global --project <dir> [--skill-home <dir>] [--dry-run|--yes]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n  proposals list|audit --project <dir>\n  proposals show|approve|reject|defer|supersede <id> --project <dir>\n  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n  instructions render|audit --project <dir> [--json]\n  knowledge cleanup [--output <plan>] | --apply <plan> --digest <sha256> --yes\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill auto|project|global|none --no-activate.\nProject filters: --project-include/--project-exclude and --project-assert-include/--project-assert-exclude <globs>.
+function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init | doctor | validate | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] [--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  skill status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens list|show|validate|bind|unbind|bindings [id] [--root <self-root>]\n  link add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  link skill migrate-global --project <dir> [--skill-home <dir>] [--dry-run|--yes]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n  proposals list|audit --project <dir>\n  proposals show|approve|reject|defer|supersede <id> --project <dir>\n  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n  instructions render|audit --project <dir> [--json]\n  knowledge migrate-lenses [--output <plan>] | --apply <plan> --digest <sha256> --yes\n  knowledge transform --replacements <json> [--output <plan>]\n  knowledge cleanup [--output <plan>] | --apply <plan> --digest <sha256> --yes\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill auto|project|global|none --no-activate.\nProject filters: --project-include/--project-exclude and --project-assert-include/--project-assert-exclude <globs>.
 Efficiency: context supports --budget small|standard|deep|unbounded, --manifest, repeatable --source, and --temporal current|historical|superseded|all.\nInstruction consolidation: instructions render|audit --project <dir>.\nSafety confirmations: --yes. Packet adapters: --adapter pi|claude|codex|generic|obsidian|restricted-host.\nMCP: mcp [--project <linked-project>] | mcp configure|status --project <dir> [--platform codex|agy|claude].\n`) }
 async function confirm(o,message){if(o.yes)return true; if(!input.isTTY||!output.isTTY) throw new Error(`${message} Re-run with --yes to confirm.`); const rl=createInterface({input,output}); try { const answer=await rl.question(`${message} Type "yes" to continue: `); return answer.trim().toLowerCase()==='yes' } finally { rl.close() }}
 export async function run(argv){
@@ -382,12 +385,20 @@ export async function run(argv){
   }
   if(o.command==='data-root'){console.log(root);return}
   if(o.command==='knowledge'){
-    if(o.args[0]!=='cleanup')throw new Error('knowledge requires cleanup')
+    if(o.args[0]==='transform'||o.args[0]==='migrate-lenses'){
+      const action=o.args[0]
+      if(o.apply){if(!o.yes)throw new Error('knowledge transformation --apply requires --yes');const plan=JSON.parse(readFileSync(resolve(o.apply),'utf8')),result=applyTransformationPlan(root,plan,{expectedDigest:o.digest,validate:()=>{const errors=ecosystemValidationErrors(root);if(errors.length)throw new Error(`transformation validation failed: ${errors.join('; ')}`)}});console.log(JSON.stringify(result,null,2));return}
+      if(action==='transform'&&!o.replacements)throw new Error('knowledge transform requires --replacements <JSON path>')
+      const plan=action==='migrate-lenses'?buildLensMigrationPlan(root):buildTransformationPlan(root,JSON.parse(readFileSync(resolve(o.replacements),'utf8')))
+      if(o.output)atomicWrite(o.output,JSON.stringify(plan,null,2)+'\n');console.log(JSON.stringify(plan,null,2));return
+    }
+    if(o.args[0]!=='cleanup')throw new Error('knowledge requires cleanup, transform, or migrate-lenses')
     if(o.apply){if(!o.yes)throw new Error('knowledge cleanup --apply requires --yes');const plan=JSON.parse(readFileSync(resolve(o.apply),'utf8')),result=applyCleanupPlan(root,plan,{expectedDigest:o.digest});console.log(JSON.stringify(result,null,2));return}
     const plan=buildCleanupPlan(root);if(o.output){atomicWrite(o.output,JSON.stringify(plan,null,2)+'\n');console.log(JSON.stringify({status:'planned',plan_path:o.output,digest:plan.digest,operations:plan.operations,review_only:plan.review_only},null,2))}else console.log(JSON.stringify(plan,null,2));return
   }
   if(await runEcosystem(o)) return
   if(o.command==='init'){
+    seedLensDefinitions(root)
     ensureDir(root); for(const name of ['context','topics','reference','me','exports','history']) ensureDir(join(root,name));for(const state of ['pending','approved','rejected','deferred','superseded'])ensureDir(join(root,'proposals',state)); ensureDir(join(root,'contribs','local')); ensureDir(join(root,'profile'))
     ensureDir(join(root,'.holoself','runtime'))
     const cursorKeyPath=join(root,'.holoself','runtime','.cursor.key')

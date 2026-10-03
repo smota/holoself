@@ -17,7 +17,7 @@ node bin/holoself.mjs link setup --project C:/work/project --self C:/private/my-
 Or add directly:
 
 ```bash
-node bin/holoself.mjs link add --project C:/work/project --self C:/private/my-self --lens career --secondary-lenses technical,leadership --yes
+node bin/holoself.mjs link add --project C:/work/project --self C:/private/my-self --lens professional --secondary-lenses technical,leadership --yes
 ```
 
 `link add` detects agent platforms, generates `.holoself/BOOTSTRAP.md` and runtime metadata, and injects bounded startup pointers after confirmation. Use `--no-activate` only for deliberate configuration-only setup. See [Activated project links](../guides/activated-links.md).
@@ -26,7 +26,7 @@ node bin/holoself.mjs link add --project C:/work/project --self C:/private/my-se
 
 ```bash
 node bin/holoself.mjs link status --project C:/work/project
-node bin/holoself.mjs context --project C:/work/project --lens career --format packet --adapter generic
+node bin/holoself.mjs context --project C:/work/project --lens professional --format packet --adapter generic
 node bin/holoself.mjs analyze all --project C:/work/project
 ```
 

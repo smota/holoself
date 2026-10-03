@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/lens-bindings.schema.json",
+  "title": "Self-side project lens bindings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bindings"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "default_lens",
+          "secondary_lenses"
+        ],
+        "properties": {
+          "default_lens": {
+            "type": "string",
+            "not": {
+              "const": "private"
+            }
+          },
+          "secondary_lenses": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "not": {
+                "const": "private"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

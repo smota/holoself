@@ -14,19 +14,19 @@ async function fixture(){
   const self=await temp(),project=await temp()
   await run(['init','--root',self])
   await writeFile(join(self,'profile','identity.md'),'---\nvisibility: linked-projects\nconfidence: confirmed\n---\n# Identity\n\nBuilds regulated AI systems.\n')
-  await writeFile(join(self,'context','career.md'),'---\nvisibility: career\npublic_safe: false\n---\n# Career\n\nLed 20 engineers in regulated AI.\n')
-  await writeFile(join(self,'context','publishing.md'),'---\nvisibility: publishing\npublic_safe: true\n---\n# Publishing\n\nWrite evidence-first posts.\n')
+  await writeFile(join(self,'context','career.md'),'---\nvisibility: professional\npublic_safe: false\n---\n# Career\n\nLed 20 engineers in regulated AI.\n')
+  await writeFile(join(self,'context','publishing.md'),'---\nvisibility: public-voice\npublic_safe: true\n---\n# Publishing\n\nWrite evidence-first posts.\n')
   await writeFile(join(self,'context','admin.md'),'---\nvisibility: private\n---\n# Admin\n\nPrivate logistics.\n')
   await mkdir(join(project,'Context'),{recursive:true})
   await writeFile(join(project,'Context','career-profile.md'),'# Career profile\n\nLed 25 engineers in regulated AI.\n')
   await writeFile(join(project,'README.md'),'# Project\n\nRegulated AI execution workspace.\n')
-  await run(['link','add','--project',project,'--self',self,'--lens','career','--secondary-lenses','publishing,general','--yes'])
+  await run(['link','add','--project',project,'--self',self,'--lens','professional','--secondary-lenses','public-voice,general','--project-include','**/*.md','--yes'])
   return {self,project}
 }
 
 test('linked configuration is project-local metadata and never copies self',async()=>{
   const {self,project}=await fixture();const yaml=await readFile(join(project,'.holoself','link.yaml'),'utf8')
-  assert.match(yaml,/self_context:/);assert.match(yaml,/access: "read"/);assert.match(yaml,/default_lens: "career"/)
+  assert.match(yaml,/self_context:/);assert.match(yaml,/access: "read"/);assert.doesNotMatch(yaml,/default_lens|secondary_lenses/);const bindings=JSON.parse(await readFile(join(self,'lenses','bindings.json'),'utf8'));assert.ok(Object.values(bindings.bindings).some(binding=>binding.default_lens==='professional'))
   for(const dir of ['catalog','proposals','reports'])assert.equal((await stat(join(project,'.holoself',dir))).isDirectory(),true)
   await assert.rejects(access(join(project,'.holoself','profile')))
   const status=JSON.parse(await capture(()=>run(['link','status','--project',project])))
@@ -36,12 +36,12 @@ test('linked configuration is project-local metadata and never copies self',asyn
 test('context resolves lens, task, provenance, privacy, and adapters',async()=>{
   const {project}=await fixture()
   const career=JSON.parse(await capture(()=>run(['context','--project',project,'--task','regulated AI','--json'])))
-  assert.equal(career.lens,'career');assert.ok(career.sources.some(x=>x.path==='context/career.md'));assert.ok(career.sources.some(x=>x.kind==='project'))
+  assert.equal(career.lens,'professional');assert.ok(career.sources.some(x=>x.path==='context/career.md'));assert.ok(career.sources.every(x=>x.kind!=='project'))
   assert.ok(!career.sources.some(x=>x.path==='context/admin.md'));assert.ok(career.restrictions.some(x=>x.source==='context/admin.md'))
   assert.ok(career.sources.every(x=>x.path&&x.kind&&x.freshness))
   await writeFile(join(project,'Context','compensation.md'),'# Compensation\n\nSalary: 100000\n')
-  const packet=await capture(()=>run(['context','--project',project,'--lens','publishing','--format','packet','--adapter','claude']))
-  assert.match(packet,/Claude Code context packet/);assert.match(packet,/context\/publishing.md/);assert.doesNotMatch(packet,/Led 20 engineers|100000/);assert.match(packet,/field compensation excluded/)
+  const packet=await capture(()=>run(['context','--project',project,'--lens','public-voice','--format','packet','--adapter','claude']))
+  assert.match(packet,/Claude Code context packet/);assert.match(packet,/context\/publishing.md/);assert.doesNotMatch(packet,/Led 20 engineers|100000/)
 })
 
 test('analysis writes recommendation reports without mutating source',async()=>{
@@ -73,9 +73,9 @@ test('terminal legacy proposal records preserve folded text and external evidenc
 })
 
 test('deterministic index supports changed/rebuild/search and skips secrets',async()=>{
-  const {project}=await fixture();await writeFile(join(project,'secret.md'),'# Secret\n\napi_key = abcdefghijklmnop\n')
+  const {self,project}=await fixture();await writeFile(join(self,'context','secret.md'),'# Secret\n\napi_key = abcdefghijklmnop\n')
   const built=JSON.parse(await capture(()=>run(['index','rebuild','--project',project])));assert.equal(built.engine,'deterministic-json');assert.equal(built.skipped_secret_files,1)
-  const raw=await readFile(join(project,'.holoself','catalog','catalog.json'),'utf8');assert.doesNotMatch(raw,/abcdefghijklmnop/);assert.match(raw,/source_text_hash/);assert.match(raw,/sections/)
+  const raw=await readFile(join(self,'.holoself','catalog','catalog.json'),'utf8');assert.doesNotMatch(raw,/abcdefghijklmnop/);assert.match(raw,/source_text_hash/);assert.match(raw,/sections/)
   const found=JSON.parse(await capture(()=>run(['search','regulated AI','--project',project,'--federated'])));assert.ok(found.results.length>0);assert.ok(found.results.every(x=>x.provenance&&x.visibility&&x.freshness))
   await run(['index','--project',project,'--changed']);const status=JSON.parse(await capture(()=>run(['index','status','--project',project])));assert.equal(status.status,'ready')
 })
@@ -97,13 +97,13 @@ test('validation reports link, visibility, reference, and proposal provenance er
 
 test('malformed links fail closed while valid reordered YAML lists parse',async()=>{
   const {self,project}=await fixture(),path=self.replaceAll('\\','/')
-  await writeFile(join(project,'.holoself','link.yaml'),`self_context:\n  secondary_lenses:\n    - "leadership"\n    - "technical"\n  path: "${path}"\n  proposals: "enabled"\n  access: "read"\n  default_lens: "career"\n  index: "local"\n`)
-  const status=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.deepEqual(status.self_context.secondary_lenses,['leadership','technical'])
-  await writeFile(join(project,'.holoself','link.yaml'),`self_context:\n  path: "${path}" # canonical root\n  secondary_lenses: [leadership, technical] # valid flow list\n  access: read\n  proposals: enabled\n  index: local\n  default_lens: career\n`);const inline=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.deepEqual(inline.self_context.secondary_lenses,['leadership','technical'])
+  await writeFile(join(project,'.holoself','link.yaml'),`self_context:\n  secondary_lenses:\n    - "leadership"\n    - "technical"\n  path: "${path}"\n  proposals: "enabled"\n  access: "read"\n  default_lens: "professional"\n  index: "local"\n`)
+  const status=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.deepEqual(status.self_context.secondary_lenses,['public-voice','general'])
+  await writeFile(join(project,'.holoself','link.yaml'),`self_context:\n  path: "${path}" # canonical root\n  secondary_lenses: [leadership, technical] # valid flow list\n  access: read\n  proposals: enabled\n  index: local\n  default_lens: career\n`);const inline=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.deepEqual(inline.self_context.secondary_lenses,['public-voice','general'])
   await writeFile(join(project,'.holoself','link.yaml'),`self_context:\n  path: "${path}"\n  secondary_lenses: [leadership, leadership]\n  access: read\n  proposals: enabled\n  index: local\n  default_lens: career\n`)
   const broken=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.equal(broken.state,'broken');assert.match(broken.errors[0],/secondary_lenses must contain unique lenses/);process.exitCode=0
   const duplicateProject=await temp()
-  await assert.rejects(run(['link','add','--project',duplicateProject,'--self',self,'--lens','career','--secondary-lenses','technical,technical']),/secondary_lenses must contain unique lenses/)
+  await assert.rejects(run(['link','add','--project',duplicateProject,'--self',self,'--lens','professional','--secondary-lenses','technical,technical']),/secondary_lenses must contain unique lenses/)
   await writeFile(join(project,'.holoself','link.yaml'),'self_context:\n  path: "broken"\n    access: "read"\n')
   await assert.rejects(run(['context','--project',project,'--root',self,'--json']),/malformed link configuration/)
 })
@@ -122,14 +122,14 @@ test('index and search enforce claim, field, compensation, metadata, and secret 
   const {self,project}=await fixture()
   await writeFile(join(self,'context','privacy.md'),'---\nvisibility: linked-projects\nhome_address: 10 Secret Street\nfield_visibility:\n  Compensation: private\n---\n# Public\n\nApproved public phrase.\n\n## Compensation\n\nGolden package totals $210,000 with annual bonus.\n\n<!-- holoself-claim visibility=private -->\n## Private proof\n\nPrivate unicorn evidence phrase.\n<!-- /holoself-claim -->\n')
   await writeFile(join(project,'Context','role.md'),'# Role\n\nMy annual compensation totals USD 200000 plus bonus and equity.\n')
-  await writeFile(join(project,'credentials-notes.md'),'# Credentials\n\nfilename secret phrase\n');await writeFile(join(project,'.env.md'),'# Environment\n\ninternal credential phrase\n');await writeFile(join(project,'bearer.md'),'# Auth\n\nAuthorization: Bearer abcdefghijklmnopqrstuvwxyz\n')
+  await writeFile(join(self,'context','credentials-notes.md'),'# Credentials\n\nfilename secret phrase\n');await writeFile(join(self,'context','.env.md'),'# Environment\n\ninternal credential phrase\n');await writeFile(join(self,'context','bearer.md'),'# Auth\n\nAuthorization: Bearer abcdefghijklmnopqrstuvwxyz\n')
   const built=JSON.parse(await capture(()=>run(['index','rebuild','--project',project])));assert.ok(built.skipped_secret_files>=3)
   const raw=await readFile(join(project,'.holoself','catalog','catalog.json'),'utf8');assert.doesNotMatch(raw,/home_address|10 Secret Street|filename secret phrase|internal credential phrase|abcdefghijklmnopqrstuvwxyz/);assert.match(raw,/"schema_version": 2/)
   const generalClaim=JSON.parse(await capture(()=>run(['search','private unicorn','--project',project,'--lens','general'])));assert.equal(generalClaim.results.length,0)
-  const privateClaim=JSON.parse(await capture(()=>run(['search','private unicorn','--project',project,'--lens','private'])));assert.ok(privateClaim.results.length>0)
+  await assert.rejects(run(['search','private unicorn','--project',project,'--lens','private']),/not granted/)
   const field=JSON.parse(await capture(()=>run(['search','golden package','--project',project,'--lens','general'])));assert.equal(field.results.length,0)
-  const publishingSearch=JSON.parse(await capture(()=>run(['search','annual compensation bonus equity','--project',project,'--lens','publishing'])));assert.equal(publishingSearch.results.length,0)
-  const publishingPacket=await capture(()=>run(['context','--project',project,'--lens','publishing','--format','packet']));assert.doesNotMatch(publishingPacket,/200000|210,000|annual bonus|bonus and equity/);assert.match(publishingPacket,/compensation content excluded|field Compensation excluded/)
+  const publishingSearch=JSON.parse(await capture(()=>run(['search','annual compensation bonus equity','--project',project,'--lens','public-voice'])));assert.equal(publishingSearch.results.length,0)
+  const publishingPacket=await capture(()=>run(['context','--project',project,'--lens','public-voice','--format','packet']));assert.doesNotMatch(publishingPacket,/200000|210,000|annual bonus|bonus and equity/);assert.match(publishingPacket,/compensation content excluded|field Compensation excluded/)
 })
 
 test('metadata collisions, legacy export overwrite, and unknown flags fail safely',async()=>{
@@ -151,7 +151,7 @@ test('link setup is inspect-first and remove preserves review artifacts',async()
 test('link add activates detected agents with private bounded bootstrap and supports lifecycle',async()=>{
   const self=await temp(),project=await temp();await run(['init','--root',self]);await writeFile(join(project,'AGENTS.md'),'# User rules\n\nKeep me.\n');await writeFile(join(project,'CLAUDE.md'),'# Claude adapter\n')
   await assert.rejects(run(['link','add','--project',project,'--self',self]),/Re-run with --yes/)
-  await run(['link','add','--project',project,'--self',self,'--lens','career','--yes'])
+  await run(['link','add','--project',project,'--self',self,'--lens','professional','--yes'])
   const agents=await readFile(join(project,'AGENTS.md'),'utf8'),claude=await readFile(join(project,'CLAUDE.md'),'utf8'),bootstrap=await readFile(join(project,'.holoself','BOOTSTRAP.md'),'utf8'),runtime=JSON.parse(await readFile(join(project,'.holoself','runtime.json'),'utf8'))
   assert.match(agents,/Keep me/);assert.equal((agents.match(/holoself-link-start/g)||[]).length,1);assert.match(claude,/\.holoself\/BOOTSTRAP\.md/);assert.doesNotMatch(agents+claude+bootstrap,new RegExp(self.replaceAll('\\','\\\\')));assert.ok(runtime.activatedAdapters.some(x=>x.id==='agents'));assert.ok(runtime.activatedAdapters.some(x=>x.id==='claude'))
   const status=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.equal(status.state,'activated')
@@ -188,9 +188,9 @@ test('owned installation hash supports cross-version removal and none policy sta
 test('real project structures exclude agent skills and parse folded YAML',async()=>{
   const self=await temp(),project=await temp();await run(['init','--root',self]);await mkdir(join(project,'.agents','skills','example'),{recursive:true});await mkdir(join(project,'Master'),{recursive:true});await mkdir(join(project,'Context'),{recursive:true})
   await writeFile(join(project,'.agents','skills','example','SKILL.md'),'---\nname: example\ndescription: >\n  folded YAML that belongs to another skill\n---\n# Private agent skill noise\n')
-  await writeFile(join(project,'Master','career.md'),'---\nvisibility: career\npublic_safe: false\ndescription: >\n  valid arbitrary folded frontmatter\n---\n# Career\n\nProject evidence.\n');await writeFile(join(project,'Context','publishing.md'),'# Publishing\n\nProject publishing rules.\n')
-  await run(['link','add','--project',project,'--self',self,'--lens','career','--yes','--project-include','Master/**/*.md,Context/**/*.md'])
-  const data=JSON.parse(await capture(()=>run(['context','--project',project,'--json'])));assert.ok(data.project.documents.some(x=>x.path==='Master/career.md'));assert.ok(!data.project.documents.some(x=>x.path.includes('.agents/skills')));assert.ok(!data.warnings.some(x=>x.includes('unsupported project frontmatter parsed conservatively')))
+  await writeFile(join(project,'Master','career.md'),'---\nvisibility: professional\npublic_safe: false\ndescription: >\n  valid arbitrary folded frontmatter\n---\n# Career\n\nProject evidence.\n');await writeFile(join(project,'Context','publishing.md'),'# Publishing\n\nProject publishing rules.\n')
+  await run(['link','add','--project',project,'--self',self,'--lens','professional','--yes','--project-include','Master/**/*.md,Context/**/*.md'])
+  const data=JSON.parse(await capture(()=>run(['context','--project',project,'--json'])));assert.deepEqual(data.project.documents,[]);assert.ok(data.self.documents.length>0);assert.ok(!data.project.documents.some(x=>x.path.includes('.agents/skills')));assert.ok(!data.warnings.some(x=>x.includes('unsupported project frontmatter parsed conservatively')))
   const doctor=JSON.parse(await capture(()=>run(['link','doctor','--project',project])));assert.equal(doctor.checks.context,'valid')
   const snapshot=JSON.parse(await capture(()=>run(['context','--project',project,'--snapshot','--adapter','generic','--yes'])));assert.equal(snapshot.mode,'snapshot');assert.match(await readFile(join(project,'.holoself','runtime','context-packet.md'),'utf8'),/Holoself context packet/)
 })
@@ -226,26 +226,26 @@ test('deactivate discovers registry markers when runtime is narrow or corrupt',a
 test('tolerant project frontmatter preserves privacy fields and unclosed metadata fails private',async()=>{
   const self=await temp(),project=await temp();await run(['init','--root',self]);await mkdir(join(project,'Context'),{recursive:true})
   await writeFile(join(project,'Context','safe.md'),'---\nvisibility: public-safe\npublic_safe: true\ndescription: >\n  unsupported fold\n---\n# Safe\n\nAllowed phrase.\n')
-  await writeFile(join(project,'Context','confidential.md'),'---\nvisibility: publishing\nsensitivity: employer-confidential\ndescription: >\n  unsupported fold\n---\n# Confidential\n\nRestricted phrase.\n')
+  await writeFile(join(project,'Context','confidential.md'),'---\nvisibility: public-voice\nsensitivity: employer-confidential\ndescription: >\n  unsupported fold\n---\n# Confidential\n\nRestricted phrase.\n')
   await writeFile(join(project,'Context','unclosed.md'),'---\nvisibility: public-safe\npublic_safe: true\n# Unclosed\n\nMust remain private.\n')
-  await run(['link','add','--project',project,'--self',self,'--lens','publishing','--yes','--project-include','Context/**/*.md'])
-  const publishing=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','publishing','--json'])));assert.ok(publishing.project.documents.some(x=>x.path==='Context/safe.md'));assert.ok(!publishing.project.documents.some(x=>x.path==='Context/confidential.md'));assert.ok(!publishing.project.documents.some(x=>x.path==='Context/unclosed.md'));assert.ok(publishing.warnings.some(x=>x.includes('unclosed project frontmatter restricted')))
+  await run(['link','add','--project',project,'--self',self,'--lens','public-voice','--yes','--project-include','Context/**/*.md'])
+  const publishing=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','public-voice','--json'])));assert.deepEqual(publishing.project.documents,[]);assert.ok(publishing.self.documents.length>0);assert.ok(!publishing.project.documents.some(x=>x.path==='Context/confidential.md'));assert.ok(!publishing.project.documents.some(x=>x.path==='Context/unclosed.md'));assert.ok(!publishing.warnings.some(x=>x.includes('Context/')))
   await writeFile(join(self,'context','bad-frontmatter.md'),'---\nvisibility: public-safe\n# Missing delimiter\n');const canonical=JSON.parse(await capture(()=>run(['context','--project',project,'--json'])));assert.ok(!canonical.self.documents.some(x=>x.path==='context/bad-frontmatter.md'));assert.ok(canonical.warnings.some(x=>x.includes('context/bad-frontmatter.md: unclosed frontmatter')))
 })
 
 test('publishing context excludes documents when any salvaged privacy scalar is malformed',async()=>{
   const self=await temp(),project=await temp();await run(['init','--root',self]);await mkdir(join(project,'Context'),{recursive:true})
-  const malformed={visibility:'visibility: 7',sensitivity:'visibility: public-safe\nsensitivity: true',public_safe:'visibility: public-safe\npublic_safe: yes',exclude_lenses:'visibility: public-safe\nexclude_lenses: publishing',field_visibility:'visibility: public-safe\nfield_visibility: publishing',confidence:'visibility: public-safe\nconfidence: 5'}
+  const malformed={visibility:'visibility: 7',sensitivity:'visibility: public-safe\nsensitivity: true',public_safe:'visibility: public-safe\npublic_safe: yes',exclude_lenses:'visibility: public-safe\nexclude_lenses: publishing',field_visibility:'visibility: public-safe\nfield_visibility: public-voice',confidence:'visibility: public-safe\nconfidence: 5'}
   for(const [name,privacy] of Object.entries(malformed))await writeFile(join(project,'Context',`${name}.md`),`---\n${privacy}\ndescription: >\n  unsupported fold\n---\n# ${name}\n\nMust not publish ${name}.\n`)
   await writeFile(join(project,'Context','valid-blocks.md'),'---\nvisibility: public-safe\npublic_safe: true\nexclude_lenses:\n  - career\nfield_visibility:\n  compensation: private\ndescription: >\n  unsupported fold\n---\n# Publishable\n\nSafe block metadata survives.\n')
-  await run(['link','add','--project',project,'--self',self,'--lens','publishing','--yes','--project-include','Context/**/*.md']);const publishing=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','publishing','--json'])));for(const name of Object.keys(malformed)){assert.ok(!publishing.project.documents.some(x=>x.path===`Context/${name}.md`));assert.ok(publishing.restrictions.some(x=>x.source===`Context/${name}.md`))}assert.ok(publishing.project.documents.some(x=>x.path==='Context/valid-blocks.md'))
+  await run(['link','add','--project',project,'--self',self,'--lens','public-voice','--yes','--project-include','Context/**/*.md']);const publishing=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','public-voice','--json'])));for(const name of Object.keys(malformed)){assert.ok(!publishing.project.documents.some(x=>x.path===`Context/${name}.md`));assert.ok(publishing.self.documents.length>0);assert.ok(!JSON.stringify(publishing).includes(`Context/${name}.md`))}assert.deepEqual(publishing.project.documents,[])
 })
 
 test('publishing context excludes syntactically valid frontmatter with malformed privacy fields',async()=>{
   const self=await temp(),project=await temp();await run(['init','--root',self]);await mkdir(join(project,'Context'),{recursive:true})
-  const malformed={visibility:'visibility: 7',sensitivity:'visibility: public-safe\nsensitivity: true',public_safe:'visibility: public-safe\npublic_safe: yes',exclude_lenses:'visibility: public-safe\nexclude_lenses: publishing',field_visibility:'visibility: public-safe\nfield_visibility: publishing',confidence:'visibility: public-safe\nconfidence: 5'}
+  const malformed={visibility:'visibility: 7',sensitivity:'visibility: public-safe\nsensitivity: true',public_safe:'visibility: public-safe\npublic_safe: yes',exclude_lenses:'visibility: public-safe\nexclude_lenses: publishing',field_visibility:'visibility: public-safe\nfield_visibility: public-voice',confidence:'visibility: public-safe\nconfidence: 5'}
   for(const [name,privacy] of Object.entries(malformed))await writeFile(join(project,'Context',`${name}.md`),`---\n${privacy}\n---\n# ${name}\n\nSyntactically valid YAML must not publish ${name}.\n`)
-  await run(['link','add','--project',project,'--self',self,'--lens','publishing','--yes','--project-include','Context/**/*.md']);const publishing=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','publishing','--json'])));for(const name of Object.keys(malformed)){assert.ok(!publishing.project.documents.some(x=>x.path===`Context/${name}.md`));assert.ok(publishing.restrictions.some(x=>x.source===`Context/${name}.md`));assert.ok(publishing.warnings.some(x=>x.includes(`Context/${name}.md: invalid project privacy metadata restricted`)))}
+  await run(['link','add','--project',project,'--self',self,'--lens','public-voice','--yes','--project-include','Context/**/*.md']);const publishing=JSON.parse(await capture(()=>run(['context','--project',project,'--lens','public-voice','--json'])));for(const name of Object.keys(malformed)){assert.ok(!publishing.project.documents.some(x=>x.path===`Context/${name}.md`));assert.ok(publishing.self.documents.length>0);assert.ok(!JSON.stringify(publishing).includes(`Context/${name}.md`));assert.ok(!publishing.warnings.some(x=>x.includes(`Context/${name}.md`)))}
 })
 
 test('activation rollback restores prior files and link when a late write fails',async()=>{
@@ -320,4 +320,9 @@ test('migration recognizes exact historical generated skill wrappers as removabl
   const self=await temp(),project=await temp(),skillHome=await temp(),canonical=await readFile(join(process.cwd(),'skills','holoself','SKILL.md'),'utf8');await run(['init','--root',self]);await run(['skill','install','--scope','user','--skill-home',skillHome,'--platform','agents','--yes']);await run(['link','add','--project',project,'--self',self,'--yes'])
   const local=join(project,'.agents','skills','holoself','SKILL.md'),start=canonical.indexOf('# Holoself'),body=canonical.slice(start).trim(),historical=`---\nname: holoself\ndescription: Load linked whole-person context for this project.\n---\n\n# Linked Holoself\n\nRead \`.holoself/BOOTSTRAP.md\` before substantive work. Use the installed public Holoself skill when available. Resolve context through the configured lens, preserve provenance and project ownership, and create proposals instead of editing canonical self directly.\n\n<!-- holoself-skill-start schema=1 -->\n${body}\n<!-- holoself-skill-end -->\n`;await writeFile(local,historical);await rm(join(project,'.holoself','runtime.json'))
   const preview=JSON.parse(await capture(()=>run(['link','skill','migrate-global','--project',project,'--skill-home',skillHome,'--dry-run'])));assert.equal(preview.migration_plan.project_cleanup[0].action,'delete');await run(['link','skill','migrate-global','--project',project,'--skill-home',skillHome,'--yes']);await assert.rejects(access(local))
+})
+
+test('approval to an absent target uses current lens metadata and removes the new target on validation failure',async()=>{
+ const {self,project}=await fixture(),target=join(self,'context','new-target.md'),made=JSON.parse(await capture(()=>run(['propose','--project',project,'--claim','A reviewed absent target claim.','--source-file','README.md','--target-file','context/new-target.md','--visibility','private']))),proposal=join(project,'.holoself','proposals',made.proposal_id+'.yaml'),before=await readFile(proposal,'utf8'),bad=join(self,'context','invalid-target.md')
+ await writeFile(bad,'---\nvisibility: invalid\n---\n# Invalid\n');await assert.rejects(run(['proposals','approve',made.proposal_id,'--project',project,'--yes']),/validation/);await assert.rejects(access(target));assert.equal(await readFile(proposal,'utf8'),before);await rm(bad);await capture(()=>run(['proposals','approve',made.proposal_id,'--project',project,'--yes']));const text=await readFile(target,'utf8');assert.match(text,/A reviewed absent target claim/);assert.doesNotMatch(text,/access_lenses:.*career|access_lenses:.*publishing/);assert.deepEqual(ecosystemValidationErrors(self),[])
 })

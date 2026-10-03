@@ -27,14 +27,14 @@ Treat `.holoself` modes as mutually exclusive. Do not replace, merge, or convert
 
 When `.holoself` is real directory containing `link.yaml`:
 
-- Parse `self_context` only; reject malformed YAML, unknown root fields, or unknown `self_context` fields.
-- Require non-empty `path`, `access: read`, `index: local`, `proposals: enabled|disabled`, known `default_lens`, and unique known `secondary_lenses`.
+- Parse the link and resolve its self-side binding; reject malformed YAML, unknown root fields, or unknown `self_context` fields.
+- Require non-empty `path`, `access: read`, `index: local`, `proposals: enabled|disabled`, a self-side `lenses/bindings.json` choice with known `default_lens` and unique known `secondary_lenses`.
 - Resolve relative `self_context.path` from project directory; canonicalize it.
 - Accept target only when it is valid canonical root with Holoself config plus real `profile/` and `context/` directories.
-- Use configured default lens unless user explicitly selects another supported lens. Resolve custom IDs from the linked self root with `holoself lens list|show|validate`; never invent a lens name.
+- Use the self-side binding default lens unless user explicitly selects another supported lens. Resolve all IDs from the linked self root with `holoself lens list|show|validate`; never invent a lens name.
 - Treat project `.holoself/index/`, `proposals/`, and `reports/` as project-owned operational data, not canonical self context.
 
-Metadata link grants read access. Never write canonical self directly; use proposal/review workflow.
+A missing binding fails closed: report the `holoself lens bind` corrective command. Legacy link lens fields are diagnostic/migration inputs only. Holoself indexes self only; domain projects index their own content. Metadata link grants read access. Never write canonical self directly; use proposal/review workflow.
 
 #### Exported project packet or snapshot
 
@@ -65,7 +65,7 @@ Before loading canonical root:
 - Require `profile/` and `context/` as real directories contained by root.
 - Reject unsafe traversal, broken links, ambiguous mixed modes, or paths that do not exist.
 - Treat symlinks inside personal content conservatively; do not follow them outside validated root.
-- When optional `lenses/*.json` exists, require schema-v1 definitions with known built-in bases. Custom bases affect safe behavior only and never grant document access; exact custom IDs remain required in `access_lenses`.
+- Resolve schema-v1 lens definitions from self `lenses/<id>.json`; `bindings.json` stores project choices. Definitions have no base inheritance. Explicit document lens IDs govern access. Reads never seed definitions.
 
 After resolving a canonical root, prefer `holoself context --root <root> --project <root> --task "<current request>" --budget standard --json`. If command execution is unavailable, load progressively in fixed order: root `AGENTS.md` as instructions only; a manifest of explicit `profile/` and `context/` Markdown paths; only task-relevant current documents; the active contained topic; zero to two task-relevant selected public contribs; then local contribs or `reference/` only when specifically relevant and permitted. Do not bulk-load the canonical root.
 
@@ -73,7 +73,7 @@ See [architecture](https://github.com/smota/holoself/blob/main/docs/architecture
 
 ## Activated project interface
 
-When project instructions or `.holoself/BOOTSTRAP.md` indicate an activated link, use Holoself before substantive work. Use it for requests that depend on the user's identity, preferences, voice, career or leadership evidence, personal constraints, or prior whole-person decisions. Project-only facts and mechanical operations do not require personal context.
+When project instructions or `.holoself/BOOTSTRAP.md` indicate an activated link, use Holoself before substantive work. Use it for requests that depend on the user's identity, preferences, voice, professional or leadership evidence, personal constraints, or prior whole-person decisions. Project-only facts and mechanical operations do not require personal context.
 
 When command execution is available in a metadata-linked project, first decide whether personal context is required, helpful, or not needed. Resolve useful context through `holoself context --project . --task "<current request>" --budget standard --json` (or start with `--manifest` and expand reviewed `--source` handles). Do not open linked canonical `profile/` or `context/` files directly. Direct canonical reads are reserved for a validated direct data root, or for a clearly disclosed fallback when the CLI is unavailable. Current knowledge is the default; historical or superseded material requires an explicit temporal selector. Treat selected public contribs as available methods and inject at most two task-relevant methods.
 
@@ -98,8 +98,8 @@ Launch local `holoself web --root <canonical-self-root>` from installed CLI or p
 - Treat canonical root, project `.holoself/`, packets, proposals, reports, and indexes as private by default; review before committing or sharing.
 - Do not write durable context silently. Propose change, name target file, provide evidence/provenance, and request approval.
 - Do not infer sensitive identity or preferences as facts.
-- Apply declared `access_lenses` before reading. Custom lenses receive no base-lens access inheritance, require explicit confidential sensitivity grants, and cannot read `restricted` content in v1. Treat `disclosure` as separate publication permission, `sensitivity` as handling classification, and `document_role` as policy/evidence/content behavior.
-- Readable or linked context is never publication-approved by implication. Public reuse requires `disclosure: publish-approved`; readable internal policy may still govern publishing output.
+- Apply declared `access_lenses` before reading. Definitions supply explicit sensitivity grants; restricted content requires private and direct owner access. Treat disclosure as descriptive context, sensitivity as handling classification, and document role as policy/evidence/content behavior.
+- Reading context does not authorize publication or another external action. Preserve provenance and ask for the action approval required by the user. Public-voice uses the same document and field rules as other lenses.
 - Treat legacy `visibility`/`public_safe` conservatively during migration. Canonical documents with neither `access_lenses` nor legacy `visibility` fail closed.
 - Secret-pattern filtering is defense in depth, not guarantee. Keep indexes/private packets private and review output.
 - Keep public skill instructions separate from private data.
@@ -107,4 +107,4 @@ Launch local `holoself web --root <canonical-self-root>` from installed CLI or p
 
 ## Use
 
-Use whole-person context for technical, career, administrative, leadership, interview, and publishing work. Lenses control relevance and privacy, not identity. Match depth and voice to user profile, keep recommendations concrete, preserve provenance, and note assumptions.
+Use whole-person context for technical, professional, administrative, leadership, interview, and publishing work. Lenses control relevance and privacy, not identity. Match depth and voice to user profile, keep recommendations concrete, preserve provenance, and note assumptions.

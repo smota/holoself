@@ -1,5 +1,7 @@
 # Holoself — plano de implementação de contexto e lentes
 
+Historical design and evidence. The current contract is documented in [Lenses and privacy](../concepts/lenses-and-privacy.md): self-side bindings, uniform definitions and self-only indexing.
+
 ID: HS-PLAN-001 | Versão: 0.1 | Data: 2026-09-19
 
 Estado: C-00 concluído e verificado em 2026-09-20; C-01 iniciado; C-02–C-06 planejados e não iniciados. Base normativa: [HS-SPEC-001](context-and-lenses-vnext.md), versão 0.1. Baseline Git confirmado: `1217e7c5241fcd3bc9a8aa1a6e759f6e16c78a95`, pacote 0.8.0. Nenhuma alteração de produto realizada em C-00.

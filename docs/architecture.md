@@ -8,7 +8,7 @@ Holoself separates authority from delivery. Canonical self Markdown is the durab
 |---|---|---|
 | Approved reusable self knowledge | Canonical self root | Validated Markdown metadata, lifecycle, provenance, and explicit review |
 | Project execution artifacts | Independent project | Path containment and project-owned `.holoself/` operational state |
-| Read authorization | Project `.holoself/link.yaml` | Known lens allowlist, same-root validation, task/privacy filtering |
+| Read authorization | Self `lenses/bindings.json` and `.holoself/links.json`, project link | Binding choices intersect active attestation grants, same-root validation, task/privacy filtering |
 | Generated retrieval | Context packet, MCP result, or local index | Bounded selection, source hashes, restrictions, receipts; rebuildable and non-authoritative |
 | Durable discovery | Project-local pending proposal | Contained evidence, exact preview hash, explicit approve/reject/defer decision |
 
@@ -36,7 +36,7 @@ Holoself is a local-first, Markdown-first whole-person context protocol. Public 
 ├── config.json                 # user selection and schema marker
 ├── profile/                    # stable self attributes
 ├── context/                    # domain context and notes
-├── lenses/                     # optional private typed custom-lens registry
+├── lenses/                     # uniform private lens definitions and project bindings
 ├── topics/                     # bounded explorations; .current selects one
 ├── reference/                  # private/local reference material
 ├── me/                         # local self-model activation (for example contribs.md)
@@ -48,11 +48,11 @@ Holoself is a local-first, Markdown-first whole-person context protocol. Public 
 
 `<project>/.holoself/` supports three explicit modes: legacy generated packet, legacy live directory link, or activated linked-ecosystem metadata directory. Metadata mode contains `link.yaml`, platform-neutral `BOOTSTRAP.md`, activation `runtime.json`, local rebuildable `index/`, reviewable `proposals/`, and non-mutating `reports/`; it never copies canonical self files. Bounded sections in detected agent instructions point to bootstrap without exposing absolute self path. Agents may open a data root directly; direct-root detection takes precedence over project `.holoself`. See [linked ecosystem contract](linked-ecosystem.md).
 
-An optional local MCP adapter reverses the Workbench launch relationship: Codex, AGY, or Claude Code starts `holoself mcp` as a project-bound STDIO subprocess and requests only needed context. The link remains authority, and MCP/CLI share the same domain functions. MCP exposes no raw canonical resources, repair, approval, publication, or canonical write operations. See the [architecture decision](decisions/local-mcp-architecture.md).
+An optional local MCP adapter reverses the Workbench launch relationship: Codex, AGY, or Claude Code starts `holoself mcp` as a project-bound STDIO subprocess and requests only needed context. Binding choices and attestation grants remain authority, and MCP/CLI share the same domain functions. MCP exposes no raw canonical resources, repair, approval, publication, or canonical write operations. See the [architecture decision](decisions/local-mcp-architecture.md).
 
 ## Schema and ownership
 
-`config.json` uses `schemaVersion: 1` and `product: "holoself"`. Public `contribs/catalog.json` uses `schemaVersion: 1`; each catalog entry identifies an id, title, domain, type, and shipped path. Markdown is canonical. Config, catalogs, lens definitions, and packets are generated/operational metadata. Custom lens definitions use schema v1 under optional `<data-root>/lenses/*.json`; runtime semantic resolution validates registry membership after structural schema validation.
+`config.json` uses `schemaVersion: 1` and `product: "holoself"`. Public `contribs/catalog.json` uses `schemaVersion: 1`; each catalog entry identifies an id, title, domain, type, and shipped path. Markdown is canonical. Config, catalogs, lens definitions, and packets are generated/operational metadata. Lens definitions use schema v1 under `<data-root>/lenses/*.json`; runtime semantic resolution validates registry membership after structural schema validation.
 
 - **User-owned/private:** `profile/`, `context/`, `topics/`, `reference/`, `me/`, `contribs/local/`.
 - **Holoself-managed:** `config.json`, lifecycle/history metadata, and generated `exports/`.

@@ -1,5 +1,7 @@
 # Holoself: contexto eficiente e lentes integradas
 
+Historical design and evidence. The current contract is documented in [Lenses and privacy](../concepts/lenses-and-privacy.md): self-side bindings, uniform definitions and self-only indexing.
+
 | Campo | Valor |
 |---|---|
 | ID | HS-SPEC-001 |

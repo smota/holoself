@@ -40,7 +40,7 @@ Keep the generated frontmatter in place. Add one or two paragraphs beneath the h
 holoself validate --data-dir C:/private/my-self
 ```
 
-Add career, leadership, technical, publishing, or other context later when a real use case needs it. Small, current, reviewed context is more useful than importing everything at once.
+Add career, leadership, technical, public-voice, or other context later when a real use case needs it. Small, current, reviewed context is more useful than importing everything at once.
 
 ## 4. See it in Workbench (optional)
 

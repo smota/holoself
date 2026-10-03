@@ -1,3 +1,4 @@
+import { normalizeProjectPath, writeBinding } from '../src/bindings.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, writeFile, lstat } from 'node:fs/promises'
@@ -11,14 +12,14 @@ const temp=()=>mkdtemp(join(tmpdir(),'holoself-web-project-'))
 test('Workbench can derive root and lens from optional linked project',async()=>{
   const self=await temp(),project=await temp()
   await run(['init','--root',self])
-  await run(['link','add','--project',project,'--self',self,'--lens','career','--no-activate','--yes'])
+  await run(['link','add','--project',project,'--self',self,'--lens','professional','--no-activate','--yes'])
   const app=await startWebServer({project,port:0})
   try{
     const session=await (await fetch(`${app.url}/api/session`)).json()
     assert.equal(session.data.mode,'linked-project')
     assert.equal(session.data.project,resolve(project))
     assert.equal(session.data.root,resolve(self))
-    assert.equal(session.data.lens,'career')
+    assert.equal(session.data.lens,'professional')
   }finally{await new Promise(resolveClose=>app.server.close(resolveClose))}
 })
 
@@ -36,19 +37,19 @@ test('Workbench launches from product cwd with explicit canonical root',async()=
   }finally{await new Promise(resolveClose=>app.server.close(resolveClose))}
 })
 
-test('Workbench exposes dynamic annotation schema and policy validation',async()=>{const self=await temp();await run(['init','--root',self]);const app=await startWebServer({root:self,port:0});try{const session=(await(await fetch(`${app.url}/api/session`)).json()).data,schema=(await(await fetch(`${app.url}/api/annotations/schema`)).json()).data;assert.equal(schema.fields.access_lenses.type,'multi-select');assert.ok(schema.fields.access_lenses.options.some(option=>option.value==='career'));const response=await fetch(`${app.url}/api/annotations/validate`,{method:'POST',headers:{'content-type':'application/json','x-holoself-token':session.token},body:JSON.stringify({metadata:{access_lenses:['career'],disclosure:'publish-approved',sensitivity:'compensation-confidential',document_role:'content'}})}),result=(await response.json()).data;assert.equal(response.status,200);assert.equal(result.valid,false);assert.match(result.errors.join(' '),/publish-approved/)}finally{await new Promise(resolveClose=>app.server.close(resolveClose))}})
+test('Workbench exposes dynamic annotation schema and policy validation',async()=>{const self=await temp();await run(['init','--root',self]);const app=await startWebServer({root:self,port:0});try{const session=(await(await fetch(`${app.url}/api/session`)).json()).data,schema=(await(await fetch(`${app.url}/api/annotations/schema`)).json()).data;assert.equal(schema.fields.access_lenses.type,'multi-select');assert.ok(schema.fields.access_lenses.options.some(option=>option.value==='professional'));const response=await fetch(`${app.url}/api/annotations/validate`,{method:'POST',headers:{'content-type':'application/json','x-holoself-token':session.token},body:JSON.stringify({metadata:{access_lenses:['professional'],disclosure:'publish-approved',sensitivity:'compensation-confidential',document_role:'content'}})}),result=(await response.json()).data;assert.equal(response.status,200);assert.equal(result.valid,false);assert.match(result.errors.join(' '),/publish-approved/)}finally{await new Promise(resolveClose=>app.server.close(resolveClose))}})
 
 test('Workbench discovers canonical linked projects and lazily browses local folders',async()=>{
   const self=await temp(),project=await temp(),productCwd=await temp()
   await mkdir(join(project,'nested-folder'))
   await run(['init','--root',self])
-  await run(['link','add','--project',project,'--self',self,'--lens','career','--no-activate','--yes'])
+  await run(['link','add','--project',project,'--self',self,'--lens','professional','--no-activate','--yes'])
   await writeFile(join(self,'context','linked-projects.md'),`# Linked projects\n\n## Career-Assistant\n\n- Path: \`${project}\`\n- Lens: career\n`)
   const app=await startWebServer({project:productCwd,root:self,port:0})
   try{
     const spaces=await (await fetch(`${app.url}/api/spaces`)).json()
-    const discovered=spaces.data.find(space=>resolve(space.path)===resolve(project))
-    assert.equal(discovered.discoveredFrom,'context/linked-projects.md')
+    const discovered=spaces.data.find(space=>normalizeProjectPath(space.path)===normalizeProjectPath(project))
+    assert.equal(discovered.discoveredFrom,'lenses/bindings.json')
     assert.ok(['configured','activated','active'].includes(discovered.status.state))
     const listing=await (await fetch(`${app.url}/api/filesystem/folders?path=${encodeURIComponent(project)}`)).json()
     assert.ok(listing.data.folders.some(folder=>folder.name==='nested-folder'&&resolve(folder.path)===resolve(join(project,'nested-folder'))))
@@ -64,6 +65,7 @@ test('Workbench requires explicit root when cwd has no project link',async()=>{
 test('Workbench detects legacy mount, suggests migration setup, and migrates to metadata link', async () => {
   const self = await temp(), project = await temp(), productCwd = await temp()
   await run(['init', '--root', self])
+  writeBinding(self,project,{default_lens:'general',secondary_lenses:[]})
   await run(['link', '--root', self, '--target', project, '--yes'])
   assert.equal((await lstat(join(project, '.holoself'))).isSymbolicLink(), true)
 
@@ -73,7 +75,7 @@ test('Workbench detects legacy mount, suggests migration setup, and migrates to 
   try {
     const session = (await (await fetch(`${app.url}/api/session`)).json()).data
     const spacesRes = await (await fetch(`${app.url}/api/spaces`)).json()
-    const space = spacesRes.data.find(s => resolve(s.path) === resolve(project))
+    const space = spacesRes.data.find(s => normalizeProjectPath(s.path) === normalizeProjectPath(project))
     assert.ok(space)
     assert.equal(space.status.state, 'legacy-mount')
     assert.equal(space.status.mode, 'legacy-mount')
@@ -89,9 +91,18 @@ test('Workbench detects legacy mount, suggests migration setup, and migrates to 
     assert.equal((await lstat(join(project, '.holoself'))).isDirectory(), true)
 
     const updatedSpaces = await (await fetch(`${app.url}/api/spaces`)).json()
-    const updated = updatedSpaces.data.find(s => resolve(s.path) === resolve(project))
+    const updated = updatedSpaces.data.find(s => normalizeProjectPath(s.path) === normalizeProjectPath(project))
     assert.equal(updated.status.mode, 'metadata-link')
   } finally {
     await new Promise(resolveClose => app.server.close(resolveClose))
   }
+})
+
+test('Workbench binding CRUD uses optimistic hashes and prunes the catalog after unbinding',async()=>{
+ const self=await temp(),project=await temp();await run(['init','--root',self]);await run(['link','add','--project',project,'--self',self,'--lens','professional','--no-activate','--yes']);const app=await startWebServer({root:self,port:0})
+ try{const session=(await(await fetch(app.url+'/api/session')).json()).data,headers={'content-type':'application/json','x-holoself-token':session.token},store=(await(await fetch(app.url+'/api/bindings')).json()).data
+ const changed=await fetch(app.url+'/api/bindings',{method:'PUT',headers,body:JSON.stringify({project,default_lens:'public-voice',secondary_lenses:['general'],expectedHash:store.hash})});assert.equal(changed.status,200);const current=(await changed.json()).data;assert.equal(current.bindings[normalizeProjectPath(project)].default_lens,'public-voice')
+ const stale=await fetch(app.url+'/api/bindings',{method:'DELETE',headers,body:JSON.stringify({project,expectedHash:store.hash})});assert.equal(stale.status,409);assert.equal((await(await fetch(app.url+'/api/spaces')).json()).data.length,1)
+ const removed=await fetch(app.url+'/api/bindings',{method:'DELETE',headers,body:JSON.stringify({project,expectedHash:current.hash})});assert.equal(removed.status,200);assert.deepEqual((await(await fetch(app.url+'/api/spaces')).json()).data,[])
+ }finally{await new Promise(done=>app.server.close(done))}
 })

@@ -64,7 +64,7 @@ export async function createFixture({ count = 100, baseDir } = {}) {
     for (const linked of [project, peer]) await quietRun(['link', 'add', '--project', linked, '--self', self, '--lens', 'general', '--no-activate', '--yes'])
     await writeFile(join(peer, 'C00-PEER-EXCLUSIVE.md'), '# Peer synthetic evidence\nC00_PEER_EXCLUSIVE\n')
     await mkdir(join(self, 'lenses'), { recursive: true })
-    await writeFile(join(self, 'lenses', 'spiritual.json'), JSON.stringify({ schema_version: 1, id: 'spiritual', title: 'Synthetic spiritual perspective', base_lens: 'general' }))
+    await writeFile(join(self, 'lenses', 'spiritual.json'), JSON.stringify({ schema_version: 1, id: 'spiritual', title: 'Synthetic spiritual perspective', }))
     const syntheticPaths = []
     for (let index = 0; index < count; index++) {
       const path = join(self, 'context', `synthetic-${String(index).padStart(5, '0')}.md`)
@@ -75,7 +75,7 @@ export async function createFixture({ count = 100, baseDir } = {}) {
     for (const item of qualityDefinitions()) {
       const path = join(qualityRoot, `${item.id}.md`)
       const lead = item.language === 'pt' ? 'Evidência sintética relevante' : 'Relevant synthetic evidence'
-      const text = metadata(['general', 'career']) + `# ${lead}\n\n${item.task}\n${item.requiredMarkers.join(' ')} ${item.optionalMarkers.join(' ')}\n`
+      const text = metadata(['general', 'professional']) + `# ${lead}\n\n${item.task}\n${item.requiredMarkers.join(' ')} ${item.optionalMarkers.join(' ')}\n`
       await writeFile(path, text)
       qualityCases.push({ ...item, sourcePath: path, sourceBytes: Buffer.byteLength(text) })
     }

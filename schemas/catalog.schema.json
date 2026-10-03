@@ -101,14 +101,14 @@
               "publication_allowed": { "type": "boolean" },
               "task_include": { "type": "array", "items": { "type": "string" } },
               "task_exclude": { "type": "array", "items": { "type": "string" } },
-              "visibility": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] },
+              "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] },
               "read_scope": { "type": "string", "enum": ["shared", "local", "restricted"] },
               "public_safe": { "type": ["boolean", "null"] },
               "confidence": { "type": ["string", "null"] },
               "exclude_lenses": { "type": "array", "items": { "type": "string" } },
               "field_visibility": {
                 "type": "object",
-                "additionalProperties": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] }
+                "additionalProperties": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] }
               },
               "knowledge_status": { "type": "string", "enum": ["current", "historical", "superseded"] },
               "temporal_scope": { "type": "string", "enum": ["current", "time-bounded", "historical", "timeless"] },
@@ -149,7 +149,7 @@
               "properties": {
                 "section_id": { "type": "string" },
                 "heading": { "type": "string" },
-                "visibility": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] },
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] },
                 "disclosure": { "type": "string", "enum": ["internal-only", "review-required", "publish-approved"] },
                 "claim": { "type": "boolean" },
                 "snippet": { "type": "string" }
@@ -164,7 +164,7 @@
               "additionalProperties": false,
               "properties": {
                 "text": { "type": "string" },
-                "visibility": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] }
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] }
               }
             }
           },
@@ -176,7 +176,7 @@
               "additionalProperties": false,
               "properties": {
                 "value": { "type": "string" },
-                "visibility": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] }
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] }
               }
             }
           },
@@ -188,7 +188,7 @@
               "additionalProperties": false,
               "properties": {
                 "value": { "type": "string" },
-                "visibility": { "type": "string", "enum": ["private", "linked-projects", "career", "publishing", "public-safe"] }
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] }
               }
             }
           },

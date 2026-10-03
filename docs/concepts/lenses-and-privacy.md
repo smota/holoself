@@ -1,69 +1,54 @@
 # Lenses and privacy
 
-Built-in lenses: `general`, `career`, `publishing`, `technical`, `leadership`, `interview`, `private`.
-
-## Custom lens registry
-
-A private self root may add typed definitions under `<data-root>/lenses/*.json`. A missing directory is valid. Use `lens list`, `lens show <id>`, and `lens validate` to inspect the effective built-in plus custom vocabulary.
+All lenses are definitions in `<self-root>/lenses/<id>.json`. Init seeds `general`, `professional`, `public-voice`, `technical`, `leadership`, `interview`, and `private`. Every definition has the same schema and can be edited. Reading a missing registry returns an empty catalog; reads create no files.
 
 ```json
 {
   "schema_version": 1,
   "id": "client-advisory",
   "title": "Client advisory",
-  "base_lens": "publishing",
-  "sensitivity_access": ["employer-confidential"]
+  "sensitivity_access": ["employer-confidential"],
+  "instructions": {
+    "purpose": "Support client decisions",
+    "priorities": ["evidence"],
+    "include": [],
+    "exclude": [],
+    "response_guidance": []
+  }
 }
 ```
 
-IDs are lowercase kebab-case, begin with a letter, and are at most 40 characters. Bases are built-in and affect safe filtering behavior only: they never grant access. A canonical document must explicitly include the custom ID in `access_lenses`. Custom lenses receive no confidential sensitivity access by default; allowed categories must be listed, and `restricted` is never available to custom lenses in v1. Unknown, duplicate, malformed, or unsafe definitions fail closed.
+IDs use lowercase kebab-case and match filenames. `bindings` is reserved for configuration. There is no base-lens inheritance. Documents grant explicit `access_lenses`; definitions supply sensitivity access and instructions. Only the direct owner can use `private` to access restricted material. Bound lenses must be unbound before removal, and private cannot be removed.
 
-| Task | Typical lens |
-|---|---|
-| General planning | general |
-| Applications and career decisions | career |
-| Public content preparation | publishing |
-| Architecture and implementation | technical |
-| People leadership | leadership |
-| Interview preparation | interview |
-| Sensitive self-review | private |
+## Project choices
 
-## Independent controls
+The self owns `lenses/bindings.json`:
 
-Canonical Markdown uses four independent controls:
+```json
+{
+  "schema_version": 1,
+  "bindings": {
+    "C:/Example/Domain": {
+      "default_lens": "professional",
+      "secondary_lenses": ["technical", "interview"]
+    }
+  }
+}
+```
+
+`lens bind|unbind|bindings` manages the store. Paths are absolute; Windows drive and UNC paths compare without case differences. Duplicate normalized paths fail closed. A linked project without a binding receives a corrective `lens bind` message. The separate `.holoself/links.json` attestation preserves `binding_salt`, status and `allowed_lenses`. Binding commands update matching grants while preserving salt and status.
+
+## Document controls
 
 ```yaml
 ---
-access_lenses:
-  - publishing
-  - private
+access_lenses: [professional, public-voice, private]
 disclosure: review-required
 sensitivity: personal
 document_role: evidence
-confidence: confirmed
 ---
 ```
 
-- `access_lenses` answers **which tasks may read this document**.
-- `disclosure` answers **whether document facts may be reproduced publicly**: `internal-only`, `review-required`, or `publish-approved`.
-- `sensitivity` classifies handling risk: `public`, `personal`, `compensation-confidential`, `third-party-personal`, `recruiter-confidential`, `employer-confidential`, `application-private`, `restricted`, or `none`. `personal` does not automatically block a permitted lens.
-- `document_role` distinguishes `policy`, `evidence`, and ordinary `content`.
-- Optional `task_include` and `task_exclude` string lists narrow use by explicit task text. `task_include` without matching `--task` fails closed.
+Explicit document, claim and field access apply to every lens. Definitions control sensitivity categories. `disclosure` and `publication_allowed` remain descriptive metadata. `public-voice` applies no special publication eligibility or compensation filter. Reading context does not authorize external actions. Public and restricted-host adapters retain their explicit snapshot handling contract.
 
-Readability is never publication approval. A metadata link grants read access only. `linked-projects` visibility does not mean `publish-approved`.
-
-Publishing resolution always includes readable `policy` documents, even when their disclosure is `internal-only`, because policy governs output rather than supplying publishable facts. Unapproved `evidence` is excluded from publishing context. Other readable, unapproved content is marked `publication_allowed: false` and receives an explicit restriction. Confidential sensitivity categories are never publication-eligible, even when disclosure metadata is mistakenly permissive.
-
-Sensitivity defaults narrow lenses: compensation, recruiter, and application-private material to career/interview/private; third-party personal material to leadership/private; employer-confidential material to career/technical/leadership/interview/private; and restricted material to private. Policy documents may still be read where their access lens permits because they constrain output rather than provide facts.
-
-## Legacy metadata
-
-`visibility`, `public_safe`, `exclude_lenses`, and `field_visibility` remain supported for migration. Mapping is conservative:
-
-- `public-safe` or `public_safe: true` maps to `publish-approved`.
-- Other legacy visibility values grant reading only; they do not grant publication.
-- Unknown legacy sensitivity strings resolve conservatively as `restricted` but fail validation until migrated to a supported value.
-- Canonical files with neither `access_lenses` nor legacy `visibility` fail closed during context resolution and fail validation.
-- New files using `access_lenses` must also declare `disclosure`, `sensitivity`, and `document_role`.
-
-Privacy metadata reduces accidental disclosure; review remains required before publication.
+Legacy `visibility`, `public_safe`, `exclude_lenses`, and `field_visibility` remain readable. Canonical documents need modern controls or valid legacy visibility. `knowledge migrate-lenses` previews exact conversion from `career` to `professional` and `publishing` to `public-voice`, including claim markers. Ordinary prose and proposal archives remain intact. See [CLI](../reference/cli.md) and [migration](../guides/migration.md).

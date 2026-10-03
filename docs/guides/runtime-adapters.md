@@ -27,7 +27,7 @@ Packet formatter names change delivery framing only. They are not startup adapte
 
 ```bash
 node bin/holoself.mjs context --project C:/work/project --json
-node bin/holoself.mjs context --project C:/work/project --lens publishing --json
+node bin/holoself.mjs context --project C:/work/project --lens public-voice --json
 node bin/holoself.mjs context --project C:/work/project --format packet --adapter pi
 node bin/holoself.mjs context --project C:/work/project --format packet --adapter claude
 node bin/holoself.mjs context --project C:/work/project --format packet --adapter codex

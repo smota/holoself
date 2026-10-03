@@ -13,9 +13,9 @@ async function temp(){return mkdtemp(join(tmpdir(),'holoself-mcp-'))}
 async function capture(fn){const old=console.log;let out='';console.log=(...x)=>{out+=x.join(' ')+'\n'};try{await fn()}finally{console.log=old}return out}
 async function fixture(){
   const self=await temp(),project=await temp();await capture(()=>run(['init','--root',self]))
-  await writeFile(join(self,'profile','identity.md'),'---\naccess_lenses: [general, career, private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Identity\n\nMCP parity marker.\n')
+  await writeFile(join(self,'profile','identity.md'),'---\naccess_lenses: [general, professional, private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Identity\n\nMCP parity marker.\n')
   await mkdir(join(project,'Context'),{recursive:true});await writeFile(join(project,'Context','evidence.md'),'# Evidence\n\nProject-bound marker.\n')
-  await capture(()=>run(['link','add','--project',project,'--self',self,'--lens','career','--no-activate','--yes']))
+  await capture(()=>run(['link','add','--project',project,'--self',self,'--lens','professional','--no-activate','--yes']))
   return {self,project}
 }
 function session(project){
@@ -48,7 +48,7 @@ test('Claude project-bound startup fails closed when its trusted root signal is 
 
 test('MCP status and context preserve link authority without exposing absolute private roots',async()=>{
   const {self,project}=await fixture(),m=session(project),status=m.call(2,'holoself_status').result.structuredContent.data
-  assert.equal(status.project.name,project.split(/[\\/]/).at(-1));assert.equal(status.link.default_lens,'career');assert.equal(status.self.access,'read')
+  assert.equal(status.project.name,project.split(/[\\/]/).at(-1));assert.equal(status.link.default_lens,'professional');assert.equal(status.self.access,'read')
   const manifest=m.call(3,'holoself_context_manifest',{task:'parity marker',budget:'small'}).result.structuredContent.data,text=JSON.stringify(manifest)
   assert.doesNotMatch(text,new RegExp(self.replaceAll('\\','\\\\'),'i'));assert.doesNotMatch(text,/absolute_path|source_project_path/)
   const source=manifest.sources.find(item=>item.path==='profile/identity.md');assert.ok(source?.source_id);assert.ok(manifest.self.documents.every(document=>document.content===''))
@@ -71,7 +71,7 @@ test('MCP broken-state diagnostics redact bound private paths on successful and 
   const {self,project}=await fixture(),m=session(project);await rm(self,{recursive:true,force:true})
   const status=m.call(2,'holoself_status').result.structuredContent.data,search=m.call(3,'holoself_search',{query:'marker'}).result
   assert.equal(status.context.state,'broken');assert.doesNotMatch(JSON.stringify(status),new RegExp(self.replaceAll('\\','\\\\'),'i'))
-  assert.doesNotMatch(JSON.stringify(search),new RegExp(self.replaceAll('\\','\\\\'),'i'));if(search.isError)assert.match(search.structuredContent.error.message,/failed closed/)
+  assert.doesNotMatch(JSON.stringify(search),new RegExp(self.replaceAll('\\','\\\\'),'i'));if(search.isError)assert.match(search.structuredContent.error.message,/failed closed|lens bind/)
 })
 
 test('MCP read tools do not create cache or index state',async()=>{

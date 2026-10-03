@@ -204,7 +204,7 @@ async function prepareQualityFixture(fixture) {
   const markdown = entries.filter(entry => entry.isFile() && entry.name.endsWith('.md'))
   if (markdown.length !== 37) throw new Error(`quality fixture must contain 37 Markdown sources, found ${markdown.length}`)
   await Promise.all(markdown.map(entry => copyFile(join(fixture.qualityRoot, entry.name), join(fixture.self, 'context', entry.name))))
-  await quietRun(['link', 'add', '--project', fixture.project, '--self', fixture.self, '--lens', 'general', '--secondary-lenses', 'career', '--force', '--no-activate', '--yes'])
+  await quietRun(['link', 'add', '--project', fixture.project, '--self', fixture.self, '--lens', 'general', '--secondary-lenses', 'professional', '--force', '--no-activate', '--yes'])
 }
 
 function validateQuality(data, expectedCases, expectedDigest) {

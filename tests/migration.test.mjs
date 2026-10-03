@@ -30,7 +30,7 @@ test('verifyNonAmplification gate detects illegal permission expansion', () => {
   )
   assert.equal(safe.valid, true)
 
-  // Narrowing (career removes publishing, technical, leadership): allowed
+  // Narrowing (career removes public-voice, technical, leadership): allowed
   const narrowing = verifyNonAmplification(
     { visibility: 'career' },
     { visibility: 'career', read_scope: 'shared', access_lenses: ['general', 'career', 'interview', 'private'] }
@@ -92,7 +92,7 @@ test('migrate policy requires --confirm-narrowing when coverage loss occurs', as
   const self = await temp()
   await run(['init', '--root', self])
 
-  // Create a document with visibility: career (which loses publishing, technical, leadership coverage)
+  // Create a document with visibility: career (which loses public-voice, technical, leadership coverage)
   await writeFile(join(self, 'context', 'career-guide.md'), '---\nvisibility: career\n---\n# Career\nCareer details.\n')
 
   const planOutput = await capture(() => run(['migrate', 'policy', '--root', self]))

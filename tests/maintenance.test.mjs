@@ -1,0 +1,52 @@
+import fs from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
+import { run } from '../src/cli.mjs'
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync, rmSync, renameSync, symlinkSync, readdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { buildLensMigrationPlan, buildTransformationPlan, applyTransformationPlan, renameLensMetadata } from '../src/maintenance.mjs'
+import { seedLensDefinitions, loadLensRegistry } from '../src/lenses.mjs'
+import { readBindings } from '../src/bindings.mjs'
+const temp=()=>mkdtempSync(join(tmpdir(),'holoself-maintenance-'))
+function fixture(){const root=temp();mkdirSync(join(root,'context'));seedLensDefinitions(root);writeFileSync(join(root,'context','one.md'),'# One\n');writeFileSync(join(root,'context','two.md'),'# Two\n');return root}
+
+test('lens migration previews exact metadata and preserves tags, prose, terminal proposals and receipts',()=>{
+ const root=fixture();const text='---\naccess_lenses:\n  - career\n  - publishing\nvisibility: career\nfield_visibility:\n  Compensation: publishing\ntags:\n  - career\n---\n# Career and publishing remain prose\n\n<!-- holoself-claim visibility=publishing -->\n- Visibility: publishing\nCareer prose.\n<!-- /holoself-claim -->\n';writeFileSync(join(root,'context','one.md'),text);mkdirSync(join(root,'reference'));writeFileSync(join(root,'reference','legacy.md'),text);mkdirSync(join(root,'proposals','approved'),{recursive:true});writeFileSync(join(root,'proposals','approved','immutable.yaml'),'visibility: career\n');mkdirSync(join(root,'proposals','receipts'));writeFileSync(join(root,'proposals','receipts','immutable.json'),'{}')
+ mkdirSync(join(root,'lenses','instructions'));writeFileSync(join(root,'lenses','instructions','career.json'),JSON.stringify({purpose:'Preserved override'}));writeFileSync(join(root,'lenses','bindings.json'),JSON.stringify({schema_version:1,bindings:{'C:/Synthetic/Domain':{default_lens:'career',secondary_lenses:['publishing']}}}))
+ const plan=buildLensMigrationPlan(root);assert.ok(plan.operations.some(op=>op.path==='reference/legacy.md'));assert.ok(!plan.operations.some(op=>op.path.startsWith('proposals/')));assert.equal(readFileSync(join(root,'context','one.md'),'utf8'),text);const receipt=applyTransformationPlan(root,plan,{expectedDigest:plan.digest});assert.ok(existsSync(receipt.receipt_path));assert.match(readFileSync(join(root,'context','one.md'),'utf8'),/tags:\n  - career/);assert.match(readFileSync(join(root,'context','one.md'),'utf8'),/# Career and publishing remain prose/);assert.match(readFileSync(join(root,'context','one.md'),'utf8'),/visibility=public-voice/);assert.equal(loadLensRegistry(root).byId.get('professional').instructions.purpose,'Preserved override');assert.equal(readBindings(root).bindings['c:/synthetic/domain'].default_lens,'professional');assert.equal(readFileSync(join(root,'proposals','approved','immutable.yaml'),'utf8'),'visibility: career\n');assert.equal(applyTransformationPlan(root,plan,{expectedDigest:plan.digest}).replayed,true)
+})
+test('reviewed replacements reject stale plans, tampering, wrong roots, protected and duplicate targets',()=>{
+ const root=fixture(),plan=buildTransformationPlan(root,[{path:'context/one.md',after:'# New\n'}]);assert.throws(()=>applyTransformationPlan(root,plan,{expectedDigest:'wrong'}),/digest/);assert.throws(()=>applyTransformationPlan(temp(),plan,{expectedDigest:plan.digest}),/invalid/);writeFileSync(join(root,'context','one.md'),'Changed\n');assert.throws(()=>applyTransformationPlan(root,plan,{expectedDigest:plan.digest}),/stale/)
+ for(const path of ['proposals/approved/x.md','proposals/receipts/x.json','../outside.md','config.json','coaching/x.md'])assert.throws(()=>buildTransformationPlan(root,[{path,after:'x'}]))
+ assert.throws(()=>buildTransformationPlan(root,[{path:'context/two.md',after:'x'},{path:'context/two.md',after:'y'}]),/duplicate/)
+})
+test('partial write and validation failures rollback exactly and the same plan can be retried',()=>{
+ const root=fixture(),plan=buildTransformationPlan(root,[{path:'context/one.md',after:'New one\n'},{path:'context/two.md',after:'New two\n'}]);assert.throws(()=>applyTransformationPlan(root,plan,{expectedDigest:plan.digest,afterWrite:()=>{throw new Error('injected write failure')}}),/injected/);assert.equal(readFileSync(join(root,'context','one.md'),'utf8'),'# One\n');assert.equal(readFileSync(join(root,'context','two.md'),'utf8'),'# Two\n');assert.throws(()=>applyTransformationPlan(root,plan,{expectedDigest:plan.digest,validate:()=>{throw new Error('injected validation failure')}}),/injected/);const receipt=applyTransformationPlan(root,plan,{expectedDigest:plan.digest});assert.equal(receipt.replayed,false);const raw=readFileSync(receipt.receipt_path,'utf8');writeFileSync(join(root,'context','one.md'),'Drift\n');assert.throws(()=>applyTransformationPlan(root,plan,{expectedDigest:plan.digest}),/replay/);assert.equal(readFileSync(receipt.receipt_path,'utf8'),raw)
+})
+test('failed seed migration removes new files and preserves original definitions',()=>{
+ const root=temp();mkdirSync(join(root,'context'));writeFileSync(join(root,'context','one.md'),'---\nvisibility: career\n---\n# One\n');const plan=buildLensMigrationPlan(root);assert.throws(()=>applyTransformationPlan(root,plan,{expectedDigest:plan.digest,validate:()=>{throw new Error('failure')}}),/failure/);assert.equal(readFileSync(join(root,'context','one.md'),'utf8'),'---\nvisibility: career\n---\n# One\n');assert.equal(existsSync(join(root,'lenses')),false);applyTransformationPlan(root,plan,{expectedDigest:plan.digest});assert.equal(loadLensRegistry(root).lenses.length,7)
+})
+test('ancestor swaps after preflight fail closed and never write outside root',()=>{
+ const root=fixture(),outside=temp();mkdirSync(join(root,'context','later'));writeFileSync(join(root,'context','later','two.md'),'Two\n');writeFileSync(join(outside,'two.md'),'Two\n');const plan=buildTransformationPlan(root,[{path:'context/aaa.md',after:'One changed\n'},{path:'context/later/two.md',after:'Outside changed\n'}],{kind:'lens-migration'});let supported=true
+ try{symlinkSync(outside,join(root,'probe'),'junction');rmSync(join(root,'probe'))}catch(error){if(error.code==='EPERM')supported=false;else throw error}if(!supported)return
+ assert.throws(()=>applyTransformationPlan(root,plan,{expectedDigest:plan.digest,afterWrite:op=>{if(op.path==='context/aaa.md'){renameSync(join(root,'context','later'),join(root,'saved-later'));symlinkSync(outside,join(root,'context','later'),'junction')}}}),/unsafe/);assert.equal(readFileSync(join(outside,'two.md'),'utf8'),'Two\n');assert.equal(existsSync(join(root,'context','aaa.md')),false)
+})
+test('metadata renaming does not alter unrelated multiline frontmatter or ordinary body',()=>{const text='---\ntags:\n  - career\nnotes: publishing\naccess_lenses: [career, publishing]\n---\ncareer publishing\n';assert.equal(renameLensMetadata(text),'---\ntags:\n  - career\nnotes: publishing\naccess_lenses: [professional, public-voice]\n---\ncareer publishing\n')})
+
+async function capture(fn){const original=console.log;let out='';console.log=(...args)=>out+=args.join(' ')+'\n';try{await fn();return out}finally{console.log=original}}
+test('partial receipt write is removed, rolled back and retry preserves the successful receipt',()=>{
+ const root=fixture(),plan=buildTransformationPlan(root,[{path:'context/one.md',after:'# Reviewed\n'}]),original=fs.writeFileSync
+ fs.writeFileSync=(path,text,...args)=>{if(typeof path==='number'){original(path,String(text).slice(0,10));throw new Error('partial receipt failure')}return original(path,text,...args)};syncBuiltinESMExports()
+ try{assert.throws(()=>applyTransformationPlan(root,plan,{expectedDigest:plan.digest}),/partial receipt failure/)}finally{fs.writeFileSync=original;syncBuiltinESMExports()}
+ assert.equal(readFileSync(join(root,'context','one.md'),'utf8'),'# One\n');assert.equal(existsSync(join(root,'.holoself','maintenance-receipts',plan.digest+'.json')),false)
+ const receipt=applyTransformationPlan(root,plan,{expectedDigest:plan.digest}),text=readFileSync(receipt.receipt_path,'utf8');assert.equal(applyTransformationPlan(root,plan,{expectedDigest:plan.digest}).replayed,true);assert.equal(readFileSync(receipt.receipt_path,'utf8'),text)
+})
+test('CLI previews exact migration and reviewed replacements, then applies only an approved digest',async()=>{
+ const root=temp(),planPath=join(tmpdir(),'holoself-plan-'+Date.now()+'.json');await capture(()=>run(['init','--root',root]));const target=join(root,'context','preferences.md');writeFileSync(target,'---\naccess_lenses: [career, private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Preferences\n\nKeep ordinary career prose.\n')
+ const before=readFileSync(target,'utf8'),plan=JSON.parse(await capture(()=>run(['knowledge','migrate-lenses','--root',root,'--output',planPath])));assert.equal(readFileSync(target,'utf8'),before);assert.equal(JSON.parse(readFileSync(planPath,'utf8')).digest,plan.digest)
+ await assert.rejects(run(['knowledge','migrate-lenses','--root',root,'--apply',planPath,'--digest','bad','--yes']),/digest/)
+ const receipt=JSON.parse(await capture(()=>run(['knowledge','migrate-lenses','--root',root,'--apply',planPath,'--digest',plan.digest,'--yes'])));assert.ok(existsSync(receipt.receipt_path));assert.match(readFileSync(target,'utf8'),/access_lenses: \[professional, private\]/)
+ const changesPath=planPath+'.changes.json',after=readFileSync(target,'utf8').replace('Keep ordinary career prose.','Reviewed replacement.');writeFileSync(changesPath,JSON.stringify([{path:'context/preferences.md',after,reason:'Reviewed section'}]));const replacement=JSON.parse(await capture(()=>run(['knowledge','transform','--root',root,'--replacements',changesPath,'--output',planPath])));assert.notEqual(readFileSync(target,'utf8'),after);await capture(()=>run(['knowledge','transform','--root',root,'--apply',planPath,'--digest',replacement.digest,'--yes']));assert.equal(readFileSync(target,'utf8'),after);rmSync(planPath);rmSync(changesPath)
+})

@@ -42,7 +42,7 @@ flowchart LR
     class Q review
 ```
 
-- **One whole person, many lenses.** Built-in and optional private registry-backed lenses change explicit read scope and relevance—not identity or publication approval. Custom base lenses never inherit document access.
+- **One whole person, many lenses.** Self-side lens definitions change explicit read scope and relevance. Every lens uses the same schema, and project choices live in self-side bindings. Reading context never authorizes an external action.
 - **Independent projects.** Applications, research, posts, calendars, and execution notes stay with their projects.
 - **Review before memory.** Projects propose; only explicit approval changes canonical self context.
 - **Inspectability.** Markdown is source of truth. Generated packets and indexes are disposable.
@@ -119,7 +119,7 @@ It opens on `127.0.0.1` and requires no hosted account. Start with the [screen-b
 holoself link add \
   --project C:/work/my-project \
   --self C:/private/my-self \
-  --lens career
+  --lens professional
 
 holoself context \
   --project C:/work/my-project \
@@ -169,7 +169,7 @@ Never substitute one mode for another without reviewing privacy exposure. Startu
 ```bash
 # Inspect the validated lens vocabulary and project context
 holoself lens list --root C:/private/my-self
-holoself context --project C:/work/my-project --lens career --format packet --adapter claude
+holoself context --project C:/work/my-project --lens professional --format packet --adapter claude
 
 # Produce non-mutating ownership/conflict recommendations
 holoself analyze all --project C:/work/my-project

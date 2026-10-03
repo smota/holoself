@@ -77,7 +77,7 @@ Every conversation turn resolves bounded, lens-filtered, current Holoself contex
 
 Knowledge APIs parse frontmatter fields (`access_lenses`, disclosure, sensitivity, role, confidence, visibility, public-safe status, lifecycle state, validity/review dates, and supersession references) plus `os-section` markers. The UI renders schema-driven metadata controls: dynamic Access Lens checkboxes, guided disclosure/sensitivity/document-role/visibility values, confidence suggestions with custom-value compatibility, and a derived-or-legacy public-safe selector. Unknown lens and confidence values remain visible and preserved. Inline and save-time cross-field checks block unsafe publication combinations and fail closed when modern documents have no Access Lens. Frontmatter delimiters and opening/closing annotation comments are never exposed as editable text; the backend preserves unknown metadata, validates marker order, hash-guards the write, validates the complete root, and rolls back on failure.
 
-Lens instructions contain structured purpose, priorities, include/exclude rules, and response guidance. Personal overrides are stored under `<root>/lenses/instructions/` so built-in definitions remain intact.
+Lens instructions contain structured purpose, priorities, include/exclude rules, and response guidance. Instructions are stored in each `<root>/lenses/<id>.json` definition. All definitions use the same editor; explicit migration folds legacy instruction overrides into their definitions.
 
 ## Valuable and correctable Spaces
 
