@@ -17,7 +17,7 @@ The preview is collision-aware and names exact client files. Generated configura
 ## Configure and activate
 
 ```bash
-node bin/holoself.mjs link add --project C:/work/project --self C:/private/self --lens career --yes
+node bin/holoself.mjs link add --project C:/work/project --self C:/private/self --lens professional --yes
 ```
 
 By default, Holoself detects platform evidence, always installs the generic `AGENTS.md` fallback, writes `.holoself/BOOTSTRAP.md` and `runtime.json`, and injects bounded pointers into detected instructions. Personal paths remain in private `link.yaml`; injected instructions contain no absolute self path.

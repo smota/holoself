@@ -4,7 +4,7 @@ Machine-readable contracts:
 
 Proposed D00 contracts, not active runtime interfaces: [evidence v1](../../schemas/evidence-v1.schema.json) and [coaching v1](../../schemas/coaching-v1.schema.json). See their [decisions, coverage and acceptance boundaries](../specifications/evidence-contract-v1.md).
 
-- [`schemas/lens.schema.json`](../../schemas/lens.schema.json): private custom-lens definition
+- [`schemas/lens.schema.json`](../../schemas/lens.schema.json): self-side lens definition
 - [`schemas/link.schema.json`](../../schemas/link.schema.json): project `self_context` link
 - [`schemas/adapter-capability.schema.json`](../../schemas/adapter-capability.schema.json): startup adapter capability evidence
 - [`schemas/context.schema.json`](../../schemas/context.schema.json): resolved runtime context
@@ -15,4 +15,6 @@ Proposed D00 contracts, not active runtime interfaces: [evidence v1](../../schem
 
 Link configuration grants read access and optional proposals. Proposal validation covers backward-compatible single-change records and schema-v2 grouped changes, UUID, type, state, source paths, target containment, evidence/provenance, confidence, visibility, and reserved markers. Context output preserves packet generation/expiry metadata, bounded selection telemetry, receipt and cache evidence, source hashes, restrictions, warnings, leakage validation, lifecycle state, and pending proposals. Document metadata additionally supports `knowledge_status`, temporal validity/review dates, and supersession references.
 
-Lens references are structurally validated as lowercase kebab IDs of at most 40 characters; the CLI then semantically requires each ID to resolve from built-ins or the selected self registry. Canonical Markdown frontmatter is validated by CLI rules and documented by the standalone metadata schema. Legacy `visibility` and `public_safe` remain readable during migration, but new `access_lenses` metadata requires disclosure, sensitivity, and document role.
+Lens references are structurally validated as lowercase kebab IDs of at most 40 characters; the CLI then semantically requires each ID to resolve from the selected self registry. Canonical Markdown frontmatter is validated by CLI rules and documented by the standalone metadata schema. Legacy `visibility` and `public_safe` remain readable during migration, but new `access_lenses` metadata requires disclosure, sensitivity, and document role.
+
+Project lens choices use [lens-bindings.schema.json](../../schemas/lens-bindings.schema.json). Exact reviewed maintenance plans use [maintenance-plan.schema.json](../../schemas/maintenance-plan.schema.json).

@@ -107,8 +107,8 @@ test('skill documents validated resolution for every supported project mode',asy
   for(const phrase of ['Direct data root','Metadata project link','Exported project packet or snapshot','Legacy live mount','Environment root','Default root','Secret-pattern filtering is defense in depth, not guarantee'])assert.match(skill,new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')))
   assert.match(skill,/unique known `secondary_lenses`/)
   assert.match(skill,/reject paths escaping packet directory/i)
-  const schema=JSON.parse(await readFile(join(root,'schemas','link.schema.json'),'utf8'))
-  assert.equal(schema.properties.self_context.properties.secondary_lenses.uniqueItems,true)
+  const schema=JSON.parse(await readFile(join(root,'schemas','lens-bindings.schema.json'),'utf8'))
+  assert.equal(schema.properties.bindings.additionalProperties.properties.secondary_lenses.uniqueItems,true)
 })
 
 test('agent instructions consolidate resolution in the public skill and bounded command',async()=>{

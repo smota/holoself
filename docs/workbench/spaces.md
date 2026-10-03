@@ -12,14 +12,14 @@ The screenshot shows three real projects linked from their current folders under
 
 Choose the least-broad lens that fits the project's purpose. Linking does not copy canonical self documents into the project.
 
-**Discover existing links** reconciles links already known to the canonical root. Use it after moving between the CLI and Workbench or when a valid linked folder is not listed.
+**Discover existing links** reconciles and prunes the catalog from `<root>/lenses/bindings.json`. Use it after moving between the CLI and Workbench or when a valid linked folder is not listed.
 
 ## Read a Space card
 
 | Field | Meaning |
 |---|---|
 | State and lens | Activation/link health and the default context policy |
-| Context | Number of configured project include scopes, not the number of selected documents |
+| Context | Self-only retrieval; domain documents remain owned by the project |
 | Index | Whether the project-owned rebuildable index exists |
 | Proposals | Pending project-owned review items |
 | Connectors | Detected local launch choices |
@@ -33,6 +33,7 @@ Choose the least-broad lens that fits the project's purpose. Linking does not co
 - **Health details** runs link diagnostics and shows the command result.
 - **Review proposals** moves to the inbox for that project's reusable-knowledge proposals.
 - **Open here** offers detected CLI, GUI, and terminal launch plans rooted in the Space directory.
+- **Edit binding** edits the default and secondary lens choices in the self root. Removing a binding prunes its Space from the catalog and makes context fail closed until rebound.
 - **Remove link** removes managed activation and `link.yaml` after confirmation. Project artifacts outside managed link metadata remain untouched; indexes, reports, and proposals are preserved for review by the underlying link contract.
 
 ## Recover a degraded Space

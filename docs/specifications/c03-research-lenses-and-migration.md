@@ -1,5 +1,7 @@
 # T03-R: Inventário de Schemas, Sensibilidade, Publicação, Bases Customizadas, Parsers Legados e Tabela de Precedência
 
+Historical design and evidence. The current contract is documented in [Lenses and privacy](../concepts/lenses-and-privacy.md): self-side bindings, uniform definitions and self-only indexing.
+
 | Campo | Valor |
 |---|---|
 | Tarefa | T03-R (Ciclo C-03 — Lentes como Perspectivas e Migração) |

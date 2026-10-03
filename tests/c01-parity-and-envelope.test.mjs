@@ -41,7 +41,7 @@ async function setupC01Fixture() {
       schema_version: 1,
       id: 'spiritual',
       title: 'Spiritual perspective',
-      base_lens: 'general',
+
       sensitivity_access: []
     }, null, 2)
   )
@@ -49,7 +49,7 @@ async function setupC01Fixture() {
   // Add documents in self
   await writeFile(
     join(self, 'profile', 'identity.md'),
-    '---\naccess_lenses: [general, career, spiritual, private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Identity\n\nCanonical identity profile.\n'
+    '---\naccess_lenses: [general, professional, spiritual, private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Identity\n\nCanonical identity profile.\n'
   )
   await writeFile(
     join(self, 'context', 'secret-personal.md'),

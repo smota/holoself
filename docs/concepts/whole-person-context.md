@@ -1,6 +1,6 @@
 # Whole-person context
 
-Holoself represents one person across identity, work, preferences, voice, thinking, career, technical work, leadership, publishing, projects, people, decisions, stories, and private context.
+Holoself represents one person across identity, work, preferences, voice, thinking, professional, technical work, leadership, public-voice, projects, people, decisions, stories, and private context.
 
 It does not create separate career or publishing personas. A lens changes relevance, depth, and privacy for a task while preserving one canonical self.
 

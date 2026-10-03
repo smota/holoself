@@ -193,7 +193,7 @@ test('validateDecisionCacheSchema validates content-free decision cache strictly
     contrib_selection_hash: dummyHash,
     identity_id: 'user:direct',
     lens: 'general',
-    allowed_lenses: ['general', 'career'],
+    allowed_lenses: ['general', 'professional'],
     task_hash: dummyHash,
     temporal: 'current',
     include_history: false,
@@ -242,8 +242,8 @@ test('computeDecisionCacheKey is deterministic and canonicalizes arrays', () => 
     lens_registry_hash: dummyHash,
     contrib_selection_hash: dummyHash,
     identity_id: 'client:proj',
-    lens: 'career',
-    allowed_lenses: ['technical', 'career', 'general'],
+    lens: 'professional',
+    allowed_lenses: ['technical', 'professional', 'general'],
     task_hash: dummyHash,
     temporal: 'current',
     include_history: false,
@@ -255,7 +255,7 @@ test('computeDecisionCacheKey is deterministic and canonicalizes arrays', () => 
   const key1 = computeDecisionCacheKey(base)
   const key2 = computeDecisionCacheKey({
     ...base,
-    allowed_lenses: ['career', 'general', 'technical'],
+    allowed_lenses: ['professional', 'general', 'technical'],
     requested_source_ids: ['hs-aaaaaaaaaaaaaaaaaaaa', 'hs-bbbbbbbbbbbbbbbbbbbb']
   })
   assert.equal(key1, key2)
@@ -272,8 +272,8 @@ test('purgeInvalidDecisionCache removes legacy non-v2 files and preserves valid 
     links_register_hash: dummyHash,
     contrib_selection_hash: dummyHash,
     identity_id: 'client:proj',
-    lens: 'career',
-    allowed_lenses: ['career'],
+    lens: 'professional',
+    allowed_lenses: ['professional'],
     task_hash: dummyHash,
     temporal: 'current',
     include_history: false,
@@ -286,7 +286,7 @@ test('purgeInvalidDecisionCache removes legacy non-v2 files and preserves valid 
       schema_version: 1,
       context_hash: dummyHash,
       task_hash: dummyHash,
-      lens: 'career',
+      lens: 'professional',
       budget: 'standard',
       temporal: 'current',
       source_ids: [],
@@ -320,8 +320,8 @@ test('readDecisionCache, writeDecisionCache, expiry, and eviction work end-to-en
     links_register_hash: dummyHash,
     contrib_selection_hash: dummyHash,
     identity_id: 'client:proj',
-    lens: 'career',
-    allowed_lenses: ['career'],
+    lens: 'professional',
+    allowed_lenses: ['professional'],
     task_hash: dummyHash,
     temporal: 'current',
     include_history: false,
@@ -334,7 +334,7 @@ test('readDecisionCache, writeDecisionCache, expiry, and eviction work end-to-en
       schema_version: 1,
       context_hash: dummyHash,
       task_hash: dummyHash,
-      lens: 'career',
+      lens: 'professional',
       budget: 'standard',
       temporal: 'current',
       source_ids: [],
@@ -563,7 +563,7 @@ test('persistent decision cache hit yields identical context_hash, omitted reaso
 
   writeFileSync(
     join(self, 'profile', 'profile.md'),
-    '---\naccess_lenses: [general, career]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Profile\n\nSoftware engineer.\n'
+    '---\naccess_lenses: [general, professional]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Profile\n\nSoftware engineer.\n'
   )
   writeFileSync(
     join(self, 'context', 'notes.md'),
@@ -728,24 +728,19 @@ test('candidate links and snippets fail-closed under publishing lens (B-1 and B-
 
   writeFileSync(
     join(self, 'context', 'compensation-links.md'),
-    `---\naccess_lenses: [general, publishing]\ndisclosure: publish-approved\nsensitivity: personal\ndocument_role: content\npublication_allowed: true\n---\n# Public Resources\n\nPublic link: [public portal](https://example.com)\n\n## Compensation Details\n\n- Base salary: $150,000 USD\n- Bonus: $30,000 USD\n\n<!-- holoself-claim visibility=private -->\nPrivate link: [internal portal](https://internal.corp/secret)\n<!-- /holoself-claim -->\n`
+    `---\naccess_lenses: [general, public-voice]\ndisclosure: publish-approved\nsensitivity: personal\ndocument_role: content\npublication_allowed: true\n---\n# Public Resources\n\nPublic link: [public portal](https://example.com)\n\n## Compensation Details\n\n- Base salary: $150,000 USD\n- Bonus: $30,000 USD\n\n<!-- holoself-claim visibility=private -->\nPrivate link: [internal portal](https://internal.corp/secret)\n<!-- /holoself-claim -->\n`
   )
-  await capture(() => run(['link', 'add', '--project', project, '--self', self, '--lens', 'publishing', '--no-activate', '--yes']))
+  await capture(() => run(['link', 'add', '--project', project, '--self', self, '--lens', 'public-voice', '--no-activate', '--yes']))
 
   // Manifest under publishing lens
-  const resPublishing = await capture(() => run(['context', '--project', project, '--lens', 'publishing', '--manifest', '--json']))
+  const resPublishing = await capture(() => run(['context', '--project', project, '--lens', 'public-voice', '--manifest', '--json']))
   const outPub = JSON.parse(resPublishing.stdout)
   const compDocPub = outPub.sources.find(s => s.path === 'context/compensation-links.md')
   assert.ok(compDocPub, 'compensation-links.md should be included')
 
-  // B-2 check: snippets and search_text must not leak compensation
-  for (const sec of compDocPub.sections) {
-    assert.equal(sec.snippet.includes('$150,000'), false, 'snippet must not leak salary')
-    assert.equal(sec.snippet.includes('150,000'), false, 'snippet must not leak salary numbers')
-    assert.equal(sec.snippet.includes('Bonus'), false, 'snippet must not leak bonus')
-  }
-  assert.equal(compDocPub.search_text.includes('$150,000'), false, 'search_text must not leak compensation')
-  assert.equal(compDocPub.search_text.includes('150,000'), false, 'search_text must not leak compensation numbers')
+  // Public voice has no compensation filter; explicit private claims still apply.
+  assert.ok(compDocPub.sections.some(sec=>sec.snippet.includes('$150,000')))
+  assert.ok(compDocPub.search_text.includes('150,000'))
 
   // B-1 check: private link filtered out under publishing lens
   assert.equal(compDocPub.links.some(l => l.value.includes('internal.corp')), false, 'private link must be omitted under publishing lens')

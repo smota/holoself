@@ -4,9 +4,9 @@ import {
 } from 'node:fs'
 import { join, resolve, relative, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
-import { BUILTIN_LENS_IDS } from './lenses.mjs'
+import { DEFAULT_LENS_IDS } from './lenses.mjs'
 
-const ALL_LENSES = BUILTIN_LENS_IDS
+const ALL_LENSES = DEFAULT_LENS_IDS
 const HASH_RE = /^[0-9a-f]{64}$/
 
 function hash(text) {
@@ -39,11 +39,11 @@ export function computeMeetMetadata(meta, kind = 'self') {
       if (vis === 'private') {
         result.access_lenses = ['private']
       } else if (vis === 'linked-projects') {
-        result.access_lenses = ['general', 'career', 'publishing', 'technical', 'leadership', 'interview', 'private']
-      } else if (vis === 'career') {
-        result.access_lenses = ['general', 'career', 'interview', 'private']
-      } else if (vis === 'publishing' || vis === 'public-safe') {
-        result.access_lenses = ['general', 'publishing', 'private']
+        result.access_lenses = ['general', 'professional', 'public-voice', 'technical', 'leadership', 'interview', 'private']
+      } else if (vis === 'professional') {
+        result.access_lenses = ['general', 'professional', 'interview', 'private']
+      } else if (vis === 'public-voice' || vis === 'public-safe') {
+        result.access_lenses = ['general', 'public-voice', 'private']
       } else {
         result.access_lenses = ['general', 'private']
       }
@@ -53,7 +53,7 @@ export function computeMeetMetadata(meta, kind = 'self') {
       } else if (vis === 'linked-projects') {
         result.access_lenses = ['general', 'technical']
       } else if (vis === 'public-safe') {
-        result.access_lenses = ['general', 'publishing']
+        result.access_lenses = ['general', 'public-voice']
       } else {
         result.access_lenses = ['general']
       }
@@ -132,7 +132,7 @@ function evaluateAllowed(meta, lens, adapter, subjectKind) {
   // Phase 3 & 4
   const accessLenses = Array.isArray(meta.access_lenses) && meta.access_lenses.length
     ? meta.access_lenses
-    : (meta.visibility === 'private' ? ['private'] : (meta.visibility === 'career' ? ['general', 'career', 'interview', 'private'] : (meta.visibility === 'publishing' ? ['general', 'publishing', 'private'] : ALL_LENSES)))
+    : (meta.visibility === 'private' ? ['private'] : (meta.visibility === 'professional' ? ['general', 'professional', 'interview', 'private'] : (meta.visibility === 'public-voice' ? ['general', 'public-voice', 'private'] : ALL_LENSES)))
   if (!accessLenses.includes(lens)) return false
   if (Array.isArray(meta.exclude_lenses) && meta.exclude_lenses.includes(lens)) return false
 
@@ -157,7 +157,7 @@ function evaluateAllowedV1(meta, lens, adapter, subjectKind) {
 
   const accessLenses = Array.isArray(meta.access_lenses) && meta.access_lenses.length
     ? meta.access_lenses
-    : (meta.visibility === 'private' ? ['private'] : (meta.visibility === 'career' ? ['general', 'career', 'interview', 'private'] : (meta.visibility === 'publishing' ? ['general', 'publishing', 'private'] : ALL_LENSES)))
+    : (meta.visibility === 'private' ? ['private'] : (meta.visibility === 'professional' ? ['general', 'professional', 'interview', 'private'] : (meta.visibility === 'public-voice' ? ['general', 'public-voice', 'private'] : ALL_LENSES)))
   if (!accessLenses.includes(lens)) return false
   if (Array.isArray(meta.exclude_lenses) && meta.exclude_lenses.includes(lens)) return false
 

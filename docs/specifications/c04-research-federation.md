@@ -1,5 +1,7 @@
 # C-04: Pesquisa e Inventário de Federação Soberana
 
+Historical design and evidence. The current contract is documented in [Lenses and privacy](../concepts/lenses-and-privacy.md): self-side bindings, uniform definitions and self-only indexing.
+
 | Campo | Valor |
 |---|---|
 | Ciclo | C-04 — Federação real |

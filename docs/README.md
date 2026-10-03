@@ -71,6 +71,8 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 
 ## Development specifications
 
+The context/lens research below records earlier designs. The current contract uses [uniform self-side lenses and bindings](concepts/lenses-and-privacy.md) and self-only indexes.
+
 The D00–D03 evidence documents below record earlier research and experiments. The current coaching workflow is described in [Local coaching sessions](guides/coaching.md); it does not use the experimental native extraction runtime.
 
 - [External sources and coaching development plan](specifications/external-sources-and-coaching-plan.md)

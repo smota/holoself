@@ -1,4 +1,4 @@
-export const VISIBILITIES=['private','linked-projects','career','publishing','public-safe']
+export const VISIBILITIES=['private','linked-projects','professional','public-voice','public-safe']
 export const DISCLOSURES=['internal-only','review-required','publish-approved']
 export const SENSITIVITIES=['public','none','personal','application-private','compensation-confidential','third-party-personal','recruiter-confidential','employer-confidential','restricted']
 export const DOCUMENT_ROLES=['policy','evidence','content']
@@ -12,7 +12,7 @@ export function derivedPublicSafe(metadata={}){return metadata.disclosure==='pub
 export function annotationSchema(lenses=[]){return {
  schema_version:1,
  fields:{
-  access_lenses:{type:'multi-select',required:true,options:lenses.map(lens=>({value:lens.id,label:lens.title||lens.id,source:lens.source||'unknown'}))},
+  access_lenses:{type:'multi-select',required:true,options:lenses.map(lens=>({value:lens.id,label:lens.title||lens.id,source:'self'}))},
   disclosure:{type:'single-select',required:true,options:DISCLOSURES},
   sensitivity:{type:'single-select',required:true,options:SENSITIVITIES},
   document_role:{type:'single-select',required:true,options:DOCUMENT_ROLES},

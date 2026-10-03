@@ -2,11 +2,11 @@
 
 Holoself is local-first. CLI performs no network requests, creates no hosted account, and does not publish data.
 
-Private profile, context, optional custom-lens definitions, topics, reference material, proposals, and local contribs live under data root selected by `HOLOSELF_HOME` or `--data-dir` (`--root` remains compatibility alias). CLI option wins. Personal data is not included in package source.
+Private profile, context, lens definitions and project bindings, topics, reference material, proposals, and local contribs live under data root selected by `HOLOSELF_HOME` or `--data-dir` (`--root` remains compatibility alias). CLI option wins. Personal data is not included in package source.
 
 ## Linked projects
 
-Recommended `link add --project --self` creates project-local metadata with `access: read`; it does not copy canonical self files. Access lenses control reading. Custom lens bases never inherit document access, confidential categories require explicit lens-definition grants, and custom lenses cannot access `restricted` material in v1. Disclosure controls public reuse. Sensitivity classifies handling risk. A readable or linked document is never publication-approved unless `disclosure: publish-approved`. Project proposals cannot change canonical context without explicit approval.
+Recommended `link add --project --self` creates project-local metadata with `access: read`; it does not copy canonical self files. Self-side bindings choose the lens, and active attestation grants authorize linked reads. Definitions and explicit document access rules control reading. Restricted material requires private and direct owner access. Public-voice uses the same document and field rules as other lenses. Reading context does not authorize publication or another external action. Sensitivity classifies handling risk. Project proposals cannot change canonical context without explicit approval.
 
 Legacy `link --target` creates filesystem symlink/junction to complete data root. It exposes more private context to project tools and should be used only when full live mounting is intended. `unlink` removes only managed link.
 

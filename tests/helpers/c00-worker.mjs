@@ -136,7 +136,7 @@ async function quality() {
   for (const item of cases) {
     let response
     const sample = await measure(async () => {
-      response = await cli(['context', '--project', fixture.project, '--task', item.task, '--lens', item.lens, '--budget', item.budget, '--json'])
+      response = await cli(['context', '--project', fixture.project, '--task', item.task, '--lens', ({career:'professional',publishing:'public-voice'}[item.lens]||item.lens), '--budget', item.budget, '--json'])
       return response
     })
     const text = content(response.data)

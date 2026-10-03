@@ -31,7 +31,7 @@ Estrutura gerada:
 - `config.json`: Configuração do produto e seleção de contribs.
 - `profile/`: Documentos de identidade, voz, estilo e preferências.
 - `context/`: Histórico profissional, evidências de liderança e projetos.
-- `lenses/`: Definições customizadas opcionais.
+- `lenses/`: Definições uniformes e bindings por projeto.
 
 ### 2.2 Vinculação de um Projeto (Metadata Link)
 Para conectar um projeto local à sua raiz canônica com escopo restrito de privacidade:
@@ -124,3 +124,7 @@ holoself link remove --project /caminho/do/projeto --yes
 - Remove de forma limpa as instruções gerenciadas e a configuração local `.holoself/link.yaml`.
 - Atualiza o registro central soberano (`links.json`) na raiz canônica, marcando o projeto como `revoked`.
 - Todos os arquivos do projeto fora de `.holoself` permanecem estritamente intactos.
+
+## Self-side lens migration
+
+Create and review a `knowledge migrate-lenses --root <self-root> --output <plan.json>` plan on a backed-up copy. Apply with `--apply <plan.json> --digest <sha256> --yes`, then repair each legacy link. The plan preserves terminal proposals and ordinary prose. The receipt confirms exact applied hashes; a repeated apply succeeds only while those hashes match. Rollback on partial failure restores prior bytes. Public voice uses ordinary lens access, with no publishing eligibility gate or compensation-specific filter.
