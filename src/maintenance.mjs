@@ -7,23 +7,24 @@ import { normalizeProjectPath, readBindings } from './bindings.mjs'
 const sha=value=>createHash('sha256').update(value).digest('hex')
 const slash=value=>value.replaceAll('\\','/')
 export const renamedLens=id=>({career:'professional',publishing:'public-voice'}[id]||id)
+function pathExists(path){try{lstatSync(path);return true}catch(error){if(['ENOENT','ENOTDIR'].includes(error.code))return false;throw error}}
 function safePath(root,rel){
  if(typeof rel!=='string'||!rel||isAbsolute(rel)||rel.includes('\\')||rel.split('/').some(part=>['','..','.'].includes(part)))throw new Error(`invalid maintenance path: ${rel}`)
- let rootAncestor=root;while(true){if(existsSync(rootAncestor)&&lstatSync(rootAncestor).isSymbolicLink())throw new Error('unsafe maintenance root ancestor');const parent=dirname(rootAncestor);if(parent===rootAncestor)break;rootAncestor=parent}
+ let rootAncestor=root;while(true){if(pathExists(rootAncestor)&&lstatSync(rootAncestor).isSymbolicLink())throw new Error('unsafe maintenance root ancestor');const parent=dirname(rootAncestor);if(parent===rootAncestor)break;rootAncestor=parent}
  const path=resolve(root,rel),local=relative(root,path);if(local==='..'||local.startsWith(`..${sep}`)||isAbsolute(local))throw new Error('maintenance path escapes root')
- let current=path;while(true){if(existsSync(current)&&lstatSync(current).isSymbolicLink())throw new Error(`unsafe maintenance path: ${rel}`);if(current===root)break;const parent=dirname(current);if(parent===current)throw new Error('maintenance root mismatch');current=parent}
- if(existsSync(path)&&!lstatSync(path).isFile())throw new Error(`maintenance target is not a file: ${rel}`)
+ let current=path;while(true){if(pathExists(current)&&lstatSync(current).isSymbolicLink())throw new Error(`unsafe maintenance path: ${rel}`);if(current===root)break;const parent=dirname(current);if(parent===current)throw new Error('maintenance root mismatch');current=parent}
+ if(pathExists(path)&&!lstatSync(path).isFile())throw new Error(`maintenance target is not a file: ${rel}`)
  return path
 }
 const editableMarkdown=rel=>/^(?:profile|context|topics|history|reference|me)\/.*\.md$/.test(rel)||/^contribs\/local\/.*\.md$/.test(rel)
-function authorized(rel,kind){return editableMarkdown(rel)||(kind==='lens-migration'&&(/^(?:AGENTS|CLAUDE|README)\.md$/.test(rel)||/^contribs\/default\/.*\.md$/.test(rel)||/^lenses\/(?:instructions\/)?[a-z][a-z0-9-]*\.json$/.test(rel)||rel==='.holoself/links.json'))}
+function authorized(rel,kind){if(kind==='instruction-replacement')return /^(?:AGENTS|CLAUDE)\.md$/.test(rel);return editableMarkdown(rel)||(kind==='lens-migration'&&(/^(?:AGENTS|CLAUDE|README)\.md$/.test(rel)||/^contribs\/default\/.*\.md$/.test(rel)||/^lenses\/(?:instructions\/)?[a-z][a-z0-9-]*\.json$/.test(rel)||rel==='.holoself/links.json'))}
 function currentText(path){return existsSync(path)?readFileSync(path,'utf8'):null}
 export function buildTransformationPlan(root,changes,{kind='section-replacement',now=new Date().toISOString()}={}){
- root=resolve(root);if(!['section-replacement','lens-migration'].includes(kind)||!Array.isArray(changes))throw new Error('invalid maintenance transformation')
+ root=resolve(root);if(!['section-replacement','instruction-replacement','lens-migration'].includes(kind)||!Array.isArray(changes))throw new Error('invalid maintenance transformation')
  const seen=new Set(),operations=[]
  for(const change of changes){const rel=change.path;if(!authorized(rel,kind))throw new Error(`protected maintenance target: ${rel}`);const path=safePath(root,rel),key=process.platform==='win32'?rel.toLowerCase():rel;if(seen.has(key))throw new Error(`duplicate maintenance target: ${rel}`);seen.add(key)
   const before=currentText(path),after=change.after;if(after!==null&&typeof after!=='string')throw new Error('maintenance after must be exact text or null')
-  if(kind==='section-replacement'&&(before===null||after===null))throw new Error('section replacement requires an existing Markdown document')
+  if(kind!=='lens-migration'&&(before===null||after===null))throw new Error('section replacement requires an existing Markdown document')
   if(before===after)continue
   operations.push({operation:'transform',path:rel,before,after,before_sha256:before===null?null:sha(before),after_sha256:after===null?null:sha(after),reason:change.reason||kind})
  }
@@ -84,12 +85,12 @@ function writeExact(path,text,createdDirs){
 export function applyTransformationPlan(root,plan,{expectedDigest,validate,afterWrite}={}){
  root=resolve(root);const body={...plan};delete body.digest;const digest=sha(JSON.stringify(body))
  if(!expectedDigest||expectedDigest!==digest||plan.digest!==digest)throw new Error('maintenance plan digest mismatch')
- if(plan.schema_version!==1||resolve(plan.root)!==root||!['section-replacement','lens-migration'].includes(plan.kind)||!Array.isArray(plan.operations))throw new Error('invalid maintenance plan')
+ if(plan.schema_version!==1||resolve(plan.root)!==root||!['section-replacement','instruction-replacement','lens-migration'].includes(plan.kind)||!Array.isArray(plan.operations))throw new Error('invalid maintenance plan')
  const receiptRel=`.holoself/maintenance-receipts/${digest}.json`,receiptPath=safePath(root,receiptRel),targets=new Set(),ops=[]
  for(const op of plan.operations){if(op.operation!=='transform'||!authorized(op.path,plan.kind))throw new Error(`protected maintenance target: ${op.path}`);const path=safePath(root,op.path),key=process.platform==='win32'?op.path.toLowerCase():op.path;if([...targets].some(target=>target===key||target.startsWith(key+'/')||key.startsWith(target+'/')))throw new Error('duplicate or overlapping maintenance target');targets.add(key)
   for(const field of ['before','after'])if(op[field]!==null&&typeof op[field]!=='string')throw new Error('invalid transformation text')
   if(op.before_sha256!==(op.before===null?null:sha(op.before))||op.after_sha256!==(op.after===null?null:sha(op.after)))throw new Error('maintenance content hash mismatch')
-  if(plan.kind==='section-replacement'&&(op.before===null||op.after===null))throw new Error('section replacement requires existing Markdown')
+  if(plan.kind!=='lens-migration'&&(op.before===null||op.after===null))throw new Error('section replacement requires existing Markdown')
   ops.push({...op,absolute:path})
  }
  if(existsSync(receiptPath)){const receipt=JSON.parse(readFileSync(receiptPath,'utf8'));if(receipt.plan_digest!==digest||ops.some(op=>currentText(op.absolute)!==op.after))throw new Error('maintenance replay state differs from receipt');return {...receipt,receipt_path:slash(receiptPath),replayed:true}}
@@ -102,3 +103,5 @@ export function applyTransformationPlan(root,plan,{expectedDigest,validate,after
   const receipt={schema_version:1,plan_digest:digest,kind:plan.kind,applied_at:new Date().toISOString(),operations:ops.map(({path,before_sha256,after_sha256,reason})=>({path,before_sha256,after_sha256,reason}))};safePath(root,receiptRel);const receiptDir=dirname(receiptPath);if(!existsSync(receiptDir)){mkdirSync(receiptDir,{recursive:true});createdDirs.push(receiptDir)};const fd=openSync(receiptPath,'wx');receiptCreated=true;try{writeFileSync(fd,JSON.stringify(receipt,null,2)+'\n')}finally{closeSync(fd)};return {...receipt,receipt_path:slash(receiptPath),replayed:false}
  }catch(error){for(const op of applied.reverse()){safePath(root,op.path);writeExact(op.absolute,op.before,[])};if(receiptCreated){safePath(root,receiptRel);rmSync(receiptPath)};rmSync(lock);for(const dir of createdDirs.reverse())try{rmdirSync(dir)}catch{};throw error}finally{if(existsSync(lock))rmSync(lock)}
 }
+
+export { safePath as safeMaintenancePath }

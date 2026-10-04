@@ -1,3 +1,4 @@
+import { inspectSkillFile } from './skill-paths.mjs'
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -56,8 +57,8 @@ const capability=(delivery,discovery,testedProduct,evidence)=>({
 const REGISTRY=[
   {id:'agents',name:'Generic AGENTS',files:['AGENTS.md'],dirs:[],support:'configured',skillDirs:['.agents/skills/holoself'],userSkillDirs:['.agents/skills/holoself'],...capability('file','configured','AGENTS.md-compatible hosts','Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.')},
   {id:'claude',name:'Claude Code',files:['CLAUDE.md'],dirs:['.claude'],support:'configured',skillDirs:['.claude/skills/holoself'],userSkillDirs:['.claude/skills/holoself'],...capability('file','configured','Claude Code','CLAUDE.md activation is generated and covered by filesystem tests; product discovery is not asserted without a recorded smoke test.')},
-  {id:'codex',name:'Codex',files:['CODEX.md','codex.md'],dirs:['.codex'],support:'configured',skillDirs:[],...capability('file','configured','Codex','Codex instruction pointer is generated; product discovery requires versioned smoke-test evidence.')},
-  {id:'pi',name:'Pi',files:['PI.md'],dirs:['.pi'],support:'configured',skillDirs:['.pi/skills/holoself'],userSkillDirs:['.pi/skills/holoself'],...capability('file','configured','Pi','PI.md and optional skill pointer are generated; product discovery requires versioned smoke-test evidence.')},
+  {id:'codex',name:'Codex',files:['CODEX.md','codex.md'],dirs:['.codex'],support:'configured',skillDirs:['.codex/skills/holoself'],userSkillDirs:['.codex/skills/holoself'],...capability('file','configured','Codex','Codex instruction pointer is generated; product discovery requires versioned smoke-test evidence.')},
+  {id:'pi',name:'Pi',files:['PI.md'],dirs:['.pi'],support:'configured',skillDirs:['.pi/skills/holoself'],userSkillDirs:['.pi/agent/skills/holoself'],...capability('file','configured','Pi','PI.md and optional skill pointer are generated; product discovery requires versioned smoke-test evidence.')},
   {id:'agy',name:'AGY',files:['AGY.md'],dirs:['.agy'],support:'generated-only',skillDirs:[],...capability('file','generated-only','AGY','Adapter file can be generated, but no product-level discovery evidence is bundled.')},
   {id:'antigravity',name:'Antigravity',files:['ANTIGRAVITY.md'],dirs:['.antigravity'],support:'generated-only',skillDirs:[],...capability('file','generated-only','Antigravity IDE','Adapter file can be generated, but IDE rule discovery must be configured and verified in product.')},
   {id:'gemini',name:'Gemini CLI',files:['GEMINI.md'],dirs:['.gemini'],support:'configured',skillDirs:[],...capability('file','configured','Gemini CLI','GEMINI.md pointer is generated; product discovery requires versioned smoke-test evidence.')},
@@ -68,13 +69,14 @@ const REGISTRY=[
 function slash(p){return p.replaceAll('\\','/')}
 function ensureDir(p){mkdirSync(p,{recursive:true})}
 function atomicWrite(p,content){ensureDir(dirname(p));const t=`${p}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;try{writeFileSync(t,content,'utf8');renameSync(t,p)}finally{if(existsSync(t))rmSync(t,{force:true})}}
+function pathExists(path){try{lstatSync(path);return true}catch(error){if(['ENOENT','ENOTDIR'].includes(error.code))return false;throw error}}
 function contained(root,path){const rel=relative(root,path);return rel===''||(!rel.startsWith(`..${sep}`)&&rel!=='..'&&!isAbsolute(rel))}
 export function safeProjectFile(project,rel,label='managed path'){
   if(typeof rel!=='string'||!rel.trim()||isAbsolute(rel))throw new Error(`${label} must be a project-relative path: ${rel}`)
   const lexicalRoot=resolve(project),target=resolve(lexicalRoot,rel);if(!contained(lexicalRoot,target))throw new Error(`${label} escapes project: ${rel}`)
   const rootReal=realpathSync(lexicalRoot);let current=target
   const chain=[];while(current!==lexicalRoot){chain.push(current);current=dirname(current)}
-  for(const item of chain.reverse()){if(!existsSync(item))continue;const stat=lstatSync(item);if(stat.isSymbolicLink())throw new Error(`${label} traverses symlink: ${item}`);const actual=realpathSync(item);if(!contained(rootReal,actual))throw new Error(`${label} escapes real project root: ${item}`)}
+  for(const item of chain.reverse()){if(!pathExists(item))continue;const stat=lstatSync(item);if(stat.isSymbolicLink())throw new Error(`${label} traverses symlink: ${item}`);const actual=realpathSync(item);if(!contained(rootReal,actual))throw new Error(`${label} escapes real project root: ${item}`)}
   return target
 }
 function evidence(project,adapter){return adapter.files.some(f=>existsSync(safeProjectFile(project,f,'adapter evidence')))||adapter.dirs.some(d=>existsSync(safeProjectFile(project,d,'adapter evidence')))}
@@ -86,13 +88,13 @@ function safeUserSkillFile(home,rel,label='user skill path'){
   if(typeof rel!=='string'||!rel.trim()||isAbsolute(rel))throw new Error(`${label} must be relative to the user skill home: ${rel}`)
   const root=resolve(home),target=resolve(root,rel);if(!contained(root,target))throw new Error(`${label} escapes user skill home: ${rel}`)
   let current=target;const chain=[];while(current!==root){chain.push(current);current=dirname(current)}
-  for(const item of chain.reverse()){if(!existsSync(item))continue;const stat=lstatSync(item);if(stat.isSymbolicLink())throw new Error(`${label} traverses symlink: ${item}`)}
+  for(const item of chain.reverse()){if(!pathExists(item))continue;const stat=lstatSync(item);if(stat.isSymbolicLink())throw new Error(`${label} traverses symlink: ${item}`)}
   return target
 }
 function userSkillTargets(ids,options={}){
   const selected=ids?.length?ids:['agents','claude','pi'],unknown=selected.filter(id=>!REGISTRY.some(a=>a.id===id));if(unknown.length)throw new Error(`unknown platform adapter: ${unique(unknown).join(', ')}`)
   const wanted=new Set(selected),home=skillHome(options),targets=[]
-  for(const adapter of REGISTRY.filter(a=>wanted.has(a.id)))for(const dir of adapter.userSkillDirs||[])targets.push({id:adapter.id,file:slash(join(dir,'SKILL.md')),path:safeUserSkillFile(home,join(dir,'SKILL.md'))})
+  for(const adapter of REGISTRY.filter(a=>wanted.has(a.id)))for(const dir of adapter.userSkillDirs||[])targets.push({id:adapter.id,file:slash(join(dir,'SKILL.md')),path:resolve(home,dir,'SKILL.md')})
   return targets
 }
 function instructionIdentity(project,rel){let path;try{path=safeProjectFile(project,rel,'instruction identity')}catch{const unsafe=resolve(project,rel);return `unsafe:${process.platform==='win32'?unsafe.toLowerCase():unsafe}`}const identity=existsSync(path)?realpathSync(path):resolve(path);return process.platform==='win32'?identity.toLowerCase():identity}
@@ -108,7 +110,8 @@ export function activationPlan(project,options={}){
   const mapped=adapters.map(a=>({id:a.id,name:a.name,support:a.support,delivery:a.delivery,discovery:a.discovery,tested_product:a.tested_product,tested_version:a.tested_version,evidence:a.evidence,last_verified:a.last_verified,detected:a.detected,file:slash(a.id==='agents'?canonical:(a.files.find(f=>existsSync(safeProjectFile(project,f,'adapter instructions')))||a.files[0])),skillDirs:a.skillDirs}))
   const install=options.installSkill||'auto',skills=[]
   if(!['none','global'].includes(install))for(const adapter of mapped)for(const dir of adapter.skillDirs){const file=slash(join(dir,'SKILL.md'));if(install==='project'||existsSync(dirname(safeProjectFile(project,file,'skill installation')))||adapter.id==='agents')skills.push({adapter:adapter.id,file})}
-  const globalSkills=install==='global'?userSkillTargets(unique(['agents',...mapped.map(x=>x.id)]),options).map(x=>({...x,status:inspectGlobalSkillPath(x.path).status})):[]
+  const providers=mapped.filter(adapter=>adapter.id!=='agents'&&REGISTRY.find(item=>item.id===adapter.id)?.userSkillDirs?.length).map(adapter=>adapter.id)
+  const globalSkills=install==='global'?userSkillTargets(providers.length?providers:['agents'],options).map(x=>({...x,status:inspectGlobalSkillPath(x,options).status})):[]
   return {canonical,adapters:mapped,skills,globalSkills,writes:unique(['.holoself/BOOTSTRAP.md','.holoself/runtime.json',...mapped.map(x=>x.file),...skills.map(x=>x.file)])}
 }
 function markerInfo(text,start=LINK_START,end=LINK_END){const starts=[];const ends=[];let i=-1;while((i=text.indexOf(start,i+1))>=0)starts.push(i);i=-1;while((i=text.indexOf(end,i+1))>=0)ends.push(i);if(!starts.length&&!ends.length)return {state:'inactive'};if(starts.length!==1||ends.length!==1||ends[0]<starts[0])return {state:'malformed'};const finish=ends[0]+end.length;return {state:'active',start:starts[0],end:finish,block:text.slice(starts[0],finish)}}
@@ -119,29 +122,37 @@ export function injectMarker(project,rel,section,dryRun=false){const p=safeProje
 export function removeMarker(project,rel,dryRun=false){const p=safeProjectFile(project,rel,'instruction removal'),state=managedMarkerState(p);if(state==='missing'||state==='inactive')return 'unchanged';if(state!=='active')throw new Error(`${p} has unsafe or malformed Holoself markers`);const old=readFileSync(p,'utf8'),info=markerInfo(old),next=(old.slice(0,info.start)+old.slice(info.end)).replace(/\n{3,}/g,'\n\n').trimEnd()+'\n';if(!dryRun)atomicWrite(p,next);return 'removed'}
 function normalizedSkill(text){return text.replaceAll('\r\n','\n').trim()}
 function contentHash(text){return createHash('sha256').update(text).digest('hex')}
-function inspectGlobalSkillPath(path){
-  if(!existsSync(path))return {status:'missing',kind:'missing',installed:false,contentHash:null}
-  if(lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())return {status:'unsafe',kind:'unsafe',installed:false,contentHash:null}
-  const text=readFileSync(path,'utf8'),hash=contentHash(text),state=skillState(path)
-  if(normalizedSkill(text)===normalizedSkill(PUBLIC_SKILL))return {status:'full-public-skill-current',kind:'full-public-skill',installed:true,contentHash:hash}
-  if(state==='active'&&text.includes(SKILL_BODY))return {status:'full-public-skill-compatible',kind:'full-public-skill',installed:true,contentHash:hash}
-  if(state==='malformed')return {status:'malformed',kind:'malformed',installed:false,contentHash:hash}
-  if(state==='active')return {status:'legacy-shim',kind:'legacy-shim',installed:false,contentHash:hash}
-  return {status:'unmanaged-collision',kind:'unknown',installed:false,contentHash:hash}
+function inspectGlobalSkillPath(target,options={}){
+  const location=inspectSkillFile(skillHome(options),target.file,{allowDirectoryLink:true}),remediation=location.external?'Update or undeploy this skill through its deployment manager; Holoself will not write through the link':location.status==='missing'?'Install the current public Holoself skill globally':'Review the unsafe skill path and restore regular ancestors; filesystem permissions remain enforced'
+  const detail={external:location.external,readOnly:location.external,linkPath:location.linkPath,reason:location.reason||null,remediation}
+  if(location.status!=='regular')return {...detail,status:location.status==='external-link'?'unsafe':location.status,kind:location.status,installed:false,contentHash:null}
+  let text;try{text=readFileSync(location.resolvedPath,'utf8')}catch(error){return {...detail,status:'unreadable',kind:'unreadable',installed:false,contentHash:null,reason:error.message}};const hash=contentHash(text)
+  if(location.external){
+    const current=text.replaceAll('\r\n','\n')===PUBLIC_SKILL
+    return {...detail,status:current?'full-public-skill-current':'external-content-mismatch',kind:current?'full-public-skill':'unknown',installed:current,contentHash:hash}
+  }
+  const state=skillState(location.resolvedPath)
+  if(normalizedSkill(text)===normalizedSkill(PUBLIC_SKILL))return {...detail,status:'full-public-skill-current',kind:'full-public-skill',installed:true,contentHash:hash,remediation:null}
+  if(state==='active'&&text.includes(SKILL_BODY))return {...detail,status:'full-public-skill-compatible',kind:'full-public-skill',installed:true,contentHash:hash,remediation:null}
+  if(state==='malformed')return {...detail,status:'malformed',kind:'malformed',installed:false,contentHash:hash}
+  if(state==='active')return {...detail,status:'legacy-shim',kind:'legacy-shim',installed:false,contentHash:hash}
+  return {...detail,status:'unmanaged-collision',kind:'unknown',installed:false,contentHash:hash,remediation:'Review the existing skill before replacement; unmanaged regular files require --force --yes'}
 }
 export function globalSkillStatus(options={}){
   const targets=userSkillTargets(options.platforms||[],options)
-  return {scope:'user',home:slash(skillHome(options)),installations:targets.map(target=>({...target,path:slash(target.path),...inspectGlobalSkillPath(target.path)}))}
+  return {scope:'user',home:slash(skillHome(options)),installations:targets.map(target=>({...target,path:slash(target.path),...inspectGlobalSkillPath(target,options)}))}
 }
 function snapshotAbsolute(paths){return paths.map(path=>({path,exists:existsSync(path),content:existsSync(path)&&lstatSync(path).isFile()?readFileSync(path):null}))}
 function rollbackAbsolute(snapshots){for(const item of snapshots.reverse()){try{if(item.exists&&item.content!==null)atomicWrite(item.path,item.content);else if(!item.exists&&existsSync(item.path))rmSync(item.path,{force:true})}catch{}}}
 export function installGlobalSkills(options={}){
   const status=globalSkillStatus(options),collisions=status.installations.filter(x=>!['missing','full-public-skill-current','full-public-skill-compatible'].includes(x.status))
+  const externalCollisions=collisions.filter(item=>item.external||['unsafe','unreadable'].includes(item.status));if(externalCollisions.length&&!options.dryRun)throw new Error(`global skill paths require deployment-manager repair: ${externalCollisions.map(item=>`${item.path}: ${item.remediation}`).join('; ')}`)
   if(collisions.length&&!options.force&&!options.dryRun)throw new Error(`global skill installation collision: ${collisions.map(x=>`${x.path}: ${x.status}`).join('; ')}; review and use --force --yes to replace`)
-  const canonicalHash=contentHash(PUBLIC_SKILL_RAW),plan={scope:'user',home:status.home,installations:status.installations.map(x=>({id:x.id,file:x.file,path:x.path,from:x.status,action:x.status==='full-public-skill-current'&&x.contentHash===canonicalHash?'unchanged':'write'}))}
+  const canonicalHash=contentHash(PUBLIC_SKILL_RAW),plan={scope:'user',home:status.home,installations:status.installations.map(x=>({id:x.id,file:x.file,path:x.path,from:x.status,action:x.external?(x.installed?'unchanged':'blocked'):['unsafe','unreadable'].includes(x.status)?'blocked':x.status==='full-public-skill-current'&&x.contentHash===canonicalHash?'unchanged':'write',readOnly:x.readOnly,remediation:x.remediation}))}
   if(options.dryRun)return plan
-  const writes=plan.installations.filter(x=>x.action==='write'),snapshots=snapshotAbsolute(writes.map(x=>x.path))
-  try{for(const item of writes)atomicWrite(item.path,PUBLIC_SKILL_RAW);return {...plan,installations:plan.installations.map(x=>({...x,result:x.action==='write'?'installed':'unchanged'}))}}catch(error){rollbackAbsolute(snapshots);throw error}
+  const blocked=plan.installations.filter(x=>x.action==='blocked');if(blocked.length)throw new Error(`global skill paths require deployment-manager repair: ${blocked.map(x=>`${x.path}: ${x.remediation}`).join('; ')}`)
+  const writes=plan.installations.filter(x=>x.action==='write'),snapshots=snapshotAbsolute(writes.map(x=>safeUserSkillFile(skillHome(options),x.file,'global skill write')))
+  try{for(const item of writes)atomicWrite(safeUserSkillFile(skillHome(options),item.file,'global skill write'),PUBLIC_SKILL_RAW);return {...plan,installations:plan.installations.map(x=>({...x,result:x.action==='write'?'installed':'unchanged'}))}}catch(error){rollbackAbsolute(snapshots);throw error}
 }
 function skillState(path){if(!existsSync(path))return 'missing';if(lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())return 'unsafe';const text=readFileSync(path,'utf8');if(normalizedSkill(text)===normalizedSkill(PUBLIC_SKILL))return 'public';return markerInfo(text,SKILL_START,SKILL_END).state}
 function generatedSkillOutside(text,info){const outside=normalizedSkill(text.slice(0,info.start)+text.slice(info.end));return [SKILL_FRONTMATTER,HISTORICAL_PUBLIC_FRONTMATTER,HISTORICAL_LINKED_PREFIX,LEGACY_SKILL.slice(0,LEGACY_SKILL.indexOf(SKILL_START))].map(normalizedSkill).includes(outside)}
@@ -170,7 +181,7 @@ export function activateProject(project,link,options={}){
     for(const adapter of plan.adapters){const section=adapter.file===plan.canonical?canonicalSection():overlaySection(plan.canonical);results.push({...adapter,result:injectMarker(project,adapter.file,section,false)})}
     for(const skill of plan.skills)skillResults.push({...skill,result:writeSkill(project,skill.file,false,options.force===true)})
     const installations=skillResults.map(x=>{const text=readFileSync(safeProjectFile(project,x.file,'skill runtime hash'),'utf8'),owned=x.result==='created'||previousUnchangedOwned.get(x.file)===true;return {id:x.adapter,file:x.file,status:'installed',kind:'full-public-skill',owned,contentHash:owned?contentHash(text):null}})
-    const globalInstallations=(plan.globalSkills||[]).map(x=>({id:x.id,file:x.file,status:x.status,kind:'full-public-skill',contentHash:inspectGlobalSkillPath(x.path).contentHash,verifiedAt:new Date().toISOString()}))
+    const globalInstallations=(plan.globalSkills||[]).map(x=>({id:x.id,file:x.file,status:x.status,kind:'full-public-skill',contentHash:inspectGlobalSkillPath(x,options).contentHash,readOnly:inspectGlobalSkillPath(x,options).readOnly,verifiedAt:new Date().toISOString()}))
     const runtime={schemaVersion:2,project:basename(project),mode:'live-link',defaultLens:link.default_lens,activatedAdapters:results.map(x=>{const text=readFileSync(safeProjectFile(project,x.file,'runtime hash'),'utf8');return {id:x.id,file:x.file,status:'active',markerHash:managedBlockHash(text),delivery:x.delivery,discovery:x.discovery,tested_product:x.tested_product,tested_version:x.tested_version,evidence:x.evidence,last_verified:x.last_verified}}),skillInstallPolicy:options.installSkill||'auto',skillInstallations:installations,globalSkillInstallations:globalInstallations,skillShims:installations.map(({contentHash,...x})=>({...x,status:'active'})),fallback:'.holoself/BOOTSTRAP.md',instructionEvidence:instructionEvidence(link),lastValidated:new Date().toISOString(),toolVersion:VERSION}
     atomicWrite(runtimeFile(project),JSON.stringify(runtime,null,2)+'\n');return {plan,results,skillResults,runtime}
   }catch(error){rollback(snapshots);throw error}
@@ -181,10 +192,12 @@ export function deactivateProject(project,options={}){const runtime=readRuntime(
 export function activationStatus(project,options={}){
   const runtime=readRuntime(project),bootstrap=existsSync(safeProjectFile(project,'.holoself/BOOTSTRAP.md','bootstrap status')),adapters=(runtime?.activatedAdapters||[]).map(a=>{const path=safeProjectFile(project,a.file,'activation status'),marker=managedMarkerState(path),actualHash=marker==='active'?managedBlockHash(readFileSync(path,'utf8')):null;return {...a,marker,actualHash,drift:marker==='active'&&a.markerHash!==actualHash}})
   const discovered=registryInstructionFiles(project).filter(file=>!adapters.some(a=>a.file===file)).map(file=>({file,marker:managedMarkerState(safeProjectFile(project,file,'activation discovery')),drift:true,status:'untracked'}));adapters.push(...discovered)
-  const installations=(runtime?.skillInstallations||runtime?.skillShims||[]).map(item=>{const path=safeProjectFile(project,item.file,'skill installation status'),marker=skillState(path),text=marker==='active'?readFileSync(path,'utf8'):'';return {...item,marker,kind:marker==='public'||(marker==='active'&&text.includes(SKILL_BODY))?'full-public-skill':marker==='active'?'legacy-shim':'unknown',installed:['active','public'].includes(marker)}})
+  const installations=(runtime?.skillInstallations||runtime?.skillShims||[]).map(item=>{const detail=inspectGlobalSkillPath(item,{skillHome:project});return {...item,...detail,marker:detail.status==='full-public-skill-current'?(detail.external?detail.status:'public'):detail.status==='full-public-skill-compatible'?'active':detail.status}})
   const globalIds=(runtime?.globalSkillInstallations||[]).map(x=>x.id),globalInstallations=runtime?.skillInstallPolicy==='global'?globalSkillStatus({...options,platforms:globalIds}).installations:[]
-  const projectSkillOverrides=runtime?.skillInstallPolicy==='global'?registrySkillFiles(project).filter(file=>existsSync(safeProjectFile(project,file,'project skill override discovery'))):[]
-  const active=bootstrap&&adapters.length>0&&adapters.every(a=>a.marker==='active'&&!a.drift);return {runtime,bootstrap,adapters,skillInstallations:installations,globalSkillInstallations:globalInstallations,projectSkillOverrides,active}
+  const projectSkillDeployments=registrySkillFiles(project).map(file=>({file,...inspectGlobalSkillPath({file},{skillHome:project})})).filter(item=>item.status!=='missing')
+  const projectSkillOverrideDetails=runtime?.skillInstallPolicy==='global'?projectSkillDeployments.filter(item=>!(item.external&&item.installed)).map(item=>({...item,remediation:item.external?item.remediation:'Review and relocate the local override, then rerun link doctor'})):[]
+  const projectSkillOverrides=projectSkillOverrideDetails.map(item=>item.file)
+  const active=bootstrap&&adapters.length>0&&adapters.every(a=>a.marker==='active'&&!a.drift);return {runtime,bootstrap,adapters,skillInstallations:installations,globalSkillInstallations:globalInstallations,projectSkillOverrides,projectSkillOverrideDetails,projectSkillDeployments,active}
 }
 
 function activeAdapterIds(project,runtime){

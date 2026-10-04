@@ -18,7 +18,8 @@
     "kind": {
       "enum": [
         "lens-migration",
-        "section-replacement"
+        "section-replacement",
+        "instruction-replacement"
       ]
     },
     "root": {
@@ -95,5 +96,38 @@
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "instruction-replacement"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "operations": {
+            "items": {
+              "properties": {
+                "path": {
+                  "enum": [
+                    "AGENTS.md",
+                    "CLAUDE.md"
+                  ]
+                },
+                "before": {
+                  "type": "string"
+                },
+                "after": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

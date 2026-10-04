@@ -18,3 +18,5 @@ Link configuration grants read access and optional proposals. Proposal validatio
 Lens references are structurally validated as lowercase kebab IDs of at most 40 characters; the CLI then semantically requires each ID to resolve from the selected self registry. Canonical Markdown frontmatter is validated by CLI rules and documented by the standalone metadata schema. Legacy `visibility` and `public_safe` remain readable during migration, but new `access_lenses` metadata requires disclosure, sensitivity, and document role.
 
 Project lens choices use [lens-bindings.schema.json](../../schemas/lens-bindings.schema.json). Exact reviewed maintenance plans use [maintenance-plan.schema.json](../../schemas/maintenance-plan.schema.json).
+
+Maintenance plan kinds are `lens-migration`, `section-replacement`, and `instruction-replacement`. The CLI additionally enforces the allowed roots, exact target types, stale-byte checks and protected archives for each kind.
