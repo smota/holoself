@@ -4,6 +4,14 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+## [0.10.1] — 2026-10-04
+
+- Recognize exact current public skills deployed through terminal directory links as external, read-only installations, while preserving strict managed writes and permission checks.
+- Correct Codex and Pi global skill paths and avoid requiring a separate generic global skill when providers are selected.
+- Add explicit reviewed root instruction replacement plans and strengthen cleanup path checks, receipt replay and recoverable rollback.
+
+Existing linked projects can preview and apply link repair to reconcile runtime activation. See [release notes](docs/releases/0.10.1.md).
+
 ## [0.10.0] — 2026-10-03
 
 - Keep context, search and indexing restricted to self records; domains own their indexing.
