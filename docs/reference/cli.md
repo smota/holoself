@@ -127,3 +127,12 @@ node bin/holoself.mjs knowledge transform --root C:/Example/self-copy --apply C:
 ```
 
 Migration leaves legacy project link choices untouched until explicit `link repair --project <project> --yes --no-activate`. Repair imports configured choices into bindings and preserves the attestation salt. Conflicting existing choices require an explicit reviewed `--lens` selection. Apply refuses stale bytes, symlink ancestors, overlapping targets, protected archives, and a busy authority lock. Partial failure restores changed files and removes files/directories created by the transaction; an empty `.holoself` authority directory may remain. A receipt is written only after validation. This transaction protects recoverable operation failures; it does not provide crash recovery after process or machine termination.
+
+Root instruction changes use an explicit plan kind. Supply exact full replacement text for an existing `AGENTS.md` or `CLAUDE.md`:
+
+```bash
+holoself knowledge transform --root <self-root> --plan-kind instruction-replacement --replacements <changes.json> --output <plan.json>
+holoself knowledge transform --root <self-root> --apply <plan.json> --digest <sha256> --yes
+```
+
+The ordinary section plan protects root instruction files. Instruction plans protect all other targets and cannot create or delete files. Cleanup archives profile/context/topics/reference/me Markdown to its exact `history/<source>` destination and checks ancestors before moves and rollback. Existing cleanup receipts support replay only while the archived bytes match. See [maintenance and external deployment safety](../decisions/external-skill-deployments.md).

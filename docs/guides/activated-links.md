@@ -80,3 +80,18 @@ holoself context --project . --snapshot --adapter generic --yes
 ```
 
 This writes `.holoself/runtime/context-packet.md`. It is generated, potentially sensitive, and stale until refreshed. Markdown in canonical self remains source of truth.
+
+## Skills Manager deployments
+
+A directory junction or symlink at a known `holoself` skill location can be inspected as an external deployment when it contains the exact current public skill and its source/target paths pass the strict checks. It is reported as current and read-only. Holoself does not update or remove that deployment, even with `--force`; use its deployment manager. Identical external local deployments appear in diagnostics without causing an override conflict. Changed, missing, inaccessible, or linked ancestor paths remain degraded with a corrective action.
+
+Codex global skills live under `.codex/skills`, Claude under `.claude/skills`, and Pi under `.pi/agent/skills`. Pi's project skills remain under `.pi/skills`. A selected Codex/Claude/Pi provider supplies the global skill; the generic `AGENTS.md` instruction fallback remains in the project. For example, after deploying the current public skill globally through your manager:
+
+```bash
+holoself skill status --scope user --platform codex
+holoself link repair --project . --activate agents,codex --install-skill global --dry-run
+holoself link repair --project . --activate agents,codex --install-skill global --yes
+holoself link doctor --project .
+```
+
+Review the dry-run before applying. Diagnostic artifact validation does not prove native host discovery. Read the [external deployment decision](../decisions/external-skill-deployments.md) for the path, ownership, and compatibility contract.

@@ -113,3 +113,5 @@ The D00–D03 evidence documents below record earlier research and experiments. 
 Compatibility entry points remain at [architecture.md](architecture.md), [linked-ecosystem.md](linked-ecosystem.md), [migration.md](migration.md), [ownership.md](ownership.md), and [usage.md](usage.md).
 
 - [Coaching course correction and validation](reports/coaching-course-correction.md): current local CLI delivery, retired experimental scope, and review evidence.
+
+- [External public skill deployments](decisions/external-skill-deployments.md): read-only skills-manager compatibility, provider paths, diagnostics, and maintenance safety.

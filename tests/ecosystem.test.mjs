@@ -267,7 +267,7 @@ test('user-scoped skill install is explicit, inspectable, and installs the canon
   assert.equal(preview.installation_plan.installations.length,3);assert.ok(preview.installation_plan.installations.every(x=>x.action==='write'))
   await assert.rejects(access(join(skillHome,'.agents','skills','holoself','SKILL.md')))
   await run(['skill','install','--scope','user','--skill-home',skillHome,'--yes'])
-  for(const dir of ['.agents','.claude','.pi'])assert.equal((await readFile(join(skillHome,dir,'skills','holoself','SKILL.md'),'utf8')).replaceAll('\r\n','\n'),canonical)
+  for(const dir of ['.agents','.claude','.pi/agent'])assert.equal((await readFile(join(skillHome,dir,'skills','holoself','SKILL.md'),'utf8')).replaceAll('\r\n','\n'),canonical)
   const status=JSON.parse(await capture(()=>run(['skill','status','--scope','user','--skill-home',skillHome])));assert.ok(status.installations.every(x=>x.status==='full-public-skill-current'))
 })
 
@@ -282,9 +282,9 @@ test('global policy validates user skills and creates no project skill override'
 })
 
 test('global migration removes owned and untracked generated project skills transactionally',async()=>{
-  const self=await temp(),project=await temp(),skillHome=await temp();await run(['init','--root',self]);await run(['skill','install','--scope','user','--skill-home',skillHome,'--yes']);await run(['link','add','--project',project,'--self',self,'--activate','all','--install-skill','project','--yes'])
+  const self=await temp(),project=await temp(),skillHome=await temp();await run(['init','--root',self]);await run(['skill','install','--scope','user','--skill-home',skillHome,'--platform','agents','--platform','claude','--platform','codex','--platform','pi','--yes']);await run(['link','add','--project',project,'--self',self,'--activate','all','--install-skill','project','--yes'])
   const runtimePath=join(project,'.holoself','runtime.json');await rm(runtimePath)
-  const preview=JSON.parse(await capture(()=>run(['link','skill','migrate-global','--project',project,'--skill-home',skillHome,'--dry-run'])));assert.equal(preview.migration_plan.project_cleanup.length,3);assert.ok(preview.migration_plan.project_cleanup.every(x=>x.action==='delete'))
+  const preview=JSON.parse(await capture(()=>run(['link','skill','migrate-global','--project',project,'--skill-home',skillHome,'--dry-run'])));assert.equal(preview.migration_plan.project_cleanup.length,4);assert.ok(preview.migration_plan.project_cleanup.every(x=>x.action==='delete'))
   await run(['link','skill','migrate-global','--project',project,'--skill-home',skillHome,'--yes'])
   for(const dir of ['.agents','.claude','.pi'])await assert.rejects(access(join(project,dir,'skills','holoself','SKILL.md')))
   const runtime=JSON.parse(await readFile(runtimePath,'utf8'));assert.equal(runtime.skillInstallPolicy,'global');assert.equal(runtime.globalSkillInstallations.length,3)
