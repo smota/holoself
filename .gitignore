@@ -3,3 +3,20 @@ node_modules/
 .holoself/
 .env*
 scratch/
+
+# Local Pi agent state
+.pi/
+.pi-subagents/
+
+# Local editor and agent integrations
+.obsidian/
+.pair/
+.agents/
+.agy/
+.grok/
+.claude/
+.codex/
+.copilot/
+.gemini/
+.codebase-memory/
+.kimi-code/

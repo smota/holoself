@@ -111,6 +111,7 @@ The D00–D03 evidence documents below record earlier research and experiments. 
 - [Development](contributing/development.md)
 - [Release process](contributing/releases.md)
 - [Status and roadmap](contributing/status-and-roadmap.md)
+- [Holoself consolidation backlog](backlog/2026-10-03-holoself-consolidation.md)
 
 Compatibility entry points remain at [architecture.md](architecture.md), [linked-ecosystem.md](linked-ecosystem.md), [migration.md](migration.md), [ownership.md](ownership.md), and [usage.md](usage.md).
 
