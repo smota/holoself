@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/acceptance-contract.schema.json",
+  "title": "AgentFlow AcceptanceContract",
+  "type": "object",
+  "required": [
+    "version",
+    "type",
+    "id",
+    "subject",
+    "ownerRole",
+    "deliveryRole",
+    "collaborationClass",
+    "candidateDigest",
+    "criteria",
+    "councilPolicy",
+    "controls",
+    "digest"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "type": { "const": "acceptance-contract" },
+    "id": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "minLength": 1 },
+    "ownerRole": { "type": "string", "pattern": "^agentflow:" },
+    "deliveryRole": { "type": "string", "pattern": "^agentflow:" },
+    "collaborationClass": { "enum": ["linear", "bilateral", "council", "human-gated"] },
+    "candidateDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "verification", "required"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "verification": { "enum": ["deterministic", "semantic"] },
+          "required": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "councilPolicy": {
+      "type": "object",
+      "required": ["required", "seats", "decisionOwner"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "seats": { "type": "array", "items": { "type": "object" } },
+        "decisionOwner": { "type": "string", "pattern": "^agentflow:" }
+      },
+      "additionalProperties": false
+    },
+    "controls": { "type": "array", "items": { "type": "string" } },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

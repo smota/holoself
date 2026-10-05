@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/acceptance-decision.schema.json",
+  "title": "AgentFlow AcceptanceDecision",
+  "type": "object",
+  "required": [
+    "version",
+    "type",
+    "id",
+    "handoffDigest",
+    "contractDigest",
+    "deliveryDigest",
+    "decidedByRole",
+    "state",
+    "deterministicReport",
+    "semanticFindings",
+    "councilSynthesisDigest",
+    "conditions",
+    "humanApproval",
+    "provenance",
+    "digest"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "type": { "const": "acceptance-decision" },
+    "id": { "type": "string", "minLength": 1 },
+    "handoffDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "contractDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "deliveryDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "decidedByRole": { "type": "string", "pattern": "^agentflow:" },
+    "state": { "enum": ["accepted", "accepted-with-conditions", "rework-required", "rejected"] },
+    "deterministicReport": { "$ref": "delivery-verification.schema.json" },
+    "semanticFindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["criterionId", "status", "reason"],
+        "properties": {
+          "criterionId": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["pass", "fail"] },
+          "reason": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "councilSynthesisDigest": { "type": ["string", "null"] },
+    "conditions": { "type": "array", "items": { "type": "string" } },
+    "humanApproval": {
+      "type": ["object", "null"],
+      "required": ["approved", "actor", "actorType", "deliveryDigest", "evidenceRef"],
+      "properties": {
+        "approved": { "type": "boolean" },
+        "actor": { "type": "string", "minLength": 1 },
+        "actorType": { "const": "human" },
+        "deliveryDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "evidenceRef": { "$ref": "artifact-ref.schema.json" }
+      },
+      "additionalProperties": false
+    },
+    "provenance": { "type": "object" },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

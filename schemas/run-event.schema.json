@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "run-event",
+  "type": "object",
+  "required": [
+    "version",
+    "type",
+    "digest",
+    "runId",
+    "id",
+    "previousDigest",
+    "generation",
+    "kind",
+    "payload",
+    "timestamp"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "type": {
+      "const": "run-event"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "previousDigest": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "kind": {
+      "enum": [
+        "started",
+        "contract-frozen",
+        "candidate",
+        "observation",
+        "budget-admission",
+        "advanced",
+        "returned",
+        "rework-resolved",
+        "paused",
+        "blocked",
+        "resumed",
+        "operation",
+        "completed",
+        "cancelled",
+        "checkpoint"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": true
+}

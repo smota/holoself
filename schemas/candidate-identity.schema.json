@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "candidate-identity",
+  "type": "object",
+  "required": ["version", "type", "digest", "inputs", "context"],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "type": {
+      "const": "candidate-identity"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "inputs": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "context": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

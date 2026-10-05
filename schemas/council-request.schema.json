@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/council-request.schema.json",
+  "title": "AgentFlow CouncilRequest",
+  "type": "object",
+  "required": [
+    "version",
+    "type",
+    "id",
+    "subject",
+    "ownerRole",
+    "question",
+    "evidenceDigest",
+    "seats",
+    "decisionPolicy",
+    "digest"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "type": { "const": "council-request" },
+    "id": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "minLength": 1 },
+    "ownerRole": { "type": "string", "pattern": "^agentflow:" },
+    "question": { "type": "string", "minLength": 1 },
+    "evidenceDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "seats": { "type": "array", "minItems": 1, "items": { "type": "object" } },
+    "decisionPolicy": { "const": "owner-decides-objections-resolved" },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

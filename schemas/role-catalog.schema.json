@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/role-catalog.schema.json",
+  "title": "AgentFlow role catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "namespace",
+    "identityFormat",
+    "collaborationProtocol",
+    "roles",
+    "transitions",
+    "sidecarLinks",
+    "invariants"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "namespace": { "const": "agentflow" },
+    "identityFormat": { "const": "<namespace>:<role>" },
+    "collaborationProtocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acceptanceOwner",
+        "deliveryOwner",
+        "decisionPolicy",
+        "classes",
+        "deterministicFirst",
+        "councilIsAdvisory"
+      ],
+      "properties": {
+        "acceptanceOwner": { "const": "handover-sender" },
+        "deliveryOwner": { "const": "handover-receiver" },
+        "decisionPolicy": { "const": "owner-decides-objections-resolved" },
+        "classes": { "const": ["linear", "bilateral", "council", "human-gated"] },
+        "deterministicFirst": { "const": true },
+        "councilIsAdvisory": { "const": true }
+      }
+    },
+    "roles": { "type": "array", "minItems": 1, "items": { "$ref": "role-definition.schema.json" } },
+    "transitions": { "type": "array", "items": { "$ref": "#/$defs/rolePair" } },
+    "sidecarLinks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "artifact"],
+        "properties": {
+          "from": { "$ref": "#/$defs/qualifiedRole" },
+          "to": { "$ref": "#/$defs/qualifiedRole" },
+          "artifact": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "qualifiedRole": { "type": "string", "pattern": "^agentflow:[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "rolePair": {
+      "type": "array",
+      "prefixItems": [{ "$ref": "#/$defs/qualifiedRole" }, { "$ref": "#/$defs/qualifiedRole" }],
+      "minItems": 2,
+      "maxItems": 2
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/execution-intent.schema.json",
+  "title": "AgentFlow ExecutionIntent",
+  "type": "object",
+  "required": ["version", "subject", "requirements", "controls", "requiredFacets", "limits"],
+  "properties": {
+    "version": { "const": 1 },
+    "subject": { "type": ["string", "null"] },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "required", "fallback", "parameters"],
+        "properties": {
+          "id": {
+            "enum": [
+              "plan-before-edit",
+              "delegated-work",
+              "parallel-fanout",
+              "isolated-workspace",
+              "background-execution",
+              "structured-result",
+              "bounded-loop",
+              "workflow-orchestration"
+            ]
+          },
+          "required": { "type": "boolean" },
+          "fallback": { "type": ["string", "null"] },
+          "parameters": { "type": "object" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "controls": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "sandbox",
+          "branch-protection",
+          "human-approval",
+          "credential-isolation",
+          "network-policy",
+          "single-writer",
+          "review-independence",
+          "authority-may-only-narrow"
+        ]
+      }
+    },
+    "requiredFacets": {
+      "type": "array",
+      "items": {
+        "enum": ["inventory", "project-adapters", "execution", "workspace", "evidence", "lifecycle"]
+      }
+    },
+    "limits": { "type": "object" }
+  },
+  "additionalProperties": false
+}

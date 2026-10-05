@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/council-advice.schema.json",
+  "title": "AgentFlow CouncilAdvice",
+  "type": "object",
+  "required": [
+    "version",
+    "type",
+    "id",
+    "requestDigest",
+    "role",
+    "position",
+    "evidenceRefs",
+    "objections",
+    "confidence",
+    "outsideScope",
+    "digest"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "type": { "const": "council-advice" },
+    "id": { "type": "string", "minLength": 1 },
+    "requestDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "role": { "type": "string", "pattern": "^agentflow:" },
+    "position": { "type": "string", "minLength": 1 },
+    "evidenceRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } },
+    "objections": { "type": "array", "items": { "type": "object" } },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "outsideScope": { "type": "array", "items": { "type": "string" } },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

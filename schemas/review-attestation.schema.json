@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/review-attestation.schema.json",
+  "title": "AgentFlow review attestation",
+  "type": "object",
+  "required": [
+    "version",
+    "subject",
+    "reviewedDigest",
+    "reviewer",
+    "decision",
+    "timestamp",
+    "findings"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "subject": { "type": "string", "minLength": 1 },
+    "reviewedDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "reviewer": {
+      "type": "object",
+      "required": ["platform", "executor", "independence"],
+      "properties": {
+        "platform": { "type": "string", "minLength": 1 },
+        "executor": { "type": "string", "minLength": 1 },
+        "model": { "type": "string" },
+        "independence": { "enum": ["independent", "self-review", "human-gate"] }
+      },
+      "additionalProperties": false
+    },
+    "decision": { "enum": ["agree", "changes-requested", "blocked"] },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "findings": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

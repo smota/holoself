@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/collaboration-intent.schema.json",
+  "title": "AgentFlow CollaborationIntent",
+  "type": "object",
+  "required": [
+    "version",
+    "mode",
+    "reason",
+    "profile",
+    "participantRoles",
+    "writerPolicy",
+    "humanGate",
+    "execution",
+    "fallback"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "issueNumber": { "type": ["integer", "null"] },
+    "mode": {
+      "enum": [
+        "auto-minimal",
+        "single-agent",
+        "advisory",
+        "sparring",
+        "council",
+        "parallel-discovery",
+        "spike",
+        "human-gated"
+      ]
+    },
+    "reason": { "type": "string", "minLength": 1 },
+    "profile": { "type": "string", "minLength": 1 },
+    "risk": { "type": "string" },
+    "effort": { "type": "string" },
+    "uncertainty": { "type": "string" },
+    "changeSurface": { "type": "array", "items": { "type": "string" } },
+    "participantRoles": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "writerPolicy": { "const": "single-writer" },
+    "humanGate": { "type": "boolean" },
+    "synthesisRequired": { "type": "boolean" },
+    "execution": { "$ref": "execution-intent.schema.json" },
+    "fallback": {
+      "type": "object",
+      "required": ["allowed", "modes"],
+      "properties": {
+        "allowed": { "type": "boolean" },
+        "modes": { "type": "array", "items": { "enum": ["sequential", "manual"] } }
+      }
+    }
+  },
+  "additionalProperties": false
+}

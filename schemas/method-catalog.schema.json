@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/method-catalog.schema.json",
+  "title": "AgentFlow method catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "namespace", "methods"],
+  "properties": {
+    "version": { "const": 1 },
+    "namespace": { "const": "agentflow:method" },
+    "methods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "role", "description", "parameters", "adds"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9.-]+:method:[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "role": { "type": "string", "pattern": "^agentflow:[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "description": { "type": "string", "minLength": 1 },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/parameter" }
+          },
+          "adds": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["inputs", "outputs", "evidenceFields", "behaviorSteps"],
+            "properties": {
+              "inputs": { "$ref": "#/$defs/strings" },
+              "outputs": { "$ref": "#/$defs/strings" },
+              "evidenceFields": { "$ref": "#/$defs/strings" },
+              "behaviorSteps": { "$ref": "#/$defs/strings" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "strings": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "parameter": {
+      "type": "object",
+      "required": ["type", "default"],
+      "properties": {
+        "type": { "enum": ["boolean", "string", "integer", "number"] },
+        "default": {},
+        "enum": { "type": "array" },
+        "minimum": { "type": "number" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/source-adapter.schema.json",
+  "title": "AgentFlow SourceAdapter descriptor",
+  "type": "object",
+  "required": ["version", "id", "capabilities"],
+  "properties": {
+    "version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "read-artifacts",
+          "read-lifecycle",
+          "mutate-comments",
+          "mutate-artifacts",
+          "mutate-lifecycle"
+        ]
+      },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}

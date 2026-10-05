@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/provider-binding.schema.json",
+  "title": "AgentFlow ProviderBinding",
+  "type": "object",
+  "required": [
+    "version",
+    "status",
+    "provider",
+    "platform",
+    "facets",
+    "intentResolutions",
+    "availability",
+    "degraded",
+    "reason",
+    "attempts"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "status": { "enum": ["bound", "degraded", "blocked"] },
+    "provider": { "type": ["string", "null"] },
+    "platform": { "type": ["string", "null"] },
+    "facets": {
+      "type": "array",
+      "items": {
+        "enum": ["inventory", "project-adapters", "execution", "workspace", "evidence", "lifecycle"]
+      }
+    },
+    "intentResolutions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "required", "parameters", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "required": { "type": "boolean" },
+          "parameters": { "type": "object" },
+          "fallback": { "type": ["string", "null"] },
+          "implementation": { "enum": ["native", "plugin", "adapter", "emulated", "manual"] },
+          "fidelity": { "enum": ["full", "partial", "degraded"] },
+          "evidence": { "enum": ["probed", "contract-tested", "self-declared"] },
+          "limits": { "type": "object" },
+          "status": { "enum": ["satisfied", "degraded", "skipped", "blocked"] },
+          "reason": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "executionTarget": { "type": ["string", "null"] },
+    "transport": { "type": ["string", "null"] },
+    "delegationBoundary": { "type": ["string", "null"] },
+    "availability": { "enum": ["available", "unavailable", "unknown", "configured", "manual"] },
+    "degraded": { "type": "boolean" },
+    "reason": { "type": "string", "minLength": 1 },
+    "attempts": { "type": "array" },
+    "metadata": { "type": "object" }
+  },
+  "additionalProperties": false
+}

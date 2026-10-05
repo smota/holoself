@@ -1,0 +1,469 @@
+{
+  "version": 1,
+  "namespace": "agentflow",
+  "identityFormat": "<namespace>:<role>",
+  "collaborationProtocol": {
+    "acceptanceOwner": "handover-sender",
+    "deliveryOwner": "handover-receiver",
+    "decisionPolicy": "owner-decides-objections-resolved",
+    "classes": ["linear", "bilateral", "council", "human-gated"],
+    "deterministicFirst": true,
+    "councilIsAdvisory": true
+  },
+  "roles": [
+    {
+      "slug": "product-manager",
+      "qualifiedName": "agentflow:product-manager",
+      "label": "Product manager",
+      "kind": "lifecycle",
+      "phase": 0,
+      "source": "roles/product-manager",
+      "purpose": "Define the problem, intended outcome, value, priority, and release intent without prescribing the solution method.",
+      "owns": ["product.problem", "product.outcome", "product.release-intent"],
+      "contributesTo": ["analysis.scope", "delivery.release-readiness"],
+      "doesNotOwn": ["analysis.requirements", "architecture.design", "delivery.implementation"],
+      "inputs": ["user-request", "product-context"],
+      "outputs": ["problem-statement", "outcome-definition", "release-intent"],
+      "authority": {
+        "defaultBoundary": "propose",
+        "maximumBoundary": "propose",
+        "mutationScopes": ["goal-records"]
+      },
+      "behavior": {
+        "steps": [
+          "frame the problem and affected users",
+          "define observable outcomes and priority"
+        ],
+        "failurePolicy": "block on an untestable outcome or unresolved product authority"
+      },
+      "completionCriteria": [
+        "problem and outcome are explicit",
+        "release intent is recorded or declared not applicable"
+      ],
+      "acceptsFrom": [],
+      "sendsTo": ["agentflow:analyst"],
+      "collaboration": {
+        "allowedModes": ["single-agent", "advisory", "council"],
+        "independence": "not-required"
+      },
+      "extensionPoints": ["methodPlays", "templates", "validators", "evidenceFields"]
+    },
+    {
+      "slug": "analyst",
+      "qualifiedName": "agentflow:analyst",
+      "label": "Analyst",
+      "kind": "lifecycle",
+      "phase": 1,
+      "source": "roles/analyst",
+      "purpose": "Turn product intent or a request into testable requirements, acceptance criteria, assumptions, and a bounded scope.",
+      "owns": ["analysis.requirements", "analysis.acceptance-criteria", "analysis.scope"],
+      "contributesTo": ["architecture.constraints", "assurance.validation-plan"],
+      "doesNotOwn": ["product.priority", "architecture.design", "delivery.implementation"],
+      "inputs": ["problem-statement", "outcome-definition", "user-request"],
+      "outputs": ["requirements", "acceptance-criteria", "scope-boundary", "open-questions"],
+      "authority": {
+        "defaultBoundary": "propose",
+        "maximumBoundary": "propose",
+        "mutationScopes": ["issue-requirements"]
+      },
+      "behavior": {
+        "steps": [
+          "separate facts, assumptions, and questions",
+          "express acceptance in observable terms"
+        ],
+        "failurePolicy": "block or return when scope cannot be made testable"
+      },
+      "completionCriteria": [
+        "acceptance criteria are testable",
+        "in-scope and out-of-scope boundaries are explicit"
+      ],
+      "acceptsFrom": ["agentflow:product-manager"],
+      "sendsTo": ["agentflow:architect"],
+      "collaboration": {
+        "allowedModes": ["single-agent", "advisory", "parallel-discovery"],
+        "independence": "not-required"
+      },
+      "extensionPoints": ["methodPlays", "templates", "validators", "evidenceFields"]
+    },
+    {
+      "slug": "architect",
+      "qualifiedName": "agentflow:architect",
+      "label": "Architect",
+      "kind": "lifecycle",
+      "phase": 2,
+      "source": "roles/architect",
+      "purpose": "Define the technical design, constraints, quality attributes, risks, tradeoffs, and workflow profile.",
+      "owns": ["architecture.design", "architecture.risk", "architecture.workflow-profile"],
+      "contributesTo": ["delivery.plan", "assurance.review"],
+      "doesNotOwn": [
+        "analysis.acceptance-criteria",
+        "delivery.implementation",
+        "assurance.test-verdict"
+      ],
+      "inputs": ["requirements", "acceptance-criteria", "scope-boundary", "repository-context"],
+      "outputs": [
+        "technical-design",
+        "risk-register",
+        "workflow-profile",
+        "architecture-decisions"
+      ],
+      "authority": {
+        "defaultBoundary": "propose",
+        "maximumBoundary": "propose",
+        "mutationScopes": ["architecture-records"]
+      },
+      "behavior": {
+        "steps": ["evaluate constraints and alternatives", "select a design and expose tradeoffs"],
+        "failurePolicy": "block on an unsafe or undecidable architecture boundary"
+      },
+      "completionCriteria": [
+        "selected design satisfies acceptance and constraints",
+        "material risks and mitigations are recorded"
+      ],
+      "acceptsFrom": ["agentflow:analyst"],
+      "sendsTo": ["agentflow:implementation-planner"],
+      "collaboration": {
+        "allowedModes": ["single-agent", "advisory", "council"],
+        "independence": "recommended-for-high-risk"
+      },
+      "extensionPoints": ["methodPlays", "templates", "validators", "evidenceFields"]
+    },
+    {
+      "slug": "implementation-planner",
+      "qualifiedName": "agentflow:implementation-planner",
+      "label": "Implementation planner",
+      "kind": "lifecycle",
+      "phase": 3,
+      "source": "roles/implementation-planner",
+      "purpose": "Translate the approved design into an executable, ordered implementation, validation, documentation, and rollback plan.",
+      "owns": ["delivery.plan", "assurance.validation-plan", "delivery.rollback-plan"],
+      "contributesTo": ["delivery.implementation", "documentation.change-plan"],
+      "doesNotOwn": ["architecture.design", "delivery.implementation", "assurance.test-verdict"],
+      "inputs": ["technical-design", "risk-register", "acceptance-criteria", "repository-context"],
+      "outputs": ["implementation-plan", "validation-plan", "documentation-plan", "rollback-plan"],
+      "authority": {
+        "defaultBoundary": "propose",
+        "maximumBoundary": "propose",
+        "mutationScopes": ["planning-evidence"]
+      },
+      "behavior": {
+        "steps": [
+          "map changes to owned files and contracts",
+          "order implementation and validation with stop conditions"
+        ],
+        "failurePolicy": "return to architect when the design is not executable"
+      },
+      "completionCriteria": [
+        "files, tests, documentation, and rollback are covered",
+        "dependencies and stop conditions are explicit"
+      ],
+      "acceptsFrom": ["agentflow:architect", "agentflow:developer"],
+      "sendsTo": ["agentflow:developer"],
+      "collaboration": {
+        "allowedModes": ["single-agent", "advisory"],
+        "independence": "not-required"
+      },
+      "extensionPoints": ["methodPlays", "templates", "validators", "evidenceFields"]
+    },
+    {
+      "slug": "developer",
+      "qualifiedName": "agentflow:developer",
+      "label": "Developer",
+      "kind": "lifecycle",
+      "phase": 4,
+      "source": "roles/developer",
+      "purpose": "Implement the approved plan within the declared scope and produce truthful change evidence.",
+      "owns": ["delivery.implementation", "delivery.change-evidence"],
+      "contributesTo": ["documentation.implementation-coupled", "assurance.testability"],
+      "doesNotOwn": ["architecture.design", "assurance.test-verdict", "assurance.review-verdict"],
+      "inputs": [
+        "implementation-plan",
+        "technical-design",
+        "acceptance-criteria",
+        "repository-policy"
+      ],
+      "outputs": ["implementation", "change-evidence", "implementation-notes"],
+      "authority": {
+        "defaultBoundary": "mutate-worktree",
+        "maximumBoundary": "mutate-worktree",
+        "mutationScopes": ["approved-plan-files"]
+      },
+      "behavior": {
+        "steps": [
+          "implement the smallest complete approved change",
+          "self-check scope and evidence before handoff"
+        ],
+        "failurePolicy": "return to planner for a planning defect and stop on unsafe scope expansion"
+      },
+      "completionCriteria": [
+        "implementation matches the plan",
+        "changed behavior and known limitations are recorded"
+      ],
+      "acceptsFrom": [
+        "agentflow:implementation-planner",
+        "agentflow:reviewer",
+        "agentflow:technical-writer",
+        "agentflow:pr-readiness"
+      ],
+      "sendsTo": ["agentflow:tester", "agentflow:implementation-planner"],
+      "collaboration": {
+        "allowedModes": ["single-agent", "advisory", "spike"],
+        "independence": "single-writer-required"
+      },
+      "extensionPoints": ["methodPlays", "templates", "validators", "evidenceFields"]
+    },
+    {
+      "slug": "tester",
+      "qualifiedName": "agentflow:tester",
+      "label": "Tester",
+      "kind": "lifecycle",
+      "phase": 5,
+      "source": "roles/tester",
+      "purpose": "Execute deterministic verification against acceptance criteria and classify failures without repairing the candidate.",
+      "owns": [
+        "assurance.test-verdict",
+        "assurance.validation-evidence",
+        "assurance.coverage-notes"
+      ],
+      "contributesTo": ["assurance.review", "delivery.follow-up"],
+      "doesNotOwn": ["delivery.implementation", "assurance.review-verdict", "product.acceptance"],
+      "inputs": ["implementation", "acceptance-criteria", "validation-plan", "change-evidence"],
+      "outputs": [
+        "test-verdict",
+        "validation-evidence",
+        "coverage-notes",
+        "failure-classification"
+      ],
+      "authority": {
+        "defaultBoundary": "observe",
+        "maximumBoundary": "observe",
+        "mutationScopes": ["none"]
+      },
+      "behavior": {
+        "steps": [
+          "run the planned deterministic checks",
+          "classify failures as candidate, environment, or test defects"
+        ],
+        "failurePolicy": "return a failing verdict; never patch the candidate in the tester role"
+      },
+      "completionCriteria": [
+        "all applicable checks have a result",
+        "failures and untested areas are explicit"
+      ],
+      "acceptsFrom": ["agentflow:developer"],
+      "sendsTo": ["agentflow:reviewer"],
+      "collaboration": {
+        "allowedModes": ["single-agent", "parallel-discovery"],
+        "independence": "read-only-required"
+      },
+      "extensionPoints": ["methodPlays", "sidecars", "validators", "evidenceFields"]
+    },
+    {
+      "slug": "reviewer",
+      "qualifiedName": "agentflow:reviewer",
+      "label": "Reviewer",
+      "kind": "lifecycle",
+      "phase": 6,
+      "source": "roles/reviewer",
+      "purpose": "Issue an evidence-bound correctness, risk, maintainability, and policy verdict independently where required.",
+      "owns": [
+        "assurance.review-verdict",
+        "assurance.review-findings",
+        "assurance.independence-boundary"
+      ],
+      "contributesTo": ["delivery.follow-up", "delivery.merge-readiness"],
+      "doesNotOwn": ["delivery.implementation", "assurance.test-verdict", "product.acceptance"],
+      "inputs": [
+        "implementation",
+        "change-evidence",
+        "test-verdict",
+        "validation-evidence",
+        "risk-register"
+      ],
+      "outputs": ["review-verdict", "review-findings", "remediation-contract"],
+      "authority": {
+        "defaultBoundary": "observe",
+        "maximumBoundary": "observe",
+        "mutationScopes": ["none"]
+      },
+      "behavior": {
+        "steps": [
+          "review defects and risks before summaries",
+          "bind the verdict to the exact candidate digest"
+        ],
+        "failurePolicy": "return findings to developer; never repair while acting as reviewer"
+      },
+      "completionCriteria": [
+        "verdict and findings are digest-bound",
+        "required independence is proven"
+      ],
+      "acceptsFrom": ["agentflow:tester", "agentflow:qa-expert"],
+      "sendsTo": ["agentflow:technical-writer", "agentflow:developer"],
+      "collaboration": {
+        "allowedModes": ["single-agent", "advisory", "council", "human-gated"],
+        "independence": "profile-dependent"
+      },
+      "extensionPoints": ["reviewLenses", "templates", "validators", "evidenceFields"]
+    },
+    {
+      "slug": "technical-writer",
+      "qualifiedName": "agentflow:technical-writer",
+      "label": "Technical writer",
+      "kind": "lifecycle",
+      "phase": 7,
+      "source": "roles/technical-writer",
+      "purpose": "Ensure user-facing documentation, onboarding, examples, and release language accurately reflect the validated product behavior.",
+      "owns": [
+        "documentation.user-guidance",
+        "documentation.onboarding",
+        "documentation.release-language"
+      ],
+      "contributesTo": ["delivery.merge-readiness", "product.usability"],
+      "doesNotOwn": ["delivery.implementation", "architecture.design", "assurance.review-verdict"],
+      "inputs": ["implementation", "test-verdict", "review-verdict", "documentation-plan"],
+      "outputs": ["documentation-evidence", "onboarding-evidence", "release-notes"],
+      "authority": {
+        "defaultBoundary": "mutate-worktree",
+        "maximumBoundary": "mutate-worktree",
+        "mutationScopes": ["documentation-files"]
+      },
+      "behavior": {
+        "steps": ["verify claims against validated behavior", "update audience paths and examples"],
+        "failurePolicy": "return behavioral inaccuracies to developer and do not disguise product defects as documentation"
+      },
+      "completionCriteria": [
+        "affected audiences have a truthful path",
+        "examples and release language match the candidate"
+      ],
+      "acceptsFrom": ["agentflow:reviewer"],
+      "sendsTo": ["agentflow:pr-readiness", "agentflow:developer"],
+      "collaboration": {
+        "allowedModes": ["single-agent", "advisory"],
+        "independence": "not-required"
+      },
+      "extensionPoints": ["methodPlays", "templates", "validators", "evidenceFields"]
+    },
+    {
+      "slug": "pr-readiness",
+      "qualifiedName": "agentflow:pr-readiness",
+      "label": "PR readiness",
+      "kind": "lifecycle",
+      "phase": 8,
+      "source": "roles/pr-readiness",
+      "purpose": "Verify traceability, evidence completeness, follow-up status, release assignment, and the merge contract without replacing specialist verdicts.",
+      "owns": ["delivery.pr-manifest", "delivery.merge-readiness", "delivery.follow-up-status"],
+      "contributesTo": ["delivery.release-readiness"],
+      "doesNotOwn": [
+        "architecture.design",
+        "assurance.test-verdict",
+        "assurance.review-verdict",
+        "delivery.merge-decision"
+      ],
+      "inputs": [
+        "role-pass-chain",
+        "validation-evidence",
+        "review-verdict",
+        "documentation-evidence"
+      ],
+      "outputs": ["pr-manifest", "readiness-verdict", "follow-up-status"],
+      "authority": {
+        "defaultBoundary": "open-pr",
+        "maximumBoundary": "open-pr",
+        "mutationScopes": ["pr-records"]
+      },
+      "behavior": {
+        "steps": [
+          "verify every applicable gate and reference",
+          "return blockers to their owning role"
+        ],
+        "failurePolicy": "block readiness on missing or stale evidence; never manufacture approval"
+      },
+      "completionCriteria": [
+        "applicable evidence is current and traceable",
+        "merge owner and remaining human gates are explicit"
+      ],
+      "acceptsFrom": ["agentflow:technical-writer", "agentflow:reviewer"],
+      "sendsTo": ["agentflow:developer"],
+      "collaboration": {
+        "allowedModes": ["single-agent", "human-gated"],
+        "independence": "not-a-specialist-approval"
+      },
+      "extensionPoints": ["deliveryPolicies", "templates", "validators", "evidenceFields"]
+    },
+    {
+      "slug": "qa-expert",
+      "qualifiedName": "agentflow:qa-expert",
+      "label": "QA expert",
+      "kind": "sidecar",
+      "phase": null,
+      "source": "roles/qa-expert",
+      "purpose": "Explore negative paths, boundaries, accessibility, and system quirks not covered by deterministic tester evidence.",
+      "owns": ["assurance.exploratory-findings"],
+      "contributesTo": ["assurance.test-verdict", "assurance.review"],
+      "doesNotOwn": [
+        "assurance.test-verdict",
+        "assurance.review-verdict",
+        "delivery.implementation"
+      ],
+      "inputs": ["implementation", "test-verdict", "coverage-notes", "exploratory-charter"],
+      "outputs": ["exploratory-findings", "reproduction-evidence", "follow-up-proposals"],
+      "authority": {
+        "defaultBoundary": "observe",
+        "maximumBoundary": "observe",
+        "mutationScopes": ["none"]
+      },
+      "behavior": {
+        "steps": [
+          "avoid duplicating deterministic coverage",
+          "explore uncovered risks and preserve reproduction evidence"
+        ],
+        "failurePolicy": "report findings as issues or remediation input; never patch the candidate"
+      },
+      "completionCriteria": [
+        "charter scope and explored boundaries are recorded",
+        "findings are reproducible or explicitly uncertain"
+      ],
+      "acceptsFrom": ["agentflow:tester"],
+      "sendsTo": ["agentflow:reviewer"],
+      "collaboration": {
+        "allowedModes": ["advisory", "parallel-discovery"],
+        "independence": "read-only-required"
+      },
+      "extensionPoints": ["methodPlays", "tools", "validators", "evidenceFields"]
+    }
+  ],
+  "transitions": [
+    ["agentflow:product-manager", "agentflow:analyst"],
+    ["agentflow:analyst", "agentflow:architect"],
+    ["agentflow:architect", "agentflow:implementation-planner"],
+    ["agentflow:implementation-planner", "agentflow:developer"],
+    ["agentflow:developer", "agentflow:tester"],
+    ["agentflow:tester", "agentflow:reviewer"],
+    ["agentflow:reviewer", "agentflow:technical-writer"],
+    ["agentflow:technical-writer", "agentflow:pr-readiness"],
+    ["agentflow:developer", "agentflow:implementation-planner"],
+    ["agentflow:reviewer", "agentflow:developer"],
+    ["agentflow:technical-writer", "agentflow:developer"],
+    ["agentflow:pr-readiness", "agentflow:developer"]
+  ],
+  "sidecarLinks": [
+    { "from": "agentflow:tester", "to": "agentflow:qa-expert", "artifact": "exploratory-charter" },
+    {
+      "from": "agentflow:qa-expert",
+      "to": "agentflow:reviewer",
+      "artifact": "exploratory-findings"
+    }
+  ],
+  "invariants": [
+    "exclusive-ownership",
+    "authority-may-only-narrow",
+    "single-writer",
+    "review-independence-for-high-assurance",
+    "human-approval-for-high-assurance",
+    "digest-bound-handoffs",
+    "digest-bound-acceptance",
+    "handover-owner-accepts-delivery",
+    "council-does-not-dilute-accountability",
+    "extensions-cannot-change-core-transitions"
+  ]
+}
