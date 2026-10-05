@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "namespace": "agentflow:method",
+  "methods": [
+    {
+      "id": "agentflow:method:jtbd",
+      "role": "agentflow:product-manager",
+      "description": "Frame product intent through jobs, circumstances, desired progress, and outcome signals.",
+      "parameters": { "includeForces": { "type": "boolean", "default": true } },
+      "adds": {
+        "inputs": ["customer-evidence"],
+        "outputs": ["job-statement"],
+        "evidenceFields": ["circumstances", "desired-progress"],
+        "behaviorSteps": ["express the job without prescribing a solution"]
+      }
+    },
+    {
+      "id": "agentflow:method:event-storming",
+      "role": "agentflow:analyst",
+      "description": "Model business behavior through events, commands, policies, actors, and boundaries.",
+      "parameters": { "includeExternalActors": { "type": "boolean", "default": true } },
+      "adds": {
+        "inputs": ["domain-context"],
+        "outputs": ["event-model"],
+        "evidenceFields": ["domain-assumptions"],
+        "behaviorSteps": ["identify events before implementation structures"]
+      }
+    },
+    {
+      "id": "agentflow:method:adr-driven",
+      "role": "agentflow:architect",
+      "description": "Capture material architecture decisions and rejected alternatives as ADR evidence.",
+      "parameters": {
+        "threshold": { "type": "string", "enum": ["material", "all"], "default": "material" }
+      },
+      "adds": {
+        "inputs": [],
+        "outputs": ["adr-set"],
+        "evidenceFields": ["alternatives", "consequences"],
+        "behaviorSteps": ["record material decisions before implementation planning"]
+      }
+    },
+    {
+      "id": "agentflow:method:vertical-slices",
+      "role": "agentflow:implementation-planner",
+      "description": "Plan end-to-end, independently verifiable delivery slices.",
+      "parameters": { "maximumSlices": { "type": "integer", "minimum": 1, "default": 7 } },
+      "adds": {
+        "inputs": [],
+        "outputs": ["slice-plan"],
+        "evidenceFields": ["slice-dependencies"],
+        "behaviorSteps": ["order slices by dependency and user-visible value"]
+      }
+    },
+    {
+      "id": "agentflow:method:tdd",
+      "role": "agentflow:developer",
+      "description": "Use test-first feedback for behavior whose contract is known.",
+      "parameters": { "allowCharacterizationFirst": { "type": "boolean", "default": true } },
+      "adds": {
+        "inputs": ["validation-plan"],
+        "outputs": ["test-first-evidence"],
+        "evidenceFields": ["red-green-refactor"],
+        "behaviorSteps": [
+          "establish a failing behavioral check before the implementation when practical"
+        ]
+      }
+    },
+    {
+      "id": "agentflow:method:risk-based-testing",
+      "role": "agentflow:tester",
+      "description": "Prioritize deterministic verification by impact, likelihood, detectability, and change surface.",
+      "parameters": {
+        "riskThreshold": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "default": "medium"
+        }
+      },
+      "adds": {
+        "inputs": ["risk-register"],
+        "outputs": ["risk-coverage-map"],
+        "evidenceFields": ["residual-risk"],
+        "behaviorSteps": ["map tests to ranked risks and acceptance criteria"]
+      }
+    },
+    {
+      "id": "agentflow:method:security-review",
+      "role": "agentflow:reviewer",
+      "description": "Apply a security review lens without transferring the core review verdict.",
+      "parameters": { "threatModelRequired": { "type": "boolean", "default": false } },
+      "adds": {
+        "inputs": ["security-context"],
+        "outputs": ["security-findings"],
+        "evidenceFields": ["threats-reviewed"],
+        "behaviorSteps": ["review trust boundaries, misuse paths, and sensitive data handling"]
+      }
+    },
+    {
+      "id": "agentflow:method:diataxis",
+      "role": "agentflow:technical-writer",
+      "description": "Organize documentation into tutorials, how-to guides, explanations, and references.",
+      "parameters": { "requireAllQuadrants": { "type": "boolean", "default": false } },
+      "adds": {
+        "inputs": ["audience-map"],
+        "outputs": ["documentation-type-map"],
+        "evidenceFields": ["content-purpose"],
+        "behaviorSteps": ["give each document one primary reader purpose"]
+      }
+    },
+    {
+      "id": "agentflow:method:trunk-based-readiness",
+      "role": "agentflow:pr-readiness",
+      "description": "Evaluate readiness for short-lived branches and protected-trunk integration.",
+      "parameters": { "requireSmallBatch": { "type": "boolean", "default": true } },
+      "adds": {
+        "inputs": ["branch-policy"],
+        "outputs": ["integration-readiness"],
+        "evidenceFields": ["batch-size", "branch-age"],
+        "behaviorSteps": ["verify the candidate can integrate without hidden release coupling"]
+      }
+    }
+  ]
+}

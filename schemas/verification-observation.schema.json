@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "verification-observation",
+  "type": "object",
+  "required": [
+    "version",
+    "type",
+    "digest",
+    "id",
+    "invocationId",
+    "criterionId",
+    "producer",
+    "origin",
+    "isolation",
+    "candidateDigest",
+    "definitionDigest",
+    "outcome",
+    "assertions",
+    "startedAt",
+    "completedAt"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "type": {
+      "const": "verification-observation"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "invocationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "criterionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "producer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "origin": {
+      "enum": ["collector-observed", "external-resolved", "agent-reported", "human-attested"]
+    },
+    "isolation": {
+      "enum": ["immutable", "cooperative", "unknown"]
+    },
+    "candidateDigest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "definitionDigest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "executionContextDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "executionContext": { "type": "object" },
+    "outcome": {
+      "enum": ["pass", "fail", "blocked", "not-run", "unknown"]
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "assertions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "outcome"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "outcome": {
+            "enum": ["pass", "fail", "blocked", "not-run", "unknown"]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}

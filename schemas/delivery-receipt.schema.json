@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/delivery-receipt.schema.json",
+  "title": "AgentFlow Role DeliveryReceipt",
+  "type": "object",
+  "required": [
+    "version",
+    "type",
+    "id",
+    "handoffDigest",
+    "contractDigest",
+    "producerRole",
+    "status",
+    "candidateDigest",
+    "criteriaResults",
+    "evidenceRefs",
+    "deviations",
+    "executionReceiptDigest",
+    "provenance",
+    "digest"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "type": { "const": "delivery-receipt" },
+    "id": { "type": "string", "minLength": 1 },
+    "handoffDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "contractDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "producerRole": { "type": "string", "pattern": "^agentflow:" },
+    "status": { "enum": ["submitted", "blocked"] },
+    "candidateDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "criteriaResults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["criterionId", "status", "evidenceRefs"],
+        "properties": {
+          "criterionId": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["pass", "fail", "not-applicable"] },
+          "evidenceRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "evidenceRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } },
+    "deviations": { "type": "array", "items": { "type": "string" } },
+    "executionReceiptDigest": { "type": ["string", "null"] },
+    "provenance": { "type": "object" },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

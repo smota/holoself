@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "recovery-plan",
+  "type": "object",
+  "required": [
+    "version",
+    "type",
+    "digest",
+    "runId",
+    "runRevision",
+    "owner",
+    "boundary",
+    "writer",
+    "priorWriter",
+    "workspace",
+    "operations",
+    "candidateChanged",
+    "blocked"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "type": {
+      "const": "recovery-plan"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runRevision": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "writer": {
+      "type": ["object", "null"]
+    },
+    "priorWriter": {
+      "type": "object"
+    },
+    "workspace": {
+      "type": ["object", "null"]
+    },
+    "operations": {
+      "type": "array"
+    },
+    "candidateChanged": {
+      "type": "boolean"
+    },
+    "blocked": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": true
+}

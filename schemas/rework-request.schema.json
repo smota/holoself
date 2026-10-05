@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/rework-request.schema.json",
+  "title": "AgentFlow ReworkRequest",
+  "type": "object",
+  "required": [
+    "version",
+    "type",
+    "id",
+    "acceptanceDecisionDigest",
+    "ownerRole",
+    "deliveryRole",
+    "failedCriteria",
+    "requiredChanges",
+    "evidenceDigest",
+    "digest"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "type": { "const": "rework-request" },
+    "id": { "type": "string", "minLength": 1 },
+    "acceptanceDecisionDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "ownerRole": { "type": "string", "pattern": "^agentflow:" },
+    "deliveryRole": { "type": "string", "pattern": "^agentflow:" },
+    "failedCriteria": { "type": "array", "items": { "type": "string" } },
+    "requiredChanges": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "evidenceDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

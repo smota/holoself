@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/delivery-verification.schema.json",
+  "title": "AgentFlow DeliveryVerification",
+  "type": "object",
+  "required": [
+    "version",
+    "type",
+    "handoffDigest",
+    "contractDigest",
+    "deliveryDigest",
+    "ownerRole",
+    "candidateDigest",
+    "humanApprovalRequired",
+    "councilSynthesisDigest",
+    "status",
+    "checks",
+    "semanticCriteria",
+    "digest"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "type": { "const": "delivery-verification" },
+    "handoffDigest": { "type": ["string", "null"] },
+    "contractDigest": { "type": ["string", "null"] },
+    "deliveryDigest": { "type": ["string", "null"] },
+    "ownerRole": { "type": ["string", "null"] },
+    "candidateDigest": { "type": ["string", "null"] },
+    "humanApprovalRequired": { "type": "boolean" },
+    "councilSynthesisDigest": { "type": ["string", "null"] },
+    "status": { "enum": ["pass", "fail", "semantic-review-required"] },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "reason"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["pass", "fail"] },
+          "reason": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "semanticCriteria": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "platforms": [
+    {
+      "slug": "agy",
+      "displayName": "Agy",
+      "kind": "agent-runtime",
+      "routable": true
+    },
+    {
+      "slug": "antigravity",
+      "displayName": "Antigravity",
+      "kind": "harness",
+      "routable": false
+    },
+    {
+      "slug": "chatgpt",
+      "displayName": "ChatGPT",
+      "kind": "harness",
+      "routable": false
+    },
+    {
+      "slug": "claude",
+      "displayName": "Claude",
+      "kind": "agent-runtime",
+      "routable": true
+    },
+    {
+      "slug": "codex",
+      "displayName": "Codex",
+      "kind": "agent-runtime",
+      "routable": true
+    },
+    {
+      "slug": "cowork",
+      "displayName": "Cowork",
+      "kind": "harness",
+      "routable": false
+    },
+    {
+      "slug": "human",
+      "displayName": "Human",
+      "kind": "human",
+      "routable": false
+    },
+    {
+      "slug": "grok",
+      "displayName": "Grok",
+      "kind": "agent-runtime",
+      "routable": true
+    },
+    {
+      "slug": "pi",
+      "displayName": "Pi",
+      "kind": "agent-runtime",
+      "routable": true
+    }
+  ]
+}

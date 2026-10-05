@@ -1,0 +1,240 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agentflow.dev/schemas/onboarding-runtime.schema.json",
+  "title": "OnboardingRuntimeEnvelope",
+  "description": "Schema for AgentFlow S2 generic runtime capability contract envelopes: requests, evidence, and assessment results.",
+  "oneOf": [
+    { "$ref": "#/definitions/RuntimeRequest" },
+    { "$ref": "#/definitions/RuntimeEvidence" },
+    { "$ref": "#/definitions/RuntimeAssessment" }
+  ],
+  "definitions": {
+    "CapabilityRequirement": {
+      "type": "object",
+      "required": ["id", "kind", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "maxLength": 2048 },
+        "kind": { "type": "string", "maxLength": 2048 },
+        "description": { "type": "string", "maxLength": 2048 }
+      }
+    },
+    "RuntimeRequest": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "runtimeId",
+        "requiredCapabilities",
+        "assessUpdates",
+        "sharedUpdate"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "type": "integer", "const": 1 },
+        "requestId": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "runtimeId": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "additionalRuntimes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "maxItems": 100
+        },
+        "sharedUpdate": { "type": "boolean" },
+        "assessUpdates": { "type": "boolean", "const": true },
+        "requiredCapabilities": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/CapabilityRequirement" },
+          "minItems": 2,
+          "maxItems": 100
+        },
+        "instructions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "installationAuthority": { "type": "string", "maxLength": 2048 },
+            "updateAssessmentRequired": { "type": "boolean" },
+            "policy": { "type": "string", "maxLength": 2048 }
+          }
+        }
+      }
+    },
+    "ComponentEvidence": {
+      "type": "object",
+      "required": [
+        "id",
+        "presence",
+        "compatibility",
+        "operationOutcome",
+        "updateDisposition",
+        "evidence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "presence": { "type": "string", "enum": ["available", "missing", "unknown"] },
+        "compatibility": { "type": "string", "enum": ["compatible", "incompatible", "unknown"] },
+        "operationOutcome": {
+          "type": "string",
+          "enum": ["succeeded", "failed", "unknown", "not-requested"]
+        },
+        "updateDisposition": {
+          "type": "string",
+          "enum": ["available", "current", "deferred", "unknown"]
+        },
+        "evidence": {
+          "type": "string",
+          "enum": ["declared", "observed", "unavailable", "unknown"]
+        },
+        "version": { "type": "string", "maxLength": 2048 },
+        "provenance": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "hostDiscovered": { "type": "boolean" },
+        "updateEvidence": {
+          "type": "string",
+          "enum": ["declared", "observed", "unavailable", "unknown"]
+        },
+        "updateProvenance": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "availableVersion": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      }
+    },
+    "RuntimeEvidence": {
+      "type": "object",
+      "required": ["schemaVersion", "requestId", "runtimeId", "components"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "type": "integer", "const": 1 },
+        "requestId": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "runtimeId": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ComponentEvidence" },
+          "maxItems": 100
+        },
+        "additionalRuntimes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "maxItems": 100
+        },
+        "sharedUpdate": { "type": "boolean" }
+      }
+    },
+    "ComponentAssessment": {
+      "type": "object",
+      "required": [
+        "id",
+        "presence",
+        "compatibility",
+        "operationOutcome",
+        "updateDisposition",
+        "evidence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "maxLength": 2048 },
+        "presence": { "type": "string", "enum": ["available", "missing", "unknown"] },
+        "compatibility": { "type": "string", "enum": ["compatible", "incompatible", "unknown"] },
+        "operationOutcome": {
+          "type": "string",
+          "enum": ["succeeded", "failed", "unknown", "not-requested"]
+        },
+        "updateDisposition": {
+          "type": "string",
+          "enum": ["available", "current", "deferred", "unknown"]
+        },
+        "evidence": {
+          "type": "string",
+          "enum": ["declared", "observed", "unavailable", "unknown"]
+        },
+        "version": { "type": "string", "maxLength": 2048 },
+        "provenance": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "hostDiscovered": { "type": "boolean" },
+        "updateEvidence": {
+          "type": "string",
+          "enum": ["declared", "observed", "unavailable", "unknown"]
+        },
+        "updateProvenance": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "availableVersion": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      }
+    },
+    "RuntimeProposal": {
+      "type": "object",
+      "required": ["type", "componentId", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["install", "upgrade", "update", "deferred-update"] },
+        "componentId": { "type": "string", "maxLength": 2048 },
+        "runtimeId": { "type": "string", "maxLength": 2048 },
+        "shared": { "type": "boolean" },
+        "description": { "type": "string", "maxLength": 2048 }
+      }
+    },
+    "RuntimeUnknown": {
+      "type": "object",
+      "required": ["componentId", "field", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "componentId": { "type": "string", "maxLength": 2048 },
+        "field": { "type": "string", "maxLength": 2048 },
+        "reason": { "type": "string", "maxLength": 2048 }
+      }
+    },
+    "RuntimeAssessment": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "runtimeId",
+        "currentRuntime",
+        "runtimeReady",
+        "action",
+        "components",
+        "proposals",
+        "unknowns",
+        "scope",
+        "errors"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "type": "integer", "const": 1 },
+        "requestId": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "runtimeId": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "currentRuntime": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "runtimeReady": { "type": "boolean" },
+        "action": { "type": "string", "enum": ["ready", "reconcile", "install", "upgrade"] },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ComponentAssessment" },
+          "maxItems": 100
+        },
+        "proposals": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/RuntimeProposal" },
+          "maxItems": 100
+        },
+        "unknowns": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/RuntimeUnknown" },
+          "maxItems": 100
+        },
+        "scope": {
+          "type": "object",
+          "required": ["currentRuntime", "additionalRuntimes", "sharedUpdate"],
+          "additionalProperties": false,
+          "properties": {
+            "currentRuntime": { "type": "string", "maxLength": 2048 },
+            "additionalRuntimes": {
+              "type": "array",
+              "items": { "type": "string", "maxLength": 2048 },
+              "maxItems": 100
+            },
+            "sharedUpdate": { "type": "boolean" }
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "maxItems": 100
+        }
+      }
+    }
+  }
+}

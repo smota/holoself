@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/role-handoff.schema.json",
+  "title": "AgentFlow role handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "id",
+    "subject",
+    "state",
+    "fromRole",
+    "toRole",
+    "rolePassId",
+    "profile",
+    "actionBoundary",
+    "inputRefs",
+    "outputRefs",
+    "validationRefs",
+    "expectedAction",
+    "acceptanceCriteria",
+    "acceptanceContract",
+    "openQuestions",
+    "methodPlays",
+    "provenance",
+    "digest"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "minLength": 1 },
+    "state": {
+      "enum": ["issued", "superseded"]
+    },
+    "fromRole": { "type": "string", "pattern": "^agentflow:" },
+    "toRole": { "type": "string", "pattern": "^agentflow:" },
+    "rolePassId": { "type": "string", "minLength": 1 },
+    "profile": { "type": "string", "minLength": 1 },
+    "actionBoundary": {
+      "enum": ["observe", "propose", "mutate-worktree", "open-pr", "external-action"]
+    },
+    "inputRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } },
+    "outputRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } },
+    "validationRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } },
+    "expectedAction": { "type": "string", "minLength": 1 },
+    "acceptanceCriteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "acceptanceContract": { "$ref": "acceptance-contract.schema.json" },
+    "openQuestions": { "type": "array", "items": { "type": "string" } },
+    "methodPlays": { "type": "array", "items": { "type": "string" } },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "executor", "transport", "delegationBoundary"],
+      "properties": {
+        "platform": { "type": "string", "minLength": 1 },
+        "executor": { "type": "string", "minLength": 1 },
+        "transport": { "type": "string", "minLength": 1 },
+        "delegationBoundary": { "type": "string", "minLength": 1 }
+      }
+    },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

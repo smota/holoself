@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/role-definition.schema.json",
+  "title": "AgentFlow role definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "slug",
+    "qualifiedName",
+    "label",
+    "kind",
+    "phase",
+    "source",
+    "purpose",
+    "owns",
+    "contributesTo",
+    "doesNotOwn",
+    "inputs",
+    "outputs",
+    "authority",
+    "behavior",
+    "completionCriteria",
+    "acceptsFrom",
+    "sendsTo",
+    "collaboration",
+    "extensionPoints"
+  ],
+  "properties": {
+    "slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "qualifiedName": { "type": "string", "pattern": "^agentflow:[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "label": { "type": "string", "minLength": 1 },
+    "kind": { "enum": ["lifecycle", "sidecar"] },
+    "phase": { "type": ["integer", "null"], "minimum": 0 },
+    "source": { "type": "string", "pattern": "^roles/[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "purpose": { "type": "string", "minLength": 1 },
+    "owns": { "$ref": "#/$defs/uniqueStrings" },
+    "contributesTo": { "$ref": "#/$defs/strings" },
+    "doesNotOwn": { "$ref": "#/$defs/strings" },
+    "inputs": { "$ref": "#/$defs/strings" },
+    "outputs": { "$ref": "#/$defs/strings" },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defaultBoundary", "maximumBoundary", "mutationScopes"],
+      "properties": {
+        "defaultBoundary": {
+          "enum": ["observe", "propose", "mutate-worktree", "open-pr", "external-action"]
+        },
+        "maximumBoundary": {
+          "enum": ["observe", "propose", "mutate-worktree", "open-pr", "external-action"]
+        },
+        "mutationScopes": { "$ref": "#/$defs/uniqueStrings" }
+      }
+    },
+    "behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["steps", "failurePolicy"],
+      "properties": {
+        "steps": { "$ref": "#/$defs/uniqueStrings" },
+        "failurePolicy": { "type": "string", "minLength": 1 }
+      }
+    },
+    "completionCriteria": { "$ref": "#/$defs/uniqueStrings" },
+    "acceptsFrom": { "$ref": "#/$defs/qualifiedRoles" },
+    "sendsTo": { "$ref": "#/$defs/qualifiedRoles" },
+    "collaboration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowedModes", "independence"],
+      "properties": {
+        "allowedModes": { "$ref": "#/$defs/uniqueStrings" },
+        "independence": { "type": "string", "minLength": 1 }
+      }
+    },
+    "extensionPoints": { "$ref": "#/$defs/uniqueStrings" }
+  },
+  "$defs": {
+    "strings": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "uniqueStrings": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "qualifiedRoles": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^agentflow:[a-z0-9]+(?:-[a-z0-9]+)*$" }
+    }
+  }
+}

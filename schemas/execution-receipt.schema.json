@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/execution-receipt.schema.json",
+  "title": "AgentFlow ExecutionReceipt",
+  "type": "object",
+  "required": [
+    "version",
+    "subject",
+    "status",
+    "provider",
+    "requestDigest",
+    "planDigest",
+    "actual",
+    "boundaries",
+    "revision",
+    "writerLease",
+    "timing",
+    "digests",
+    "executionIntentSource",
+    "cleanup",
+    "disclosure",
+    "redaction",
+    "inputRefs",
+    "outputRefs",
+    "validationRefs"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "subject": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["pass", "failed", "blocked", "cancelled"] },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "provider": { "type": ["string", "null"] },
+    "executionTarget": { "type": ["string", "null"] },
+    "transport": { "type": ["string", "null"] },
+    "delegationBoundary": { "type": ["string", "null"] },
+    "collaborationMode": { "type": ["string", "null"] },
+    "degraded": { "type": "boolean" },
+    "requestDigest": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+    "planDigest": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+    "actual": {
+      "type": "object",
+      "required": ["platform", "target", "transport", "model"],
+      "properties": {
+        "platform": { "type": "string", "minLength": 1 },
+        "target": { "type": "string", "minLength": 1 },
+        "transport": { "type": "string", "minLength": 1 },
+        "model": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "boundaries": {
+      "type": "object",
+      "required": ["requested", "effective", "enforced", "observed", "declared"],
+      "properties": {
+        "requested": {
+          "enum": ["observe", "propose", "mutate-worktree", "open-pr", "external-action"]
+        },
+        "effective": {
+          "enum": [null, "observe", "propose", "mutate-worktree", "open-pr", "external-action"]
+        },
+        "enforced": {
+          "enum": [null, "observe", "propose", "mutate-worktree", "open-pr", "external-action"]
+        },
+        "observed": {
+          "enum": [null, "observe", "propose", "mutate-worktree", "open-pr", "external-action"]
+        },
+        "declared": {
+          "enum": ["observe", "propose", "mutate-worktree", "open-pr", "external-action"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "revision": {
+      "type": "object",
+      "required": ["source", "workspaceFingerprint"],
+      "properties": {
+        "source": { "type": ["string", "null"], "minLength": 1 },
+        "workspaceFingerprint": { "type": ["string", "null"], "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "writerLease": {
+      "type": "object",
+      "required": ["id", "owner", "status"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "owner": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["held", "released", "reconciled"] }
+      },
+      "additionalProperties": false
+    },
+    "timing": {
+      "type": "object",
+      "required": ["startedAt", "completedAt", "timeoutMs", "cancelled"],
+      "properties": {
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "timeoutMs": { "type": "integer", "minimum": 0 },
+        "cancelled": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "digests": {
+      "type": "object",
+      "required": ["artifacts", "changes", "output"],
+      "properties": {
+        "artifacts": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "changes": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "output": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" }
+      },
+      "additionalProperties": false
+    },
+    "executionIntentSource": {
+      "type": "object",
+      "required": ["provider", "declared", "resolutions"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "declared": { "type": "array", "items": { "type": "string" } },
+        "resolutions": { "type": "array", "items": { "type": "object" } }
+      },
+      "additionalProperties": false
+    },
+    "cleanup": {
+      "type": "object",
+      "required": ["status", "actions"],
+      "properties": {
+        "status": { "enum": ["clean", "partial", "failed", "not-required"] },
+        "actions": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "disclosure": {
+      "type": "object",
+      "required": ["authorized", "scope"],
+      "properties": {
+        "authorized": { "type": "boolean" },
+        "scope": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "redaction": {
+      "type": "object",
+      "required": ["applied", "policy"],
+      "properties": {
+        "applied": { "type": "boolean" },
+        "policy": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "inputRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } },
+    "outputRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } },
+    "validationRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } },
+    "metadata": { "type": "object" }
+  },
+  "additionalProperties": false
+}

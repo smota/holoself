@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/transition-envelope.schema.json",
+  "title": "AgentFlow Transition Envelope",
+  "type": "object",
+  "required": [
+    "version",
+    "subject",
+    "fromRole",
+    "toRole",
+    "decision",
+    "nextContract",
+    "timestamp",
+    "inputRefs",
+    "outputRefs",
+    "validationRefs",
+    "provenance"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "subject": { "type": "string", "minLength": 1 },
+    "fromRole": { "type": "string", "minLength": 1 },
+    "toRole": { "type": "string", "minLength": 1 },
+    "decision": { "enum": ["pass", "blocked", "returned", "skipped"] },
+    "nextContract": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "profile": { "type": "string", "minLength": 1 },
+    "actionBoundary": { "$ref": "action-boundary.schema.json" },
+    "inputRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } },
+    "outputRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } },
+    "validationRefs": { "type": "array", "items": { "$ref": "artifact-ref.schema.json" } },
+    "openQuestions": { "type": "array", "items": { "type": "string" } },
+    "extensionPlays": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "provenance": {
+      "type": "object",
+      "required": ["platform", "executor", "transport", "delegationBoundary"],
+      "properties": {
+        "platform": { "type": "string", "minLength": 1 },
+        "executor": { "type": "string", "minLength": 1 },
+        "transport": { "type": "string", "minLength": 1 },
+        "delegationBoundary": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "authority": {
+    "human": "docs/sdlc-definition.md",
+    "machine": "sdlc.config.json"
+  },
+  "paths": {
+    "light": {
+      "requiredRoles": [
+        "analyst",
+        "implementation-planner",
+        "developer",
+        "tester",
+        "reviewer",
+        "pr-readiness"
+      ],
+      "optionalRoles": ["product-manager", "architect", "technical-writer"],
+      "allowsSelfReview": true,
+      "requiresHumanApproval": false
+    },
+    "bounded": {
+      "requiredRoles": [
+        "analyst",
+        "implementation-planner",
+        "developer",
+        "tester",
+        "reviewer",
+        "pr-readiness"
+      ],
+      "optionalRoles": ["product-manager", "architect", "technical-writer"],
+      "allowsSelfReview": true,
+      "requiresHumanApproval": false
+    },
+    "standard": {
+      "requiredRoles": [
+        "analyst",
+        "architect",
+        "implementation-planner",
+        "developer",
+        "tester",
+        "reviewer",
+        "pr-readiness"
+      ],
+      "optionalRoles": ["product-manager", "technical-writer"],
+      "allowsSelfReview": true,
+      "requiresHumanApproval": false
+    },
+    "high-assurance": {
+      "requiredRoles": [
+        "product-manager",
+        "analyst",
+        "architect",
+        "implementation-planner",
+        "developer",
+        "tester",
+        "reviewer",
+        "technical-writer",
+        "pr-readiness"
+      ],
+      "optionalRoles": [],
+      "allowsSelfReview": false,
+      "requiresHumanApproval": true
+    },
+    "exploratory": {
+      "requiredRoles": ["product-manager", "analyst", "architect", "reviewer"],
+      "optionalRoles": [
+        "implementation-planner",
+        "developer",
+        "tester",
+        "technical-writer",
+        "pr-readiness"
+      ],
+      "allowsSelfReview": true,
+      "requiresHumanApproval": false
+    }
+  },
+  "labels": {
+    "type": ["epic", "feature", "bug", "dx", "tooling", "documentation", "qa", "exploratory"],
+    "routingPrefixes": ["for-implementation:"],
+    "lifecyclePrefixes": ["drafted-by:", "implemented-by:", "for-review:", "reviewed-by:"],
+    "forbiddenPrefixes": ["agent:"],
+    "release": ["awaiting-release"],
+    "integrationPrefixes": ["integrated:"]
+  },
+  "release": {
+    "candidateSources": ["issue-field", "milestone"],
+    "assignmentStates": ["assigned", "needs-assignment", "released", "no-release-impact"],
+    "impactStates": ["major", "minor", "patch", "docs-only", "none", "unknown"],
+    "filters": ["unreleased", "released", "all", "needs-assignment"],
+    "rejectIncidentalSemver": true
+  },
+  "gateways": {
+    "humanApproval": {
+      "requiredFor": ["high-assurance"],
+      "fields": ["Reviewer", "Scope", "Decision", "Notes"],
+      "decisions": ["approved", "changes-requested", "blocked"]
+    },
+    "guidedAction": { "requires": ["preview", "auth", "csrf", "confirmation", "audit"] }
+  },
+  "actionPolicy": {
+    "profileMaximums": {
+      "light": "open-pr",
+      "bounded": "open-pr",
+      "standard": "open-pr",
+      "high-assurance": "external-action",
+      "exploratory": "propose"
+    },
+    "externalActionRequiresHumanApproval": true,
+    "delegationMayNotWidenBoundary": true
+  },
+  "extensionPolicy": {
+    "mayAdd": [
+      "roles",
+      "roleBoundPlays",
+      "labels",
+      "gateways",
+      "paths",
+      "validators",
+      "toolPermissions",
+      "controlRequirements",
+      "evals",
+      "harnessAdapters"
+    ],
+    "mustPreserve": [
+      "role-pass-provenance",
+      "human-approval-for-high-assurance",
+      "readiness-denominator-rules",
+      "no-raw-secrets-or-transcripts",
+      "follow-ups-over-hidden-todos"
+    ]
+  },
+  "deliveryPolicy": {
+    "deterministicOrigins": ["collector-observed", "external-resolved"],
+    "sourceAcknowledgmentRequired": true,
+    "requiredJourneyCoverage": false,
+    "budgetMaxima": {}
+  }
+}

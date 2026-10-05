@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/artifact-ref.schema.json",
+  "title": "AgentFlow ArtifactRef",
+  "type": "object",
+  "required": ["kind", "system", "uri", "authority", "relationship"],
+  "properties": {
+    "kind": { "type": "string", "minLength": 1 },
+    "system": { "type": "string", "minLength": 1 },
+    "uri": { "type": "string", "minLength": 1 },
+    "authority": { "enum": ["authoritative", "working-copy", "mirror"] },
+    "relationship": { "type": "string", "minLength": 1 },
+    "scope": { "type": "string" },
+    "revision": { "type": "string" },
+    "digest": { "type": "string" }
+  },
+  "additionalProperties": true
+}

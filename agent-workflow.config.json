@@ -1,0 +1,86 @@
+{
+  "posture": "assisted",
+  "ciCommands": [],
+  "bounded": {
+    "allowedExactPaths": ["README.md"],
+    "allowedPathPrefixes": ["docs/"],
+    "deniedPathFragments": [],
+    "defaultBase": "origin/main"
+  },
+  "branching": {
+    "trunk": "main",
+    "releaseCandidate": null,
+    "integration": "main",
+    "directEditDeniedBranches": ["main"],
+    "defaultPrTarget": "main",
+    "promotionOrder": ["main"],
+    "workBranchPrefixes": ["work/", "feature/", "fix/", "hotfix/", "spike/", "chore/"],
+    "compatibilityBranchPrefixes": ["issue/", "wt/", "claude/"],
+    "requireBoundedWorkBranch": true
+  },
+  "integrationLifecycle": {
+    "integrationBranch": "main",
+    "trunkBranch": "main",
+    "referenceKeywords": ["Implements", "Refs"],
+    "addLabels": ["integrated:main", "awaiting-release"],
+    "closeIntegratedIssues": true
+  },
+  "routing": {
+    "defaultMode": "single-agent"
+  },
+  "collaboration": {
+    "defaultMode": "auto-minimal",
+    "sensitiveSurfaces": ["security", "auth", "data", "infra", "billing"],
+    "councilDomainThreshold": 3,
+    "bilateralDomainThreshold": 2,
+    "councilOnPublicContract": true,
+    "councilOnMigration": true,
+    "councilHelpers": [
+      "risk-scout",
+      "implementation-strategist",
+      "testability-scout",
+      "docs-impact-scout"
+    ],
+    "discoveryHelpers": ["requirements-scout", "architecture-scout"],
+    "councilSeats": [
+      {
+        "role": "agentflow:architect",
+        "focus": "architecture and system boundaries",
+        "required": true
+      },
+      {
+        "role": "agentflow:developer",
+        "focus": "implementation feasibility",
+        "required": true
+      },
+      {
+        "role": "agentflow:tester",
+        "focus": "testability and failure evidence",
+        "required": true
+      },
+      {
+        "role": "agentflow:reviewer",
+        "focus": "risk and maintainability",
+        "required": true
+      }
+    ],
+    "fallbackModes": ["sequential", "manual"],
+    "maxDelegates": 4,
+    "maxDepth": 1,
+    "maxIterations": 3
+  },
+  "extensions": {
+    "enabledPacks": []
+  },
+  "delivery": {
+    "source": {
+      "kind": "local-preview"
+    },
+    "candidate": {
+      "inputs": []
+    }
+  },
+  "gateNotifications": {
+    "hookUrl": null
+  }
+}

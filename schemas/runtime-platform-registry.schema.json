@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/runtime-platform-registry.schema.json",
+  "title": "AgentFlow runtime platform registry",
+  "type": "object",
+  "required": ["version", "platforms"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "platforms": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/platform" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "platformSlug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "platform": {
+      "type": "object",
+      "required": ["slug", "displayName", "kind", "routable"],
+      "properties": {
+        "slug": { "$ref": "#/$defs/platformSlug" },
+        "displayName": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["agent-runtime", "harness", "human"] },
+        "routable": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
