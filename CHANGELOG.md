@@ -5,6 +5,7 @@ All notable Holoself releases are documented here.
 ## Unreleased
 
 - `link repair` restores the adapters recorded in `.holoself/runtime.json` instead of re-detecting hosts, so it no longer re-creates adapters you removed or overwrites hand-written instruction files. The plan reports `source: recorded|detected|explicit`. Workbench repair now shows the plan first and applies it only if it is unchanged (`PLAN_CHANGED` otherwise) (#34).
+- `link deactivate --adapters <list>` removes only the listed adapters and keeps `runtime.json` for the rest. `link deactivate` now prints its plan before confirming, and rejects flags it doesn't use (such as `--platform` or `--adapter`) instead of silently ignoring them. `--adapters` is rejected on every other command (#33).
 
 ## [0.10.1] — 2026-10-04
 

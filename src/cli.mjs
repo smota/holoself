@@ -47,10 +47,25 @@ function requiredValue(args, i, flag){
   if (!value || value.startsWith('--')) throw new Error(`${flag} requires a value`)
   return value
 }
+// Flags are parsed globally; commands listed here accept only their own flags plus COMMON_FLAGS.
+// SCOPED_FLAGS are rejected on every command that does not list them. Unlisted commands are not yet validated.
+const COMMON_FLAGS=['--root','--data-root','--data-dir','--help','-h','--json','--yes','--confirm','--dry-run']
+const COMMAND_FLAGS={'link deactivate':['--project','--adapters']}
+const SCOPED_FLAGS={'--adapters':['link deactivate']}
+function validateFlags(o){
+  const key=o.command==='link'&&o.args[0]?`link ${o.args[0]}`:o.command,allowed=COMMAND_FLAGS[key]
+  for(const flag of o._flags){
+    const scoped=SCOPED_FLAGS[flag],supported=allowed?COMMON_FLAGS.includes(flag)||allowed.includes(flag):!scoped||scoped.includes(key)
+    if(!supported){const error=new Error(`option ${flag} is not supported by '${key||'holoself'}'; see holoself --help`);error.code='OPTION_NOT_SUPPORTED';throw error}
+  }
+}
 function parse(args){
-  const o={rootSetup:false}; const positional=[]
+  const o={rootSetup:false,_flags:[]}; const positional=[]
   for(let i=0;i<args.length;i++){
     const a=args[i]
+    if(a.startsWith('-'))o._flags.push(a)
+    if(a==='--adapters') o.adapters=requiredValue(args,i++,a)
+    else
     if(a==='--root'||a==='--data-root'||a==='--data-dir') { o.root=resolve(requiredValue(args,i++,a));o.rootExplicit=true }
     else if(a==='--target') o.target=resolve(requiredValue(args,i++,a))
     else if(a==='--project') o.project=resolve(requiredValue(args,i++,a))
@@ -341,11 +356,12 @@ function isHoloselfLink(p, root){
   if(!lstatSync(p).isSymbolicLink()) return false
   try { return resolve(dirname(p), readlinkSync(p)) === resolve(root) } catch { return false }
 }
-function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init | doctor | validate | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] [--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  skill status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens list|show|validate|bind|unbind|bindings [id] [--root <self-root>]\n  link add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  link skill migrate-global --project <dir> [--skill-home <dir>] [--dry-run|--yes]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n  proposals list|audit --project <dir>\n  proposals show|approve|reject|defer|supersede <id> --project <dir>\n  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n  instructions render|audit --project <dir> [--json]\n  knowledge migrate-lenses [--output <plan>] | --apply <plan> --digest <sha256> --yes\n  knowledge transform --replacements <json> [--plan-kind section-replacement|instruction-replacement] [--output <plan>]\n  knowledge cleanup [--output <plan>] | --apply <plan> --digest <sha256> --yes\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill auto|project|global|none --no-activate.\nProject filters: --project-include/--project-exclude and --project-assert-include/--project-assert-exclude <globs>.
+function help(){console.log(`Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init | doctor | validate | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] [--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  skill status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens list|show|validate|bind|unbind|bindings [id] [--root <self-root>]\n  link add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]
+  link deactivate --project <dir> [--adapters all|<list>] [--dry-run|--yes]\n  link skill migrate-global --project <dir> [--skill-home <dir>] [--dry-run|--yes]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n  proposals list|audit --project <dir>\n  proposals show|approve|reject|defer|supersede <id> --project <dir>\n  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n  instructions render|audit --project <dir> [--json]\n  knowledge migrate-lenses [--output <plan>] | --apply <plan> --digest <sha256> --yes\n  knowledge transform --replacements <json> [--plan-kind section-replacement|instruction-replacement] [--output <plan>]\n  knowledge cleanup [--output <plan>] | --apply <plan> --digest <sha256> --yes\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill auto|project|global|none --no-activate.\nProject filters: --project-include/--project-exclude and --project-assert-include/--project-assert-exclude <globs>.
 Efficiency: context supports --budget small|standard|deep|unbounded, --manifest, repeatable --source, and --temporal current|historical|superseded|all.\nInstruction consolidation: instructions render|audit --project <dir>.\nSafety confirmations: --yes. Packet adapters: --adapter pi|claude|codex|generic|obsidian|restricted-host.\nMCP: mcp [--project <linked-project>] | mcp configure|status --project <dir> [--platform codex|agy|claude].\n`) }
 async function confirm(o,message){if(o.yes)return true; if(!input.isTTY||!output.isTTY) throw new Error(`${message} Re-run with --yes to confirm.`); const rl=createInterface({input,output}); try { const answer=await rl.question(`${message} Type "yes" to continue: `); return answer.trim().toLowerCase()==='yes' } finally { rl.close() }}
 export async function run(argv){
-  const o=parse(argv)
+  const o=parse(argv);validateFlags(o)
   if(o.version){console.log(o.json?JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION}):`Holoself ${VERSION}`);return}
   if(o.command==='capabilities'){
     console.log(JSON.stringify({schemaVersion:1,product:'holoself',version:VERSION,interface:'local-cli',contextSchemaVersion:1,commands:['doctor','context','search','propose','proposals','instructions','knowledge','link','skill','mcp','coaching'],coaching:{storage:'self-root/coaching/sessions',commands:['start','note','action','choose','review','material','resume'],externalTextOnly:true},contextFeatures:['need-gate','budgets','manifest','source-handles','lifecycle','receipts','persistent-cache','task-contrib-routing'],proposalSchemaVersions:[1,2],indexSchemaVersion:5,mcp:{transport:'stdio',projectBound:true,linkAuthority:true,tools:['holoself_status','holoself_context','holoself_context_manifest','holoself_context_get','holoself_search','holoself_proposal_create','holoself_proposal_preview']},globalSkillSupported:true},null,2));return
