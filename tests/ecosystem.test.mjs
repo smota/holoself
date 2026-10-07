@@ -326,3 +326,26 @@ test('approval to an absent target uses current lens metadata and removes the ne
  const {self,project}=await fixture(),target=join(self,'context','new-target.md'),made=JSON.parse(await capture(()=>run(['propose','--project',project,'--claim','A reviewed absent target claim.','--source-file','README.md','--target-file','context/new-target.md','--visibility','private']))),proposal=join(project,'.holoself','proposals',made.proposal_id+'.yaml'),before=await readFile(proposal,'utf8'),bad=join(self,'context','invalid-target.md')
  await writeFile(bad,'---\nvisibility: invalid\n---\n# Invalid\n');await assert.rejects(run(['proposals','approve',made.proposal_id,'--project',project,'--yes']),/validation/);await assert.rejects(access(target));assert.equal(await readFile(proposal,'utf8'),before);await rm(bad);await capture(()=>run(['proposals','approve',made.proposal_id,'--project',project,'--yes']));const text=await readFile(target,'utf8');assert.match(text,/A reviewed absent target claim/);assert.doesNotMatch(text,/access_lenses:.*career|access_lenses:.*publishing/);assert.deepEqual(ecosystemValidationErrors(self),[])
 })
+
+const planOf=output=>Object.assign({},...[...output.matchAll(/^\{[\s\S]*?^\}$/gm)].map(match=>JSON.parse(match[0]))).activation_plan
+
+test('link repair restores the recorded adapter set instead of re-detecting hosts',async()=>{
+  const self=await temp(),project=await temp();await run(['init','--root',self])
+  for(const dir of ['.claude','.codex','.pi','.gemini'])await mkdir(join(project,dir))
+  await run(['link','add','--project',project,'--self',self,'--activate','agents','--install-skill','none','--yes'])
+  const handWritten='# Codex notes\n\nWritten by hand; not managed by Holoself.\n';await writeFile(join(project,'CODEX.md'),handWritten)
+  const plan=planOf(await capture(()=>run(['link','repair','--project',project,'--yes'])))
+  assert.equal(plan.source,'recorded');assert.deepEqual(plan.adapter_ids,['agents']);assert.deepEqual(plan.writes,['.holoself/BOOTSTRAP.md','.holoself/runtime.json','AGENTS.md'])
+  for(const file of ['CLAUDE.md','PI.md','GEMINI.md'])await assert.rejects(access(join(project,file)))
+  assert.equal(await readFile(join(project,'CODEX.md'),'utf8'),handWritten)
+  const runtime=JSON.parse(await readFile(join(project,'.holoself','runtime.json'),'utf8'));assert.deepEqual(runtime.activatedAdapters.map(x=>x.id),['agents']);assert.equal(runtime.skillInstallPolicy,'none')
+  const explicit=planOf(await capture(()=>run(['link','repair','--project',project,'--activate','agents,claude','--yes'])))
+  assert.equal(explicit.source,'explicit');assert.match(await readFile(join(project,'CLAUDE.md'),'utf8'),/holoself-link-start/)
+})
+
+test('link repair falls back to detection only when nothing is recorded',async()=>{
+  const self=await temp(),project=await temp();await run(['init','--root',self]);await mkdir(join(project,'.claude'))
+  await run(['link','add','--project',project,'--self',self,'--no-activate','--yes'])
+  const plan=planOf(await capture(()=>run(['link','repair','--project',project,'--dry-run','--yes'])))
+  assert.equal(plan.source,'detected');assert.ok(plan.adapter_ids.includes('claude'));await assert.rejects(access(join(project,'.holoself','runtime.json')))
+})

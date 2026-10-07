@@ -36,6 +36,8 @@ holoself link deactivate --project . --yes
 holoself link doctor --project .
 ```
 
+`link repair` restores the adapters recorded in `.holoself/runtime.json`. It does not re-detect hosts, so it never adds adapters you didn't activate or overwrites an instruction file you wrote by hand. With no runtime record, it falls back to active managed markers, then to detection. The printed `activation_plan.source` says which one applied: `recorded`, `detected`, or `explicit` when you pass `--activate` or `--platform`. Run `link repair --project . --dry-run --yes` to see the plan without writing.
+
 Use `--no-activate` only for deliberate configuration-only workflows. Use `--instructions <relative-file>` to identify an existing canonical manual. Use `--install-skill auto|project|global|none` to control skill resolution. `project` installs full public skills under `.agents`, `.claude`, and `.pi`; `global` requires validated user-level installations and creates no project copies; `none` disables skill management and validation. Preview lists every instruction, bootstrap/runtime artifact, and skill installation. Activation upgrades the old generated miniature shim in place, rejects symlink parents, malformed or reversed markers, and preserves unmanaged skill files unless `--force --yes` appends a bounded managed installation. Deactivation deletes an unchanged Holoself-owned install, but removes only the managed block when user content was appended. Managed writes roll back on failure.
 
 ## User-level skills and project cleanup

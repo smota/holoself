@@ -200,9 +200,16 @@ export function activationStatus(project,options={}){
   const active=bootstrap&&adapters.length>0&&adapters.every(a=>a.marker==='active'&&!a.drift);return {runtime,bootstrap,adapters,skillInstallations:installations,globalSkillInstallations:globalInstallations,projectSkillOverrides,projectSkillOverrideDetails,projectSkillDeployments,active}
 }
 
-function activeAdapterIds(project,runtime){
+export function activeAdapterIds(project,runtime){
   if(runtime?.activatedAdapters?.length)return unique(runtime.activatedAdapters.map(x=>x.id).filter(id=>REGISTRY.some(a=>a.id===id)))
   return REGISTRY.filter(adapter=>adapter.files.some(file=>{try{return managedMarkerState(safeProjectFile(project,file,'adapter migration discovery'))==='active'}catch{return false}})).map(x=>x.id)
+}
+// Adapter set to restore on repair: the runtime record first, then active managed markers.
+// Empty ids mean nothing is known and the caller falls back to `auto` detection.
+export function recordedActivation(project,runtime=readRuntime(project)){
+  const recorded=unique((runtime?.activatedAdapters||[]).map(x=>x.id)),dropped=recorded.filter(id=>!REGISTRY.some(a=>a.id===id))
+  if(recorded.length)return {ids:activeAdapterIds(project,runtime),source:'recorded',dropped}
+  return {ids:activeAdapterIds(project,null),source:'detected',dropped:[]}
 }
 function projectSkillCleanupPlan(project,runtime,options={}){
   const tracked=new Map((runtime?.skillInstallations||runtime?.skillShims||[]).map(x=>[x.file,x])),items=[]

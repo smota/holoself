@@ -4,6 +4,8 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- `link repair` restores the adapters recorded in `.holoself/runtime.json` instead of re-detecting hosts, so it no longer re-creates adapters you removed or overwrites hand-written instruction files. The plan reports `source: recorded|detected|explicit`. Workbench repair now shows the plan first and applies it only if it is unchanged (`PLAN_CHANGED` otherwise) (#34).
+
 ## [0.10.1] — 2026-10-04
 
 - Recognize exact current public skills deployed through terminal directory links as external, read-only installations, while preserving strict managed writes and permission checks.

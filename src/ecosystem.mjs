@@ -8,7 +8,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
-import { activateProject, activationPlan, activationStatus, auditInstructions, bootstrapText, deactivateProject, globalSkillStatus, installGlobalSkills, migrateProjectSkillsToGlobal, preflightActivation, readRuntime } from './adapters.mjs'
+import { activateProject, activationPlan, activationStatus, auditInstructions, bootstrapText, deactivateProject, globalSkillStatus, installGlobalSkills, migrateProjectSkillsToGlobal, preflightActivation, readRuntime, recordedActivation } from './adapters.mjs'
 import { readBindings, resolveBinding, writeBinding, bindingsPath } from './bindings.mjs'
 import { DEFAULT_LENS_IDS, lensIdStructurallyValid, loadLensRegistry, resolveLens } from './lenses.mjs'
 import { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES } from './annotations.mjs'
@@ -2236,10 +2236,14 @@ export function holoselfMcpPreviewProposal(project,id){
   return {proposal_id:preview.proposal.proposal_id,status:preview.proposal.status,changes:preview.changes,preview_hash:preview.preview_hash,requires_human_approval:true,canonical_write_performed:false}
 }
 
-async function activateLinkedProject(o,project,link,verb='Activate'){
+// Repair restores what was activated (runtime record, else active markers); `auto` only when nothing is known.
+function repairSelection(project){const recorded=recordedActivation(project);return {activate:recorded.ids.length?recorded.ids.join(','):'auto',source:recorded.source,dropped:recorded.dropped}}
+// selection: {activate, source, dropped} from repair; activate/setup pass none and report detected|explicit.
+async function activateLinkedProject(o,project,link,verb='Activate',selection=null){
   if(o.noActivate)return null
-  const options={activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||readRuntime(project)?.skillInstallPolicy||'auto',skillHome:o.skillHome,dryRun:o.dryRun,force:o.force}
-  const {plan}=preflightActivation(project,options);console.log(JSON.stringify({activation_plan:{canonical:plan.canonical,adapters:plan.adapters.map(({id,name,file,support,delivery,discovery,tested_product,tested_version,evidence,last_verified,detected})=>({id,name,file,support,delivery,discovery,tested_product,tested_version,evidence,last_verified,detected})),skills:plan.skills,global_skills:plan.globalSkills,writes:plan.writes}},null,2))
+  const explicit=Boolean(o.activate||o.platforms?.length),source=explicit?'explicit':selection?.source||'detected'
+  const options={activate:o.activate||selection?.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||readRuntime(project)?.skillInstallPolicy||'auto',skillHome:o.skillHome,dryRun:o.dryRun,force:o.force}
+  const {plan}=preflightActivation(project,options);console.log(JSON.stringify({activation_plan:{source,adapter_ids:plan.adapters.map(x=>x.id),...(selection?.dropped?.length&&!explicit?{dropped_adapters:selection.dropped}:{}),canonical:plan.canonical,adapters:plan.adapters.map(({id,name,file,support,delivery,discovery,tested_product,tested_version,evidence,last_verified,detected})=>({id,name,file,support,delivery,discovery,tested_product,tested_version,evidence,last_verified,detected})),skills:plan.skills,global_skills:plan.globalSkills,writes:plan.writes}},null,2))
   if(!await askConfirm(o,`${verb} Holoself by modifying bounded managed files: ${plan.writes.join(', ')}?`))return null
   const result=activateProject(project,link,options);for(const item of result.results)console.log(` - ${item.id}: ${item.file} (${item.result})`);return result
 }
@@ -2868,7 +2872,7 @@ export async function runEcosystem(o){
       const registry=loadLensRegistry(diagnostic.path);resolveLens(registry,choice.default_lens);for(const id of choice.secondary_lenses)resolveLens(registry,id)
       if(legacy||o.lens||!current){
         console.log(JSON.stringify({binding_migration:{project:slash(project),before:current,legacy,after:choice}},null,2))
-        if(o.dryRun)return true
+        if(o.dryRun){if(!o.noActivate)await activateLinkedProject(o,project,diagnostic,'Repair',repairSelection(project));return true}
         if(!await askConfirm(o,'Migrate lens choice into self-side bindings?'))return true
         const file=bindingsPath(diagnostic.path),before=existsSync(file)?readFileSync(file):null,linkBefore=readFileSync(linkPath(project))
         try{
@@ -2879,7 +2883,7 @@ export async function runEcosystem(o){
           })
         }catch(error){atomicWrite(linkPath(project),linkBefore);if(before)atomicWrite(file,before);else if(existsSync(file))rmSync(file);throw error}
       }
-      if(!o.noActivate)await activateLinkedProject(o,project,readLink(project),'Repair')
+      if(!o.noActivate)await activateLinkedProject(o,project,readLink(project),'Repair',repairSelection(project))
       return true
     }
     if(sub==='deactivate'){if(!await askConfirm(o,'Remove bounded Holoself activation sections while preserving link metadata?'))return true;const results=deactivateProject(project,{dryRun:o.dryRun});for(const item of results)console.log(` - ${item.file}: ${item.result}`);return true}
