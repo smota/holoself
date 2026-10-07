@@ -21,7 +21,7 @@ Status: accepted for implementation (issues #34, #33). Ships with the #34 pull r
    }
    ```
 
-   The source is `recorded` when `runtime.json` lists adapters, and `detected` otherwise. The `detected` fallback first uses managed-marker discovery, then `auto` detection.
+   The source is `recorded` when `runtime.json` lists known adapters, and `detected` otherwise. Unknown recorded IDs are reported as `dropped_adapters`; a record with only unknown IDs counts as no record. The `detected` fallback first uses managed-marker discovery (plus `agents`). If no markers remain, it uses detected hosts but skips any adapter whose instruction file exists without markers (hand-written), reported as `skipped_unmanaged`. Repair therefore always passes an explicit list and never runs bare `auto`.
 2. In the repair branch of `link repair`, when the caller passed neither `--activate` nor `--platform`, set `o.activate` to the recorded IDs joined with commas, so `activationPlan` takes its `list` mode. When the fallback finds nothing, keep `auto`. An explicit `--activate` or `--platform` still overrides the record and reports `source: "explicit"`.
 3. `activateLinkedProject` adds `source: "recorded" | "detected" | "explicit"` and `adapter_ids` to the printed `activation_plan` JSON. `link activate` reports `detected` or `explicit`. It never reads the record: activation is the step that creates the record.
 4. Repair keeps `skillInstallPolicy` from the runtime record. This is already the behaviour, through `installSkill: o.installSkill || readRuntime(project)?.skillInstallPolicy`.

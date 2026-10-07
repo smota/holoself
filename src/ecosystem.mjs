@@ -2237,13 +2237,13 @@ export function holoselfMcpPreviewProposal(project,id){
 }
 
 // Repair restores what was activated (runtime record, else active markers); `auto` only when nothing is known.
-function repairSelection(project){const recorded=recordedActivation(project);return {activate:recorded.ids.length?recorded.ids.join(','):'auto',source:recorded.source,dropped:recorded.dropped}}
-// selection: {activate, source, dropped} from repair; activate/setup pass none and report detected|explicit.
+function repairSelection(project){const recorded=recordedActivation(project);return {activate:recorded.ids.join(','),source:recorded.source,dropped:recorded.dropped,skipped:recorded.skipped}}
+// selection: {activate, source, dropped, skipped} from repair; activate/setup pass none and report detected|explicit.
 async function activateLinkedProject(o,project,link,verb='Activate',selection=null){
   if(o.noActivate)return null
   const explicit=Boolean(o.activate||o.platforms?.length),source=explicit?'explicit':selection?.source||'detected'
   const options={activate:o.activate||selection?.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||readRuntime(project)?.skillInstallPolicy||'auto',skillHome:o.skillHome,dryRun:o.dryRun,force:o.force}
-  const {plan}=preflightActivation(project,options);console.log(JSON.stringify({activation_plan:{source,adapter_ids:plan.adapters.map(x=>x.id),...(selection?.dropped?.length&&!explicit?{dropped_adapters:selection.dropped}:{}),canonical:plan.canonical,adapters:plan.adapters.map(({id,name,file,support,delivery,discovery,tested_product,tested_version,evidence,last_verified,detected})=>({id,name,file,support,delivery,discovery,tested_product,tested_version,evidence,last_verified,detected})),skills:plan.skills,global_skills:plan.globalSkills,writes:plan.writes}},null,2))
+  const {plan}=preflightActivation(project,options);console.log(JSON.stringify({activation_plan:{source,adapter_ids:plan.adapters.map(x=>x.id),...(selection?.dropped?.length&&!explicit?{dropped_adapters:selection.dropped}:{}),...(selection?.skipped?.length&&!explicit?{skipped_unmanaged:selection.skipped}:{}),canonical:plan.canonical,adapters:plan.adapters.map(({id,name,file,support,delivery,discovery,tested_product,tested_version,evidence,last_verified,detected})=>({id,name,file,support,delivery,discovery,tested_product,tested_version,evidence,last_verified,detected})),skills:plan.skills,global_skills:plan.globalSkills,writes:plan.writes}},null,2))
   if(!await askConfirm(o,`${verb} Holoself by modifying bounded managed files: ${plan.writes.join(', ')}?`))return null
   const result=activateProject(project,link,options);for(const item of result.results)console.log(` - ${item.id}: ${item.file} (${item.result})`);return result
 }

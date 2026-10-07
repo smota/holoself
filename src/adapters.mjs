@@ -204,12 +204,15 @@ export function activeAdapterIds(project,runtime){
   if(runtime?.activatedAdapters?.length)return unique(runtime.activatedAdapters.map(x=>x.id).filter(id=>REGISTRY.some(a=>a.id===id)))
   return REGISTRY.filter(adapter=>adapter.files.some(file=>{try{return managedMarkerState(safeProjectFile(project,file,'adapter migration discovery'))==='active'}catch{return false}})).map(x=>x.id)
 }
-// Adapter set to restore on repair: the runtime record first, then active managed markers.
-// Empty ids mean nothing is known and the caller falls back to `auto` detection.
+// Adapter set to restore on repair: the runtime record, else active managed markers, else detected hosts.
+// The host fallback skips adapters whose instruction file exists without markers (written by hand); agents is always kept.
 export function recordedActivation(project,runtime=readRuntime(project)){
-  const recorded=unique((runtime?.activatedAdapters||[]).map(x=>x.id)),dropped=recorded.filter(id=>!REGISTRY.some(a=>a.id===id))
-  if(recorded.length)return {ids:activeAdapterIds(project,runtime),source:'recorded',dropped}
-  return {ids:activeAdapterIds(project,null),source:'detected',dropped:[]}
+  const recorded=unique((runtime?.activatedAdapters||[]).map(x=>x.id)),dropped=recorded.filter(id=>!REGISTRY.some(a=>a.id===id)),known=recorded.filter(id=>!dropped.includes(id))
+  if(known.length)return {ids:known,source:'recorded',dropped,skipped:[]}
+  const marked=activeAdapterIds(project,null);if(marked.length)return {ids:unique(['agents',...marked]),source:'detected',dropped,skipped:[]}
+  const handWritten=adapter=>adapter.files.some(file=>{try{return managedMarkerState(safeProjectFile(project,file,'repair host discovery'))==='inactive'}catch{return false}})
+  const hosts=detectAdapters(project).filter(adapter=>adapter.detected),skipped=hosts.filter(adapter=>adapter.id!=='agents'&&handWritten(adapter)).map(adapter=>adapter.id)
+  return {ids:unique(['agents',...hosts.map(adapter=>adapter.id).filter(id=>!skipped.includes(id))]),source:'detected',dropped,skipped}
 }
 function projectSkillCleanupPlan(project,runtime,options={}){
   const tracked=new Map((runtime?.skillInstallations||runtime?.skillShims||[]).map(x=>[x.file,x])),items=[]
