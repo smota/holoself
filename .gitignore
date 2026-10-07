@@ -4,6 +4,9 @@ node_modules/
 .env*
 scratch/
 
+# Local Meshloop execution state (state.sqlite)
+.meshloop/
+
 # Local Pi agent state
 .pi/
 .pi-subagents/
