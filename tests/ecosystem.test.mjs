@@ -394,3 +394,14 @@ test('link deactivate rejects unsupported flags and previews without --yes',asyn
   assert.deepEqual(await Promise.all(['AGENTS.md','CLAUDE.md','.holoself/runtime.json'].map(file=>readFile(join(project,file),'utf8'))),before)
   await assert.rejects(run(['context','--project',project,'--adapters','claude']),error=>error.code==='OPTION_NOT_SUPPORTED')
 })
+
+test('scoped deactivation keeps a canonical file shared with a remaining adapter',async()=>{
+  const self=await temp(),project=await temp();await run(['init','--root',self])
+  await run(['link','add','--project',project,'--self',self,'--activate','agents,claude,codex','--instructions','CLAUDE.md','--install-skill','none','--yes'])
+  const canonical=await readFile(join(project,'CLAUDE.md'),'utf8'),codex=await readFile(join(project,'CODEX.md'),'utf8')
+  const output=await capture(()=>run(['link','deactivate','--project',project,'--adapters','claude','--yes']))
+  assert.match(output,/claude: CLAUDE\.md: kept-shared/);assert.equal(await readFile(join(project,'CLAUDE.md'),'utf8'),canonical);assert.equal(await readFile(join(project,'CODEX.md'),'utf8'),codex)
+  const runtime=JSON.parse(await readFile(join(project,'.holoself','runtime.json'),'utf8'));assert.deepEqual(runtime.activatedAdapters.map(x=>x.id),['agents','codex'])
+  assert.equal(JSON.parse(await capture(()=>run(['link','status','--project',project]))).state,'activated')
+  await run(['link','deactivate','--project',project,'--adapters','all,claude','--yes']);await assert.rejects(access(join(project,'.holoself','runtime.json')))
+})

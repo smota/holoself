@@ -49,7 +49,7 @@ function requiredValue(args, i, flag){
 }
 // Flags are parsed globally; commands listed here accept only their own flags plus COMMON_FLAGS.
 // SCOPED_FLAGS are rejected on every command that does not list them. Unlisted commands are not yet validated.
-const COMMON_FLAGS=['--root','--data-root','--data-dir','--help','-h','--json','--yes','--confirm','--dry-run']
+const COMMON_FLAGS=['--root','--data-root','--data-dir','--help','-h','--version','-v','--json','--yes','--confirm','--dry-run']
 const COMMAND_FLAGS={'link deactivate':['--project','--adapters']}
 const SCOPED_FLAGS={'--adapters':['link deactivate']}
 function validateFlags(o){
