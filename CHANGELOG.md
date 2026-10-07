@@ -4,6 +4,8 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- Fix the data-root `AGENTS.md` block and the public skill, which recommended `holoself context --root . --project .` (it fails with `LINK_REQUIRED`). They now use `holoself context --root . --task …` from inside the root. `holoself init` updates existing root blocks, and `--project` pointing at a data root now explains the fix (#32).
+
 ## [0.10.1] — 2026-10-04
 
 - Recognize exact current public skills deployed through terminal directory links as external, read-only installations, while preserving strict managed writes and permission checks.
