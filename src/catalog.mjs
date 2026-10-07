@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { DISCLOSURES, VISIBILITIES } from './annotations.mjs'
 
 export const CATALOG_SCHEMA_VERSION = 2
-export const CACHE_SCHEMA_VERSION = 3
+export const CACHE_SCHEMA_VERSION = 4
 
 const HASH_RE = /^[0-9a-f]{64}$/
 export const SOURCE_ID_RE = /^hs-[0-9a-f]{20}$/

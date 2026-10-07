@@ -119,6 +119,8 @@ Compatibility entry points remain at [architecture.md](architecture.md), [linked
 
 - [External public skill deployments](decisions/external-skill-deployments.md): read-only skills-manager compatibility, provider paths, diagnostics, and maintenance safety.
 
+- [Context packet budget](specifications/context-packet-budget.md): whole-packet cap, body-once packets, session-start sources, one selection path (#31).
+
 ## AgentFlow SDLC
 
 - [AgentFlow SDLC Definition](sdlc-definition.md)

@@ -7,6 +7,7 @@ import {
   holoselfMcpPreviewProposal,
   holoselfMcpSearch,
   holoselfMcpStatus,
+  mcpToolEnvelope,
   PROPOSAL_TYPES,
   VISIBILITIES
 } from './ecosystem.mjs'
@@ -24,7 +25,8 @@ const baseContextProperties={
   lens:{type:'string',minLength:1,maxLength:80,description:'A lens ID defined in the canonical self root.'},
   budget:{type:'string',enum:BUDGETS,default:'standard'},
   temporal:{type:'string',enum:TEMPORAL,default:'current'},
-  cursor:{type:'string',minLength:1,maxLength:4096,description:'Opaque pagination cursor from previous manifest request.'}
+  cursor:{type:'string',minLength:1,maxLength:4096,description:'Opaque pagination cursor from previous manifest request.'},
+  session_start:{type:'boolean',default:false,description:'Recurring session-start load: without a task, return only the lens session_start_sources (default identity, preferences, work-context).'}
 }
 const objectSchema=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false})
 const resultSchema=objectSchema({schema_version:{type:'integer'},data:{type:'object'},error:{type:'object'}})
@@ -74,11 +76,12 @@ function resolveBoundProject(projectInput,env=process.env,cwd=process.cwd()){
   holoselfMcpStatus(project)
   return {project,source}
 }
-function toolResult(data){
-  const structuredContent={schema_version:1,data}
-  const text=JSON.stringify(structuredContent)
-  if(Buffer.byteLength(text)>MAX_RESULT_BYTES)fail('bounded MCP result exceeded 512 KiB','RESULT_TOO_LARGE')
-  return {content:[{type:'text',text}],structuredContent}
+// Context results carry the packet once (structuredContent) with a short text summary; other tools echo JSON.
+const CONTEXT_TOOLS=new Set([`${TOOL_PREFIX}context`,`${TOOL_PREFIX}context_manifest`,`${TOOL_PREFIX}context_get`])
+function toolResult(data,name){
+  const result=CONTEXT_TOOLS.has(name)?mcpToolEnvelope(data):{content:[{type:'text',text:JSON.stringify({schema_version:1,data})}],structuredContent:{schema_version:1,data}}
+  if(Buffer.byteLength(JSON.stringify(result))>MAX_RESULT_BYTES)fail('bounded MCP result exceeded 512 KiB','RESULT_TOO_LARGE')
+  return result
 }
 function safeErrorMessage(error){
   if(!error?.code)return 'Holoself operation failed closed. Run holoself link doctor locally for path-safe diagnostics.'
@@ -120,7 +123,7 @@ export function createMcpSession({project,write=line=>process.stdout.write(`${li
       else if(!initialized)throw Object.assign(new Error('Server is not initialized'),{rpcCode:-32002})
       else if(request.method==='tools/list')result={tools:MCP_TOOLS}
       else if(request.method==='tools/call'){
-        try{result=toolResult(callTool(project,request.params?.name,request.params?.arguments||{}))}catch(error){result=toolError(error)}
+        try{result=toolResult(callTool(project,request.params?.name,request.params?.arguments||{}),request.params?.name)}catch(error){result=toolError(error)}
       }else throw Object.assign(new Error(`Method not found: ${request.method}`),{rpcCode:-32601})
       write(JSON.stringify(response(request.id,result)))
     }catch(error){write(JSON.stringify(response(request.id,null,protocolError(error.rpcCode||-32603,error.rpcCode?error.message:'Internal error'))))}

@@ -16,6 +16,7 @@ import {
   buildCursor,
   cachedSelection,
   selectContextRecords,
+  selectionReceipt,
   dateValue,
   ENVELOPE_BYTE_CAPS,
   CONTEXT_BUDGETS,
@@ -1031,7 +1032,8 @@ function contextData(o){
     identity_id:identityId,
     lens,
     allowed_lenses:allowedLensesList,
-    task_hash:hash(String(o.task||'')),
+    // A session-start request selects differently from a task-less one, so it gets its own decision key.
+    task_hash:hash(String(o.task||'')+(o.sessionStart?' session-start':'')),
     temporal:o.temporal||'current',
     include_history:Boolean(o.includeHistory),
     budget:budgetName,
@@ -1160,177 +1162,18 @@ function contextData(o){
     registryHash:registry.registry_hash,
     allowedLenses:allowedLensesList,
     deliver:deliverRecord,
+    sessionStart:Boolean(o.sessionStart),
+    sessionStartSources:resolution.session_start_sources||null,
     now:o.now
   }
 
-  let selected=null
+  // Cold, in-memory and persistent hits all run the same selection; a hit only marks that the decision was seen.
   const cachedEntry=cacheDir?readDecisionCache(cacheDir,decisionKey,{now:o.now}):null
+  let selected
   if(cachedEntry){
-    const candById=new Map(candidates.map(c=>[c.source_id,c]))
-    const selectedCandidates=cachedEntry.receipt.source_ids.map(id=>candById.get(id)).filter(Boolean)
-    const deliveredRecords=[]
-    const omitted=[]
-    const temporalExcluded=[]
-    const eligibleCandidates=[]
-    const reqSet = new Set((o.sources || []).concat(requested_source_ids || []))
-    for(const c of candidates){
-      const temporal=temporalDisposition(c.metadata,o.task,{includeHistory:o.includeHistory,temporal:o.temporal,now:o.now})
-      if(!temporal.include){
-        temporalExcluded.push({source:c.path,reason:temporal.reason})
-      }else{
-        c.knowledge_status = temporal.status
-        c.temporal_scope = temporal.scope
-        if(reqSet.size && !reqSet.has(c.source_id) && !reqSet.has(c.path)) continue
-        eligibleCandidates.push(c)
-      }
-    }
-    eligibleCandidates.sort((a,b)=>{
-      if(reqSet.size)return (a.source_id<b.source_id?-1:a.source_id>b.source_id?1:0)||(a.path<b.path?-1:a.path>b.path?1:0)
-      return (b.task_relevance||0)-(a.task_relevance||0)||(a.source_id<b.source_id?-1:a.source_id>b.source_id?1:0)||(a.path<b.path?-1:a.path>b.path?1:0)
-    })
-    const selectedCandidateIds=new Set(selectedCandidates.map(c=>c.source_id))
-    if(!o.manifest){
-      let contribCount=0
-      for(const c of eligibleCandidates){
-        if(selectedCandidateIds.has(c.source_id)){
-          if(c.kind==='contrib') contribCount++
-        }else{
-          if(o.task&&!reqSet.size&&c.kind==='project'&&(c.task_relevance||0)<=0&&c.document_role!=='policy'){
-            omitted.push({source:c.path,reason:'no meaningful task relevance'})
-          }else if(c.kind==='contrib'&&contribCount>=2){
-            omitted.push({source:c.path,reason:'contrib selection limit reached'})
-          }else{
-            omitted.push({source:c.path,reason:`context budget ${budgetName} exhausted`})
-          }
-        }
-      }
-    }
-    let isTruncated=false
-    let chars=0
-    if(o.manifest){
-      for(const cand of selectedCandidates){
-        deliveredRecords.push({
-          ...cand,
-          content:'',
-          manifest_only:true,
-          truncated:false,
-          knowledge_status:cand.knowledge_status||'current',
-          temporal_scope:cand.temporal_scope||'timeless'
-        })
-      }
-    }else{
-      const budgetChars=CONTEXT_BUDGETS[budgetName]||CONTEXT_BUDGETS.standard
-      const isNotNeeded=contextNeed(o.task)==='not-needed'
-      for(const cand of selectedCandidates){
-        if(!reqSet.size&&isNotNeeded&&cand.kind==='self'){
-          omitted.push({source:cand.path,reason:'personal context not needed for this task'})
-          continue
-        }
-        const remaining=budgetChars-chars
-        if(remaining<160){
-          omitted.push({source:cand.path,reason:`context budget ${budgetName} exhausted`})
-          isTruncated=true
-          continue
-        }
-        const delivered=deliverRecord(cand)
-        if(!delivered){
-          if(cand.delivery_reason) omitted.push({source:cand.path,reason:cand.delivery_reason})
-          continue
-        }
-        const res=excerpt(delivered.content,o.task,remaining)
-        if(!res.content.trim()){
-          omitted.push({source:cand.path,reason:'empty after filtering'})
-          continue
-        }
-        deliveredRecords.push({
-          ...cand,
-          content:res.content,
-          metadata:delivered.metadata||cand.metadata,
-          source_hash:delivered.source_hash||cand.source_hash,
-          freshness:delivered.freshness||cand.freshness,
-          estimated_tokens:delivered.estimated_tokens??cand.estimated_tokens,
-          sections:delivered.sections||cand.sections,
-          claims:delivered.claims||cand.claims,
-          tags:delivered.tags||cand.tags,
-          links:delivered.links||cand.links,
-          search_text:delivered.search_text||cand.search_text,
-          knowledge_status:cand.knowledge_status||'current',
-          temporal_scope:cand.temporal_scope||'timeless',
-          truncated:res.truncated
-        })
-        chars+=res.content.length
-        if(res.truncated)isTruncated=true
-      }
-    }
-    let startOffset=0
-    if(o.cursor){
-      try{
-        const parsed=JSON.parse(Buffer.from(o.cursor,'base64url').toString('utf8'))
-        if(Number.isInteger(parsed?.p?.offset)&&parsed.p.offset>=0) startOffset=parsed.p.offset
-      }catch{}
-    }
-    const nextOffset=startOffset+deliveredRecords.length
-    const nextCursor=(o.manifest&&nextOffset<eligibleCandidates.length)
-      ?buildCursor(identityId,lens,budgetName,true,selfId,cachedEntry.task_hash,cachedEntry.temporal,nextOffset,cachedEntry.state_hash,cursorSecret)
-      :null
-    const receiptInput={
-      budget:budgetName,
-      task_hash:cachedEntry.task_hash,
-      lens:lens||null,
-      sources:deliveredRecords.map(r=>[r.source_id,r.source_hash,r.truncated])
-    }
-    const contextHash=hash(canonicalJson(receiptInput))
-    const freshReceipt={
-      schema_version:1,
-      context_hash:contextHash,
-      task_hash:cachedEntry.task_hash,
-      lens:lens||null,
-      budget:budgetName,
-      temporal:cachedEntry.temporal,
-      source_ids:deliveredRecords.map(r=>r.source_id),
-      source_hashes:deliveredRecords.map(r=>r.source_hash)
-    }
-    const serializedContentBytes=Buffer.byteLength(JSON.stringify(deliveredRecords))
-    selected={
-      records:deliveredRecords,
-      omitted,
-      temporalExcluded,
-      candidates:eligibleCandidates,
-      startOffset,
-      taskHash:cachedEntry.task_hash,
-      temporalVal:cachedEntry.temporal,
-      stateHash:cachedEntry.state_hash,
-      selection:{
-        schema_version:1,
-        context_need:contextNeed(o.task),
-        budget:budgetName,
-        budget_chars:(CONTEXT_BUDGETS[budgetName]||CONTEXT_BUDGETS.standard)===Number.MAX_SAFE_INTEGER?null:(CONTEXT_BUDGETS[budgetName]||CONTEXT_BUDGETS.standard),
-        manifest_only:Boolean(o.manifest),
-        temporal:cachedEntry.temporal,
-        candidate_count:candidates.length,
-        eligible_count:eligibleCandidates.length,
-        selected_count:deliveredRecords.length,
-        omitted_count:omitted.length+temporalExcluded.length,
-        content_chars:chars,
-        estimated_tokens:estimateTokens(chars),
-        estimated_tokens_total_heuristic:Math.ceil(serializedContentBytes/4),
-        truncated:isTruncated||deliveredRecords.some(r=>r.truncated),
-        truncated_sources:deliveredRecords.filter(r=>r.truncated).map(r=>r.source_id),
-        selected_sources:deliveredRecords.map(r=>r.source_id),
-        temporal_excluded:temporalExcluded.length,
-        contrib_sources:deliveredRecords.filter(r=>r.kind==='contrib').map(r=>r.source_id),
-        contradiction_digest:contradictionDigest(deliveredRecords),
-        reconcile_reads:reconcileReads,
-        catalog_reads:catResult.catalog_reads||0,
-        next_cursor:nextCursor
-      },
-      receipt:freshReceipt,
-      cache:{key:decisionKey,hit:true,persistent:true}
-    }
+    selected={...selectContextRecords(candidates,selectionOptions),cache:{key:decisionKey,hit:true,persistent:true}}
   }else{
     selected=cachedSelection(candidates,selectionOptions)
-    selected.selection.reconcile_reads=reconcileReads
-    selected.selection.catalog_reads=catResult.catalog_reads||0
     if(cacheDir){
       const decisionEntry={
         schema_version:CACHE_SCHEMA_VERSION,
@@ -1352,14 +1195,16 @@ function contextData(o){
         receipt:selected.receipt,
         state_hash:selected.stateHash,
         valid_until_epoch_ms:validUntilEpochMs,
-        estimated_tokens_total:selected.selection.estimated_tokens_total_heuristic
+        estimated_tokens_total:selected.selection.estimated_tokens
       }
       writeDecisionCache(cacheDir,decisionKey,decisionEntry,getDecisionCacheLimits(link))
       selected.cache={key:decisionKey,hit:false,persistent:true}
     }
   }
+  selected.selection.reconcile_reads=reconcileReads
+  selected.selection.catalog_reads=catResult.catalog_reads||0
 
-  const records=[...selected.records],sources=records.map(({content,metadata,absolute_path,...source})=>source)
+  const records=[...selected.records]
   const warnings=[
     ...(catResult.warnings||[]),
     ...(identity.kind==='owner:direct'?[...(selfData.warnings||[]),...(local.warnings||[])]:[])
@@ -1367,46 +1212,38 @@ function contextData(o){
   if(!link&&!o.self&&resolve(self)!==resolve(project))warnings.push('No project link found; resolved explicit/default self root.')
   const generatedAt=new Date().toISOString(),restrictedHost=Boolean(o.snapshot||o.restrictedHost||adapter==='restricted-host'),expiresAt=restrictedHost?new Date(Date.parse(generatedAt)+(o.expiresHours||24)*60*60*1000).toISOString():null
   const validation=resolvedContextAssertions(records,lens,o.task,adapter,link,resolution,subject)
-  const selfRecords=records.filter(record=>record.kind==='self')
   const localSpaceId=identity.kind==='client:linked'?canonicalSpaceId(project):'self'
-  const localRecords=records.filter(record=>record.kind==='project'&&(!record.space_id||record.space_id===localSpaceId))
-  const methodRecords=records.filter(record=>record.kind==='contrib')
-  const federatedRecords=records.filter(record=>record.kind==='project'&&record.space_id&&record.space_id!==localSpaceId)
-
-  const isLinked=identity.kind==='client:linked'
-  const selfProjection=isLinked
-    ?{documents:selfRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))}
-    :{path:slash(resolve(self)),documents:selfRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))}
-
-  const projectProjection=isLinked
-    ?{name:basename(project),documents:localRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))}
-    :{path:slash(project),name:basename(project),documents:localRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))}
-
-  const federatedProjections=(catResult.federated||[]).map(peer=>{
-    const peerDocs=federatedRecords.filter(r=>r.space_id===peer.space_id)
+  const isLinked=identity.kind==='client:linked',isMcp=surface==='mcp'
+  // Document bodies live only in the owning documents array; sources[] is a body-free provenance index.
+  const projections=list=>{
+    const selfDocs=list.filter(r=>r.kind==='self').map(documentProjection),localDocs=list.filter(r=>r.kind==='project'&&(!r.space_id||r.space_id===localSpaceId)).map(documentProjection)
     return {
-      space_id:peer.space_id,
-      name:peer.name,
-      documents:peerDocs.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))
+      self:isLinked?{documents:selfDocs}:{path:slash(resolve(self)),documents:selfDocs},
+      project:isLinked?{name:basename(project),documents:localDocs}:{path:slash(project),name:basename(project),documents:localDocs},
+      federated:(catResult.federated||[]).map(peer=>({space_id:peer.space_id,name:peer.name,documents:list.filter(r=>r.kind==='project'&&r.space_id===peer.space_id&&r.space_id!==localSpaceId).map(documentProjection)})).filter(p=>p.documents.length>0),
+      methods:{documents:list.filter(r=>r.kind==='contrib').map(r=>({...documentProjection(r),contrib:r.contrib}))},
+      sources:list.map(sourceIndexEntry),
+      source_hashes:list.map(r=>({kind:r.kind,path:r.path,sha256:r.source_hash,freshness:r.freshness}))
     }
-  }).filter(p=>p.documents.length>0)
+  }
+  const view=projections(records)
 
   const hasUnreachable=Boolean(catResult.unreachable_spaces&&catResult.unreachable_spaces.length>0)
   const queryStatus=hasUnreachable?'partial':(selected.selection.context_need==='not-needed'?'not-needed':'complete')
 
   const unauthorizedSourcesOmitted=(selfData.unauthorized_sources_omitted||0)+(local.unauthorized_sources_omitted||0)+federatedUnauthorizedOmitted
-  const result={
+  let result={
     status:queryStatus,
-    self:selfProjection,
+    self:view.self,
     lens,
     lens_resolution:{schema_version:resolution.schema_version,id:resolution.id,title:resolution.title,sensitivity_access:[...resolution.sensitivity_access]},
-    project:projectProjection,
-    federated:federatedProjections,
-    methods:{documents:methodRecords.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only,contrib:r.contrib}))},
+    project:view.project,
+    federated:view.federated,
+    methods:view.methods,
     ...(hasUnreachable?{unreachable_spaces:catResult.unreachable_spaces}:{}),
     task:o.task||null,
-    packet_metadata:{schema_version:2,packet_id:randomUUID(),generated_at:generatedAt,expires_at:expiresAt,host_mode:restrictedHost?'restricted-host-snapshot':'live-local',lens_registry_hash:registry.registry_hash,source_hash_algorithm:'sha256',source_hashes:sources.map(source=>({kind:source.kind,path:source.path,sha256:source.source_hash,freshness:source.freshness}))},
-    sources,
+    packet_metadata:{schema_version:3,packet_id:randomUUID(),generated_at:generatedAt,expires_at:expiresAt,host_mode:restrictedHost?'restricted-host-snapshot':'live-local',lens_registry_hash:registry.registry_hash,source_hash_algorithm:'sha256',source_hashes:view.source_hashes},
+    sources:view.sources,
     restrictions:[...selfData.restrictions,...local.restrictions,...deliveryRestrictions,...selected.omitted,...selected.temporalExcluded],
     warnings,
     validation,
@@ -1424,55 +1261,60 @@ function contextData(o){
     cache:selected.cache,
     ...(!isLinked&&unauthorizedSourcesOmitted>0?{unauthorized_sources_omitted:unauthorizedSourcesOmitted}:{})
   }
+  // MCP strips private paths before measuring so the cap and total_bytes apply to what is actually sent.
+  const finish=value=>{if(!isMcp)return value;const clean=withoutPrivatePaths(value);clean.self={documents:clean.self.documents};clean.project={name:value.project.name,documents:clean.project.documents};return clean}
+  const measurePayload=value=>isMcp?Buffer.byteLength(JSON.stringify(mcpToolEnvelope(value))):Buffer.byteLength(JSON.stringify(value,null,2)+'\n')
+  result=finish(result)
 
-  const envelopeCap=ENVELOPE_BYTE_CAPS[budgetName]||ENVELOPE_BYTE_CAPS.standard
-  const isMcp=surface==='mcp'
-  const measurePayload=res=>{
-    if(isMcp)return Buffer.byteLength(JSON.stringify({content:[{type:'text',text:JSON.stringify(res,null,2)}],structuredContent:{data:res}}))
-    return Buffer.byteLength(JSON.stringify(res,null,2)+'\n')
-  }
-
+  // The envelope cap (2x the content budget) bounds the emitted packet on every path, not only --manifest.
+  const envelopeCap=ENVELOPE_BYTE_CAPS[budgetName]||ENVELOPE_BYTE_CAPS.standard,dropped=[]
+  // Size fields are present (with values at least as wide as the final ones) while trimming, so adding them cannot push past the cap.
+  const widest=envelopeCap===Number.MAX_SAFE_INTEGER?Number.MAX_SAFE_INTEGER:envelopeCap
+  Object.assign(result.selection,{envelope_cap_bytes:envelopeCap===Number.MAX_SAFE_INTEGER?null:envelopeCap,total_bytes:widest,estimated_tokens_total:widest,estimated_tokens_total_heuristic:widest})
   let payloadBytes=measurePayload(result)
-  if(o.manifest&&payloadBytes>envelopeCap){
-    const candidateList=selected.candidates||candidates
-    const startOffset=selected.startOffset||0
-    while(records.length>0&&payloadBytes>envelopeCap){
-      const removed=records.pop()
-      result.restrictions.push({source:removed.path,reason:'source exceeds envelope budget'})
-      result.sources=records.map(({content,metadata,absolute_path,...s})=>s)
-      result.self.documents=records.filter(r=>r.kind==='self').map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))
-      result.project.documents=records.filter(r=>r.kind==='project'&&(!r.space_id||r.space_id===localSpaceId)).map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))
-      result.federated=(catResult.federated||[]).map(peer=>{
-        const pDocs=records.filter(r=>r.space_id===peer.space_id)
-        return {
-          space_id:peer.space_id,
-          name:peer.name,
-          documents:pDocs.map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only}))
-        }
-      }).filter(p=>p.documents.length>0)
-      result.methods.documents=records.filter(r=>r.kind==='contrib').map(r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only,contrib:r.contrib}))
-      result.packet_metadata.source_hashes=result.sources.map(s=>({kind:s.kind,path:s.path,sha256:s.source_hash,freshness:s.freshness}))
-      result.selection.selected_count=records.length
-      result.selection.selected_sources=records.map(r=>r.source_id)
-      result.selection.omitted_count=result.restrictions.length
-      result.selection.truncated=true
-      payloadBytes=measurePayload(result)
-    }
-    result.selection.estimated_tokens_total_heuristic=Math.ceil(payloadBytes/4)
-    let nextOffset=startOffset+records.length
-    if(records.length===0&&startOffset<candidateList.length){
-      nextOffset=startOffset+1
-      result.selection.truncated=true
-    }
-    if(nextOffset<candidateList.length){
-      result.selection.next_cursor=buildCursor(identityId,lens,budgetName,Boolean(o.manifest),selfId,selected.taskHash,selected.temporalVal,nextOffset,selected.stateHash,cursorSecret)
-    }else{
-      result.selection.next_cursor=null
+  while(records.length>0&&payloadBytes>envelopeCap){
+    const removed=records.pop();dropped.push(removed.source_id);result.selection.envelope_dropped=dropped
+    result.restrictions.push({source:removed.path,reason:`packet envelope cap ${budgetName} exceeded`})
+    const next=projections(records),cleanNext=finish({self:next.self,project:next.project,federated:next.federated,methods:next.methods,sources:next.sources})
+    Object.assign(result,{self:cleanNext.self,project:cleanNext.project,federated:cleanNext.federated,methods:cleanNext.methods,sources:cleanNext.sources})
+    result.packet_metadata.source_hashes=next.source_hashes
+    const receipt=selectionReceipt(records,{budget:budgetName,taskHash:selected.taskHash,lens,temporal:selected.temporalVal})
+    result.context_receipt={...result.context_receipt,context_hash:receipt.context_hash,source_ids:receipt.source_ids,source_hashes:receipt.source_hashes}
+    Object.assign(result.selection,{selected_count:records.length,selected_sources:records.map(r=>r.source_id),omitted_count:result.selection.omitted_count+1,truncated:true})
+    payloadBytes=measurePayload(result)
+  }
+  if(dropped.length){
+    if(o.manifest){
+      const candidateList=selected.candidates||candidates,startOffset=selected.startOffset||0
+      const nextOffset=records.length===0&&startOffset<candidateList.length?startOffset+1:startOffset+records.length
+      result.selection.next_cursor=nextOffset<candidateList.length?buildCursor(identityId,lens,budgetName,true,selfId,selected.taskHash,selected.temporalVal,nextOffset,selected.stateHash,cursorSecret):null
     }
   }
+  if(payloadBytes>envelopeCap){result.selection.truncated=true;result.warnings.push('packet envelope exceeds cap without content')}
 
+  // total_bytes counts itself, so measure until the digit count is stable.
+  for(let pass=0;pass<4;pass++){
+    const bytes=measurePayload(result);if(result.selection.total_bytes===bytes)break
+    Object.assign(result.selection,{total_bytes:bytes,estimated_tokens_total:Math.ceil(bytes/4),estimated_tokens_total_heuristic:Math.ceil(bytes/4)})
+  }
   return result
 }
+const documentProjection=r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only})
+// When the body is delivered in documents[], body-derived fields (search_text, sections, claims, links) are left out
+// and headings stay as a short outline. Manifest entries carry no body, so they keep their snippets.
+function sourceIndexEntry(record){
+  const {content,metadata,absolute_path,...entry}=record
+  if(record.manifest_only)return entry
+  // Metadata copies (access_lenses, disclosure, ...) and source_ref are dropped too: documents[].metadata and source_id/source_hash carry them.
+  const {search_text,sections,claims,links,source_ref,access_lenses,disclosure,publication_allowed,visibility,public_safe,sensitivity,confidence,...index}=entry
+  return {...index,headings:(sections||[]).map(section=>section.heading).filter(Boolean)}
+}
+// MCP context results carry the packet once, in structuredContent; the text part is a short summary.
+export function mcpContextSummary(data){
+  const docs=[...(data.self?.documents||[]),...(data.project?.documents||[]),...(data.federated||[]).flatMap(peer=>peer.documents),...(data.methods?.documents||[])]
+  return `Holoself context (${data.lens}, ${data.status}): ${docs.length} document(s) in structuredContent.data; ${data.selection?.total_bytes??'?'} bytes; receipt ${data.context_receipt?.context_hash}.\n${docs.map(doc=>`- ${doc.path}${doc.truncated?' (excerpt)':''}`).join('\n')}`
+}
+export function mcpToolEnvelope(data){const structuredContent={schema_version:1,data};return {content:[{type:'text',text:mcpContextSummary(data)}],structuredContent}}
 function packetFormat(data,adapter='generic'){
   const labels={pi:'Pi context packet',claude:'Claude Code context packet',codex:'Codex context packet',generic:'Holoself context packet',obsidian:'Obsidian/Claude context packet','restricted-host':'Restricted-host Holoself context packet'}
   const title=labels[adapter] || labels.generic,metadata=data.packet_metadata
@@ -1508,13 +1350,11 @@ function mcpContextData(project,options={}){
     manifest:Boolean(options.manifest),
     sources:options.source_ids||options.sources||[],
     cursor:options.cursor||null,
+    sessionStart:Boolean(options.session_start),
     noCache:true
   })
   if(options.source_ids?.length){const selected=new Set(data.sources.map(source=>source.source_id)),missing=options.source_ids.filter(id=>!selected.has(id));if(missing.length)throw new Error(`source handles are unavailable under the requested link/lens/lifecycle: ${missing.join(', ')}`)}
-  const clean=withoutPrivatePaths(data)
-  clean.self={documents:clean.self.documents}
-  clean.project={name:data.project.name,documents:clean.project.documents}
-  return clean
+  return data
 }
 async function askConfirm(o,message){
   if(o.yes) return true
