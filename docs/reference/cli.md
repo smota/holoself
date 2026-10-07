@@ -59,6 +59,7 @@ link add --project <dir> --self <dir> [--lens general] [--secondary-lenses a,b]
          [--activate auto|all|<list>] [--platform <id>] [--instructions <file>]
          [--install-skill auto|project|global|none] [--skill-home <dir>] [--no-activate] [--yes]
 link status|activate|deactivate|repair|doctor --project <dir> [--yes]
+link deactivate --project <dir> [--adapters all|<list>] [--dry-run|--yes]
 link skill migrate-global --project <dir> [--skill-home <dir>] [--dry-run] [--yes]
 link remove --project <dir> --yes
 link setup --project <dir> [--self <dir> --yes]

@@ -119,6 +119,7 @@ Compatibility entry points remain at [architecture.md](architecture.md), [linked
 
 - [External public skill deployments](decisions/external-skill-deployments.md): read-only skills-manager compatibility, provider paths, diagnostics, and maintenance safety.
 
+- [Link adapter scope](decisions/link-adapter-scope.md): repair restores recorded adapters with a Workbench preview (#34); scoped deactivation and per-command flags (#33).
 - [Context packet budget](specifications/context-packet-budget.md): whole-packet cap, body-once packets, session-start sources, one selection path (#31).
 
 ## AgentFlow SDLC

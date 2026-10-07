@@ -1,7 +1,7 @@
 import { normalizeProjectPath, writeBinding } from '../src/bindings.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, writeFile, lstat } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile, lstat, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { run } from '../src/cli.mjs'
@@ -105,4 +105,24 @@ test('Workbench binding CRUD uses optimistic hashes and prunes the catalog after
  const stale=await fetch(app.url+'/api/bindings',{method:'DELETE',headers,body:JSON.stringify({project,expectedHash:store.hash})});assert.equal(stale.status,409);assert.equal((await(await fetch(app.url+'/api/spaces')).json()).data.length,1)
  const removed=await fetch(app.url+'/api/bindings',{method:'DELETE',headers,body:JSON.stringify({project,expectedHash:current.hash})});assert.equal(removed.status,200);assert.deepEqual((await(await fetch(app.url+'/api/spaces')).json()).data,[])
  }finally{await new Promise(done=>app.server.close(done))}
+})
+
+test('Workbench repair previews the plan and applies only a matching plan hash',async()=>{
+  const self=await temp(),project=await temp()
+  await run(['init','--root',self]);await mkdir(join(project,'.claude'))
+  await run(['link','add','--project',project,'--self',self,'--activate','agents','--install-skill','none','--yes'])
+  const app=await startWebServer({root:self,port:0})
+  try{
+    const session=(await(await fetch(`${app.url}/api/session`)).json()).data,headers={'content-type':'application/json','x-holoself-token':session.token}
+    const space=(await(await fetch(`${app.url}/api/spaces`,{headers})).json()).data.find(item=>normalizeProjectPath(item.path)===normalizeProjectPath(project))
+    const post=payload=>fetch(`${app.url}/api/spaces/${space.id}/repair`,{method:'POST',headers,body:JSON.stringify(payload)})
+    const runtimeBefore=await readFile(join(project,'.holoself','runtime.json'),'utf8')
+    const preview=(await(await post({})).json()).data.preview
+    assert.equal(preview.plan.activation_plan.source,'recorded');assert.deepEqual(preview.plan.activation_plan.adapter_ids,['agents']);assert.match(preview.plan_hash,/^[0-9a-f]{64}$/)
+    assert.equal(await readFile(join(project,'.holoself','runtime.json'),'utf8'),runtimeBefore);await assert.rejects(lstat(join(project,'CLAUDE.md')))
+    const stale=await post({apply:true,plan_hash:'0'.repeat(64)});assert.equal(stale.status,409);assert.equal((await stale.json()).error.code,'PLAN_CHANGED')
+    const missing=await post({apply:true});assert.equal(missing.status,409)
+    const applied=await post({apply:true,plan_hash:preview.plan_hash});assert.equal(applied.status,200);assert.match((await applied.json()).data.output,/agents: AGENTS\.md/)
+    await assert.rejects(lstat(join(project,'CLAUDE.md')))
+  }finally{await new Promise(resolveClose=>app.server.close(resolveClose))}
 })

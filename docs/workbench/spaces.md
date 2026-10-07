@@ -27,6 +27,8 @@ Choose the least-broad lens that fits the project's purpose. Linking does not co
 
 `Space health checks passed` means the link can be resolved under the current policy. `Degraded` lists concrete findings and, when safe, offers fixed actions such as activate, repair, relink, or rebuild index.
 
+**Repair** opens a review dialog first. It shows the adapters to restore and where that list came from (`recorded`, `detected`), any lens-binding migration, and every file to write. Nothing changes until you choose **Apply repair plan**. If the project changed after the preview, apply is refused (`PLAN_CHANGED`) and you review the new plan.
+
 ## Use the actions safely
 
 - **Preview context** resolves a small manifest through the current link and lens. Check selected sources, restrictions, hashes, and truncation before relying on it.
