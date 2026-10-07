@@ -112,6 +112,29 @@ test('init creates private architecture directories and catalog defaults', async
   assert.match(await readFile(join(root,'me','contribs.md'),'utf8'),/Local self-model/);
 })
 
+test('generated root AGENTS.md context command runs from the data root', async()=>{
+  const root=await temp(); await run(['init','--data-dir',root])
+  const agents=await readFile(join(root,'AGENTS.md'),'utf8'), command=agents.match(/`(holoself context [^`]+)`/)?.[1]
+  assert.ok(command,'root block names a context command'); assert.doesNotMatch(command,/--project/); assert.ok(command.includes('<current request>'))
+  const args=command.replace('<current request>','plan my week').match(/"[^"]*"|\S+/g).slice(1).map(x=>x.replace(/^"|"$/g,''))
+  const cwd=process.cwd(); process.chdir(root)
+  try{const packet=JSON.parse(await capture(()=>run(args)));assert.ok(packet.self.documents.length>0);assert.ok(packet.context_receipt)}finally{process.chdir(cwd)}
+})
+
+test('context with --project at a data root names the fix; unlinked projects still need a link', async()=>{
+  const root=await temp(), other=await temp(); await run(['init','--data-dir',root])
+  await assert.rejects(run(['context','--root',root,'--project',root,'--json']),error=>error.code==='LINK_REQUIRED'&&/canonical data root/.test(error.message)&&error.message.includes(`--root ${/\s/.test(root)?JSON.stringify(root):root}`)&&/without --project/.test(error.message))
+  await assert.rejects(run(['context','--project',other,'--json']),error=>error.code==='LINK_REQUIRED'&&!/canonical data root/.test(error.message))
+})
+
+test('re-running init replaces an outdated root block once and keeps user text', async()=>{
+  const root=await temp(); await run(['init','--data-dir',root]); const file=join(root,'AGENTS.md')
+  await writeFile(file,'# User rules\n\nKeep this.\n\n'+(await readFile(file,'utf8')).replace('holoself context --root . --task','holoself context --root . --project . --task'))
+  assert.match(await readFile(file,'utf8'),/--project \./,'outdated block planted')
+  await run(['init','--data-dir',root]); const updated=await readFile(file,'utf8')
+  assert.match(updated,/Keep this/); assert.equal((updated.match(/holoself-root-start/g)||[]).length,1); assert.doesNotMatch(updated,/--project \./)
+})
+
 test('selection rejects unknown contrib and keeps public methods package-owned', async()=>{
   const root=await temp(); await assert.rejects(run(['init','--root',root,'--contribs','missing']),/unknown public contrib/)
   await run(['init','--root',root]);await assert.rejects(access(join(root,'contribs','default','communication.md')))
