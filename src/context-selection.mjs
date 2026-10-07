@@ -138,7 +138,13 @@ export function applySelectionPolicy(candidates,options={}){
   const isNotNeeded=contextNeed(options.task)==='not-needed',patterns=options.sessionStartSources||DEFAULT_SESSION_START_SOURCES
   const sessionFilter=isSessionStart(options)&&!patterns.includes('*')
   let ordered=candidates
-  if(sessionFilter){const rank=record=>record.kind==='self'?sessionStartIndex(record.path,patterns):-1;ordered=candidates.map((record,i)=>({record,i,r:rank(record)})).sort((a,b)=>(a.record.kind==='self'&&b.record.kind==='self'?((a.r<0?patterns.length:a.r)-(b.r<0?patterns.length:b.r)):0)||a.i-b.i).map(x=>x.record)}
+  // Session start: self sources first, in pattern order (unmatched self last), then the rest in rank order.
+  let unmatchedPatterns=[]
+  if(sessionFilter){
+    const self=candidates.map((record,i)=>({record,i})).filter(x=>x.record.kind==='self').map(x=>({...x,r:sessionStartIndex(x.record.path,patterns)})),rank=x=>x.r<0?patterns.length:x.r
+    ordered=[...self.sort((a,b)=>rank(a)-rank(b)||a.i-b.i).map(x=>x.record),...candidates.filter(record=>record.kind!=='self')]
+    unmatchedPatterns=patterns.filter((_,index)=>!self.some(x=>x.r===index))
+  }
   const records=[],omitted=[];let chars=0,truncated=false
   for(const record of ordered){
     if(!requested.size&&isNotNeeded&&record.kind==='self'){omitted.push({source:record.path,reason:'personal context not needed for this task'});continue}
@@ -162,7 +168,7 @@ export function applySelectionPolicy(candidates,options={}){
     chars+=result.content.length
     if(result.truncated)truncated=true
   }
-  return {records,omitted,chars,truncated}
+  return {records,omitted,chars,truncated,unmatchedPatterns}
 }
 
 export function selectionReceipt(records,{budget,taskHash,lens,temporal}){
@@ -194,7 +200,7 @@ export function selectContextRecords(records,options={}){
     temporalVal,
     stateHash,
     selection:{
-      schema_version:1,context_need:contextNeed(options.task),budget:budgetName,budget_chars:budgetChars===Number.MAX_SAFE_INTEGER?null:budgetChars,manifest_only:Boolean(options.manifest),temporal:temporalVal,session_start:!options.manifest&&isSessionStart(options),candidate_count:records.length,eligible_count:candidates.length,selected_count:selected.length,omitted_count:omitted.length+temporalExcluded.length,content_chars:chars,estimated_tokens:estimateTokens(chars),truncated:picked.truncated||selected.some(r=>r.truncated),truncated_sources:selected.filter(record=>record.truncated).map(record=>record.source_id),selected_sources:selected.map(record=>record.source_id),temporal_excluded:temporalExcluded.length,contrib_sources:selected.filter(record=>record.kind==='contrib').map(record=>record.source_id),contradiction_digest:contradictionDigest(selected),next_cursor:nextCursor
+      schema_version:1,context_need:contextNeed(options.task),budget:budgetName,budget_chars:budgetChars===Number.MAX_SAFE_INTEGER?null:budgetChars,manifest_only:Boolean(options.manifest),temporal:temporalVal,session_start:!options.manifest&&isSessionStart(options),candidate_count:records.length,eligible_count:candidates.length,selected_count:selected.length,omitted_count:omitted.length+temporalExcluded.length,content_chars:chars,estimated_tokens:estimateTokens(chars),truncated:picked.truncated||selected.some(r=>r.truncated),truncated_sources:selected.filter(record=>record.truncated).map(record=>record.source_id),selected_sources:selected.map(record=>record.source_id),temporal_excluded:temporalExcluded.length,contrib_sources:selected.filter(record=>record.kind==='contrib').map(record=>record.source_id),contradiction_digest:contradictionDigest(selected),next_cursor:nextCursor,...(picked.unmatchedPatterns?.length?{session_start_unmatched:picked.unmatchedPatterns}:{})
     },
     receipt:selectionReceipt(selected,{budget:budgetName,taskHash,lens:options.lens,temporal:temporalVal})
   }

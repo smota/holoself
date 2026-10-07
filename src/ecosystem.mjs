@@ -1032,8 +1032,9 @@ function contextData(o){
     identity_id:identityId,
     lens,
     allowed_lenses:allowedLensesList,
+    task_hash:hash(String(o.task||'')),
     // A session-start request selects differently from a task-less one, so it gets its own decision key.
-    task_hash:hash(String(o.task||'')+(o.sessionStart?' session-start':'')),
+    session_start:Boolean(o.sessionStart),
     temporal:o.temporal||'current',
     include_history:Boolean(o.includeHistory),
     budget:budgetName,
@@ -1210,6 +1211,7 @@ function contextData(o){
     ...(identity.kind==='owner:direct'?[...(selfData.warnings||[]),...(local.warnings||[])]:[])
   ]
   if(!link&&!o.self&&resolve(self)!==resolve(project))warnings.push('No project link found; resolved explicit/default self root.')
+  if(selected.selection.session_start_unmatched?.length)warnings.push(`session_start_sources matched no source: ${selected.selection.session_start_unmatched.join(', ')}`)
   const generatedAt=new Date().toISOString(),restrictedHost=Boolean(o.snapshot||o.restrictedHost||adapter==='restricted-host'),expiresAt=restrictedHost?new Date(Date.parse(generatedAt)+(o.expiresHours||24)*60*60*1000).toISOString():null
   const validation=resolvedContextAssertions(records,lens,o.task,adapter,link,resolution,subject)
   const localSpaceId=identity.kind==='client:linked'?canonicalSpaceId(project):'self'
@@ -1263,18 +1265,27 @@ function contextData(o){
   }
   // MCP strips private paths before measuring so the cap and total_bytes apply to what is actually sent.
   const finish=value=>{if(!isMcp)return value;const clean=withoutPrivatePaths(value);clean.self={documents:clean.self.documents};clean.project={name:value.project.name,documents:clean.project.documents};return clean}
-  const measurePayload=value=>isMcp?Buffer.byteLength(JSON.stringify(mcpToolEnvelope(value))):Buffer.byteLength(JSON.stringify(value,null,2)+'\n')
+  // Measure the format that is actually emitted: the MCP tool result, JSON, or the Markdown packet.
+  const emitted=isMcp?'mcp':(o.json||o.format==='json')?'json':'packet',packetAdapter=o.restrictedHost?'restricted-host':(o.adapter||'generic')
+  const measurePayload=value=>emitted==='mcp'?Buffer.byteLength(JSON.stringify(mcpToolEnvelope(value))):emitted==='json'?Buffer.byteLength(JSON.stringify(value,null,2)+'\n'):Buffer.byteLength(packetFormat(value,packetAdapter).trimEnd()+'\n')
   result=finish(result)
 
   // The envelope cap (2x the content budget) bounds the emitted packet on every path, not only --manifest.
+  // Under pressure the envelope shrinks first (restrictions grouped by reason, proposals reduced to ids); documents go last.
   const envelopeCap=ENVELOPE_BYTE_CAPS[budgetName]||ENVELOPE_BYTE_CAPS.standard,dropped=[]
   // Size fields are present (with values at least as wide as the final ones) while trimming, so adding them cannot push past the cap.
   const widest=envelopeCap===Number.MAX_SAFE_INTEGER?Number.MAX_SAFE_INTEGER:envelopeCap
   Object.assign(result.selection,{envelope_cap_bytes:envelopeCap===Number.MAX_SAFE_INTEGER?null:envelopeCap,total_bytes:widest,estimated_tokens_total:widest,estimated_tokens_total_heuristic:widest})
-  let payloadBytes=measurePayload(result)
+  let payloadBytes=measurePayload(result),compacted=false
+  if(payloadBytes>envelopeCap){
+    compacted=true;result.restrictions=groupRestrictions(result.restrictions);result.selection.restrictions_grouped=true
+    if(result.proposals?.length)result.proposals=result.proposals.map(p=>({proposal_id:p.proposal_id,status:p.status}))
+    payloadBytes=measurePayload(result)
+  }
   while(records.length>0&&payloadBytes>envelopeCap){
     const removed=records.pop();dropped.push(removed.source_id);result.selection.envelope_dropped=dropped
     result.restrictions.push({source:removed.path,reason:`packet envelope cap ${budgetName} exceeded`})
+    if(compacted)result.restrictions=groupRestrictions(result.restrictions)
     const next=projections(records),cleanNext=finish({self:next.self,project:next.project,federated:next.federated,methods:next.methods,sources:next.sources})
     Object.assign(result,{self:cleanNext.self,project:cleanNext.project,federated:cleanNext.federated,methods:cleanNext.methods,sources:cleanNext.sources})
     result.packet_metadata.source_hashes=next.source_hashes
@@ -1284,6 +1295,10 @@ function contextData(o){
     payloadBytes=measurePayload(result)
   }
   if(dropped.length){
+    // Keep content statistics and validation consistent with the records that remain.
+    const chars=records.reduce((sum,r)=>sum+(r.content?.length||0),0)
+    Object.assign(result.selection,{content_chars:chars,estimated_tokens:estimateTokens(chars),truncated_sources:records.filter(r=>r.truncated).map(r=>r.source_id),contrib_sources:records.filter(r=>r.kind==='contrib').map(r=>r.source_id),contradiction_digest:contradictionDigest(records)})
+    result.validation=resolvedContextAssertions(records,lens,o.task,adapter,link,resolution,subject)
     if(o.manifest){
       const candidateList=selected.candidates||candidates,startOffset=selected.startOffset||0
       const nextOffset=records.length===0&&startOffset<candidateList.length?startOffset+1:startOffset+records.length
@@ -1298,6 +1313,12 @@ function contextData(o){
     Object.assign(result.selection,{total_bytes:bytes,estimated_tokens_total:Math.ceil(bytes/4),estimated_tokens_total_heuristic:Math.ceil(bytes/4)})
   }
   return result
+}
+// One entry per reason: the first source (kept as `source` for compatibility), up to five sources, and the total count.
+function groupRestrictions(list){
+  const groups=new Map()
+  for(const item of list){const group=groups.get(item.reason)||{reason:item.reason,count:0,sources:[]};group.count+=item.count||1;for(const source of item.sources||[item.source])if(source&&group.sources.length<5&&!group.sources.includes(source))group.sources.push(source);groups.set(item.reason,group)}
+  return [...groups.values()].map(group=>({source:group.sources[0]??null,reason:group.reason,count:group.count,sources:group.sources}))
 }
 const documentProjection=r=>({path:r.path,content:r.content,metadata:r.metadata,source_id:r.source_id,truncated:r.truncated,manifest_only:r.manifest_only})
 // When the body is delivered in documents[], body-derived fields (search_text, sections, claims, links) are left out
@@ -1320,8 +1341,8 @@ function packetFormat(data,adapter='generic'){
   const title=labels[adapter] || labels.generic,metadata=data.packet_metadata
   const fedDocs=(data.federated||[]).flatMap(f=>f.documents.map(x=>({...x,owner:f.name||f.space_id})))
   const docs=[...data.self.documents.map(x=>({...x,owner:'self'})),...data.project.documents.map(x=>({...x,owner:'project'})),...fedDocs,...(data.methods?.documents||[]).map(x=>({...x,owner:'method'}))]
-  const receipt=`Context receipt: ${data.context_receipt.context_hash} (${data.context_receipt.cache.hit?'cache hit':'fresh resolution'})\nContext gate: ${data.selection.context_need}; budget: ${data.selection.budget}; estimated tokens: ${data.selection.estimated_tokens}; selected sources: ${data.selection.selected_count}`
-  return `# ${title}\n\nPacket ID: ${metadata.packet_id}\n${receipt}\nGenerated: ${metadata.generated_at}\nExpires: ${metadata.expires_at||'not applicable (live local resolution)'}\nHost mode: ${metadata.host_mode}\nLens: ${data.lens}\nTask: ${data.task || '(none)'}\nPrivacy: access-filtered. Reading context does not authorize external action. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n${metadata.source_hashes.map(source=>`- ${source.kind}:${source.path} ${source.sha256} (${source.freshness})`).join('\n')||'- None'}\n\n${docs.map(d=>`## ${d.owner}: ${d.path}\n\nAccess lenses: ${(d.metadata.access_lenses||[]).join(', ')}\nDisclosure: ${d.metadata.disclosure}\nSensitivity: ${d.metadata.sensitivity}\nDocument role: ${d.metadata.document_role}\nPublication allowed: ${d.metadata.publication_allowed?'yes':'no'}\n\n${d.content}`).join('\n\n')}\n\n## Restrictions\n\n${data.restrictions.map(x=>`- ${x.source}: ${x.reason}`).join('\n') || '- None'}\n`
+  const receipt=`Context receipt: ${data.context_receipt.context_hash} (${data.context_receipt.cache.hit?'cache hit':'fresh resolution'})\nContext gate: ${data.selection.context_need}; budget: ${data.selection.budget}; estimated tokens: ${data.selection.estimated_tokens}; selected sources: ${data.selection.selected_count}${data.selection.total_bytes?`; packet bytes: ${data.selection.total_bytes}`:''}`
+  return `# ${title}\n\nPacket ID: ${metadata.packet_id}\n${receipt}\nGenerated: ${metadata.generated_at}\nExpires: ${metadata.expires_at||'not applicable (live local resolution)'}\nHost mode: ${metadata.host_mode}\nLens: ${data.lens}\nTask: ${data.task || '(none)'}\nPrivacy: access-filtered. Reading context does not authorize external action. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n${metadata.source_hashes.map(source=>`- ${source.kind}:${source.path} ${source.sha256} (${source.freshness})`).join('\n')||'- None'}\n\n${docs.map(d=>`## ${d.owner}: ${d.path}\n\nAccess lenses: ${(d.metadata.access_lenses||[]).join(', ')}\nDisclosure: ${d.metadata.disclosure}\nSensitivity: ${d.metadata.sensitivity}\nDocument role: ${d.metadata.document_role}\nPublication allowed: ${d.metadata.publication_allowed?'yes':'no'}\n\n${d.content}`).join('\n\n')}\n\n## Restrictions\n\n${data.restrictions.map(x=>`- ${x.source}: ${x.reason}${x.count>1?` (${x.count} sources)`:''}`).join('\n') || '- None'}\n`
 }
 function withoutPrivatePaths(value){
   if(Array.isArray(value))return value.map(withoutPrivatePaths)
@@ -1353,7 +1374,7 @@ function mcpContextData(project,options={}){
     sessionStart:Boolean(options.session_start),
     noCache:true
   })
-  if(options.source_ids?.length){const selected=new Set(data.sources.map(source=>source.source_id)),missing=options.source_ids.filter(id=>!selected.has(id));if(missing.length)throw new Error(`source handles are unavailable under the requested link/lens/lifecycle: ${missing.join(', ')}`)}
+  if(options.source_ids?.length){const selected=new Set([...data.sources.map(source=>source.source_id),...(data.selection.envelope_dropped||[])]),missing=options.source_ids.filter(id=>!selected.has(id));if(missing.length)throw new Error(`source handles are unavailable under the requested link/lens/lifecycle: ${missing.join(', ')}`)}
   return data
 }
 async function askConfirm(o,message){

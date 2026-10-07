@@ -83,3 +83,21 @@ test('cold, in-memory and persistent cache hits select identically and verify cu
   for(const extra of [['--no-cache'],[],[]])await assert.rejects(run([...manifest,'--cursor',forged,...extra]),error=>error.code==='CURSOR_INVALID')
   const page=JSON.parse(await capture(()=>run([...manifest,'--cursor',cursor])));assert.ok(page.sources.length>0)
 })
+
+test('at scale the envelope shrinks before content: 300 sources stay within cap with content, in JSON and Markdown',async()=>{
+  const {self,project}=await fixture(300),call=mcp(project)
+  await writeFile(join(self,'profile','preferences.md'),`${front}# Preferences\n\n## Communication\n\n${'Prefer concise answers with the conclusion first and explicit trade-offs. '.repeat(65)}\n`)
+  const json=await capture(()=>run(['context','--project',project,'--task','career leadership evidence','--budget','small','--json','--no-cache'])),data=JSON.parse(json)
+  assert.ok(Buffer.byteLength(json)<=ENVELOPE_BYTE_CAPS.small,`${Buffer.byteLength(json)}`);assert.ok(documents(data).length>0,'content starved');assert.equal(data.selection.restrictions_grouped,true)
+  assert.equal(data.selection.content_chars,documents(data).reduce((sum,doc)=>sum+doc.content.length,0));assert.deepEqual(data.selection.selected_sources,documents(data).map(doc=>doc.source_id).sort((a,b)=>data.selection.selected_sources.indexOf(a)-data.selection.selected_sources.indexOf(b)))
+  assert.ok(data.restrictions.every(item=>typeof item.reason==='string'&&Number.isInteger(item.count)))
+  const markdown=await capture(()=>run(['context','--project',project,'--task','career leadership evidence','--budget','small','--no-cache']))
+  assert.ok(Buffer.byteLength(markdown)<=ENVELOPE_BYTE_CAPS.small,`${Buffer.byteLength(markdown)}`);assert.match(markdown,/^## self: context\/item-/m);assert.match(markdown,new RegExp(`packet bytes: ${Buffer.byteLength(markdown)}`))
+  const session=JSON.parse(await capture(()=>run(['context','--project',project,'--session-start','--budget','small','--json','--no-cache'])))
+  for(const path of ['profile/identity.md','profile/preferences.md','profile/work-context.md'])assert.ok(session.self.documents.some(doc=>doc.path===path),path)
+  // Lower-ranked policy documents may be dropped to fit; the configured session-start sources must not be.
+  const kept=new Set(session.self.documents.map(doc=>doc.source_id));assert.ok((session.selection.envelope_dropped||[]).every(id=>!kept.has(id)))
+  const manifest=JSON.parse(await capture(()=>run(['context','--project',project,'--manifest','--json','--no-cache']))),ids=manifest.sources.slice(0,10).map(source=>source.source_id)
+  const got=call(90,'holoself_context_get',{source_ids:ids,budget:'small'});assert.ok(!got.isError,JSON.stringify(got.structuredContent?.error))
+  const back=got.structuredContent.data;assert.deepEqual([...documents(back).map(doc=>doc.source_id),...(back.selection.envelope_dropped||[])].sort(),[...ids].sort())
+})

@@ -447,7 +447,8 @@ export function computeDecisionCacheKey({
   budget,
   manifest,
   requested_source_ids,
-  cursor
+  cursor,
+  session_start = false
 }){
   return sha256(canonicalJson({
     catalog_hash,
@@ -463,7 +464,8 @@ export function computeDecisionCacheKey({
     budget,
     manifest: Boolean(manifest),
     requested_source_ids: Array.isArray(requested_source_ids) && requested_source_ids.length ? [...requested_source_ids].sort(canonicalSort) : null,
-    cursor: cursor || null
+    cursor: cursor || null,
+    session_start: Boolean(session_start)
   }))
 }
 
