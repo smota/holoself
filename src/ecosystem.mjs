@@ -832,7 +832,9 @@ function contextData(o){
     }
     const candidateLink=linkPath(project)
     if(!pathExists(candidateLink)){
-      const err=new Error(`project is not linked to any Holoself canonical root: ${project}`)
+      const shown=/\s/.test(project)?JSON.stringify(project):project
+      const hint=isCanonicalSelf(project)?`; ${project} is a canonical data root, not a linked project: run \`holoself context --root ${shown}\` from inside it, without --project`:''
+      const err=new Error(`project is not linked to any Holoself canonical root: ${project}${hint}`)
       err.code='LINK_REQUIRED'
       throw err
     }
