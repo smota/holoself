@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { DISCLOSURES, VISIBILITIES } from './annotations.mjs'
 
 export const CATALOG_SCHEMA_VERSION = 2
-export const CACHE_SCHEMA_VERSION = 3
+export const CACHE_SCHEMA_VERSION = 4
 
 const HASH_RE = /^[0-9a-f]{64}$/
 export const SOURCE_ID_RE = /^hs-[0-9a-f]{20}$/
@@ -447,7 +447,8 @@ export function computeDecisionCacheKey({
   budget,
   manifest,
   requested_source_ids,
-  cursor
+  cursor,
+  session_start = false
 }){
   return sha256(canonicalJson({
     catalog_hash,
@@ -463,7 +464,8 @@ export function computeDecisionCacheKey({
     budget,
     manifest: Boolean(manifest),
     requested_source_ids: Array.isArray(requested_source_ids) && requested_source_ids.length ? [...requested_source_ids].sort(canonicalSort) : null,
-    cursor: cursor || null
+    cursor: cursor || null,
+    session_start: Boolean(session_start)
   }))
 }
 

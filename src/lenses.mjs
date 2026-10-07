@@ -21,9 +21,17 @@ export const DEFAULT_LENSES=DEFAULT_LENS_IDS.map(id=>Object.freeze({schema_versi
 const sha=text=>createHash('sha256').update(text).digest('hex')
 const fail=(file,message)=>{throw new Error(`invalid lens definition ${file}: ${message}`)}
 
+// Relative POSIX paths or globs with `*` inside one segment; the single entry "*" means every eligible source.
+function validateSessionStartSources(value,file){
+  if(value===undefined)return undefined
+  if(!Array.isArray(value)||value.length>20||new Set(value).size!==value.length)fail(file,'session_start_sources must be an array of at most 20 unique patterns')
+  for(const item of value){if(typeof item!=='string'||!item||item.includes('\\')||item.startsWith('/')||/^[A-Za-z]:/.test(item)||item.split('/').some(part=>!part||part==='..'||part==='.')||item.includes('**'))fail(file,`invalid session_start_sources pattern: ${JSON.stringify(item)}`)}
+  if(value.includes('*')&&value.length>1)fail(file,'session_start_sources "*" must be the only entry')
+  return Object.freeze([...value])
+}
 function validateDefinition(value,file){
   if(!value||Array.isArray(value)||typeof value!=='object')fail(file,'must be an object')
-  const allowed=new Set(['schema_version','id','title','sensitivity_access','instructions'])
+  const allowed=new Set(['schema_version','id','title','sensitivity_access','instructions','session_start_sources'])
   for(const key of Object.keys(value))if(!allowed.has(key))fail(file,`unknown field ${key}`)
   for(const key of ['schema_version','id','title'])if(!Object.hasOwn(value,key))fail(file,`missing ${key}`)
   if(value.schema_version!==1)fail(file,'schema_version must be 1')
@@ -32,7 +40,8 @@ function validateDefinition(value,file){
   if(typeof value.title!=='string'||!value.title.trim())fail(file,'title must be a non-empty string')
   const sensitivity=value.sensitivity_access??[]
   if(!Array.isArray(sensitivity)||new Set(sensitivity).size!==sensitivity.length||sensitivity.some(item=>!([...CUSTOM_SENSITIVITY_CATEGORIES,...(value.id==='private'?['restricted']:[])]).includes(item)))fail(file,'sensitivity_access must contain unique supported categories; restricted is not allowed')
-  return Object.freeze({schema_version:1,id:value.id,title:value.title.trim(),sensitivity_access:Object.freeze([...sensitivity]),instructions:Object.freeze(validateInstructions(value.instructions||{purpose:''},file))})
+  const sessionStart=validateSessionStartSources(value.session_start_sources,file)
+  return Object.freeze({schema_version:1,id:value.id,title:value.title.trim(),sensitivity_access:Object.freeze([...sensitivity]),instructions:Object.freeze(validateInstructions(value.instructions||{purpose:''},file)),...(sessionStart?{session_start_sources:sessionStart}:{})})
 }
 
 export function loadLensRegistry(selfRoot){
@@ -71,7 +80,7 @@ export function saveCustomLens(selfRoot,id,value,expectedHash){
   if(id!==value?.id)throw new Error('lens id must match the definition id')
   const lens=validateDefinition(value,`${id}.json`),dir=registry.registry_path,path=join(dir,`${id}.json`)
   mkdirSync(dir,{recursive:true});const tmp=`${path}.tmp-${process.pid}`
-  try{writeFileSync(tmp,JSON.stringify({schema_version:1,id:lens.id,title:lens.title,sensitivity_access:[...lens.sensitivity_access],instructions:lens.instructions},null,2)+'\n',{flag:'wx'});renameSync(tmp,path);loadLensRegistry(selfRoot)}finally{if(existsSync(tmp))rmSync(tmp,{force:true})}
+  try{writeFileSync(tmp,JSON.stringify({schema_version:1,id:lens.id,title:lens.title,sensitivity_access:[...lens.sensitivity_access],instructions:lens.instructions,...(lens.session_start_sources?{session_start_sources:[...lens.session_start_sources]}:{})},null,2)+'\n',{flag:'wx'});renameSync(tmp,path);loadLensRegistry(selfRoot)}finally{if(existsSync(tmp))rmSync(tmp,{force:true})}
   return loadLensRegistry(selfRoot)
 }
 

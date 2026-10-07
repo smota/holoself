@@ -65,7 +65,7 @@ link setup --project <dir> [--self <dir> --yes]
 skill status --scope user [--platform <id>] [--skill-home <dir>]
 skill install --scope user [--platform <id>] [--skill-home <dir>] [--dry-run] [--force] [--yes]
 context [--project <dir>] [--self <dir>] [--lens <lens>] [--task <text>] [--self-only]
-        [--budget small|standard|deep|unbounded] [--manifest] [--source <handle>]
+        [--budget small|standard|deep|unbounded] [--manifest] [--source <handle>] [--session-start]
         [--temporal current|historical|superseded|all] [--no-cache]
         [--json | --format packet] [--adapter pi|claude|codex|generic|obsidian|restricted-host]
         [--restricted-host] [--expires-hours 24]
@@ -89,7 +89,7 @@ knowledge cleanup [--root <self-root>] [--output <plan.json>]
 knowledge cleanup [--root <self-root>] --apply <plan.json> --digest <sha256> --yes
 ```
 
-`context` defaults to packet output unless `--json` is supplied. Context and search index self only; `--self-only` remains a compatible explicit spelling. Missing bindings fail closed. `--snapshot --yes` writes a reviewed project-only fallback; `--restricted-host` applies publication-safe filtering and adds default 24-hour expiry metadata. `--expires-hours` accepts values above 0 through 720. Link setup supports `--project-include`, `--project-exclude`, `--project-assert-include`, and `--project-assert-exclude`. `index` without subcommand builds/updates index. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation. Global skill installation is separately confirmed; project migration validates the global copy before removing managed local copies.
+`context` defaults to packet output unless `--json` is supplied. Every context packet stays within twice its budget (`selection.total_bytes`, `envelope_cap_bytes`). A packet that had to shrink lists dropped sources in `selection.envelope_dropped`, groups `restrictions` by reason (adding `count` and `sources`) and reduces `proposals` to ids. `--session-start` loads only the lens `session_start_sources`; see [context efficiency](../concepts/context-efficiency.md). Context and search index self only; `--self-only` remains a compatible explicit spelling. Missing bindings fail closed. `--snapshot --yes` writes a reviewed project-only fallback; `--restricted-host` applies publication-safe filtering and adds default 24-hour expiry metadata. `--expires-hours` accepts values above 0 through 720. Link setup supports `--project-include`, `--project-exclude`, `--project-assert-include`, and `--project-assert-exclude`. `index` without subcommand builds/updates index. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation. Global skill installation is separately confirmed; project migration validates the global copy before removing managed local copies.
 
 `mcp configure` first prints exact project-local file actions and expected hashes. Without `--dry-run`, it requires confirmation or `--yes`. Existing divergent `holoself` server entries and malformed markers fail closed. Bare `mcp` uses explicit `--project`, trusted `CLAUDE_PROJECT_DIR`, or unambiguous cwd and requires a safe `.holoself/link.yaml`; tools cannot supply paths. See [MCP tools](mcp-tools.md).
 

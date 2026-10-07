@@ -78,10 +78,35 @@ export function buildCursor(identityId,lens,budgetName,manifest,selfId,taskHash,
   const sig=cursorSecret?createHmac('sha256',cursorSecret).update(payloadToSign).digest('hex'):hash(payloadToSign)
   return Buffer.from(JSON.stringify({p:{v:1,identity_id:identityId,lens,budget:budgetName,manifest:Boolean(manifest),self_id:selfId||'',task_hash:taskHash,temporal:temporalVal,offset:nextOffset,state_hash:stateHash},sig})).toString('base64url')
 }
-export function selectContextRecords(records,options={}){
-  const budgetName=options.budget||'standard',budgetChars=CONTEXT_BUDGETS[budgetName]
-  if(!budgetChars)throw new Error(`invalid context budget: ${budgetName}`)
-  const envelopeCap=ENVELOPE_BYTE_CAPS[budgetName]||ENVELOPE_BYTE_CAPS.standard
+const cursorError=message=>{const err=new Error(message);err.code='CURSOR_INVALID';return err}
+// The only cursor decoder: every selection path verifies signature, parameters and state before using an offset.
+export function verifyCursor(cursor,expected){
+  if(!cursor)return 0
+  let parsed
+  try{parsed=JSON.parse(Buffer.from(cursor,'base64url').toString('utf8'))}catch{throw cursorError('malformed cursor')}
+  if(!parsed?.p||!parsed?.sig||typeof parsed.sig!=='string')throw cursorError('invalid cursor format')
+  const p=parsed.p
+  if(p.v!==1||p.identity_id!==expected.identityId||p.lens!==expected.lens||p.task_hash!==expected.taskHash||p.temporal!==expected.temporalVal)throw cursorError('cursor parameter mismatch')
+  const signed=`v1|${p.identity_id}|${p.lens}|${p.budget}|${p.manifest}|${p.self_id}|${p.task_hash}|${p.temporal}|${p.offset}|${p.state_hash}`
+  const expectedSig=expected.cursorSecret?createHmac('sha256',expected.cursorSecret).update(signed).digest('hex'):hash(signed)
+  const sigBuf=Buffer.from(parsed.sig),expBuf=Buffer.from(expectedSig)
+  if(sigBuf.length!==expBuf.length||!timingSafeEqual(sigBuf,expBuf))throw cursorError('invalid cursor signature')
+  if(p.state_hash!==expected.stateHash)throw cursorError('cursor state expired due to changes; restart from offset 0')
+  return Number.isInteger(p.offset)&&p.offset>=0?p.offset:0
+}
+
+// Session start: no task, no explicit sources and no cursor. The lens names the self sources to load; "*" keeps all.
+export const DEFAULT_SESSION_START_SOURCES=Object.freeze(['profile/identity.md','profile/preferences.md','profile/work-context.md'])
+const globSegment=pattern=>new RegExp(`^${pattern.split('*').map(part=>part.replace(/[.+?^${}()|[\]\\]/g,'\\$&')).join('[^/]*')}$`)
+export function sessionStartIndex(path,patterns){
+  const parts=String(path).split('/')
+  return patterns.findIndex(pattern=>{if(pattern==='*')return true;const want=pattern.split('/');return want.length===parts.length&&want.every((segment,i)=>globSegment(segment).test(parts[i]))})
+}
+// Session start is explicit (--session-start / session_start) so snapshots and other task-less calls keep full selection.
+export function isSessionStart(options){return Boolean(options.sessionStart)&&!options.task&&!(options.sources?.length)&&!options.cursor}
+
+// Temporal filter, relevance score and deterministic ranking shared by every path.
+export function rankCandidates(records,options={}){
   const requested=new Set(options.sources||[]),temporalExcluded=[],candidates=[]
   for(const record of records){
     const temporal=temporalDisposition(record.metadata,options.task,{includeHistory:options.includeHistory,temporal:options.temporal,now:options.now})
@@ -90,93 +115,81 @@ export function selectContextRecords(records,options={}){
     if(requested.size&&!requested.has(id)&&!requested.has(record.path))continue
     candidates.push({...record,task_relevance:score,source_id:id,knowledge_status:temporal.status,temporal_scope:temporal.scope})
   }
-  candidates.sort((a,b)=>{
-    if(requested.size)return (a.source_id<b.source_id?-1:a.source_id>b.source_id?1:0)||(a.path<b.path?-1:a.path>b.path?1:0)
-    return b.task_relevance-a.task_relevance||(a.source_id<b.source_id?-1:a.source_id>b.source_id?1:0)||(a.path<b.path?-1:a.path>b.path?1:0)
-  })
+  const byId=(a,b)=>(a.source_id<b.source_id?-1:a.source_id>b.source_id?1:0)||(a.path<b.path?-1:a.path>b.path?1:0)
+  candidates.sort((a,b)=>requested.size?byId(a,b):b.task_relevance-a.task_relevance||byId(a,b))
+  return {candidates,temporalExcluded,requested}
+}
 
-  const taskHash=hash(String(options.task||''))
-  const temporalVal=options.temporal||'current'
-  const identityId=options.identityId||'anonymous'
+export function applyManifestPage(candidates,startOffset,options={}){
+  const envelopeCap=ENVELOPE_BYTE_CAPS[options.budget||'standard']||ENVELOPE_BYTE_CAPS.standard,PAGE_SIZE=10,records=[],omitted=[]
+  let curr=startOffset,truncated=false
+  while(curr<candidates.length&&records.length<PAGE_SIZE){
+    const record=candidates[curr]
+    if(Buffer.byteLength(JSON.stringify({source_id:record.source_id,path:record.path,kind:record.kind,metadata:record.metadata}))>envelopeCap){omitted.push({source:record.path,reason:'source exceeds envelope budget'});curr++;truncated=true;break}
+    records.push({...record,content:'',manifest_only:true,truncated:false});curr++
+  }
+  return {records,omitted,truncated,nextOffset:curr<candidates.length?curr:null}
+}
+
+// The only content-selection loop, in order: not-needed self skip, project relevance, contrib limit,
+// session-start sources, budget floor, delivery, excerpt.
+export function applySelectionPolicy(candidates,options={}){
+  const budgetName=options.budget||'standard',budgetChars=CONTEXT_BUDGETS[budgetName]||CONTEXT_BUDGETS.standard,requested=new Set(options.sources||[])
+  const isNotNeeded=contextNeed(options.task)==='not-needed',patterns=options.sessionStartSources||DEFAULT_SESSION_START_SOURCES
+  const sessionFilter=isSessionStart(options)&&!patterns.includes('*')
+  let ordered=candidates
+  // Session start: self sources first, in pattern order (unmatched self last), then the rest in rank order.
+  let unmatchedPatterns=[]
+  if(sessionFilter){
+    const self=candidates.map((record,i)=>({record,i})).filter(x=>x.record.kind==='self').map(x=>({...x,r:sessionStartIndex(x.record.path,patterns)})),rank=x=>x.r<0?patterns.length:x.r
+    ordered=[...self.sort((a,b)=>rank(a)-rank(b)||a.i-b.i).map(x=>x.record),...candidates.filter(record=>record.kind!=='self')]
+    unmatchedPatterns=patterns.filter((_,index)=>!self.some(x=>x.r===index))
+  }
+  const records=[],omitted=[];let chars=0,truncated=false
+  for(const record of ordered){
+    if(!requested.size&&isNotNeeded&&record.kind==='self'){omitted.push({source:record.path,reason:'personal context not needed for this task'});continue}
+    if(options.task&&!requested.size&&record.kind==='project'&&record.task_relevance<=0&&record.document_role!=='policy'){omitted.push({source:record.path,reason:'no meaningful task relevance'});continue}
+    if(record.kind==='contrib'&&records.filter(item=>item.kind==='contrib').length>=2){omitted.push({source:record.path,reason:'contrib selection limit reached'});continue}
+    if(sessionFilter&&record.kind==='self'&&record.document_role!=='policy'&&sessionStartIndex(record.path,patterns)<0){omitted.push({source:record.path,reason:'not in lens session_start_sources'});continue}
+    const remaining=budgetChars-chars
+    if(remaining<160){omitted.push({source:record.path,reason:`context budget ${budgetName} exhausted`});truncated=true;continue}
+    let content=record.content,next=record
+    if(!content&&options.deliver){
+      const delivered=options.deliver(record)
+      if(!delivered){if(record.delivery_reason)omitted.push({source:record.path,reason:record.delivery_reason});continue}
+      content=delivered.content
+      next={...record}
+      for(const key of ['source_hash','freshness','sections','claims','tags','links','search_text','metadata'])if(delivered[key])next[key]=delivered[key]
+      if(delivered.estimated_tokens!==undefined)next.estimated_tokens=delivered.estimated_tokens
+    }
+    const result=excerpt(content||'',options.task,remaining)
+    if(!result.content.trim()){omitted.push({source:record.path,reason:'empty after filtering'});continue}
+    records.push({...next,content:result.content,truncated:result.truncated})
+    chars+=result.content.length
+    if(result.truncated)truncated=true
+  }
+  return {records,omitted,chars,truncated,unmatchedPatterns}
+}
+
+export function selectionReceipt(records,{budget,taskHash,lens,temporal}){
+  const receiptInput={budget,task_hash:taskHash,lens:lens||null,sources:records.map(record=>[record.source_id,record.source_hash,record.truncated])}
+  return {schema_version:1,context_hash:hash(canonicalJson(receiptInput)),task_hash:taskHash,lens:lens||null,budget,temporal,source_ids:records.map(record=>record.source_id),source_hashes:records.map(record=>record.source_hash)}
+}
+
+export function selectContextRecords(records,options={}){
+  const budgetName=options.budget||'standard',budgetChars=CONTEXT_BUDGETS[budgetName]
+  if(!budgetChars)throw new Error(`invalid context budget: ${budgetName}`)
+  const {candidates,temporalExcluded}=rankCandidates(records,options)
+  const taskHash=hash(String(options.task||'')),temporalVal=options.temporal||'current',identityId=options.identityId||'anonymous'
   const stateHash=hash(JSON.stringify([options.registryHash||'',options.allowedLenses||[],candidates.map(c=>[c.source_id,c.source_hash])]))
-
-  let startOffset=0
-  if(options.cursor){
-    let parsed
-    try{parsed=JSON.parse(Buffer.from(options.cursor,'base64url').toString('utf8'))}catch{const err=new Error('malformed cursor');err.code='CURSOR_INVALID';throw err}
-    if(!parsed?.p||!parsed?.sig||typeof parsed.sig!=='string'){const err=new Error('invalid cursor format');err.code='CURSOR_INVALID';throw err}
-    const p=parsed.p
-    if(p.v!==1||p.identity_id!==identityId||p.lens!==options.lens||p.task_hash!==taskHash||p.temporal!==temporalVal){const err=new Error('cursor parameter mismatch');err.code='CURSOR_INVALID';throw err}
-    if(options.cursorSecret){
-      const expectedPayload=`v1|${p.identity_id}|${p.lens}|${p.budget}|${p.manifest}|${p.self_id}|${p.task_hash}|${p.temporal}|${p.offset}|${p.state_hash}`
-      const expectedSig=createHmac('sha256',options.cursorSecret).update(expectedPayload).digest('hex')
-      const sigBuf=Buffer.from(parsed.sig),expBuf=Buffer.from(expectedSig)
-      if(sigBuf.length!==expBuf.length||!timingSafeEqual(sigBuf,expBuf)){const err=new Error('invalid cursor signature');err.code='CURSOR_INVALID';throw err}
-    }
-    if(p.state_hash!==stateHash){const err=new Error('cursor state expired due to changes; restart from offset 0');err.code='CURSOR_INVALID';throw err}
-    startOffset=Number.isInteger(p.offset)&&p.offset>=0?p.offset:0
-  }
-
-  const selected=[],omitted=[];let chars=0,nextCursor=null,isTruncated=false
+  const startOffset=verifyCursor(options.cursor,{identityId,lens:options.lens,taskHash,temporalVal,stateHash,cursorSecret:options.cursorSecret})
+  let picked,nextCursor=null
   if(options.manifest){
-    const PAGE_SIZE=10
-    let curr=startOffset
-    while(curr<candidates.length&&selected.length<PAGE_SIZE){
-      const record=candidates[curr]
-      const approxBytes=Buffer.byteLength(JSON.stringify({source_id:record.source_id,path:record.path,kind:record.kind,metadata:record.metadata}))
-      if(approxBytes>envelopeCap){
-        omitted.push({source:record.path,reason:'source exceeds envelope budget'})
-        curr++;isTruncated=true;break
-      }
-      selected.push({...record,content:'',manifest_only:true,truncated:false})
-      curr++
-    }
-
-    if(curr<candidates.length){
-      nextCursor=buildCursor(identityId,options.lens,budgetName,true,options.selfId,taskHash,temporalVal,curr,stateHash,options.cursorSecret)
-    }else{
-      nextCursor=null
-    }
-  }else{
-    const isNotNeeded=contextNeed(options.task)==='not-needed'
-    for(const record of candidates){
-      if(!requested.size&&isNotNeeded&&record.kind==='self'){omitted.push({source:record.path,reason:'personal context not needed for this task'});continue}
-      if(options.task&&!requested.size&&record.kind==='project'&&record.task_relevance<=0&&record.document_role!=='policy'){omitted.push({source:record.path,reason:'no meaningful task relevance'});continue}
-      if(record.kind==='contrib'&&selected.filter(item=>item.kind==='contrib').length>=2){omitted.push({source:record.path,reason:'contrib selection limit reached'});continue}
-      const remaining=budgetChars-chars
-      if(remaining<160){omitted.push({source:record.path,reason:`context budget ${budgetName} exhausted`});isTruncated=true;continue}
-
-      let contentToExcerpt = record.content
-      if(!contentToExcerpt && options.deliver){
-        const delivered = options.deliver(record)
-        if(!delivered){
-          if(record.delivery_reason) omitted.push({source:record.path, reason: record.delivery_reason})
-          continue
-        }
-        contentToExcerpt = delivered.content
-        if(delivered.source_hash) record.source_hash = delivered.source_hash
-        if(delivered.freshness) record.freshness = delivered.freshness
-        if(delivered.estimated_tokens !== undefined) record.estimated_tokens = delivered.estimated_tokens
-        if(delivered.sections) record.sections = delivered.sections
-        if(delivered.claims) record.claims = delivered.claims
-        if(delivered.tags) record.tags = delivered.tags
-        if(delivered.links) record.links = delivered.links
-        if(delivered.search_text) record.search_text = delivered.search_text
-        if(delivered.metadata) record.metadata = delivered.metadata
-      }
-
-      const result=excerpt(contentToExcerpt || '',options.task,remaining)
-      if(!result.content.trim()){omitted.push({source:record.path,reason:'empty after filtering'});continue}
-      selected.push({...record,content:result.content,truncated:result.truncated})
-      chars+=result.content.length
-      if(result.truncated)isTruncated=true
-    }
-  }
-
-  const receiptInput={budget:budgetName,task_hash:taskHash,lens:options.lens||null,sources:selected.map(record=>[record.source_id,record.source_hash,record.truncated])}
-  const serializedContentBytes=Buffer.byteLength(JSON.stringify(selected))
-  const estimatedTokensTotal=Math.ceil(serializedContentBytes/4)
-
+    const page=applyManifestPage(candidates,startOffset,{budget:budgetName})
+    picked={records:page.records,omitted:page.omitted,chars:0,truncated:page.truncated}
+    if(page.nextOffset!==null)nextCursor=buildCursor(identityId,options.lens,budgetName,true,options.selfId,taskHash,temporalVal,page.nextOffset,stateHash,options.cursorSecret)
+  }else picked=applySelectionPolicy(candidates,{...options,budget:budgetName})
+  const selected=picked.records,omitted=picked.omitted,chars=picked.chars
   return {
     records:selected,
     omitted,
@@ -187,12 +200,14 @@ export function selectContextRecords(records,options={}){
     temporalVal,
     stateHash,
     selection:{
-      schema_version:1,context_need:contextNeed(options.task),budget:budgetName,budget_chars:budgetChars===Number.MAX_SAFE_INTEGER?null:budgetChars,manifest_only:Boolean(options.manifest),temporal:temporalVal,candidate_count:records.length,eligible_count:candidates.length,selected_count:selected.length,omitted_count:omitted.length+temporalExcluded.length,content_chars:chars,estimated_tokens:estimateTokens(chars),estimated_tokens_total_heuristic:estimatedTokensTotal,truncated:isTruncated||selected.some(r=>r.truncated),truncated_sources:selected.filter(record=>record.truncated).map(record=>record.source_id),selected_sources:selected.map(record=>record.source_id),temporal_excluded:temporalExcluded.length,contrib_sources:selected.filter(record=>record.kind==='contrib').map(record=>record.source_id),contradiction_digest:contradictionDigest(selected),next_cursor:nextCursor
+      schema_version:1,context_need:contextNeed(options.task),budget:budgetName,budget_chars:budgetChars===Number.MAX_SAFE_INTEGER?null:budgetChars,manifest_only:Boolean(options.manifest),temporal:temporalVal,session_start:!options.manifest&&isSessionStart(options),candidate_count:records.length,eligible_count:candidates.length,selected_count:selected.length,omitted_count:omitted.length+temporalExcluded.length,content_chars:chars,estimated_tokens:estimateTokens(chars),truncated:picked.truncated||selected.some(r=>r.truncated),truncated_sources:selected.filter(record=>record.truncated).map(record=>record.source_id),selected_sources:selected.map(record=>record.source_id),temporal_excluded:temporalExcluded.length,contrib_sources:selected.filter(record=>record.kind==='contrib').map(record=>record.source_id),contradiction_digest:contradictionDigest(selected),next_cursor:nextCursor,...(picked.unmatchedPatterns?.length?{session_start_unmatched:picked.unmatchedPatterns}:{})
     },
-    receipt:{schema_version:1,context_hash:hash(canonicalJson(receiptInput)),task_hash:receiptInput.task_hash,lens:receiptInput.lens,budget:budgetName,temporal:temporalVal,source_ids:selected.map(record=>record.source_id),source_hashes:selected.map(record=>record.source_hash)}
+    receipt:selectionReceipt(selected,{budget:budgetName,taskHash,lens:options.lens,temporal:temporalVal})
   }
 }
 
+// In-memory cache of selection inputs. A hit re-runs the same selection so cold and warm results cannot drift;
+// it only records that the inputs were seen before and keeps the earliest valid_until expiry.
 const CACHE=new Map()
 function cacheKey(records,options={}){
   const state=records.map(record=>[sourceId(record),record.source_hash,record.content?.length||0])
@@ -207,114 +222,18 @@ function cacheKey(records,options={}){
     sources:options.sources||[],
     temporal:options.temporal||'current',
     history:Boolean(options.includeHistory),
-    cursor:options.cursor||null
+    cursor:options.cursor||null,
+    session_start:Boolean(options.sessionStart),
+    session_start_sources:options.sessionStartSources||null
   }))
 }
 export function cachedSelection(records,options={}){
-  const key=cacheKey(records,options)
-  const now=options.now?Date.parse(options.now):Date.now()
-  if(CACHE.has(key)){
-    const cached=CACHE.get(key)
-    if(cached.valid_until_epoch_ms===undefined||cached.valid_until_epoch_ms===null||now<cached.valid_until_epoch_ms){
-      if(options.deliver){
-        const candById=new Map(records.map(c=>[sourceId(c),c]))
-        const selectedCandidates=cached.records.map(r=>candById.get(sourceId(r))).filter(Boolean)
-        const budgetName=options.budget||'standard'
-        const budgetChars=CONTEXT_BUDGETS[budgetName]||CONTEXT_BUDGETS.standard
-        const deliveredRecords=[]
-        let chars=0,isTruncated=false
-        const omitted = [...(cached.omitted || [])]
-        if(options.manifest){
-          for(const cand of selectedCandidates){
-            deliveredRecords.push({
-              ...cand,
-              content:'',
-              manifest_only:true,
-              truncated:false,
-              knowledge_status:cand.knowledge_status||'current',
-              temporal_scope:cand.temporal_scope||'timeless'
-            })
-          }
-        }else{
-          const isNotNeeded=contextNeed(options.task)==='not-needed'
-          for(const cand of selectedCandidates){
-            if(!options.sources?.length&&isNotNeeded&&cand.kind==='self'){omitted.push({source:cand.path,reason:'personal context not needed for this task'});continue}
-            const remaining=budgetChars-chars
-            if(remaining<160){
-              omitted.push({source:cand.path,reason:`context budget ${budgetName} exhausted`})
-              isTruncated=true
-              continue
-            }
-            const delivered=options.deliver(cand)
-            if(!delivered){
-              if(cand.delivery_reason) omitted.push({source:cand.path,reason:cand.delivery_reason})
-              continue
-            }
-            const res=excerpt(delivered.content,options.task,remaining)
-            if(!res.content.trim()){
-              omitted.push({source:cand.path,reason:'empty after filtering'})
-              continue
-            }
-            deliveredRecords.push({
-              ...cand,
-              content:res.content,
-              metadata:delivered.metadata||cand.metadata,
-              source_hash:delivered.source_hash||cand.source_hash,
-              freshness:delivered.freshness||cand.freshness,
-              estimated_tokens:delivered.estimated_tokens??cand.estimated_tokens,
-              sections:delivered.sections||cand.sections,
-              claims:delivered.claims||cand.claims,
-              tags:delivered.tags||cand.tags,
-              links:delivered.links||cand.links,
-              search_text:delivered.search_text||cand.search_text,
-              knowledge_status:cand.knowledge_status||'current',
-              temporal_scope:cand.temporal_scope||'timeless',
-              truncated:res.truncated
-            })
-            chars+=res.content.length
-            if(res.truncated)isTruncated=true
-          }
-        }
-        const taskHash=hash(String(options.task||''))
-        const receiptInput={budget:budgetName,task_hash:taskHash,lens:options.lens||null,sources:deliveredRecords.map(record=>[record.source_id,record.source_hash,record.truncated])}
-        const serializedContentBytes=Buffer.byteLength(JSON.stringify(deliveredRecords))
-        const estimatedTokensTotal=Math.ceil(serializedContentBytes/4)
-        const cloned=structuredClone(cached)
-        cloned.records=deliveredRecords
-        cloned.omitted=omitted
-        cloned.receipt={
-          schema_version:1,
-          context_hash:hash(canonicalJson(receiptInput)),
-          task_hash:taskHash,
-          lens:options.lens||null,
-          budget:budgetName,
-          temporal:options.temporal||'current',
-          source_ids:deliveredRecords.map(record=>record.source_id),
-          source_hashes:deliveredRecords.map(record=>record.source_hash)
-        }
-        cloned.selection={
-          ...cloned.selection,
-          selected_count:deliveredRecords.length,
-          omitted_count:omitted.length+(cloned.temporalExcluded?.length||0),
-          content_chars:chars,
-          estimated_tokens:estimateTokens(chars),
-          estimated_tokens_total_heuristic:estimatedTokensTotal,
-          truncated:isTruncated||deliveredRecords.some(r=>r.truncated),
-          truncated_sources:deliveredRecords.filter(r=>r.truncated).map(r=>r.source_id),
-          selected_sources:deliveredRecords.map(r=>r.source_id),
-          contrib_sources:deliveredRecords.filter(r=>r.kind==='contrib').map(r=>r.source_id),
-          contradiction_digest:contradictionDigest(deliveredRecords)
-        }
-        return {...cloned,cache:{key,hit:true,persistent:false}}
-      }
-      return {...structuredClone(cached),cache:{key,hit:true,persistent:false}}
-    }
-  }
+  const key=cacheKey(records,options),nowMs=options?.now?(typeof options.now==='number'?options.now:Date.parse(options.now)||Date.now()):Date.now()
+  const cached=CACHE.get(key),hit=Boolean(cached&&(cached.valid_until_epoch_ms===null||nowMs<cached.valid_until_epoch_ms))
   const result=selectContextRecords(records,options)
-  const nowMs=options?.now?(typeof options.now==='number'?options.now:Date.parse(options.now)||Date.now()):Date.now()
-  const validUntilValues=records.map(r=>dateValue(r.metadata?.valid_until,true)).filter(v=>v!==null&&v>nowMs)
-  const valid_until_epoch_ms=validUntilValues.length?Math.min(...validUntilValues):null
-  const toCache={...result,valid_until_epoch_ms}
-  CACHE.set(key,toCache);if(CACHE.size>64)CACHE.delete(CACHE.keys().next().value)
-  return {...structuredClone(result),cache:{key,hit:false,persistent:false}}
+  if(!hit){
+    const validUntilValues=records.map(r=>dateValue(r.metadata?.valid_until,true)).filter(v=>v!==null&&v>nowMs)
+    CACHE.set(key,{valid_until_epoch_ms:validUntilValues.length?Math.min(...validUntilValues):null});if(CACHE.size>64)CACHE.delete(CACHE.keys().next().value)
+  }
+  return {...result,cache:{key,hit,persistent:false}}
 }

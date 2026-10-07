@@ -5,6 +5,7 @@ All notable Holoself releases are documented here.
 ## Unreleased
 
 - Fix the data-root `AGENTS.md` block and the public skill, which recommended `holoself context --root . --project .` (it fails with `LINK_REQUIRED`). They now use `holoself context --root . --task …` from inside the root. `holoself init` updates existing root blocks, and `--project` pointing at a data root now explains the fix (#32).
+- Context packets are bounded as a whole: every response, with or without `--manifest`, stays within twice its content budget (16/48/128 KiB), and reports `selection.total_bytes`, `estimated_tokens_total`, `envelope_cap_bytes` and `envelope_dropped`. Document bodies appear once: when content is delivered, `sources[]` is a body-free index (`packet_metadata.schema_version` 3), and MCP context tools send the packet once with a short text summary. `context --session-start` (MCP `session_start`) loads only the lens `session_start_sources`, by default identity, preferences and work context; lens files can set this new optional field. One selection implementation now serves cold and cached requests (#31).
 
 ## [0.10.1] — 2026-10-04
 
