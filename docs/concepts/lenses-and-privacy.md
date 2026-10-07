@@ -18,6 +18,8 @@ All lenses are definitions in `<self-root>/lenses/<id>.json`. Init seeds `genera
 }
 ```
 
+An optional `session_start_sources` array (up to 20 self-relative paths or globs with `*` inside one segment, such as `"context/communication-*.md"`) names what `context --session-start` loads. Without it, the default is `profile/identity.md`, `profile/preferences.md` and `profile/work-context.md`; `["*"]` keeps every eligible source. Older Holoself versions reject lens files that use this field.
+
 IDs use lowercase kebab-case and match filenames. `bindings` is reserved for configuration. There is no base-lens inheritance. Documents grant explicit `access_lenses`; definitions supply sensitivity access and instructions. Only the direct owner can use `private` to access restricted material. Bound lenses must be unbound before removal, and private cannot be removed.
 
 ## Project choices
