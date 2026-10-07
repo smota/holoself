@@ -1266,7 +1266,7 @@ function contextData(o){
   // MCP strips private paths before measuring so the cap and total_bytes apply to what is actually sent.
   const finish=value=>{if(!isMcp)return value;const clean=withoutPrivatePaths(value);clean.self={documents:clean.self.documents};clean.project={name:value.project.name,documents:clean.project.documents};return clean}
   // Measure the format that is actually emitted: the MCP tool result, JSON, or the Markdown packet.
-  const emitted=isMcp?'mcp':(o.json||o.format==='json')?'json':'packet',packetAdapter=o.restrictedHost?'restricted-host':(o.adapter||'generic')
+  const emitted=isMcp?'mcp':(o.json||o.format==='json')?'json':'packet',packetAdapter=o.restrictedHost?'restricted-host':(o.adapter||o.format||'packet')
   const measurePayload=value=>emitted==='mcp'?Buffer.byteLength(JSON.stringify(mcpToolEnvelope(value))):emitted==='json'?Buffer.byteLength(JSON.stringify(value,null,2)+'\n'):Buffer.byteLength(packetFormat(value,packetAdapter).trimEnd()+'\n')
   result=finish(result)
 
