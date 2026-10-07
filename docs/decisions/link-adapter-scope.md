@@ -47,11 +47,11 @@ Status: accepted for implementation (issues #34, #33). Ships with the #34 pull r
    - Without `adapters`, or with `all`: unchanged.
    - With a list, remove only the instruction files and project skill files belonging to those adapters. Map adapter to files through `runtime.activatedAdapters[].file` and `runtime.skillInstallations[].id`, falling back to `REGISTRY[].files` and `skillDirs`.
    - `agents` owns the canonical section that the overlays point to. Deactivating `agents` while other adapters remain fails with `deactivation preflight failed: agents is required by <ids>; deactivate them too or use --adapters all`.
-   - Rewrite `runtime.json` without the removed entries (`activatedAdapters`, `skillInstallations`, `skillShims`, `globalSkillInstallations` for those IDs). Delete it **only when no adapters remain**. Delete `BOOTSTRAP.md` on the same condition, matching full deactivation.
+   - Rewrite `runtime.json` without the removed entries (`activatedAdapters`, `skillInstallations`, `skillShims`, `globalSkillInstallations` for those IDs). When no adapters would remain, run full deactivation instead, which deletes `runtime.json`. `BOOTSTRAP.md` is kept in both cases, matching existing full deactivation, which doesn't delete it either.
    - The whole operation stays a single snapshot/rollback transaction, as it is today.
    - Global skill deployments are never removed by scoped deactivation. They belong to the user skill home, not the project.
 3. **`link remove`** keeps calling the unscoped `deactivateProject`.
-4. **Output:** each result line gains `adapter`. `--dry-run` prints the planned results without writing.
+4. **Output:** scoped result lines gain `adapter`. `link deactivate` always prints the dry-run plan before confirming, and `--dry-run` stops there.
 
 ### Per-subcommand flag allowlist (#33)
 
@@ -67,8 +67,9 @@ const COMMAND_FLAGS = {
 }
 ```
 
-- An entry in the table is enforced: any other flag fails with `option <flag> is not supported by '<command>'; see holoself <command> --help`.
-- A command with no entry is not validated during migration. A test asserts that every dispatched command has an entry, so the table cannot drift. The release notes list the commands that became strict.
+- An entry in the table is enforced: any other flag fails with `OPTION_NOT_SUPPORTED: option <flag> is not supported by '<command>'`.
+- `SCOPED_FLAGS` maps flags that are valid only on some commands (`--adapters` → `link deactivate`). They are rejected on every other command, even one without a table entry.
+- **As implemented in #33:** the table has one entry, `link deactivate`. Adding entries for `link repair`, `context` and the other commands, plus a test that every dispatched command has one, is follow-up work. Each entry has to list every flag the command really reads, and getting one wrong breaks a working invocation, so each command needs its own review.
 - `parse` records the raw flag names it saw (`o._flags`). Validation needs the spelling the user typed, not the option key: `--confirm` and `--yes` share a key.
 
 ## Ordering and file overlap
