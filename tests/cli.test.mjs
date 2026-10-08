@@ -189,28 +189,32 @@ test('init preserves user AGENTS text and bounded root guidance', async()=>{
 })
 
 
-test('every dispatched command has a flag contract',async()=>{
-  const inventory=new Set(['','mcp','instructions','index','link','migrate'])
-  for(const name of ['cli','ecosystem']){
-    const source=await readFile(new URL(`../src/${name}.mjs`,import.meta.url),'utf8')
-    const dispatch=source.slice(source.indexOf(name==='cli'?'export async function run(':'export async function runEcosystem('))
-    const branches=[...dispatch.matchAll(/if\(o\.command==='([^']+)'/g)]
-    for(let i=0;i<branches.length;i++){
-      const command=branches[i][1],body=dispatch.slice(branches[i].index,branches[i+1]?.index||dispatch.length)
-      const subs=new Set([...body.matchAll(/(?<![\w.])(?:sub|action|command|o\.args\[0\])(?:===|!==)'([^']+)'/g)].map(m=>m[1]))
-      for(const match of body.matchAll(/\[([^\]]+)\]\.includes\((?:sub|action)\)/g))for(const item of match[1].matchAll(/'([^']+)'/g))subs.add(item[1])
-      if(subs.size){for(const sub of subs){
-        if(command==='link'&&sub==='skill'){
-          const nested=[...body.matchAll(/o\.args(?:\?\.)?\[1\](?:===|!==)'([^']+)'/g)].map(m=>m[1])
-          assert.ok(nested.length,'nested skill dispatch must be discovered')
-          for(const child of nested)inventory.add(`link skill ${child}`)
-        }else inventory.add(`${command} ${sub}`)
-      }}else inventory.add(command)
+function dispatchedCommands(dispatch){
+  const inventory=new Set(),branches=[...dispatch.matchAll(/\bif\s*\(\s*o\.command\s*===\s*(['"])([^'"]+)\1/g)]
+  for(let i=0;i<branches.length;i++){
+    const command=branches[i][2],body=dispatch.slice(branches[i].index,branches[i+1]?.index??dispatch.length)
+    const subs=new Set([...body.matchAll(/(?<![\w.])(?:sub|action|command|o\.args\s*\[\s*0\s*\])\s*(?:===|!==)\s*(['"])([^'"]+)\1/g)].map(m=>m[2]))
+    for(const match of body.matchAll(/\[([^\]]+)\]\s*\.\s*includes\s*\(\s*(?:sub|action)\s*\)/g))for(const item of match[1].matchAll(/['"]([^'"]+)['"]/g))subs.add(item[1])
+    if(!subs.size)inventory.add(command)
+    for(const sub of subs){
+      if(command==='link'&&sub==='skill'){
+        const nested=[...body.matchAll(/o\.args\s*(?:\?\.)?\s*\[\s*1\s*\]\s*(?:===|!==)\s*(['"])([^'"]+)\1/g)].map(m=>m[2])
+        assert.ok(nested.length,'nested skill dispatch must be discovered')
+        for(const child of nested)inventory.add(command+' '+sub+' '+child)
+      }else inventory.add(command+' '+sub)
     }
   }
-  const assertCoverage=table=>{for(const key of inventory)assert.ok(Object.hasOwn(table,key),`missing flag contract: ${key}`)}
+  return inventory
+}
+test('every dispatched command has a flag contract',async()=>{
+  const {runEcosystem}=await import('../src/ecosystem.mjs')
+  const inventory=new Set(['','mcp','instructions','index','link','migrate',...dispatchedCommands(run.toString()),...dispatchedCommands(runEcosystem.toString())])
+  const assertCoverage=(table,keys=inventory)=>{for(const key of keys)assert.ok(Object.hasOwn(table,key),'missing flag contract: '+key)}
   assertCoverage(COMMAND_FLAGS)
   for(const key of ['index','instructions','link skill migrate-global']){const broken={...COMMAND_FLAGS};delete broken[key];assert.throws(()=>assertCoverage(broken),/missing flag contract/)}
+  for(const source of ["if (o.command === 'future') {}", 'if ( o.command === "future" ) { if ( sub === "action" ) {} }', "if(o.command==='future'){if(['action'].includes(sub)){}}", 'if (o.command === "link" && sub === "skill") { if (o.args?.[1] !== "future") throw Error() }']){
+    const found=dispatchedCommands(source);assert.ok(found.size);assert.throws(()=>assertCoverage(COMMAND_FLAGS,found),/missing flag contract/)
+  }
   for(const key of Object.keys(COMMAND_FLAGS))assert.doesNotThrow(()=>parseArguments(key?key.split(' '):[]),key)
 })
 
