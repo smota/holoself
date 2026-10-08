@@ -464,6 +464,7 @@
         "src/mcp-server.mjs",
         "src/migration.mjs",
         "src/skill-paths.mjs",
+        "src/space-actions.mjs",
         "src/version.mjs",
         "src/web-server.mjs",
         "templates/AGENTS.md",
