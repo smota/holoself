@@ -48,3 +48,14 @@ Choose the least-broad lens that fits the project's purpose. Linking does not co
 If the project folder was intentionally retired, use **Remove link** only after confirming the exact Space. If it moved, relink the intended folder; do not create a second canonical self root to make the warning disappear.
 
 [Next: Lenses](lenses.md) · [Back to the Workbench tour](index.md)
+
+
+## Review space changes
+
+Activate, deactivate, relink and setup first show the complete file and directory plan. Review the paths, then choose **Apply**. Preview does not reconcile the catalog, acquire locks, create temporary files, or write project/self files. Cancel leaves the filesystem unchanged.
+
+The API uses two POSTs to `/api/spaces/:id/activate`, `/deactivate`, `/relink` or `/setup`: `{}` returns `data.preview.plan` and `data.preview.plan_hash`; `{ "apply": true, "plan_hash": "<reviewed hash>" }` applies that plan. A missing hash or changed file content, link, lens binding, runtime or adapter discovery returns HTTP 409 with `PLAN_CHANGED`; preview again before applying. Hashes are specific to the action, project and canonical root.
+
+Relink and setup preserve existing README, proposals, reports, project filters, secondary lenses and recorded activation choices. Their plans include canonical-root binding and link-registry writes, plus the temporary registry lock. Legacy setup verifies the exact junction target and all activation paths before replacing the junction; a recoverable failure restores the prior files and junction. Recovery never recursively removes a metadata directory: unexpected contents produce an explicit recovery error.
+
+Workbench space writes are serialized in this process and preconditions are rechecked immediately before synchronous file changes. The link-registry lock coordinates cooperating registry writers. These checks do not provide an operating-system transaction against unrelated external processes changing files concurrently.

@@ -166,7 +166,7 @@ function preflight(project,plan,options={}){
   for(const adapter of plan.adapters){const p=safeProjectFile(project,adapter.file,'instruction preflight'),state=managedMarkerState(p);if(['unsafe','malformed'].includes(state))collisions.push(`${p}: ${state}`)}
   for(const skill of plan.skills){const p=safeProjectFile(project,skill.file,'skill preflight'),state=skillState(p);if(['unsafe','malformed'].includes(state)||(state==='inactive'&&!options.force))collisions.push(`${p}: ${state==='inactive'?'existing unmanaged content (use --force --yes to append managed installation)':state}`)}
   for(const skill of plan.globalSkills||[])if(!['full-public-skill-current','full-public-skill-compatible'].includes(skill.status))collisions.push(`${skill.path}: global skill ${skill.status}`)
-  for(const rel of ['.holoself/BOOTSTRAP.md','.holoself/runtime.json']){const p=safeProjectFile(project,rel,'activation artifact');if(existsSync(p)&&!lstatSync(p).isFile())collisions.push(`${p}: not a regular file`)}
+  for(const rel of options.metadataAbsent?[]:['.holoself/BOOTSTRAP.md','.holoself/runtime.json']){const p=safeProjectFile(project,rel,'activation artifact');if(existsSync(p)&&!lstatSync(p).isFile())collisions.push(`${p}: not a regular file`)}
   if(collisions.length)throw new Error(`activation preflight failed: ${collisions.join('; ')}`)
   return {plan,collisions:[],writes:plan.writes}
 }
