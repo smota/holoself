@@ -47,18 +47,83 @@ function requiredValue(args, i, flag){
   if (!value || value.startsWith('--')) throw new Error(`${flag} requires a value`)
   return value
 }
-// Flags are parsed globally; commands listed here accept only their own flags plus COMMON_FLAGS.
-// SCOPED_FLAGS are rejected on every command that does not list them. Unlisted commands are not yet validated.
-const COMMON_FLAGS=['--root','--data-root','--data-dir','--help','-h','--version','-v','--json','--yes','--confirm','--dry-run']
-const COMMAND_FLAGS={'link deactivate':['--project','--adapters']}
-const SCOPED_FLAGS={'--adapters':['link deactivate']}
-function validateFlags(o){
-  const key=o.command==='link'&&o.args[0]?`link ${o.args[0]}`:o.command,allowed=COMMAND_FLAGS[key]
-  for(const flag of o._flags){
-    const scoped=SCOPED_FLAGS[flag],supported=allowed?COMMON_FLAGS.includes(flag)||allowed.includes(flag):!scoped||scoped.includes(key)
-    if(!supported){const error=new Error(`option ${flag} is not supported by '${key||'holoself'}'; see holoself --help`);error.code='OPTION_NOT_SUPPORTED';throw error}
-  }
+// Contracts describe meaningful options, including aliases, before any command executes.
+const ROOT_FLAGS=['--root','--data-root','--data-dir']
+const PROJECT_FLAGS=['--project','--target']
+const CONFIRM_FLAGS=['--yes','--confirm']
+const ACTIVATION_FLAGS=['--activate','--platform','--instructions','--install-skill','--skill-home','--no-activate','--force','--dry-run',...CONFIRM_FLAGS]
+const CONTEXT_FLAGS=[...ROOT_FLAGS,'--project','--target','--self','--lens','--task','--self-only','--budget','--source','--session-start','--temporal','--include-history','--manifest','--cursor','--no-cache','--adapter','--restricted-host','--expires-hours','--format','--json','--output','--snapshot',...CONFIRM_FLAGS]
+const JSON_FLAGS=['--json'] // Explicit compatibility for commands whose output is always JSON.
+export const COMMAND_FLAGS={
+  '':[], capabilities:JSON_FLAGS, 'data-root':ROOT_FLAGS,
+  init:[...ROOT_FLAGS,'--contribs','--exclude-contrib'],doctor:ROOT_FLAGS,validate:[...ROOT_FLAGS,'--project'],
+  migrate:[...ROOT_FLAGS,'--from','--force','--dry-run',...CONFIRM_FLAGS],
+  export:[...ROOT_FLAGS,'--target','--packet-only','--root-setup','--dry-run',...CONFIRM_FLAGS],
+  link:[...ROOT_FLAGS,'--target','--root-setup','--force','--dry-run',...CONFIRM_FLAGS],
+  unlink:[...ROOT_FLAGS,'--target','--dry-run',...CONFIRM_FLAGS],
+  upgrade:[...ROOT_FLAGS,'--contribs','--exclude-contrib','--dry-run'],
+  web:[...ROOT_FLAGS,'--project','--port','--no-open'],
+  mcp:['--project','--claude-project-dir'],
+  'mcp status':['--project','--platform',...JSON_FLAGS],
+  'mcp configure':['--project','--platform','--dry-run',...CONFIRM_FLAGS,...JSON_FLAGS],
+  coaching:[],
+  'coaching start':[...ROOT_FLAGS,'--question',...JSON_FLAGS],
+  'coaching note':[...ROOT_FLAGS,'--expected-revision','--kind','--text',...JSON_FLAGS],
+  'coaching action':[...ROOT_FLAGS,'--expected-revision','--text',...JSON_FLAGS],
+  'coaching choose':[...ROOT_FLAGS,'--expected-revision','--action-sequence',...JSON_FLAGS],
+  'coaching review':[...ROOT_FLAGS,'--expected-revision','--outcome','--text',...JSON_FLAGS],
+  'coaching material':[...ROOT_FLAGS,'--expected-revision','--material-text','--material-status','--source-label','--producer','--limitations',...JSON_FLAGS],
+  'coaching resume':[...ROOT_FLAGS,...JSON_FLAGS],
+  'knowledge transform':[...ROOT_FLAGS,'--replacements','--plan-kind','--output','--dry-run','--apply','--digest','--preview-hash',...CONFIRM_FLAGS,...JSON_FLAGS],
+  'knowledge migrate-lenses':[...ROOT_FLAGS,'--output','--dry-run','--apply','--digest','--preview-hash',...CONFIRM_FLAGS,...JSON_FLAGS],
+  'knowledge cleanup':[...ROOT_FLAGS,'--output','--dry-run','--apply','--digest','--preview-hash',...CONFIRM_FLAGS,...JSON_FLAGS],
+  instructions:[...PROJECT_FLAGS,...JSON_FLAGS],
+  'instructions audit':[...PROJECT_FLAGS,...JSON_FLAGS],
+  'instructions render':[...PROJECT_FLAGS,'--adapter','--json'],
+  'skill status':['--scope','--platform','--skill-home',...JSON_FLAGS],
+  'skill install':['--scope','--platform','--skill-home','--force','--dry-run',...CONFIRM_FLAGS,...JSON_FLAGS],
+  ...Object.fromEntries(['list','show','validate','bindings'].map(sub=>['lens '+sub,[...ROOT_FLAGS,...JSON_FLAGS]])),
+  'lens bind':[...ROOT_FLAGS,'--project','--lens','--secondary-lenses','--binding-hash','--dry-run',...CONFIRM_FLAGS,...JSON_FLAGS],
+  'lens unbind':[...ROOT_FLAGS,'--project','--binding-hash','--dry-run',...CONFIRM_FLAGS,...JSON_FLAGS],
+  ...Object.fromEntries(['add','setup'].map(sub=>['link '+sub,[...PROJECT_FLAGS,'--self','--lens','--secondary-lenses','--project-include','--project-exclude','--project-assert-include','--project-assert-exclude',...ACTIVATION_FLAGS]])),
+  'link activate':[...PROJECT_FLAGS,...ACTIVATION_FLAGS],
+  'link repair':[...PROJECT_FLAGS,...ACTIVATION_FLAGS,'--lens','--secondary-lenses'],
+  'link deactivate':[...PROJECT_FLAGS,'--adapters','--dry-run',...CONFIRM_FLAGS],
+  'link status':[...PROJECT_FLAGS,'--skill-home',...JSON_FLAGS],
+  'link doctor':[...PROJECT_FLAGS,'--skill-home',...CONTEXT_FLAGS],
+  'link remove':[...PROJECT_FLAGS,...ROOT_FLAGS,'--self','--force','--dry-run',...CONFIRM_FLAGS],
+  'link approve':[...PROJECT_FLAGS,...ROOT_FLAGS,'--self','--revoke','--lenses'],
+  'link backfill':[...PROJECT_FLAGS,...ROOT_FLAGS,'--self','--all','--lenses'],
+  'link prune':[...ROOT_FLAGS,'--self'],
+  'link skill migrate-global':[...PROJECT_FLAGS,'--platform','--instructions','--skill-home','--force','--dry-run',...CONFIRM_FLAGS],
+  'migrate policy':[...ROOT_FLAGS,'--self','--apply','--revert','--confirm-narrowing','--allow-partial','--include-linked','--dry-run',...JSON_FLAGS],
+  context:CONTEXT_FLAGS,
+  ...Object.fromEntries(['overlap','conflicts','stale','all'].map(sub=>['analyze '+sub,[...PROJECT_FLAGS,...JSON_FLAGS]])),
+  propose:[...PROJECT_FLAGS,'--claim','--source-file','--target-file','--proposal-type','--type','--evidence','--confidence','--visibility',...JSON_FLAGS],
+  ...Object.fromEntries(['list','audit','show'].map(sub=>['proposals '+sub,[...PROJECT_FLAGS,...JSON_FLAGS]])),
+  'proposals approve':[...PROJECT_FLAGS,'--json','--digest','--preview-hash',...CONFIRM_FLAGS],
+  ...Object.fromEntries(['reject','defer','supersede'].map(sub=>['proposals '+sub,[...PROJECT_FLAGS,...CONFIRM_FLAGS]])),
+  index:[...PROJECT_FLAGS,'--changed',...JSON_FLAGS],
+  'index status':[...PROJECT_FLAGS,...JSON_FLAGS],
+  'index rebuild':[...PROJECT_FLAGS,...JSON_FLAGS],
+  search:[...PROJECT_FLAGS,'--lens','--temporal','--federated','--spaces',...JSON_FLAGS]
 }
+export function commandKey(o){
+  if(o.command==='link'&&o.args[0]==='skill')return ['link',...o.args.slice(0,2)].join(' ')
+  if(['link','migrate','mcp','coaching','knowledge','instructions','skill','lens','analyze','proposals','index'].includes(o.command)&&o.args[0])return `${o.command} ${o.args[0]}`
+  return o.command||''
+}
+export function validateFlags(o){
+  const key=commandKey(o),allowed=COMMAND_FLAGS[key]
+  if(!allowed&&!o.help&&!o.version)throw new Error(`unknown command: ${key}`)
+  for(const flag of o._flags){
+    const universal=['--help','-h','--version','-v'].includes(flag)||(o.version&&flag==='--json')
+    if(!universal&&!allowed?.includes(flag)){const error=new Error(`option ${flag} is not supported by '${key||'holoself'}'; see holoself --help`);error.code='OPTION_NOT_SUPPORTED';throw error}
+  }
+  if(o.dryRun&&(o.command==='knowledge'||key==='migrate policy')&&(o.apply||o.revert||o.output))throw new Error('--dry-run cannot be combined with --apply, --revert or --output')
+  return o
+}
+export function parseArguments(args){return validateFlags(parse(args))}
 function parse(args){
   const o={rootSetup:false,_flags:[]}; const positional=[]
   for(let i=0;i<args.length;i++){

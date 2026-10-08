@@ -1,3 +1,4 @@
+import { parseArguments } from '../src/cli.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { access, readFile, readdir } from 'node:fs/promises'
@@ -122,4 +123,32 @@ test('agent instructions consolidate resolution in the public skill and bounded 
   assert.match(template,/public Holoself skill is the normative resolver contract/)
   assert.match(template,/--budget standard/)
   assert.doesNotMatch(template,/Loading order:/)
+})
+
+
+test('documented invocations parse under strict flag validation',async()=>{
+  const files=[...await documentationFiles(),...await markdownFiles(join(root,'skills'))],failures=[]
+  let count=0
+  for(const file of files){
+    const text=(await readFile(file,'utf8')).replace(/\\\r?\n\s*/g,' ')
+    const examples=[...text.matchAll(/`(holoself [^`\n]+)`/g),...text.matchAll(/^\s*(?:\$\w+\s*=\s*)?(holoself [^\n]+)$/gm)]
+    for(const match of examples){
+      if(/^holoself (?:<command>|\.\.\.$)/.test(match[1]))continue
+      // Synopsis alternatives are expanded separately from concrete commands.
+      const command=match[1].split(/\s+\|\s+/)[0].replace(/<[^>]+>/g,'example').replace(/\[([^\]]+)\]/g,'$1').replace(/\s+#.*$/,'').trim()
+      const tokens=command.match(/"[^"]*"|'[^']*'|[^\s]+/g).map(x=>x.replace(/^["']|["']$/g,''))
+      // Slash-separated switch synopses are prose, not executable invocations.
+      if(tokens.some(x=>x==='/'||x==='|'||x==='…'))continue
+      let variants=[[]]
+      for(const token of tokens)variants=variants.flatMap(prefix=>token.split('|').map(value=>[...prefix,value==='...'?'example':value]))
+      for(const variant of variants){try{parseArguments(variant.slice(1));count++}catch(error){failures.push(`${file.slice(root.length+1)}: ${match[1]}: ${error.message}`)}}
+    }
+  }
+  assert.ok(count>50,'documentation sweep must exercise real invocations')
+  assert.deepEqual(failures,[])
+})
+
+test('strict command changes are documented',async()=>{
+  const text=await readFile(join(root,'CHANGELOG.md'),'utf8')
+  for(const word of ['OPTION_NOT_SUPPORTED','coaching','knowledge','instructions','proposals','index','search','mcp','lens','skill','link'])assert.ok(text.includes(word),word)
 })

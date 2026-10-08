@@ -2208,7 +2208,7 @@ export async function runEcosystem(o){
   }
 
   if(o.command==='link' && ['add','status','remove','setup','activate','deactivate','repair','doctor','approve','backfill','prune'].includes(sub)){
-    const project=projectPath(o)
+    const project=sub==='backfill'&&o.all&&!o.project&&!o.target?null:projectPath(o)
     if(sub==='add'){
       if(!o.self)throw new Error('link add requires --self <path>')
       if(!existsSync(project))throw new Error(`project not found: ${project}`)

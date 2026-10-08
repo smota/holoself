@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile, mkdir, symlink, lstat, access, readdir, stat, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { run } from '../src/cli.mjs'
+import { run, COMMAND_FLAGS, parseArguments } from '../src/cli.mjs'
 
 async function temp(){return mkdtemp(join(tmpdir(),'holoself-'))}
 async function capture(fn){const old=console.log;let out='';console.log=(...x)=>{out+=x.join(' ')+'\n'};try{await fn()}finally{console.log=old}return out}
@@ -186,4 +186,29 @@ test('init preserves user AGENTS text and bounded root guidance', async()=>{
   const root=await temp(); await writeFile(join(root,'AGENTS.md'),'# User rules\n\nKeep this.\n'); await run(['init','--data-dir',root]);
   const first=await readFile(join(root,'AGENTS.md'),'utf8'); assert.match(first,/Keep this/); assert.match(first,/holoself-root-start/); assert.equal((first.match(/holoself-root-start/g)||[]).length,1)
   await run(['init','--data-dir',root]); const second=await readFile(join(root,'AGENTS.md'),'utf8'); assert.equal((second.match(/holoself-root-start/g)||[]).length,1); assert.match(second,/Keep this/)
+})
+
+
+test('every dispatched command has a flag contract',async()=>{
+  for(const name of ['cli','ecosystem']){
+    const source=await readFile(new URL(`../src/${name}.mjs`,import.meta.url),'utf8')
+    const dispatch=source.slice(source.indexOf(name==='cli'?'export async function run(':'export async function runEcosystem('))
+    const branches=[...dispatch.matchAll(/if\(o\.command==='([^']+)'/g)]
+    for(let i=0;i<branches.length;i++){
+      const command=branches[i][1],body=dispatch.slice(branches[i].index,branches[i+1]?.index||dispatch.length)
+      const subs=new Set([...body.matchAll(/(?<![\w.])(?:sub|action|command|o\.args\[0\])==='([^']+)'/g)].map(m=>m[1]))
+      for(const match of body.matchAll(/\[([^\]]+)\]\.includes\((?:sub|action)\)/g))for(const item of match[1].matchAll(/'([^']+)'/g))subs.add(item[1])
+      if(subs.size){for(const sub of subs){const key=command==='link'&&sub==='skill'?'link skill migrate-global':`${command} ${sub}`;assert.ok(Object.hasOwn(COMMAND_FLAGS,key),`missing flag contract: ${key}`)}}
+      else assert.ok(Object.hasOwn(COMMAND_FLAGS,command),`missing flag contract: ${command}`)
+    }
+  }
+  for(const key of Object.keys(COMMAND_FLAGS))assert.doesNotThrow(()=>parseArguments(key?key.split(' '):[]),key)
+})
+
+test('unsupported known flags fail before writes',async()=>{
+  const root=await temp()
+  for(const args of [['init','--root',root,'--dry-run'],['init','--root',root,'--question','x'],['context','--question','x'],['link','repair','--manifest'],['analyze','all','--dry-run'],['coaching','start','--yes'],['index','status','--changed']]){
+    await assert.rejects(()=>run(args),error=>error.code==='OPTION_NOT_SUPPORTED')
+    assert.deepEqual(await readdir(root),[])
+  }
 })
