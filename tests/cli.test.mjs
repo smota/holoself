@@ -190,24 +190,33 @@ test('init preserves user AGENTS text and bounded root guidance', async()=>{
 
 
 test('every dispatched command has a flag contract',async()=>{
+  const inventory=new Set(['','mcp','instructions','index','link','migrate'])
   for(const name of ['cli','ecosystem']){
     const source=await readFile(new URL(`../src/${name}.mjs`,import.meta.url),'utf8')
     const dispatch=source.slice(source.indexOf(name==='cli'?'export async function run(':'export async function runEcosystem('))
     const branches=[...dispatch.matchAll(/if\(o\.command==='([^']+)'/g)]
     for(let i=0;i<branches.length;i++){
       const command=branches[i][1],body=dispatch.slice(branches[i].index,branches[i+1]?.index||dispatch.length)
-      const subs=new Set([...body.matchAll(/(?<![\w.])(?:sub|action|command|o\.args\[0\])==='([^']+)'/g)].map(m=>m[1]))
+      const subs=new Set([...body.matchAll(/(?<![\w.])(?:sub|action|command|o\.args\[0\])(?:===|!==)'([^']+)'/g)].map(m=>m[1]))
       for(const match of body.matchAll(/\[([^\]]+)\]\.includes\((?:sub|action)\)/g))for(const item of match[1].matchAll(/'([^']+)'/g))subs.add(item[1])
-      if(subs.size){for(const sub of subs){const key=command==='link'&&sub==='skill'?'link skill migrate-global':`${command} ${sub}`;assert.ok(Object.hasOwn(COMMAND_FLAGS,key),`missing flag contract: ${key}`)}}
-      else assert.ok(Object.hasOwn(COMMAND_FLAGS,command),`missing flag contract: ${command}`)
+      if(subs.size){for(const sub of subs){
+        if(command==='link'&&sub==='skill'){
+          const nested=[...body.matchAll(/o\.args(?:\?\.)?\[1\](?:===|!==)'([^']+)'/g)].map(m=>m[1])
+          assert.ok(nested.length,'nested skill dispatch must be discovered')
+          for(const child of nested)inventory.add(`link skill ${child}`)
+        }else inventory.add(`${command} ${sub}`)
+      }}else inventory.add(command)
     }
   }
+  const assertCoverage=table=>{for(const key of inventory)assert.ok(Object.hasOwn(table,key),`missing flag contract: ${key}`)}
+  assertCoverage(COMMAND_FLAGS)
+  for(const key of ['index','instructions','link skill migrate-global']){const broken={...COMMAND_FLAGS};delete broken[key];assert.throws(()=>assertCoverage(broken),/missing flag contract/)}
   for(const key of Object.keys(COMMAND_FLAGS))assert.doesNotThrow(()=>parseArguments(key?key.split(' '):[]),key)
 })
 
 test('unsupported known flags fail before writes',async()=>{
   const root=await temp()
-  for(const args of [['init','--root',root,'--dry-run'],['init','--root',root,'--question','x'],['context','--question','x'],['link','repair','--manifest'],['analyze','all','--dry-run'],['coaching','start','--yes'],['index','status','--changed']]){
+  for(const args of [['init','--root',root,'--dry-run'],['init','--root',root,'--question','x'],['context','--question','x'],['link','repair','--manifest'],['analyze','all','--dry-run'],['coaching','start','--yes'],['index','status','--changed'],['proposals','show','id','--json'],['link','doctor','--output',join(root,'unused')],['link','doctor','--yes'],['link','doctor','--confirm']]){
     await assert.rejects(()=>run(args),error=>error.code==='OPTION_NOT_SUPPORTED')
     assert.deepEqual(await readdir(root),[])
   }

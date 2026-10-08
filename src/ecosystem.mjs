@@ -2194,7 +2194,7 @@ export async function runEcosystem(o){
       console.log(JSON.stringify({status:receipt.status,receipt_id:receipt.receipt_id,reverted_at:receipt.reverted_at,entries:receipt.entries.length},null,2))
       return true
     }
-    const plan=planPolicyMigration(selfRoot,{includeLinked:o.includeLinked,dryRun:true})
+    const plan=planPolicyMigration(selfRoot,{includeLinked:o.includeLinked,dryRun:Boolean(o.dryRun)})
     console.log(JSON.stringify({
       status:'planned',
       plan_id:plan.plan_id,
@@ -2202,7 +2202,7 @@ export async function runEcosystem(o){
       self_root:plan.self_root,
       include_linked:plan.include_linked,
       summary:plan.summary,
-      plan_file:slash(join(selfRoot,'.holoself','migrations',`plan-${plan.plan_id}.json`))
+      plan_file:o.dryRun?null:slash(join(selfRoot,'.holoself','migrations',`plan-${plan.plan_id}.json`))
     },null,2))
     return true
   }

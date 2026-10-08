@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, writeFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { run } from '../src/cli.mjs'
@@ -62,7 +62,7 @@ test('computeMeetMetadata derives minimal-privilege meet for self and project', 
   assert.deepEqual(projLinked.access_lenses, ['general', 'technical'])
 })
 
-test('migrate policy dry-run plans migration without mutating files', async () => {
+test('migrate policy saves a plan without mutating source documents', async () => {
   const self = await temp()
   await run(['init', '--root', self])
 
@@ -222,4 +222,16 @@ test('migrate policy revert rejects tampered receipt entries fail-closed', async
     run(['migrate', 'policy', '--root', self, '--revert', plan.plan_id]),
     /receipt integrity failure/i
   )
+})
+
+test('migrate policy explicit dry-run writes no files or directories',async()=>{
+  const root=await temp();await run(['init','--root',root])
+  async function snapshot(path){const entries=[];for(const item of (await readdir(path,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name)))entries.push([item.name,item.isDirectory()?await snapshot(join(path,item.name)):await readFile(join(path,item.name),'base64')]);return entries}
+  for(const existing of [false,true]){
+    if(existing){await mkdir(join(root,'.holoself','migrations'),{recursive:true});await writeFile(join(root,'.holoself','migrations','keep.json'),'{}')}
+    const before=await snapshot(root),result=JSON.parse(await capture(()=>run(['migrate','policy','--root',root,'--dry-run'])))
+    assert.equal(result.status,'planned');assert.equal(result.plan_file,null);assert.deepEqual(await snapshot(root),before)
+    for(const flag of ['--output','--apply','--revert'])await assert.rejects(run(['migrate','policy','--root',root,'--dry-run',flag,'example']),/cannot be combined|not supported/)
+    assert.deepEqual(await snapshot(root),before)
+  }
 })
