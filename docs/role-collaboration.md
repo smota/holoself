@@ -18,6 +18,19 @@ Role A -> AcceptanceDecision or ReworkRequest
 changing the candidate, handover, contract, delivery, or council synthesis invalidates downstream
 decisions.
 
+## Initial phase
+
+Phase 0 uses the same bilateral handoff as every later phase. `agentflow:requester` is a bootstrap
+role, not a lifecycle phase and not the exploratory QA sidecar. That role is the acceptance owner
+and sends the opening handoff to `agentflow:product-manager`, who remains the delivery role for
+phase 0. The catalog declares the edge. Phase 0 does not skip the transition check, and the product
+manager does not hand off to itself. The outgoing product-manager-to-analyst handoff is unchanged.
+
+Lifecycle phases stay 0 through 8. A copied product-manager self-handoff is not a phase-0
+contract: the acceptance owner is `agentflow:requester` and the delivery role stays
+`agentflow:product-manager`. The exploratory QA sidecar is not that sender. Consuming projects
+adopt this catalog with the framework; they do not add their own inbound edge.
+
 ## Complexity routing
 
 | Class         | Trigger                                                                   | Required path                         |

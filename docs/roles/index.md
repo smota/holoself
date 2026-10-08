@@ -14,11 +14,12 @@ Workflow profile = applicability, transition, and gate policy
 
 ## Product taxonomy
 
-The catalog in `manifests/role-catalog.json` defines nine lifecycle roles and one optional
-sidecar:
+The catalog in `manifests/role-catalog.json` defines nine lifecycle roles, one bootstrap
+predecessor, and one optional sidecar:
 
 | Identity                           | Owns                                       | Does not own                               |
 | ---------------------------------- | ------------------------------------------ | ------------------------------------------ |
+| `agentflow:requester`              | opening request                            | product problem, outcome, implementation   |
 | `agentflow:product-manager`        | problem, outcome, release intent           | requirements, architecture, implementation |
 | `agentflow:analyst`                | requirements, acceptance, scope            | priority, architecture, implementation     |
 | `agentflow:architect`              | design, risk, workflow profile             | implementation, test verdict               |
@@ -30,7 +31,10 @@ sidecar:
 | `agentflow:pr-readiness`           | PR manifest, traceability, follow-up state | specialist or merge decisions              |
 | `agentflow:qa-expert`              | exploratory findings                       | deterministic test or review verdicts      |
 
-`qa-expert` is a sidecar attached to testing and review. It is not a tenth lifecycle phase.
+`requester` is the bootstrap predecessor of phase 0. It sends a core handoff to
+`agentflow:product-manager` and owns acceptance of that delivery. It is not a lifecycle phase.
+`qa-expert` is a sidecar attached to testing and review. It is not a tenth lifecycle phase and it
+is not the phase-0 sender.
 
 Role definitions use qualified `agentflow:<slug>` identities. CLI input may use the matching current
 short slug, such as `reviewer`; aliases from earlier releases are rejected.
