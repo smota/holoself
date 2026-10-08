@@ -27,7 +27,9 @@ The problem and observable outcome are explicit, and release intent is recorded 
 
 ## Handoffs
 
-Send problem statement, outcome definition, and release intent to `agentflow:analyst`.
+Accept the opening request from `agentflow:requester`. That sender owns acceptance of this phase;
+this role owns delivery. Send problem statement, outcome definition, and release intent to
+`agentflow:analyst`. Do not accept a handoff from this role to itself.
 
 ## Extensions
 

@@ -385,10 +385,10 @@ function inspectLinkCollisions(project){
   }
   return collisions
 }
-function createLinkDirs(project,{preserveReadme=false}={}){
+function createLinkDirs(project,{preserveReadme=false,purgeLegacy=true}={}){
   const root=join(project,'.holoself');ensureDir(root)
   for(const dir of ['catalog','proposals','reports'])ensureDir(join(root,dir))
-  try{purgeLegacyIndex(project)}catch{}
+  if(purgeLegacy)try{purgeLegacyIndex(project)}catch{}
   const readme=join(root,'README.md');if(!pathExists(readme))atomicWrite(readme,managedReadme());else if(!preserveReadme&&readFileSync(readme,'utf8')!==managedReadme())throw new Error(`${readme} exists with user content; refusing to replace`)
 }
 function secretFile(path,root){return SECRET_FILE_RE.test(slash(relative(root,path)))}
@@ -859,7 +859,15 @@ function contextData(o){
       allowedLenses:new Set([link.default_lens,...(link.secondary_lenses||[])])
     }
   }else{
-    const found=findLinkUpwards(cwd)
+    // An explicit canonical root containing the caller owns this direct request,
+    // even when that root lives below another project's link. Explicit project
+    // selection was already resolved above and retains linked authority.
+    let explicitOwnerRoot=false
+    if(o.rootExplicit){
+      const candidate=resolve(o.self||o.root)
+      if(isCanonicalSelf(candidate))try{assertContainedPath(candidate,cwd,'caller working directory');explicitOwnerRoot=true}catch{}
+    }
+    const found=explicitOwnerRoot?null:findLinkUpwards(cwd)
     if(found){
       project=found.projectDir
       link=readLink(project)
@@ -2194,7 +2202,7 @@ export async function runEcosystem(o){
       console.log(JSON.stringify({status:receipt.status,receipt_id:receipt.receipt_id,reverted_at:receipt.reverted_at,entries:receipt.entries.length},null,2))
       return true
     }
-    const plan=planPolicyMigration(selfRoot,{includeLinked:o.includeLinked,dryRun:true})
+    const plan=planPolicyMigration(selfRoot,{includeLinked:o.includeLinked,dryRun:Boolean(o.dryRun)})
     console.log(JSON.stringify({
       status:'planned',
       plan_id:plan.plan_id,
@@ -2202,13 +2210,13 @@ export async function runEcosystem(o){
       self_root:plan.self_root,
       include_linked:plan.include_linked,
       summary:plan.summary,
-      plan_file:slash(join(selfRoot,'.holoself','migrations',`plan-${plan.plan_id}.json`))
+      plan_file:o.dryRun?null:slash(join(selfRoot,'.holoself','migrations',`plan-${plan.plan_id}.json`))
     },null,2))
     return true
   }
 
   if(o.command==='link' && ['add','status','remove','setup','activate','deactivate','repair','doctor','approve','backfill','prune'].includes(sub)){
-    const project=projectPath(o)
+    const project=sub==='backfill'&&o.all&&!o.project&&!o.target?null:projectPath(o)
     if(sub==='add'){
       if(!o.self)throw new Error('link add requires --self <path>')
       if(!existsSync(project))throw new Error(`project not found: ${project}`)
@@ -2867,4 +2875,27 @@ export {
   validateCatalogSchema,
   validateDecisionCacheSchema,
   contextData
+}
+
+// Workbench configuration boundary. The caller supplies validated canonical paths and
+// holds the registry lock over its complete transaction, including recovery.
+export function spaceLinkConfiguration(project,self,{lens='general',metadataAbsent=false}={}){
+  const existing=!metadataAbsent&&pathExists(linkPath(project))?readLink(project,{tolerant:true}):null
+  if(!metadataAbsent)inspectLinkCollisions(project)
+  const registry=loadLensRegistry(self),binding=readBindings(self,{registry}).bindings[canonicalProjectPath(project)]
+  const desired={path:self,access:'read',proposals:'enabled',index:'local',default_lens:binding?.default_lens||existing?.default_lens||lens,secondary_lenses:binding?.secondary_lenses||existing?.secondary_lenses||[],project_context:existing?(parseYaml(readFileSync(linkPath(project),'utf8')).project_context||{}):{include:[],exclude:DEFAULT_PROJECT_EXCLUDES,assert_include:[],assert_exclude:[]}}
+  const {project_context,...selfContext}=desired
+  const errors=[...linkSchemaErrors(selfContext,registry),...projectContextErrors(project_context)]
+  if(errors.length)throw new Error(errors.join('; '))
+  const sovereign=readRegistry(self),entry=sovereign.links.find(x=>x.project_id===canonicalSpaceId(project)||x.project_path===canonicalProjectPath(project))
+  return {link:desired,registry_hash:sovereign.registry_hash,lens_registry_hash:registry.registry_hash,binding_salt:entry?.binding_salt||existing?.binding_salt||null}
+}
+export function readSpaceLink(project){return readLink(project)}
+export const withSpaceConfigurationLock=(self,fn)=>withRegistryLock(self,fn)
+export function configureSpaceLink(project,self,configuration){
+  const {link}=configuration,salt=configuration.binding_salt||randomBytes(16).toString('hex'),now=new Date().toISOString()
+  createLinkDirs(project,{preserveReadme:true,purgeLegacy:false})
+  const written=writeLink(project,self,link.default_lens,link.secondary_lenses,link.project_context,salt)
+  writeRegistry(self,links=>{const project_id=canonicalSpaceId(project),project_path=canonicalProjectPath(project),index=links.findIndex(x=>x.project_id===project_id||x.project_path===project_path),entry={project_id,project_path,binding_salt:salt,allowed_lenses:[link.default_lens,...link.secondary_lenses],status:'active',attested_by:'owner:direct',created_at:index>=0?links[index].created_at:now,updated_at:now,revoked_at:null};if(index>=0)links[index]=entry;else links.push(entry);return links},configuration.registry_hash)
+  return written
 }

@@ -12,6 +12,49 @@
   },
   "roles": [
     {
+      "slug": "requester",
+      "qualifiedName": "agentflow:requester",
+      "label": "Requester",
+      "kind": "bootstrap",
+      "phase": null,
+      "source": "roles/requester",
+      "purpose": "Hand the opening request to the product manager and accept that phase only against the contract this role issued.",
+      "owns": ["intake.request"],
+      "contributesTo": ["product.problem"],
+      "doesNotOwn": [
+        "product.problem",
+        "product.outcome",
+        "product.release-intent",
+        "analysis.requirements",
+        "delivery.implementation"
+      ],
+      "inputs": ["user-request"],
+      "outputs": ["opening-request"],
+      "authority": {
+        "defaultBoundary": "propose",
+        "maximumBoundary": "propose",
+        "mutationScopes": ["request-records"]
+      },
+      "behavior": {
+        "steps": [
+          "record the subject the product manager must frame",
+          "accept delivery only against that opening contract"
+        ],
+        "failurePolicy": "block when the opening request has no subject"
+      },
+      "completionCriteria": [
+        "the opening request names its subject",
+        "acceptance stays with the requester"
+      ],
+      "acceptsFrom": [],
+      "sendsTo": ["agentflow:product-manager"],
+      "collaboration": {
+        "allowedModes": ["single-agent", "human-gated"],
+        "independence": "not-required"
+      },
+      "extensionPoints": ["templates", "validators", "evidenceFields"]
+    },
+    {
       "slug": "product-manager",
       "qualifiedName": "agentflow:product-manager",
       "label": "Product manager",
@@ -40,7 +83,7 @@
         "problem and outcome are explicit",
         "release intent is recorded or declared not applicable"
       ],
-      "acceptsFrom": [],
+      "acceptsFrom": ["agentflow:requester"],
       "sendsTo": ["agentflow:analyst"],
       "collaboration": {
         "allowedModes": ["single-agent", "advisory", "council"],
@@ -433,6 +476,7 @@
     }
   ],
   "transitions": [
+    ["agentflow:requester", "agentflow:product-manager"],
     ["agentflow:product-manager", "agentflow:analyst"],
     ["agentflow:analyst", "agentflow:architect"],
     ["agentflow:architect", "agentflow:implementation-planner"],
@@ -464,6 +508,7 @@
     "digest-bound-acceptance",
     "handover-owner-accepts-delivery",
     "council-does-not-dilute-accountability",
-    "extensions-cannot-change-core-transitions"
+    "extensions-cannot-change-core-transitions",
+    "bootstrap-sender-accepts-phase-zero-delivery"
   ]
 }

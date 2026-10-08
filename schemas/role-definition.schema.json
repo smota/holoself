@@ -29,7 +29,7 @@
     "slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
     "qualifiedName": { "type": "string", "pattern": "^agentflow:[a-z0-9]+(?:-[a-z0-9]+)*$" },
     "label": { "type": "string", "minLength": 1 },
-    "kind": { "enum": ["lifecycle", "sidecar"] },
+    "kind": { "enum": ["lifecycle", "sidecar", "bootstrap"] },
     "phase": { "type": ["integer", "null"], "minimum": 0 },
     "source": { "type": "string", "pattern": "^roles/[a-z0-9]+(?:-[a-z0-9]+)*$" },
     "purpose": { "type": "string", "minLength": 1 },

@@ -4,6 +4,13 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- An explicit canonical root containing the current directory now resolves owner-direct even when nested inside a linked project. Explicit project selection and callers outside that root retain linked authority.
+
+- Workbench activate, deactivate, relink and setup now preview every affected file and require the unchanged plan hash to apply. Content or configuration drift returns `PLAN_CHANGED` (409). Relink preserves project metadata and activation choices; legacy setup preflights without unlinking and restores the junction on recoverable failure (#39).
+
+- CLI options are now checked before execution for all command families: core root operations, web, mcp, coaching, knowledge, instructions, skill, lens, link, context, analyze, propose, proposals, index and search. Known unused options fail with `OPTION_NOT_SUPPORTED`; root, confirmation and dry-run options are no longer accepted globally. JSON-native commands retain explicit `--json` compatibility.
+- Planning commands accept `--dry-run` only without apply, revert or output writes. Remove ignored `--yes` from link approve/backfill/prune invocations and ignored `--changed` from index rebuild.
+
 - Fix the data-root `AGENTS.md` block and the public skill, which recommended `holoself context --root . --project .` (it fails with `LINK_REQUIRED`). They now use `holoself context --root . --task …` from inside the root. `holoself init` updates existing root blocks, and `--project` pointing at a data root now explains the fix (#32).
 - `link repair` restores the adapters recorded in `.holoself/runtime.json` instead of re-detecting hosts, so it no longer re-creates adapters you removed or overwrites hand-written instruction files. The plan reports `source: recorded|detected|explicit`. Workbench repair now shows the plan first and applies it only if it is unchanged (`PLAN_CHANGED` otherwise) (#34).
 - `link deactivate --adapters <list>` removes only the listed adapters and keeps `runtime.json` for the rest. `link deactivate` now prints its plan before confirming, and rejects flags it doesn't use (such as `--platform` or `--adapter`) instead of silently ignoring them. `--adapters` is rejected on every other command (#33).

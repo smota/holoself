@@ -271,7 +271,7 @@ function atomicWriteFile(target, content, mode = 0o600) {
 
 export function planPolicyMigration(selfRoot, options = {}) {
   const migrationsDir = join(selfRoot, '.holoself', 'migrations')
-  if (!existsSync(migrationsDir)) mkdirSync(migrationsDir, { recursive: true })
+  if (!options.dryRun && !existsSync(migrationsDir)) mkdirSync(migrationsDir, { recursive: true })
 
   const filesToScan = []
   // Discover self files
@@ -403,7 +403,7 @@ export function planPolicyMigration(selfRoot, options = {}) {
   }
 
   const planPath = join(migrationsDir, `plan-${planId}.json`)
-  writeFileSync(planPath, JSON.stringify(plan, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 })
+  if (!options.dryRun) writeFileSync(planPath, JSON.stringify(plan, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 })
 
   return plan
 }

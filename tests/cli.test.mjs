@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile, mkdir, symlink, lstat, access, readdir, stat, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { run } from '../src/cli.mjs'
+import { run, COMMAND_FLAGS, parseArguments } from '../src/cli.mjs'
 
 async function temp(){return mkdtemp(join(tmpdir(),'holoself-'))}
 async function capture(fn){const old=console.log;let out='';console.log=(...x)=>{out+=x.join(' ')+'\n'};try{await fn()}finally{console.log=old}return out}
@@ -186,4 +186,81 @@ test('init preserves user AGENTS text and bounded root guidance', async()=>{
   const root=await temp(); await writeFile(join(root,'AGENTS.md'),'# User rules\n\nKeep this.\n'); await run(['init','--data-dir',root]);
   const first=await readFile(join(root,'AGENTS.md'),'utf8'); assert.match(first,/Keep this/); assert.match(first,/holoself-root-start/); assert.equal((first.match(/holoself-root-start/g)||[]).length,1)
   await run(['init','--data-dir',root]); const second=await readFile(join(root,'AGENTS.md'),'utf8'); assert.equal((second.match(/holoself-root-start/g)||[]).length,1); assert.match(second,/Keep this/)
+})
+
+
+function dispatchedCommands(dispatch){
+  const inventory=new Set(),branches=[...dispatch.matchAll(/\bif\s*\(\s*o\.command\s*===\s*(['"])([^'"]+)\1/g)]
+  for(let i=0;i<branches.length;i++){
+    const command=branches[i][2],body=dispatch.slice(branches[i].index,branches[i+1]?.index??dispatch.length)
+    const subs=new Set([...body.matchAll(/(?<![\w.])(?:sub|action|command|o\.args\s*\[\s*0\s*\])\s*(?:===|!==)\s*(['"])([^'"]+)\1/g)].map(m=>m[2]))
+    for(const match of body.matchAll(/\[([^\]]+)\]\s*\.\s*includes\s*\(\s*(?:sub|action)\s*\)/g))for(const item of match[1].matchAll(/['"]([^'"]+)['"]/g))subs.add(item[1])
+    if(!subs.size)inventory.add(command)
+    for(const sub of subs){
+      if(command==='link'&&sub==='skill'){
+        const nested=[...body.matchAll(/o\.args\s*(?:\?\.)?\s*\[\s*1\s*\]\s*(?:===|!==)\s*(['"])([^'"]+)\1/g)].map(m=>m[2])
+        assert.ok(nested.length,'nested skill dispatch must be discovered')
+        for(const child of nested)inventory.add(command+' '+sub+' '+child)
+      }else inventory.add(command+' '+sub)
+    }
+  }
+  return inventory
+}
+test('every dispatched command has a flag contract',async()=>{
+  const {runEcosystem}=await import('../src/ecosystem.mjs')
+  const inventory=new Set(['','mcp','instructions','index','link','migrate',...dispatchedCommands(run.toString()),...dispatchedCommands(runEcosystem.toString())])
+  const assertCoverage=(table,keys=inventory)=>{for(const key of keys)assert.ok(Object.hasOwn(table,key),'missing flag contract: '+key)}
+  assertCoverage(COMMAND_FLAGS)
+  for(const key of ['index','instructions','link skill migrate-global']){const broken={...COMMAND_FLAGS};delete broken[key];assert.throws(()=>assertCoverage(broken),/missing flag contract/)}
+  for(const source of ["if (o.command === 'future') {}", 'if ( o.command === "future" ) { if ( sub === "action" ) {} }', "if(o.command==='future'){if(['action'].includes(sub)){}}", 'if (o.command === "link" && sub === "skill") { if (o.args?.[1] !== "future") throw Error() }']){
+    const found=dispatchedCommands(source);assert.ok(found.size);assert.throws(()=>assertCoverage(COMMAND_FLAGS,found),/missing flag contract/)
+  }
+  for(const key of Object.keys(COMMAND_FLAGS))assert.doesNotThrow(()=>parseArguments(key?key.split(' '):[]),key)
+})
+
+test('unsupported known flags fail before writes',async()=>{
+  const root=await temp()
+  for(const args of [['init','--root',root,'--dry-run'],['init','--root',root,'--question','x'],['context','--question','x'],['link','repair','--manifest'],['analyze','all','--dry-run'],['coaching','start','--yes'],['index','status','--changed'],['proposals','show','id','--json'],['link','doctor','--output',join(root,'unused')],['link','doctor','--yes'],['link','doctor','--confirm']]){
+    await assert.rejects(()=>run(args),error=>error.code==='OPTION_NOT_SUPPORTED')
+    assert.deepEqual(await readdir(root),[])
+  }
+})
+
+async function nestedRootFixture(){
+  const self=await temp(),project=await temp(),root=join(project,'root');await mkdir(root)
+  await run(['init','--root',self]);await run(['init','--root',root])
+  await run(['link','add','--project',project,'--self',self,'--no-activate','--yes'])
+  return {self,project,root}
+}
+test('nested canonical root resolves owner-direct',async()=>{
+  const {root}=await nestedRootFixture(),cwd=process.cwd(),nested=join(root,'context','nested');await mkdir(nested)
+  try{for(const location of [root,nested]){
+    process.chdir(location)
+    const packet=JSON.parse(await capture(()=>run(['context','--root',location===root?'.':root,'--task','x','--lens','private','--json'])))
+    assert.equal(packet.self.path,resolve(root).replaceAll('\\','/'));assert.equal(packet.lens,'private');assert.deepEqual(packet.project.documents,[])
+  }}finally{process.chdir(cwd)}
+})
+test('explicit project and linked cwd preserve linked authority',async()=>{
+  const {self,project,root}=await nestedRootFixture(),cwd=process.cwd()
+  try{
+    process.chdir(project)
+    const linked=JSON.parse(await capture(()=>run(['context','--root',self,'--json'])))
+    assert.equal(linked.self.path,undefined);assert.ok(linked.project.name)
+    await assert.rejects(run(['context','--root',root,'--json']),{code:'SELF_ROOT_NOT_CANONICAL'})
+    process.chdir(root)
+    const explicit=JSON.parse(await capture(()=>run(['context','--project',project,'--root',self,'--json'])))
+    assert.equal(explicit.self.path,undefined)
+    await assert.rejects(run(['context','--project',project,'--root',self,'--lens','private','--json']),{code:'LENS_NOT_GRANTED'})
+    await assert.rejects(run(['context','--project',project,'--root',root,'--json']),{code:'SELF_ROOT_NOT_CANONICAL'})
+  }finally{process.chdir(cwd)}
+})
+test('unlinked callers require a link',async()=>{
+  const parent=await temp(),root=join(parent,'root'),sibling=join(parent,'root-sibling'),invalid=join(parent,'invalid'),cwd=process.cwd()
+  await mkdir(root);await mkdir(sibling);await mkdir(invalid);await run(['init','--root',root])
+  const {contextData}=await import('../src/ecosystem.mjs')
+  try{
+    process.chdir(sibling);await assert.rejects(run(['context','--root',root,'--json']),{code:'LINK_REQUIRED'})
+    process.chdir(invalid);await assert.rejects(run(['context','--root',invalid,'--json']),{code:'SELF_ROOT_NOT_CANONICAL'})
+    process.chdir(root);for(const surface of ['mcp','web'])assert.throws(()=>contextData({root,rootExplicit:true,args:[],surface}),{code:'LINK_REQUIRED'})
+  }finally{process.chdir(cwd)}
 })

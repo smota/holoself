@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "issues": [
+    {
+      "repo": "smota/holoself",
+      "number": 38,
+      "title": "chore: extend per-command flag validation to all CLI commands",
+      "body": "## Background & Problem Statement\n\n#33 (PR #37) added per-command flag validation to `src/cli.mjs`: `COMMAND_FLAGS`, `COMMON_FLAGS` and `SCOPED_FLAGS`. Only `link deactivate` has a table entry so far. Every other command still accepts any known flag and silently ignores the ones it doesn't use, e.g. `context --question x` or `link repair --manifest`. That is the failure mode #33 fixed for deactivation.\n\n## Proposed Solution\n\nAdd a `COMMAND_FLAGS` entry for each dispatched command and subcommand, listing exactly the flags it reads. Then add a test that fails when a dispatched command has no entry, so the table can't drift.\n\n## Requirements\n\n- [ ] Every command dispatched by `run()` / `runEcosystem()` has an entry.\n- [ ] Every invocation in `docs/`, `README.md`, `skills/` and the test suite still parses.\n- [ ] Known-but-unused flags fail with `OPTION_NOT_SUPPORTED` before any write.\n\n## Technical Design\n\nStarting points: `src/cli.mjs` (`validateFlags`, `parse`), the command dispatch in `src/cli.mjs` and `src/ecosystem.mjs`, and `tests/docs.test.mjs` for a sweep of the documented commands. Review each command's real option reads, because a wrong entry breaks a working invocation.\n\n## Acceptance criteria\n\n- [ ] Drift test: a dispatched command without a table entry fails the suite.\n- [ ] Sweep test: every documented `holoself …` invocation parses.\n- [ ] Release notes list the commands that became strict.\n\nRefs #33",
+      "updatedAt": "2026-10-07T14:21:22Z"
+    },
+    {
+      "repo": "smota/holoself",
+      "number": 39,
+      "title": "feat: preview-then-apply for Workbench activate, deactivate, relink and setup",
+      "body": "## Background & Problem Statement\n\n#34 (PR #36) made Workbench **Repair** two-step: a dry-run preview with a `plan_hash`, then apply only if the plan is unchanged (`409 PLAN_CHANGED`). The other destructive space actions (`activate`, `deactivate`, `relink`, `setup`) still run `link … --yes` after a generic browser `confirm()`, without showing which files change. `relink` and `setup` also chain `link remove --yes` and `link add --yes`.\n\n## Proposed Solution\n\nReuse the repair contract (preview → hash → apply-if-unchanged) for these actions, and show the file list (`activation_plan.writes`, or the deactivation plan from #33) before applying.\n\n## Requirements\n\n- [ ] No destructive space action writes without a preview the user has seen.\n- [ ] A stale or missing plan hash is rejected with 409.\n- [ ] The UI shows every file to change.\n\n## Technical Design\n\nStarting points: the `/api/spaces/:id/repair` route and `repairPlan` in `src/web-server.mjs`; `repairPreview` in `web/app.mjs`; the `link deactivate` dry-run plan (#33).\n\n## Acceptance criteria\n\n- [ ] Web tests for each action: preview writes nothing; a stale hash returns 409; a matching hash applies.\n- [ ] A UI test asserts no bare `confirm()` remains for these actions.\n\nRefs #34",
+      "updatedAt": "2026-10-07T14:21:24Z"
+    },
+    {
+      "repo": "smota/holoself",
+      "number": 40,
+      "title": "fix: data root nested inside a linked project resolves the project link",
+      "body": "## Background & Problem Statement\n\nFound during the review of #32 (PR #35). `holoself context --root . --task …` run from a data root that sits inside a linked project folder goes through `findLinkUpwards(cwd)` in `src/ecosystem.mjs` `contextData`. It picks up the enclosing project's `.holoself/link.yaml`, then fails with `SELF_ROOT_NOT_CANONICAL` (or resolves as that project) instead of treating the call as direct-owner root context.\n\n## Proposed Solution\n\nWhen `--root` is explicit and the cwd is inside that canonical root, resolve as owner-direct before searching upwards for a link. Alternatively, stop the upward search at the canonical root.\n\n## Requirements\n\n- [ ] A data root nested inside a linked project resolves as owner-direct when called with `--root .` from inside it.\n- [ ] Linked-project resolution is unchanged for cwd inside the project but outside the root.\n\n## Technical Design\n\nStarting point: `contextData` identity resolution in `src/ecosystem.mjs` (the `findLinkUpwards` branch) and `isCanonicalSelf`.\n\n## Acceptance criteria\n\n- [ ] Test: project P linked to self S, data root R nested at `P/R`; `holoself context --root . --task x --json` with cwd R → owner-direct packet for R.\n- [ ] Existing linked-project and `LINK_REQUIRED` tests pass.\n\nRefs #32",
+      "updatedAt": "2026-10-07T14:21:26Z"
+    }
+  ],
+  "issueRevisions": [
+    {
+      "number": 38,
+      "digest": "d338dccea3cb87d8787e574f8c7b7978d402bec8d63ee5b90784a6bc49367506"
+    },
+    {
+      "number": 39,
+      "digest": "5b6a63c52786f78fd507557dc829e3cbaec5fd36a8f0dacad295541f55751f6b"
+    },
+    {
+      "number": 40,
+      "digest": "1e9154271ff2c6331530d2bbcfdb1735dc3d1894e23c1bfa357155ee3adab783"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "issue-38-1",
+      "issue": 38,
+      "text": "Every command dispatched by `run()` / `runEcosystem()` has an entry.",
+      "verification": "issue-38"
+    },
+    {
+      "id": "issue-38-2",
+      "issue": 38,
+      "text": "Every invocation in `docs/`, `README.md`, `skills/` and the test suite still parses.",
+      "verification": "issue-38"
+    },
+    {
+      "id": "issue-38-3",
+      "issue": 38,
+      "text": "Known-but-unused flags fail with `OPTION_NOT_SUPPORTED` before any write.",
+      "verification": "issue-38"
+    },
+    {
+      "id": "issue-38-4",
+      "issue": 38,
+      "text": "Drift test: a dispatched command without a table entry fails the suite.",
+      "verification": "issue-38"
+    },
+    {
+      "id": "issue-38-5",
+      "issue": 38,
+      "text": "Sweep test: every documented `holoself …` invocation parses.",
+      "verification": "issue-38"
+    },
+    {
+      "id": "issue-38-6",
+      "issue": 38,
+      "text": "Release notes list the commands that became strict.",
+      "verification": "issue-38"
+    },
+    {
+      "id": "issue-39-1",
+      "issue": 39,
+      "text": "No destructive space action writes without a preview the user has seen.",
+      "verification": "issue-39"
+    },
+    {
+      "id": "issue-39-2",
+      "issue": 39,
+      "text": "A stale or missing plan hash is rejected with 409.",
+      "verification": "issue-39"
+    },
+    {
+      "id": "issue-39-3",
+      "issue": 39,
+      "text": "The UI shows every file to change.",
+      "verification": "issue-39"
+    },
+    {
+      "id": "issue-39-4",
+      "issue": 39,
+      "text": "Web tests for each action: preview writes nothing; a stale hash returns 409; a matching hash applies.",
+      "verification": "issue-39"
+    },
+    {
+      "id": "issue-39-5",
+      "issue": 39,
+      "text": "A UI test asserts no bare `confirm()` remains for these actions.",
+      "verification": "issue-39"
+    },
+    {
+      "id": "issue-40-1",
+      "issue": 40,
+      "text": "A data root nested inside a linked project resolves as owner-direct when called with `--root .` from inside it.",
+      "verification": "issue-40"
+    },
+    {
+      "id": "issue-40-2",
+      "issue": 40,
+      "text": "Linked-project resolution is unchanged for cwd inside the project but outside the root.",
+      "verification": "issue-40"
+    },
+    {
+      "id": "issue-40-3",
+      "issue": 40,
+      "text": "Test: project P linked to self S, data root R nested at `P/R`; `holoself context --root . --task x --json` with cwd R → owner-direct packet for R.",
+      "verification": "issue-40"
+    },
+    {
+      "id": "issue-40-4",
+      "issue": 40,
+      "text": "Existing linked-project and `LINK_REQUIRED` tests pass.",
+      "verification": "issue-40"
+    }
+  ],
+  "order": [
+    38,
+    39,
+    40
+  ],
+  "sourceAssurance": "local snapshot; not durable GitHub acknowledgment",
+  "productAcceptance": "not implemented",
+  "boundary": "mutate-worktree",
+  "publication": "separate PR workflow; no merge authority",
+  "privacy": "Synthetic fixtures only; private data roots are outside this scope."
+}

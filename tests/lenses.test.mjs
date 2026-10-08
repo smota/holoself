@@ -51,6 +51,15 @@ test('bindings and definitions reject symlink storage',async()=>{
 
 test('explicit attestation approves an existing binding and backfill writes missing salt to the project link',async()=>{
  const {root,project}=await fixture(),registryFile=join(root,'.holoself','links.json'),linkFile=join(project,'.holoself','link.yaml'),original=await readFile(linkFile,'utf8'),salt=original.match(/binding_salt: "([a-f0-9]+)"/)[1]
- await writeFile(registryFile,JSON.stringify({schema_version:1,links:[]}));assert.throws(()=>contextData({project}),/not attested/);await capture(()=>run(['link','approve','--project',project,'--self',root,'--yes']));let registry=JSON.parse(await readFile(registryFile,'utf8'));assert.equal(registry.links[0].binding_salt,salt);assert.deepEqual(registry.links[0].allowed_lenses,['general','professional','public-voice']);assert.ok(contextData({project}).self.documents.length>0);assert.doesNotMatch(await readFile(linkFile,'utf8'),/default_lens|secondary_lenses/)
- await writeFile(linkFile,original.replace(/^\s*binding_salt:.*\n/m,''));await capture(()=>run(['link','backfill','--project',project,'--self',root,'--yes']));registry=JSON.parse(await readFile(registryFile,'utf8'));assert.match(await readFile(linkFile,'utf8'),new RegExp(registry.links[0].binding_salt));assert.ok(contextData({project}).self.documents.length>0)
+ await writeFile(registryFile,JSON.stringify({schema_version:1,links:[]}));assert.throws(()=>contextData({project}),/not attested/);await capture(()=>run(['link','approve','--project',project,'--self',root]));let registry=JSON.parse(await readFile(registryFile,'utf8'));assert.equal(registry.links[0].binding_salt,salt);assert.deepEqual(registry.links[0].allowed_lenses,['general','professional','public-voice']);assert.ok(contextData({project}).self.documents.length>0);assert.doesNotMatch(await readFile(linkFile,'utf8'),/default_lens|secondary_lenses/)
+ await writeFile(linkFile,original.replace(/^\s*binding_salt:.*\n/m,''));await capture(()=>run(['link','backfill','--project',project,'--self',root]));registry=JSON.parse(await readFile(registryFile,'utf8'));assert.match(await readFile(linkFile,'utf8'),new RegExp(registry.links[0].binding_salt));assert.ok(contextData({project}).self.documents.length>0)
+})
+
+
+test('link backfill all processes registered projects outside cwd',async()=>{
+  const {root,project}=await fixture(),other=await temp()
+  await capture(()=>run(['link','add','--self',root,'--project',other,'--yes','--no-activate']))
+  for(const path of [project,other]){const file=join(path,'.holoself','link.yaml');await writeFile(file,(await readFile(file,'utf8')).replace(/^\s*binding_salt:.*\n/m,''))}
+  await capture(()=>run(['link','backfill','--all','--self',root]))
+  for(const path of [project,other])assert.match(await readFile(join(path,'.holoself','link.yaml'),'utf8'),/binding_salt: "[a-f0-9]{32}"/)
 })
