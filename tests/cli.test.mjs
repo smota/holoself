@@ -221,3 +221,42 @@ test('unsupported known flags fail before writes',async()=>{
     assert.deepEqual(await readdir(root),[])
   }
 })
+
+async function nestedRootFixture(){
+  const self=await temp(),project=await temp(),root=join(project,'root');await mkdir(root)
+  await run(['init','--root',self]);await run(['init','--root',root])
+  await run(['link','add','--project',project,'--self',self,'--no-activate','--yes'])
+  return {self,project,root}
+}
+test('nested canonical root resolves owner-direct',async()=>{
+  const {root}=await nestedRootFixture(),cwd=process.cwd(),nested=join(root,'context','nested');await mkdir(nested)
+  try{for(const location of [root,nested]){
+    process.chdir(location)
+    const packet=JSON.parse(await capture(()=>run(['context','--root',location===root?'.':root,'--task','x','--lens','private','--json'])))
+    assert.equal(packet.self.path,resolve(root).replaceAll('\\','/'));assert.equal(packet.lens,'private');assert.deepEqual(packet.project.documents,[])
+  }}finally{process.chdir(cwd)}
+})
+test('explicit project and linked cwd preserve linked authority',async()=>{
+  const {self,project,root}=await nestedRootFixture(),cwd=process.cwd()
+  try{
+    process.chdir(project)
+    const linked=JSON.parse(await capture(()=>run(['context','--root',self,'--json'])))
+    assert.equal(linked.self.path,undefined);assert.ok(linked.project.name)
+    await assert.rejects(run(['context','--root',root,'--json']),{code:'SELF_ROOT_NOT_CANONICAL'})
+    process.chdir(root)
+    const explicit=JSON.parse(await capture(()=>run(['context','--project',project,'--root',self,'--json'])))
+    assert.equal(explicit.self.path,undefined)
+    await assert.rejects(run(['context','--project',project,'--root',self,'--lens','private','--json']),{code:'LENS_NOT_GRANTED'})
+    await assert.rejects(run(['context','--project',project,'--root',root,'--json']),{code:'SELF_ROOT_NOT_CANONICAL'})
+  }finally{process.chdir(cwd)}
+})
+test('unlinked callers require a link',async()=>{
+  const parent=await temp(),root=join(parent,'root'),sibling=join(parent,'root-sibling'),invalid=join(parent,'invalid'),cwd=process.cwd()
+  await mkdir(root);await mkdir(sibling);await mkdir(invalid);await run(['init','--root',root])
+  const {contextData}=await import('../src/ecosystem.mjs')
+  try{
+    process.chdir(sibling);await assert.rejects(run(['context','--root',root,'--json']),{code:'LINK_REQUIRED'})
+    process.chdir(invalid);await assert.rejects(run(['context','--root',invalid,'--json']),{code:'SELF_ROOT_NOT_CANONICAL'})
+    process.chdir(root);for(const surface of ['mcp','web'])assert.throws(()=>contextData({root,rootExplicit:true,args:[],surface}),{code:'LINK_REQUIRED'})
+  }finally{process.chdir(cwd)}
+})

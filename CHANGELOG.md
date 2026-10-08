@@ -4,6 +4,8 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- An explicit canonical root containing the current directory now resolves owner-direct even when nested inside a linked project. Explicit project selection and callers outside that root retain linked authority.
+
 - Workbench activate, deactivate, relink and setup now preview every affected file and require the unchanged plan hash to apply. Content or configuration drift returns `PLAN_CHANGED` (409). Relink preserves project metadata and activation choices; legacy setup preflights without unlinking and restores the junction on recoverable failure (#39).
 
 - CLI options are now checked before execution for all command families: core root operations, web, mcp, coaching, knowledge, instructions, skill, lens, link, context, analyze, propose, proposals, index and search. Known unused options fail with `OPTION_NOT_SUPPORTED`; root, confirmation and dry-run options are no longer accepted globally. JSON-native commands retain explicit `--json` compatibility.

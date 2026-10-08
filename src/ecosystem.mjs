@@ -859,7 +859,15 @@ function contextData(o){
       allowedLenses:new Set([link.default_lens,...(link.secondary_lenses||[])])
     }
   }else{
-    const found=findLinkUpwards(cwd)
+    // An explicit canonical root containing the caller owns this direct request,
+    // even when that root lives below another project's link. Explicit project
+    // selection was already resolved above and retains linked authority.
+    let explicitOwnerRoot=false
+    if(o.rootExplicit){
+      const candidate=resolve(o.self||o.root)
+      if(isCanonicalSelf(candidate))try{assertContainedPath(candidate,cwd,'caller working directory');explicitOwnerRoot=true}catch{}
+    }
+    const found=explicitOwnerRoot?null:findLinkUpwards(cwd)
     if(found){
       project=found.projectDir
       link=readLink(project)
