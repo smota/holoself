@@ -1,0 +1,82 @@
+{
+  "roleAssignments": {
+    "adversarial-reviewer": "deep-reasoning",
+    "architect": "architect-lead",
+    "coordinator": "architect-lead",
+    "developer": "balanced",
+    "developer-jr": "lightweight",
+    "fixture-builder": "lightweight",
+    "reviewer": "deep-reasoning",
+    "tester": "deep-reasoning"
+  },
+  "tiers": {
+    "architect-lead": {
+      "capabilities": [
+        "high-context",
+        "formal-logic",
+        "deep-reasoning"
+      ],
+      "defaultEffort": "medium",
+      "fallbacks": [
+        "antigravity/gemini-4-argon",
+        "claude-opus-4-6",
+        "o1"
+      ],
+      "highEffortMaxContextTokens": 30000,
+      "preferredModel": "grok-4.7",
+      "recommended2026Model": "gpt-6.1-sol"
+    },
+    "balanced": {
+      "capabilities": [
+        "fast-implementation",
+        "unit-testing",
+        "subagent-coordination"
+      ],
+      "defaultEffort": "medium",
+      "fallbacks": [
+        "claude-sonnet-4-6",
+        "gpt-6-astra",
+        "gpt-4o",
+        "grok-composer-2.5-fast"
+      ],
+      "highEffortMaxContextTokens": 40000,
+      "preferredModel": "claude-sonnet-4-5",
+      "recommended2026Model": "antigravity/gemini-4-argon"
+    },
+    "deep-reasoning": {
+      "capabilities": [
+        "adversarial-audit",
+        "security-analysis"
+      ],
+      "defaultEffort": "medium",
+      "fallbacks": [
+        "antigravity/gemini-3.1-pro",
+        "claude-opus-4-6",
+        "o3-mini"
+      ],
+      "highEffortMaxContextTokens": 35000,
+      "preferredModel": "grok-4.7",
+      "recommended2026Model": "gpt-6-astra"
+    },
+    "lightweight": {
+      "capabilities": [
+        "fixtures",
+        "formatting",
+        "inventory",
+        "fast-verification"
+      ],
+      "defaultEffort": "low",
+      "fallbacks": [
+        "antigravity/gemini-3.8-flash",
+        "gpt-5.3-codex-spark",
+        "claude-haiku-4-5",
+        "claude-haiku-3-5",
+        "gpt-4o-mini",
+        "d3-flash"
+      ],
+      "highEffortMaxContextTokens": 120000,
+      "preferredModel": "grok-fast",
+      "recommended2026Model": "antigravity/gemini-3.8-flash"
+    }
+  }
+}

@@ -48,6 +48,11 @@
       "items": { "type": "string", "minLength": 1 },
       "uniqueItems": true
     },
+    "advisorySemanticCriteria": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
     "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
   },
   "additionalProperties": false

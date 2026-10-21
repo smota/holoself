@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "phase": { "value": null, "source": null, "revision": null },
+  "envelope_hash": null,
+  "approved_by": {
+    "principal": null,
+    "source": null,
+    "revision": null,
+    "confirmation_ref": null,
+    "gate_digest": null,
+    "goal_subject_digest": null
+  },
+  "items": { "source": null, "revision": null, "entries": [] },
+  "seats": { "source": null, "revision": null, "entries": [] },
+  "open_escalations": { "source": null, "revision": null, "entries": [] },
+  "next_tick_hint": null,
+  "tick": {
+    "id": null,
+    "status": "inert",
+    "actions_used": 0,
+    "journal_lines_used": 0,
+    "state_generation": 0,
+    "journal_generation": 0,
+    "intent_refs": [],
+    "receipt_refs": []
+  },
+  "recovery": { "source": null, "revision": null, "entries": [] },
+  "archive_refs": []
+}

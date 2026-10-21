@@ -19,13 +19,14 @@ work. Use the configured branch strategy and record actual execution provenance.
 
 For each applicable phase:
 
-1. Read the previous role pass and resolve role routing.
+1. Read the previous role pass and resolve role routing (`resolveRoleRoute`, `resolveEffortCalibration`, and `resolveCompositePhaseWindow`).
 2. Route specialist work using `manifests/skill-catalog.json`.
-3. Validate returned artifacts before incorporating them.
-4. Issue the handover with its acceptance contract before the next role starts.
-5. Validate the delivery receipt and deterministic acceptance report on return.
-6. Record acceptance, conditional acceptance, or bounded rework without changing specialist ownership.
-7. Stop only for a real blocker or required human gate.
+3. For `P0` and `P1` slices once the Phase 2/3 oracle digest is pinned (and when no high-consequence path is touched), allow the Builder to execute a **Composite Phase 3–5 Pass** in one continuous turn (Phase 3 Plan + Phase 4 Code + Phase 5 local QA via an `effort: low` L2 subagent), recording each phase's evidence before handing off to Phase 6 Independent Review. Keep a separate-seat Phase 5 (`tester` / `dev.qa`) handoff mandatory for `P2`–`P4` slices.
+4. Validate returned artifacts before incorporating them.
+5. Issue the handover with its acceptance contract before the next role starts.
+6. Validate the delivery receipt and deterministic acceptance report on return.
+7. Record acceptance, conditional acceptance, or bounded rework without changing specialist ownership.
+8. Stop only for a real blocker or required human gate.
 
 ## Collaboration
 
@@ -44,6 +45,9 @@ The orchestrator maintains the acceptance ledger; it never relabels another exec
 - Do not turn helper findings into approval without the owning review gate.
 - Do not bypass issue, branch, validation, human-review, or publication authorization rules.
 - Do not commit `.agent-runs/` scratch evidence.
+- The phase contract lives in AgentFlow (`docs/agent-workflow.md`, `docs/sdlc-definition.md`). A rig
+  or other harness may bind seats to roles, but it must not redefine phases, gates, acceptance, or
+  the product and delivery seam.
 
 ## Handoffs
 

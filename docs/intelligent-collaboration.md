@@ -45,6 +45,25 @@ Use the least coordination that reduces meaningful risk:
 | `spike`              | Uncertain implementation path needs experiment.                                  | Isolated child worktree or session.                             | Explicit opt-in; parent ports or rejects.                         |
 | `human-gated`        | Authority or high-assurance review is required.                                  | Human handoff plus optional advisory helpers.                   | Human owns security/acceptance gate.                              |
 
+## Two-level execution hierarchy (L1 seats vs. L2 native subagents)
+
+AgentFlow separates **governance boundaries (L1)** from **parallel task fanout (L2)** so projects do not pay inter-seat queue serialization tax for intra-slice work:
+
+1. **Level 1 (L1 — Governance & Trust Boundaries):**
+   - Owned by the active substrate: a single CLI session (`S0`), orthogonal local CLIs (`S1`), or the OpenRig **Lean 4-Seat Squad** (`S2`: `orch.arch`, `dev.build`, `dev.qa`, `rev.review`).
+   - Enforces path-ownership rules (`AGENTS.md`), oracle digest pinning before Phase 4 code edits, and Four-Eyes independence between Phase 4 (`developer`) and Phase 6 (`review`).
+2. **Level 2 (L2 — Intra-Slice Native Subagents):**
+   - Inside a single role turn (and inside the builder's isolated `.worktrees/<branch>`), the L1 parent uses native client subagents (`invoke_subagent`, `Task()`, `pi-subagent`) for codebase exploration, sibling module edits, local test-runner verification, and clean-context `effort: high` security/architecture sparring.
+   - L2 subagents are ephemeral helpers: they return compact structured summaries to the L1 parent and never sign lifecycle gates directly.
+
+## The effort-degradation law
+
+Frontier reasoning models degrade when `effort: high` is combined with accumulated tool outputs (`>40k–80k` tokens). Collaboration plans enforce three rules:
+
+- **Rule 1 (`effort: low` for scouts, QA, and `P0`):** `parallel-discovery` scouts, test-runner verification subagents, and `P0` bounded slices run on fast models (`antigravity/gemini-3.8-flash`, `grok-cli/grok-4.7`, `gpt-5.3-codex-spark`, `claude-haiku-4-5`) at `effort: low`.
+- **Rule 2 (`effort: medium` for primary L1 loops):** `architect`, `developer` (`Gemini 4 Argon`), and `review` (`GPT-6 Astra`) default to `effort: medium` in stateful multi-turn sessions.
+- **Rule 3 (`effort: high` only in clean `<30k–40k` token subagents):** When `council` or `sparring` mode requires deep reasoning (`GPT-6.1 Sol`, `Gemini 3.1 Pro`, `Claude Opus 4.6`), the parent dispatches a **fresh L2 child subagent** with a distilled `<15k` token brief rather than escalating reasoning effort inside a polluted parent transcript.
+
 ## Sparring mode (Adversarial Pre-Code Review)
 
 Sparring mode introduces structured red-team adversarial evaluation before code changes are committed, reducing architectural churn and preventing defects early:

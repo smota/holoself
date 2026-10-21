@@ -1,0 +1,13 @@
+{
+  "shellRunner": {
+    "windowsStrategy": "cmd-type-stream",
+    "posixStrategy": "direct-pipe",
+    "stdinTimeoutMs": 15000
+  },
+  "limits": {
+    "envelopeByteCapKb": 48,
+    "maxReviewIterations": 12,
+    "largeFileScriptThresholdLines": 800
+  },
+  "scratchPath": ".agent-runs/scratch"
+}

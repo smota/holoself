@@ -1,0 +1,632 @@
+{
+  "version": 1,
+  "id": "subscription-balanced-v1",
+  "subscriptions": {
+    "openai": {
+      "budgetClass": "intermediary",
+      "monthlyBudgetUSD": 100
+    },
+    "gemini": {
+      "budgetClass": "intermediary",
+      "monthlyBudgetUSD": 100
+    },
+    "claude": {
+      "budgetClass": "basic",
+      "monthlyBudgetUSD": 20
+    },
+    "grok": {
+      "budgetClass": "basic",
+      "monthlyBudgetUSD": 20
+    }
+  },
+  "quotaControl": {
+    "enabled": false
+  },
+  "roleAliases": {
+    "product-manager": "pm.manager",
+    "analyst": "pm.analyst",
+    "architect": "orch.arch",
+    "implementation-planner": "orch.arch",
+    "developer": "dev.build",
+    "tester": "dev.qa",
+    "reviewer": "rev.review",
+    "pr-readiness": "orch.arch"
+  },
+  "roles": {
+    "steer.lead": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.1-pro",
+          "effort": "medium"
+        },
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        }
+      ]
+    },
+    "pm.manager": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "grok",
+          "providerFamily": "xai",
+          "client": "pi",
+          "subscription": "grok",
+          "model": "grok-4.7",
+          "effort": "medium"
+        },
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.8-flash",
+          "effort": "medium"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6-luna",
+          "effort": "medium"
+        }
+      ]
+    },
+    "pm.analyst": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.8-flash",
+          "effort": "medium"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        }
+      ]
+    },
+    "orch.arch": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.1-pro",
+          "effort": "medium"
+        },
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        }
+      ]
+    },
+    "dev.build": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.8-flash",
+          "effort": "medium"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "grok",
+          "providerFamily": "xai",
+          "client": "pi",
+          "subscription": "grok",
+          "model": "grok-4.7-build-fast",
+          "effort": "medium"
+        }
+      ]
+    },
+    "dev.qa": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "grok",
+          "providerFamily": "xai",
+          "client": "pi",
+          "subscription": "grok",
+          "model": "grok-4.7",
+          "effort": "low"
+        },
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.8-flash",
+          "effort": "low"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6-luna",
+          "effort": "low"
+        }
+      ]
+    },
+    "rev.review": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        },
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        },
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.1-pro",
+          "effort": "medium"
+        }
+      ]
+    },
+    "eval.tester": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.8-flash",
+          "effort": "low"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6-luna",
+          "effort": "low"
+        },
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-haiku-5-5",
+          "effort": "low"
+        }
+      ]
+    },
+    "dev.build-jr": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "grok",
+          "providerFamily": "xai",
+          "client": "pi",
+          "subscription": "grok",
+          "model": "grok-4.7-build-fast",
+          "effort": "low"
+        },
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.8-flash",
+          "effort": "low"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6-luna",
+          "effort": "low"
+        }
+      ]
+    },
+    "dev.build-sr": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.1-pro",
+          "effort": "medium"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        }
+      ]
+    },
+    "dev.test-eng": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.1-pro",
+          "effort": "medium"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        }
+      ]
+    },
+    "pm.lead": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.8-flash",
+          "effort": "medium"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        }
+      ]
+    },
+    "rev.gate": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        },
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.1-pro",
+          "effort": "medium"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6-astra",
+          "effort": "medium"
+        }
+      ]
+    },
+    "qa-expert": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.8-flash",
+          "effort": "medium"
+        },
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "grok",
+          "providerFamily": "xai",
+          "client": "pi",
+          "subscription": "grok",
+          "model": "grok-4.7-build-fast",
+          "effort": "medium"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        }
+      ]
+    },
+    "technical-writer": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.8-flash",
+          "effort": "low"
+        },
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-haiku-5-5",
+          "effort": "low"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6-luna",
+          "effort": "low"
+        }
+      ]
+    },
+    "research-ux": {
+      "scope": "persistent",
+      "options": [
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.8-flash",
+          "effort": "medium"
+        },
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        }
+      ]
+    },
+    "bounded-specialist": {
+      "scope": "bounded-clean-context",
+      "options": [
+        {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "high"
+        },
+        {
+          "runtime": "pi",
+          "executionTarget": "pi-session",
+          "providerRoute": "antigravity",
+          "providerFamily": "google",
+          "client": "pi",
+          "subscription": "gemini",
+          "model": "gemini-3.1-pro",
+          "effort": "high"
+        },
+        {
+          "runtime": "claude-code",
+          "executionTarget": "claude-cli",
+          "providerRoute": "anthropic",
+          "providerFamily": "anthropic",
+          "client": "claude",
+          "subscription": "claude",
+          "model": "claude-sonnet-5-5",
+          "effort": "high"
+        }
+      ]
+    }
+  }
+}

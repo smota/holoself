@@ -8,7 +8,7 @@
   "properties": {
     "version": { "const": 1 },
     "namespace": { "const": "agentflow" },
-    "identityFormat": { "const": "<namespace>:<role>" },
+    "identityFormat": { "const": "<namespace>-<role>" },
     "structure": {
       "type": "object",
       "additionalProperties": false,
@@ -27,7 +27,7 @@
         "required": ["role", "qualifiedName", "source", "owns", "recognizes", "collaboratesWith"],
         "properties": {
           "role": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
-          "qualifiedName": { "type": "string", "pattern": "^agentflow:[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "qualifiedName": { "type": "string", "pattern": "^agentflow-[a-z0-9]+(?:-[a-z0-9]+)*$" },
           "source": { "type": "string", "pattern": "^skills/[a-z0-9]+(?:-[a-z0-9]+)*$" },
           "owns": {
             "type": "array",

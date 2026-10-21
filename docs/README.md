@@ -146,4 +146,6 @@ Compatibility entry points remain at [architecture.md](architecture.md), [linked
 - [Provider Matrix](providers/provider-matrix.md)
 - [Roles Index](roles/index.md)
 - [Roles Methods](roles/methods.md)
+- [Execution Distributions](execution-distributions.md)
+- [Product Discipline](sources/product-discipline.md)
 

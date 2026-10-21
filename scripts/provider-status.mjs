@@ -2,7 +2,7 @@
 import { bindProvider } from '../lib/core/provider-binding.mjs'
 import { createCollaborationIntent } from '../lib/core/collaboration-intent.mjs'
 import { shippedProviders } from '../lib/providers/catalog.mjs'
-import { providerById } from '../lib/providers/registry.mjs'
+import { providerById, removedProviderMessage } from '../lib/providers/registry.mjs'
 
 const args = process.argv.slice(2)
 const flag = (name, fallback) => {
@@ -60,7 +60,7 @@ async function main() {
 
   if (command === 'inspect') {
     const provider = providerById(id, providers)
-    if (!provider) throw new Error(`Unknown provider: ${id}`)
+    if (!provider) throw new Error(removedProviderMessage(id) ?? `Unknown provider: ${id}`)
     process.stdout.write(
       `${JSON.stringify(
         {

@@ -52,6 +52,8 @@
       "enum": [
         "started",
         "contract-frozen",
+        "oracle-pinned",
+        "oracle-custody-recorded",
         "candidate",
         "observation",
         "budget-admission",
@@ -64,7 +66,11 @@
         "operation",
         "completed",
         "cancelled",
-        "checkpoint"
+        "checkpoint",
+        "grant-issued",
+        "grant-revoked",
+        "operation-admitted",
+        "delegation-safety"
       ]
     },
     "payload": {
@@ -75,5 +81,158 @@
       "format": "date-time"
     }
   },
-  "additionalProperties": true
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "oracle-custody-recorded"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["request", "receipt"],
+            "properties": {
+              "request": {
+                "allOf": [
+                  {
+                    "$ref": "oracle-custody.schema.json"
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "oracle-custody-request"
+                      }
+                    }
+                  }
+                ]
+              },
+              "receipt": {
+                "allOf": [
+                  {
+                    "$ref": "oracle-custody.schema.json"
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "oracle-custody-receipt"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "oracle-pinned"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "properties": {
+              "oraclePackage": {
+                "type": "object",
+                "required": ["request", "receipt"],
+                "properties": {
+                  "request": {
+                    "allOf": [
+                      {
+                        "$ref": "oracle-package.schema.json"
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "oracle-package-request"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "receipt": {
+                    "allOf": [
+                      {
+                        "$ref": "oracle-package.schema.json"
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "oracle-package-receipt"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "advanced"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "properties": {
+              "oraclePackageVerification": {
+                "type": "object",
+                "required": ["request", "receipt"],
+                "properties": {
+                  "request": {
+                    "allOf": [
+                      {
+                        "$ref": "oracle-package.schema.json"
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "oracle-package-request"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "receipt": {
+                    "allOf": [
+                      {
+                        "$ref": "oracle-package.schema.json"
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "oracle-package-receipt"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$id": "https://agentflow.dev/schemas/run-event.schema.json"
 }

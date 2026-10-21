@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schemas/oracle-package.schema.json",
+  "title": "Source-bound oracle package admission",
+  "type": "object",
+  "required": ["version", "type", "digest"],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "type": {
+      "enum": ["oracle-package-request", "oracle-package-receipt"]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "oracle-package-request"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "runId",
+          "goalRef",
+          "sourceRevision",
+          "runRevision",
+          "oracleDigest",
+          "generation",
+          "revocationEpoch",
+          "candidateDigest",
+          "stage",
+          "proposal"
+        ],
+        "properties": {
+          "runId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "goalRef": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceRevision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "runRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "oracleDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "generation": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "revocationEpoch": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "candidateDigest": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage": {
+            "enum": ["pin", "developer"]
+          },
+          "proposal": {
+            "type": "object",
+            "required": ["manifestDigest", "observationRefs"],
+            "properties": {
+              "manifestDigest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "observationRefs": {
+                "type": "object",
+                "required": ["calibration", "nativeBaseline", "build"],
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "oracle-package-receipt"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "requestDigest",
+          "oracleDigest",
+          "manifestDigest",
+          "packageCandidateDigest",
+          "candidateExecutionVerified",
+          "runtimeCriterionId",
+          "artifactIdentities",
+          "proofs"
+        ],
+        "properties": {
+          "requestDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "oracleDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "manifestDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "packageCandidateDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "candidateExecutionVerified": {
+            "const": false
+          },
+          "runtimeCriterionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "artifactIdentities": {
+            "type": "array",
+            "minItems": 1
+          },
+          "proofs": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "required": [
+                "group",
+                "criterionId",
+                "observationDigest",
+                "executionContextDigest",
+                "resolution"
+              ],
+              "properties": {
+                "group": {
+                  "enum": ["calibration", "nativeBaseline", "build"]
+                },
+                "criterionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "observationDigest": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "executionContextDigest": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "resolution": {
+                  "type": "object",
+                  "required": ["version", "type", "digest", "status", "candidateDigest"],
+                  "properties": {
+                    "type": {
+                      "const": "verification-resolution"
+                    },
+                    "status": {
+                      "const": "pass"
+                    },
+                    "digest": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "candidateDigest": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
