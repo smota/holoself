@@ -73,3 +73,108 @@ agentflow-sdlc collaboration verify --handoff role-handoff.json --delivery deliv
 Extension manifests use `requiredExecutionIntents`, `requiredToolPermissions`, and
 `controlRequirements`. Prose
 alone cannot satisfy a control.
+
+## Oracle custody in a native run
+
+`createRunService().recordOracleCustody()` records `oracle-custody-recorded` in the existing run
+ledger. It does not open another ledger, advance a phase, grant write permissions or satisfy a
+human gate. Its request binds the current source/run revision, native writer generation and
+revocation epoch, candidate and existing oracle pin. Native generation zero remains zero.
+
+The trusted host `resolveOracleCustody(request)` MUST verify the exact source-backed test-engineering
+assignment, manifest, identity and evidence. Compose the existing oracle-assignment admission
+contract; do not infer authorization from `pinnedBefore`, the run owner or a seat name. The host
+returns a verified, checksummed `oracle-custody-receipt` binding the exact request. Checksums prove
+consistency, not authentication. Service authorization and compare-and-swap still control the write.
+
+The two custody modes are distinct:
+
+- `historical-author` requires verified evidence of who actually authored the pinned oracle;
+- `prospective-assignment` names the assigned future executor and records no historical author.
+
+A caller cannot record either event through the generic `record` method or substitute its own
+verification boolean. Assignment and manifest references require revisions and SHA-256 digests.
+Historical authorship and prospective assignment occupy separate optional `oracleCustody.author` and
+`oracleCustody.assignment` fields, retaining their verified references. Changed pins, changed
+candidates, native writer generations, revocation epochs and candidate-invalidating recovery clear
+active custody while
+retaining prior events. Legacy states without custody events keep their existing reduced shape,
+including segmented snapshot checksums. Missing historical evidence stays unknown; migration MUST
+NOT infer an author or reset writer/rework history. Prospective assignments require fresh dispatch
+admission when used; recording them does not make an expired assignment current.
+
+Source transport revision is observed by the host and checked immediately before source append;
+it cannot be reconstructed from event reduction alone. The event also binds the prior run revision,
+which the reducer checks. Artifact authority labels describe references and are not authentication;
+the trusted verifier establishes their actual source authority. Existing service authorization,
+reduction and source compare-and-swap remain mandatory before persistence.
+
+Portable validation requires the source request for receipts:
+
+```bash
+agentflow-sdlc sdlc validate-evidence --type oracle-custody-request --path request.json
+agentflow-sdlc sdlc validate-evidence --type oracle-custody-receipt --path receipt.json --request request.json
+```
+
+Passing this check proves binding and consistency only; it is not independent verification of
+the referenced assignment, manifest or historical author.
+
+### Oracle package admission
+
+New project defaults require `deliveryPolicy.oracleAssurance.required: true`. The legacy service
+API remains compatible with historical runs without that requirement. A required run latches the
+requirement in its existing source ledger; changing live policy to false cannot downgrade it.
+Historical pins without package proof remain historical evidence, not assured pins.
+
+Configure `delivery.oracleAssurance` in the authoritative workflow configuration. Its `manifest`
+and `candidate.inputs` identify a bounded package; `identities` names source-owned lists for
+`source`, `build`, `dependency`, and `executable`. The manifest records each artifact's relative
+path, SHA-256 digest, size and roles, including native fixture, expectation and negative controls.
+Source-owned `baselineInput` and `expectedInput` select distinct-content artifacts with native-fixture
+and expectation roles respectively. `requiredControls`, optional `controlAssertions`, `requiredWitnesses`, and `witnessSchema` belong
+to the source contract, independently of the package's own inventory. Each `proofs` entry
+(`calibration`, `nativeBaseline`, `build`) selects a distinct configured structured-report check,
+its `requiredAssertions`, and its covered executable `entrypoint` (optional `entrypointArg`).
+The manifest's control map must cover every required control using the configured assertion.
+`runtimeCriterionId` identifies a separate contract criterion for actual candidate execution.
+
+Collect real proofs under current phase-three writer authority, then propose the exact package:
+
+```bash
+agentflow-sdlc run oracle-verify RUN --check CALIBRATION --writer OWNER --generation N --execute
+agentflow-sdlc run oracle-verify RUN --check NATIVE_BASELINE --writer OWNER --generation N --execute
+agentflow-sdlc run oracle-verify RUN --check BUILD --writer OWNER --generation N --execute
+agentflow-sdlc run oracle-pin RUN --digest SHA256 --package proposal.json --writer OWNER --generation N --execute
+```
+
+The proposal contains `manifestDigest` and `observationRefs` for all three groups, pointing to
+actual `.agent-runs/verification/<invocation>/observation.json` collector records. Collector scratch
+must not be committed. Package candidate identity includes native run, goal, generation and
+revocation epoch. Native baseline reports bind their observed input and independent expectation
+digests, invocation and sealed report bytes, and supply the source-required schema, row census
+and payload witnesses. This establishes configured observations, not automatic domain correctness;
+the checker, expectation and native baseline design still require independent domain review.
+
+The existing `oracle-pinned` event stores a typed request and verified receipt. Before developer
+admission, the host resolves the same source-configured proofs and identities again and stores
+that verification on the existing advancement event. Calibration, baseline and build receipts
+explicitly set `candidateExecutionVerified: false`. Phase four/five advancement and completion
+require the separate current candidate runtime observation; calibration cannot substitute for it.
+Native writer/revocation or candidate changes invalidate active runtime evidence.
+
+Artifacts are capped at the collector's existing 512 MiB ceiling; projects may configure a lower
+`maxArtifactBytes`. A 690 MiB helper is rejected before hashing. Manifest/report JSON is capped at
+1 MiB. Inputs must be contained regular files; generated executables must match their declared
+source, recipe, dependency and executable identities. No threshold increase or installed-runtime
+write is part of admission. Filesystem checks assume a cooperative worktree, not an immutable
+filesystem transaction across a remote ledger append. Collector storage shares the existing local
+cooperative trust boundary; hashes are consistency evidence, not authentication.
+
+```bash
+agentflow-sdlc sdlc validate-evidence --type oracle-package-request --path request.json
+agentflow-sdlc sdlc validate-evidence --type oracle-package-receipt --path receipt.json --request request.json
+```
+
+Portable validation checks structural binding only. The configured host must independently resolve
+collector records and current source authority. Neither command grants human acceptance or merge
+permission.

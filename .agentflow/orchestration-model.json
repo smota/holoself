@@ -1,0 +1,20 @@
+{
+  "lifecycle": "dual-gate",
+  "preCodeReview": {
+    "enabled": true,
+    "gate": "specification-sparring",
+    "targetPhases": [
+      "architect",
+      "implementation-planner"
+    ],
+    "blockingSeverity": [
+      "blocker",
+      "structural"
+    ]
+  },
+  "concurrency": {
+    "maxWriters": 1,
+    "maxAdvisors": 3,
+    "isolatedWorktreeRequired": false
+  }
+}

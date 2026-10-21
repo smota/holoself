@@ -631,5 +631,93 @@
   },
   "gateNotifications": {
     "hookUrl": null
+  },
+  "executionTopology": {
+    "substrateTier": "auto",
+    "openrigSquadPreset": "lean-4-seat",
+    "compositeBuilderMaxRung": "P1",
+    "requireOrthogonalReviewFamily": true
+  },
+  "effortPolicy": {
+    "defaultLoopEffort": "medium",
+    "subagentSearchEffort": "low",
+    "highEffortMaxContextTokens": 40000,
+    "enforceCleanSubagentForHighEffort": true
+  },
+  "executionDistribution": {
+    "profile": "subscription-balanced-v1",
+    "profileDigest": "ee486327708eb3de6b1cb67c825358af8679d9e0d9a8b6ca0164f14c1cfe8fcc",
+    "overrides": {}
+  },
+  "adapters": {
+    "openrig": {
+      "executionPolicy": {
+        "activation": "active"
+      }
+    }
+  },
+  "steering": {
+    "version": 1,
+    "goalScope": "smota/holoself",
+    "steeringOwner": "steer.lead",
+    "returnRoute": "pm.manager",
+    "executionDistribution": {
+      "profile": "subscription-balanced-v1",
+      "profileDigest": "ee486327708eb3de6b1cb67c825358af8679d9e0d9a8b6ca0164f14c1cfe8fcc",
+      "selectionDigest": "d4d991ee9d77e1e5bdec230cd85414190b6dcfd83f15249ee15659240a84b3ed",
+      "steerLeadRoute": {
+        "default": {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        "fallbacks": [
+          {
+            "runtime": "pi",
+            "executionTarget": "pi-session",
+            "providerRoute": "antigravity",
+            "providerFamily": "google",
+            "client": "pi",
+            "subscription": "gemini",
+            "model": "gemini-3.1-pro",
+            "effort": "medium"
+          },
+          {
+            "runtime": "claude-code",
+            "executionTarget": "claude-cli",
+            "providerRoute": "anthropic",
+            "providerFamily": "anthropic",
+            "client": "claude",
+            "subscription": "claude",
+            "model": "claude-sonnet-5-5",
+            "effort": "medium"
+          }
+        ]
+      }
+    },
+    "reviewAndPublicationAuthority": "bounded-self-review-with-human-merge",
+    "quotaPolicy": {
+      "mode": "park-and-checkpoint",
+      "autoMonitoring": true
+    },
+    "checkpointsAndStopConditions": {
+      "checkpointBoundary": "slice-boundary",
+      "maxReworkRounds": 2,
+      "supervisorStaleTimeoutMs": 300000,
+      "holdOnUnverifiedAuthority": true
+    },
+    "authorityBoundary": {
+      "conversationalConfirmationGrantsAuthority": false,
+      "bypassesSteeringBinding": false,
+      "bypassesMergeReadiness": false,
+      "fabricatesHostAuthentication": false,
+      "grantsPublicationOrMergePower": false
+    },
+    "confirmedDigest": "9c9af145f1f4c165168ff43bceef9dc81b2b42e4769c204041b3365d8d4c1bf9"
   }
 }

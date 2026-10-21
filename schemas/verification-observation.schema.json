@@ -60,8 +60,13 @@
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
     },
-    "executionContextDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-    "executionContext": { "type": "object" },
+    "executionContextDigest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "executionContext": {
+      "type": "object"
+    },
     "outcome": {
       "enum": ["pass", "fail", "blocked", "not-run", "unknown"]
     },
@@ -89,6 +94,10 @@
         },
         "additionalProperties": false
       }
+    },
+    "reportDigest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
     }
   },
   "additionalProperties": true

@@ -20,9 +20,13 @@ import {
   validateCouncilRecord,
   validateDeliveryReceipt,
   validateReworkRequest,
+  validateUnfreezeResolution,
+  unfreezeLedger,
+  createUnfreezeResolution,
   verifyRoleDelivery,
   verifyRoleAdvance,
 } from '../lib/core/role-collaboration.mjs'
+import { computeOracleDigest } from './validate-path-ownership.mjs'
 
 const args = process.argv.slice(2)
 const value = (name, fallback = null) => {
@@ -107,7 +111,23 @@ if (command === 'verify' || command === 'advance') {
   if (command === 'advance') {
     const decision = readJson('--decision')
     const openReworkRequests = value('--rework') ? readJson('--rework') : undefined
-    const result = verifyRoleAdvance({ ...sources, decision, openReworkRequests })
+    const seat = value('--seat')
+    const pin = value('--pin') ? readJson('--pin') : undefined
+    const oracleDigest = value('--oracle-digest')
+    const expectedDigest = computeOracleDigest({ packageRoot })
+    const options = {
+      seat,
+      pin,
+      oracleDigest,
+      expectedDigest,
+      packageRoot,
+    }
+    const result = verifyRoleAdvance({
+      ...sources,
+      decision,
+      openReworkRequests,
+      options,
+    })
     output(result)
     process.exit(result.ok ? 0 : 1)
   }
@@ -153,10 +173,20 @@ if (command === 'build') {
     case 'council-seats':
       built = selectCouncilSeats(input)
       break
+    case 'unfreeze-resolution':
+      built = createUnfreezeResolution(input)
+      break
     default:
       throw new Error(`unsupported role collaboration record type: ${type ?? ''}`)
   }
   output(built)
+  process.exit(0)
+}
+
+if (command === 'unfreeze') {
+  const ledger = readJson('--ledger')
+  const resolution = readJson('--resolution')
+  output(unfreezeLedger(ledger, resolution))
   process.exit(0)
 }
 
@@ -170,6 +200,7 @@ if (command === 'validate') {
     'council-advice': validateCouncilRecord,
     'council-synthesis': validateCouncilRecord,
     'rework-request': validateReworkRequest,
+    'unfreeze-resolution': validateUnfreezeResolution,
   }
   const validator = validators[record.type]
   if (!validator) throw new Error(`unsupported role collaboration record: ${record.type ?? ''}`)

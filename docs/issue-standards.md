@@ -109,9 +109,56 @@ _Exact file paths, template names, or data structures expected. The Architect ph
 - [ ] Pass/Fail condition 1
 ```
 
+## Issue Hierarchy
+
+This is the one description of how a work record shows its kind and its parent.
+
+A work record has a kind of `goal`, `capability`, or `spec` in the body marker
+`<!-- agentflow-work:{...} -->`. The title starts with `goal:`, `capability:`, or `spec:`, and the
+issue wears `kind:goal`, `kind:capability`, or `kind:spec`. Those three names are the same kind.
+A record with no kind is a legacy bug. It keeps a conventional title, it wears no `kind:` label,
+and it is not a goal.
+
+`Part of #<parent>` is the only parent. A capability or a spec has one. A goal has none.
+`**Epic:** #<parent>` may repeat that same number and must not name a different one. A GitHub
+sub-issue is only a navigation mirror. The open path writes the title prefix, the kind label, the
+marker, and `Part of` together. The issue validator rejects a disagreement.
+
+A part has one current record. A breakdown note that is not yet admitted has the `capability:`
+title, the `kind:capability` label, one `Part of`, and no work marker. That shape is valid. An
+admitted capability may carry one `Replaces #<note>` line. That line is the only replacement
+authority. It sets no parent, it does not move what a person agreed, and the note is not edited. A
+goal's current parts are its admitted records plus the notes nothing replaces. Given the other
+records (`validate-sdlc-issue --records <file>`), the issue validator refuses two capabilities that
+replace one note, a capability that names more than one note, a note under another parent, and a
+replacement of a goal, a spec, an admitted capability, or itself.
+
+### Goal Child Completion and Parts Ledger
+
+Goals maintain a deterministic, structured section under `## Child Work & History` (or `## Parts Ledger`) documenting all child parts, replacement relations, merging PRs, commits, dates, and delivery completion:
+
+```markdown
+## Child Work & History
+
+> **Status:** All child capabilities delivered — ready for person review/closure
+> **Progress:** 5/5 delivered (100%)
+
+| Part | Kind       | Title                                    | Status    | Replacement   | Delivery PR | Commit    | Date       |
+| :--- | :--------- | :--------------------------------------- | :-------- | :------------ | :---------- | :-------- | :--------- |
+| #440 | capability | capability: zero-friction assisted setup | Delivered | Replaces #435 | #445        | `573989c` | 2026-10-13 |
+| #441 | capability | capability: self-healing configuration   | Delivered | —             | #446        | `6b823dd` | 2026-10-13 |
+```
+
+Rules and Invariants:
+
+1. **Non-Automatic Closure Invariant**: Parent goals must **never** be auto-closed by child PR merges. The human person retains final authority to review and close the completed goal.
+2. **Ready-for-Closure Milestone**: When all admitted child capabilities are delivered, the goal ledger visibly reflects this milestone with `> **Status:** All child capabilities delivered — ready for person review/closure`.
+3. **Audit Trail**: Every delivered child records its merging PR, merge commit SHA, completion date, and replacement mapping.
+4. **Validation & Synchronization**: Tooling (`agentflow-sdlc goal sync <number>`, `scripts/sync-goal-ledger.mjs`, and `scripts/validate-sdlc-issue.mjs --records`) validates ledger consistency against child issue records and rejects desynchronized or premature ready-for-closure statuses. Updating the ledger section does not move the goal subject a person agreed to in human gates.
+
 ## Issue Titles
 
-All issue titles must start with one of these exact Conventional Commit prefixes:
+A legacy record, which has no work kind, must start with one of these exact Conventional Commit prefixes. A goal, capability, or spec uses the kind prefix in [Issue Hierarchy](#issue-hierarchy) instead.
 
 - `feat:` - user-facing product capability or feature work
 - `fix:` - defect, regression, or security bug fix
@@ -182,6 +229,33 @@ Use this canonical label vocabulary for new issues and issue updates.
 - `exploratory` - exploratory/manual test-session scope marker used with `qa` issues
 
 Apply secondary labels only when they describe the primary work or a meaningful review queue. Do not add `documentation` merely because an implementation issue includes docs updates in its acceptance criteria; use it when the issue is documentation-first or when documentation review is the main work surface.
+
+### Process State
+
+Every work item shows exactly one process state. The product computes it from the phase record and
+one integration fact; nobody sets it by hand.
+
+| State     | When                                                                         |
+| --------- | ---------------------------------------------------------------------------- |
+| Backlog   | No transition, phase 0, or a return to phase 0 or 1. Acceptance is open.     |
+| Readiness | The latest transition is a phase 1 pass. Acceptance is frozen.               |
+| WIP       | Any later transition, including a return to phase 3 or 4 and a phase 8 pass. |
+| Delivered | The result is on the integration line or trunk. A version tag is not needed. |
+
+The integration fact wins over the phase record. On GitHub it is an `integrated:<branch>` label or a
+merged pull request into the integration line or trunk that closes the issue. On the filesystem
+medium it is `integration.json` beside `goal.json`, written by `agentflow-sdlc phase integrate`. A
+closed flag is not the fact: an item closed without it has no state and is left off the board as a
+count.
+
+On GitHub the issue carries one label for its state: `state:backlog`, `state:readiness`,
+`state:wip`, or `state:delivered`. `phase append` replaces it when the projection changes. Do not
+set it by hand. `agentflow-sdlc board` shows the four groups for a GitHub repository or a
+filesystem root.
+
+The four states are fixed. An extension pack or adopter profile cannot add or rename one.
+`status:in-progress`, `status:backlog`, `status:v1-ready`, and `status:superseded` are retired; the
+product neither writes nor reads them as a state.
 
 ### Test Debt Labels
 

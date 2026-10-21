@@ -1,0 +1,795 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "source": "manifests/runtime-platforms.json",
+      "target": "manifests/runtime-platforms.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/runtime-platform-registry.schema.json",
+      "target": "schemas/runtime-platform-registry.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/runtime-platforms.md",
+      "target": "docs/runtime-platforms.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/runtime-platforms.mjs",
+      "target": "lib/runtime-platforms.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/sdlc-definition.md",
+      "target": "docs/sdlc-definition.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/evidence-contracts.md",
+      "target": "docs/evidence-contracts.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/lifecycle-boundaries.md",
+      "target": "docs/lifecycle-boundaries.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/agent-evals.md",
+      "target": "docs/agent-evals.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/outcome-metrics.md",
+      "target": "docs/outcome-metrics.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/sdlc-packaging.md",
+      "target": "docs/sdlc-packaging.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "defaults/AGENTS.md",
+      "target": "AGENTS.md",
+      "ownership": "seed-once"
+    },
+    {
+      "source": "agents/templates/stack-conventions.md",
+      "target": "docs/stack-conventions.md",
+      "ownership": "seed-once"
+    },
+    {
+      "source": "defaults/sdlc.config.json",
+      "target": "sdlc.config.json",
+      "ownership": "seed-once"
+    },
+    {
+      "source": "defaults/agent-workflow.config.json",
+      "target": "agent-workflow.config.json",
+      "ownership": "seed-once"
+    },
+    {
+      "source": "schemas/sdlc-config.schema.json",
+      "target": "schemas/sdlc-config.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/artifact-ref.schema.json",
+      "target": "schemas/artifact-ref.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/transition-envelope.schema.json",
+      "target": "schemas/transition-envelope.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/transition-envelope.cli.schema.json",
+      "target": "schemas/transition-envelope.cli.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/external-signal.schema.json",
+      "target": "schemas/external-signal.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/delivery-handoff.schema.json",
+      "target": "schemas/delivery-handoff.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/action-boundary.schema.json",
+      "target": "schemas/action-boundary.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/lifecycle-event.schema.json",
+      "target": "schemas/lifecycle-event.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/eval-manifest.schema.json",
+      "target": "schemas/eval-manifest.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/sdlc-vocabulary.mjs",
+      "target": "lib/sdlc-vocabulary.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/evidence-contracts.mjs",
+      "target": "lib/evidence-contracts.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/lifecycle-contracts.mjs",
+      "target": "lib/lifecycle-contracts.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/outcome-metrics.mjs",
+      "target": "lib/outcome-metrics.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/agent-evals.mjs",
+      "target": "lib/agent-evals.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/multi-agent-acceptance.mjs",
+      "target": "lib/multi-agent-acceptance.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "scripts/validate-evidence-contract.mjs",
+      "target": "scripts/validate-evidence-contract.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "scripts/validate-lifecycle-contract.mjs",
+      "target": "scripts/validate-lifecycle-contract.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "scripts/derive-outcome-metrics.mjs",
+      "target": "scripts/derive-outcome-metrics.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "scripts/run-agent-evals.mjs",
+      "target": "scripts/run-agent-evals.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "scripts/validate-multi-agent-acceptance.mjs",
+      "target": "scripts/validate-multi-agent-acceptance.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "agents/evals/manifests/framework-contracts.json",
+      "target": "agents/evals/manifests/framework-contracts.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "agents/evals/fixtures/canonical-output.txt",
+      "target": "agents/evals/fixtures/canonical-output.txt",
+      "ownership": "managed"
+    },
+    {
+      "source": "agents/evals/manifests/claude-agy-handoff.json",
+      "target": "agents/evals/manifests/claude-agy-handoff.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "agents/evals/fixtures/claude-analyst.txt",
+      "target": "agents/evals/fixtures/claude-analyst.txt",
+      "ownership": "managed"
+    },
+    {
+      "source": "agents/evals/fixtures/agy-architect.txt",
+      "target": "agents/evals/fixtures/agy-architect.txt",
+      "ownership": "managed"
+    },
+    {
+      "source": "agents/evals/prompts/claude-agy-handoff.md",
+      "target": "agents/evals/prompts/claude-agy-handoff.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "manifests/skill-catalog.json",
+      "target": "manifests/skill-catalog.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/skill-catalog.schema.json",
+      "target": "schemas/skill-catalog.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "manifests/role-catalog.json",
+      "target": "manifests/role-catalog.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "manifests/method-catalog.json",
+      "target": "manifests/method-catalog.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/role-catalog.schema.json",
+      "target": "schemas/role-catalog.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/role-definition.schema.json",
+      "target": "schemas/role-definition.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/method-catalog.schema.json",
+      "target": "schemas/method-catalog.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/role-handoff.schema.json",
+      "target": "schemas/role-handoff.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/role-catalog.mjs",
+      "target": "lib/role-catalog.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/role-adapters.mjs",
+      "target": "lib/role-adapters.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "scripts/validate-role-catalog.mjs",
+      "target": "scripts/validate-role-catalog.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "roles/product-manager/ROLE.md",
+      "target": "roles/product-manager/ROLE.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "roles/requester/ROLE.md",
+      "target": "roles/requester/ROLE.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "roles/analyst/ROLE.md",
+      "target": "roles/analyst/ROLE.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "roles/architect/ROLE.md",
+      "target": "roles/architect/ROLE.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "roles/implementation-planner/ROLE.md",
+      "target": "roles/implementation-planner/ROLE.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "roles/developer/ROLE.md",
+      "target": "roles/developer/ROLE.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "roles/tester/ROLE.md",
+      "target": "roles/tester/ROLE.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "roles/reviewer/ROLE.md",
+      "target": "roles/reviewer/ROLE.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "roles/technical-writer/ROLE.md",
+      "target": "roles/technical-writer/ROLE.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "roles/pr-readiness/ROLE.md",
+      "target": "roles/pr-readiness/ROLE.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "roles/qa-expert/ROLE.md",
+      "target": "roles/qa-expert/ROLE.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-orchestrator/SKILL.md",
+      "target": "skills/agentflow-orchestrator/SKILL.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-collaborator/SKILL.md",
+      "target": "skills/agentflow-collaborator/SKILL.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-collaborator/references/collaboration-modes.md",
+      "target": "skills/agentflow-collaborator/references/collaboration-modes.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-collaborator/references/bounded-environments.md",
+      "target": "skills/agentflow-collaborator/references/bounded-environments.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-scanner/SKILL.md",
+      "target": "skills/agentflow-scanner/SKILL.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-designer/SKILL.md",
+      "target": "skills/agentflow-designer/SKILL.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-designer/references/definition-completeness.md",
+      "target": "skills/agentflow-designer/references/definition-completeness.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-migrator/SKILL.md",
+      "target": "skills/agentflow-migrator/SKILL.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-migrator/references/preflight.md",
+      "target": "skills/agentflow-migrator/references/preflight.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-auditor/SKILL.md",
+      "target": "skills/agentflow-auditor/SKILL.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-auditor/references/workflow-compliance.md",
+      "target": "skills/agentflow-auditor/references/workflow-compliance.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-steerer/SKILL.md",
+      "target": "skills/agentflow-steerer/SKILL.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "skills/agentflow-maintainer/SKILL.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-steerer/references/envelope.md",
+      "target": "skills/agentflow-steerer/references/envelope.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-steerer/references/heartbeat.md",
+      "target": "skills/agentflow-steerer/references/heartbeat.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-steerer/references/adapter-openrig.md",
+      "target": "skills/agentflow-steerer/references/adapter-openrig.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-steerer/references/adapter-tmux.md",
+      "target": "skills/agentflow-steerer/references/adapter-tmux.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-steerer/references/adapter-github.md",
+      "target": "skills/agentflow-steerer/references/adapter-github.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-steerer/references/seam-rules.md",
+      "target": "skills/agentflow-steerer/references/seam-rules.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "skills/agentflow-steerer/assets/steer-state.yaml",
+      "target": "skills/agentflow-steerer/assets/steer-state.yaml",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/sources/product-discipline.md",
+      "target": "docs/sources/product-discipline.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/cockpit.md",
+      "target": "docs/cockpit.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/roles/index.md",
+      "target": "docs/roles/index.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/roles/methods.md",
+      "target": "docs/roles/methods.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/cockpit-concepts-and-rules.md",
+      "target": "docs/cockpit-concepts-and-rules.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/cockpit-qa.md",
+      "target": "docs/cockpit-qa.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "assets/cockpit/agentflow-logo.png",
+      "target": "assets/cockpit/agentflow-logo.png",
+      "ownership": "managed"
+    },
+    {
+      "source": "assets/cockpit/agentflow-logo-transparent.png",
+      "target": "assets/cockpit/agentflow-logo-transparent.png",
+      "ownership": "managed"
+    },
+    {
+      "source": "assets/cockpit/agentflow-icon-192.png",
+      "target": "assets/cockpit/agentflow-icon-192.png",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-actions.mjs",
+      "target": "lib/cockpit-actions.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-auth.mjs",
+      "target": "lib/cockpit-auth.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-config.mjs",
+      "target": "lib/cockpit-config.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-domain.mjs",
+      "target": "lib/cockpit-domain.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-graph.mjs",
+      "target": "lib/cockpit-graph.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-markdown.mjs",
+      "target": "lib/cockpit-markdown.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-goal-model.mjs",
+      "target": "lib/cockpit-goal-model.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-read-model.mjs",
+      "target": "lib/cockpit-read-model.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-replay.mjs",
+      "target": "lib/cockpit-replay.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-replay-github.mjs",
+      "target": "lib/cockpit-replay-github.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-security.mjs",
+      "target": "lib/cockpit-security.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-ui.mjs",
+      "target": "lib/cockpit-ui.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "scripts/cockpit-server.mjs",
+      "target": "scripts/cockpit-server.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "scripts/cockpit-doctor.mjs",
+      "target": "scripts/cockpit-doctor.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/core/delivery-record.mjs",
+      "target": "lib/core/delivery-record.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/core/delivery-policy.mjs",
+      "target": "lib/core/delivery-policy.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/core/run-state.mjs",
+      "target": "lib/core/run-state.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/core/verification-observation.mjs",
+      "target": "lib/core/verification-observation.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/candidate-identity.schema.json",
+      "target": "schemas/candidate-identity.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/verification-observation.schema.json",
+      "target": "schemas/verification-observation.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/verification-resolution.schema.json",
+      "target": "schemas/verification-resolution.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/run-event.schema.json",
+      "target": "schemas/run-event.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/delivery-acceptance-v2.schema.json",
+      "target": "schemas/delivery-acceptance-v2.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/journey.schema.json",
+      "target": "schemas/journey.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/recovery-plan.schema.json",
+      "target": "schemas/recovery-plan.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/application/run-service.mjs",
+      "target": "lib/application/run-service.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/application/publication-service.mjs",
+      "target": "lib/application/publication-service.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/verification/workspace.mjs",
+      "target": "lib/verification/workspace.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/verification/process-collector.mjs",
+      "target": "lib/verification/process-collector.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/sources/run-store.mjs",
+      "target": "lib/sources/run-store.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/providers/writer-status.mjs",
+      "target": "lib/providers/writer-status.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "scripts/run-delivery.mjs",
+      "target": "scripts/run-delivery.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "scripts/probe-environment.mjs",
+      "target": "scripts/probe-environment.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/delivery-config.schema.json",
+      "target": "schemas/delivery-config.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/sources/github-run-store.mjs",
+      "target": "lib/sources/github-run-store.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/sources/github-api-cli.mjs",
+      "target": "lib/sources/github-api-cli.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/verification/github-checks.mjs",
+      "target": "lib/verification/github-checks.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/verification/junit-report.mjs",
+      "target": "lib/verification/junit-report.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/verification/lifecycle-observer.mjs",
+      "target": "lib/verification/lifecycle-observer.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/cockpit-run-model.mjs",
+      "target": "lib/cockpit-run-model.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/reliable-delivery.md",
+      "target": "docs/reliable-delivery.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/run-operations.md",
+      "target": "docs/run-operations.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/delivery-release-acceptance.md",
+      "target": "docs/delivery-release-acceptance.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/adr/007-verifiable-recoverable-delivery.md",
+      "target": "docs/adr/007-verifiable-recoverable-delivery.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/adoption/operation-lock.mjs",
+      "target": "lib/adoption/operation-lock.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/agent-workflow.md",
+      "target": "docs/agent-workflow.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/issue-standards.md",
+      "target": "docs/issue-standards.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/core/onboarding-state.mjs",
+      "target": "lib/core/onboarding-state.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/core/onboarding-plan.mjs",
+      "target": "lib/core/onboarding-plan.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "schemas/onboarding-runtime.schema.json",
+      "target": "schemas/onboarding-runtime.schema.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/adr/009-incremental-onboarding.md",
+      "target": "docs/adr/009-incremental-onboarding.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/application/onboarding-service.mjs",
+      "target": "lib/application/onboarding-service.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/onboarding/project-reader.mjs",
+      "target": "lib/onboarding/project-reader.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/onboarding/project-writer.mjs",
+      "target": "lib/onboarding/project-writer.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/onboarding/runtime-handoff.mjs",
+      "target": "lib/onboarding/runtime-handoff.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/onboarding/cli.mjs",
+      "target": "lib/onboarding/cli.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/onboarding/prompt.mjs",
+      "target": "lib/onboarding/prompt.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/services/doctor-readers.mjs",
+      "target": "lib/services/doctor-readers.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/services/doctor-report.mjs",
+      "target": "lib/services/doctor-report.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/services/doctor-service.mjs",
+      "target": "lib/services/doctor-service.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "manifests/composition-profiles.json",
+      "target": "manifests/composition-profiles.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "manifests/execution-distributions/subscription-balanced-v1.json",
+      "target": "manifests/execution-distributions/subscription-balanced-v1.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "manifests/product-payload.json",
+      "target": "manifests/product-payload.json",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/config/execution-distribution.mjs",
+      "target": "lib/config/execution-distribution.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/config/distribution-change.mjs",
+      "target": "lib/config/distribution-change.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/config/distribution-cli.mjs",
+      "target": "lib/config/distribution-cli.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "docs/execution-distributions.md",
+      "target": "docs/execution-distributions.md",
+      "ownership": "managed"
+    }
+  ]
+}

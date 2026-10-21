@@ -1,0 +1,17 @@
+{
+  "escalation": {
+    "maxAttemptsPerTier": 2,
+    "tierProgression": [
+      "balanced",
+      "deep-reasoning",
+      "architect-lead"
+    ],
+    "suspendOnRepeatedRejections": 2
+  },
+  "fallbackCascade": {
+    "primary": "external-cli",
+    "onQuotaExhausted": "inner-subagent",
+    "onSubagentExhausted": "human-gate",
+    "recordDegradationInEvidence": true
+  }
+}

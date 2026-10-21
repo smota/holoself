@@ -17,7 +17,15 @@
         "workflow.acceptance-ledger",
         "workflow.pr-readiness"
       ],
-      "recognizes": ["collaborator", "scanner", "designer", "migrator", "auditor"],
+      "recognizes": [
+        "collaborator",
+        "scanner",
+        "designer",
+        "migrator",
+        "auditor",
+        "steerer",
+        "maintainer"
+      ],
       "collaboratesWith": ["collaborator", "scanner", "designer", "migrator", "auditor"]
     },
     {
@@ -31,7 +39,15 @@
         "collaboration.council-policy",
         "collaboration.parent-synthesis"
       ],
-      "recognizes": ["orchestrator", "scanner", "designer", "migrator", "auditor"],
+      "recognizes": [
+        "orchestrator",
+        "scanner",
+        "designer",
+        "migrator",
+        "auditor",
+        "steerer",
+        "maintainer"
+      ],
       "collaboratesWith": ["orchestrator", "scanner", "auditor"]
     },
     {
@@ -39,7 +55,15 @@
       "qualifiedName": "agentflow-scanner",
       "source": "skills/agentflow-scanner",
       "owns": ["discovery.scope", "discovery.findings", "discovery.evidence-map"],
-      "recognizes": ["orchestrator", "collaborator", "designer", "migrator", "auditor"],
+      "recognizes": [
+        "orchestrator",
+        "collaborator",
+        "designer",
+        "migrator",
+        "auditor",
+        "steerer",
+        "maintainer"
+      ],
       "collaboratesWith": ["orchestrator", "collaborator", "designer", "migrator", "auditor"]
     },
     {
@@ -51,7 +75,15 @@
         "definition.schema-contract",
         "definition.role-boundaries"
       ],
-      "recognizes": ["orchestrator", "collaborator", "scanner", "migrator", "auditor"],
+      "recognizes": [
+        "orchestrator",
+        "collaborator",
+        "scanner",
+        "migrator",
+        "auditor",
+        "steerer",
+        "maintainer"
+      ],
       "collaboratesWith": ["orchestrator", "scanner", "migrator", "auditor"]
     },
     {
@@ -59,8 +91,16 @@
       "qualifiedName": "agentflow-migrator",
       "source": "skills/agentflow-migrator",
       "owns": ["adoption.inventory", "adoption.mutation-plan", "adoption.transaction"],
-      "recognizes": ["orchestrator", "collaborator", "scanner", "designer", "auditor"],
-      "collaboratesWith": ["orchestrator", "scanner", "designer", "auditor"]
+      "recognizes": [
+        "orchestrator",
+        "collaborator",
+        "scanner",
+        "designer",
+        "auditor",
+        "steerer",
+        "maintainer"
+      ],
+      "collaboratesWith": ["orchestrator", "scanner", "designer", "auditor", "maintainer"]
     },
     {
       "role": "auditor",
@@ -72,8 +112,72 @@
         "assurance.verdict",
         "assurance.remediation-advice"
       ],
-      "recognizes": ["orchestrator", "collaborator", "scanner", "designer", "migrator"],
-      "collaboratesWith": ["orchestrator", "collaborator", "scanner", "designer", "migrator"]
+      "recognizes": [
+        "orchestrator",
+        "collaborator",
+        "scanner",
+        "designer",
+        "migrator",
+        "steerer",
+        "maintainer"
+      ],
+      "collaboratesWith": [
+        "orchestrator",
+        "collaborator",
+        "scanner",
+        "designer",
+        "migrator",
+        "maintainer"
+      ]
+    },
+    {
+      "role": "steerer",
+      "qualifiedName": "agentflow-steerer",
+      "source": "skills/agentflow-steerer",
+      "owns": [
+        "steering.job-framing",
+        "steering.capability-grooming",
+        "steering.dependency-reasoning",
+        "steering.tradeoff-rationale"
+      ],
+      "recognizes": [
+        "orchestrator",
+        "collaborator",
+        "scanner",
+        "designer",
+        "migrator",
+        "auditor",
+        "maintainer"
+      ],
+      "collaboratesWith": [
+        "orchestrator",
+        "collaborator",
+        "scanner",
+        "designer",
+        "migrator",
+        "auditor"
+      ]
+    },
+    {
+      "role": "maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "source": "skills/agentflow-maintainer",
+      "owns": [
+        "maintenance.doctor",
+        "maintenance.plan",
+        "maintenance.repair",
+        "maintenance.rollback"
+      ],
+      "recognizes": [
+        "orchestrator",
+        "collaborator",
+        "scanner",
+        "designer",
+        "migrator",
+        "auditor",
+        "steerer"
+      ],
+      "collaboratesWith": ["orchestrator", "migrator", "auditor"]
     }
   ],
   "handoffs": [
@@ -131,6 +235,16 @@
       "from": "auditor",
       "to": "orchestrator",
       "artifact": "acceptance-verification"
+    },
+    {
+      "from": "auditor",
+      "to": "maintainer",
+      "artifact": "remediation-advice"
+    },
+    {
+      "from": "maintainer",
+      "to": "auditor",
+      "artifact": "repair-receipt"
     }
   ]
 }

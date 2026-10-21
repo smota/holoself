@@ -36,7 +36,8 @@
           "id": { "type": "string", "minLength": 1 },
           "description": { "type": "string", "minLength": 1 },
           "verification": { "enum": ["deterministic", "semantic"] },
-          "required": { "type": "boolean" }
+          "required": { "type": "boolean" },
+          "severity": { "enum": ["blocking", "advisory"] }
         },
         "additionalProperties": false
       }

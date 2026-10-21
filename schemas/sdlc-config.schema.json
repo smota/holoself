@@ -179,7 +179,20 @@
         "budgetMaxima": {
           "type": "object",
           "maxProperties": 1,
-          "additionalProperties": { "type": "number", "minimum": 0 }
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "oracleAssurance": {
+          "type": "object",
+          "required": ["required"],
+          "properties": {
+            "required": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
