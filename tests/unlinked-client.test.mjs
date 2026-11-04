@@ -22,6 +22,7 @@ import {
   clientHostStatus
 } from '../src/mcp-client-config.mjs'
 import { clientInboxLockPath, createInboxProposal, CLIENT_INBOX_LIMIT, withClientInboxLock } from '../src/proposals/client-inbox.mjs'
+import { applyInboxBatch, buildReviewInbox } from '../src/proposals/inbox.mjs'
 import { spawn } from 'node:child_process'
 import { scanProposalStore } from '../src/proposals/store.mjs'
 import { resolveCaller } from '../src/retrieval/caller.mjs'
@@ -703,6 +704,17 @@ test('owner approval of inbox proposals via CLI (preview hash, transaction, arch
   assert.match(await capture(() => run(['proposals', 'show', first.proposal_id, '--inbox', '--root', self])), /# client: desk \(active\)/)
   // --inbox cannot be mixed with a project.
   await assert.rejects(() => run(['proposals', 'list', '--inbox', '--root', self, '--project', self]), /cannot be combined/)
+  // Multi-id batches (#71) are project-only; the client inbox is approved one id at a time so the revoked gate always applies.
+  await assert.rejects(
+    () => run(['proposals', 'approve', first.proposal_id, second.proposal_id, '--inbox', '--root', self, '--yes']),
+    error => error.code === 'INVALID_INPUT' && /single <id>/.test(error.message)
+  )
+  // The Workbench review inbox covers cataloged project spaces only: it never lists or batch-acts on client proposals.
+  assert.ok(!buildReviewInbox(self, { spaces: [] }).items.some(item => item.id === first.proposal_id))
+  await assert.rejects(
+    () => applyInboxBatch(self, { action: 'reject', items: [{ id: first.proposal_id, space: self }], spaces: [] }),
+    error => ['SPACE_NOT_FOUND', 'INVALID_INPUT'].includes(error.code)
+  )
   // The client is revoked after writing; the owner can still review, but plain-text approve warns that
   // 'client <name> is REVOKED' and requires --allow-revoked in non-TTY (or explicit interactive confirmation).
   await capture(() => run(['client', 'revoke', '--root', self, 'desk']))

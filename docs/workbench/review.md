@@ -8,7 +8,13 @@ The real inbox in the screenshot is clear. That is a valid state: it means the s
 
 ## Read the inbox
 
-Choose a Space first. Pending cards show the proposal title or claim, number of structured changes, and target files. Audit findings that cannot be adopted safely appear as **Needs adoption or repair** with a diagnostic code and suggested action.
+The Review inbox (`GET /api/inbox?space=all|<space_id>&limit=<n>&offset=<n>`) aggregates pending proposals across all cataloged linked spaces—or filters to a single cataloged space by `space_id` (or name)—without exposing absolute filesystem paths. Responses are bounded (default 200 items with `truncated`, `total`, `limit`, `offset`, and `next_offset`) and groups reference item IDs (`item_ids`) keyed by `space_id`.
+
+- **Near-duplicate grouping (`duplicate_group`)**: Proposals whose normalized claim text reaches a complete-linkage token similarity of at least `0.72` with every member of the cluster are grouped together under a deterministic `dup-<hash>` group with a **Near-duplicate** badge and a **Select group** checkbox.
+- **Conflict hints (`conflict_hints`)**: Each item returns up to the top 3 conflict hints by score (with short excerpts `<= 200` characters), flagging contradictions against existing current claims in the target document (using `contradictionDigest` and the metric-difference heuristic) as well as competing pending operations that target the same `claim_id` (such as a pending `supersede_claim` and `retire_claim` on the same claim).
+- **Visibility-change badge (`visibility_change`)**: Proposals that change a claim's visibility display `visibility <from> → <to>`.
+- **Expandable lazy preview**: Expand **Preview exact changes** on any item to fetch its exact diff and `previewHash` on demand via `POST /api/proposals/<id>/preview`.
+- **Audit findings**: Unmanaged or malformed proposal files appear as **Needs adoption or repair** with a diagnostic code and suggested action.
 
 ## Create a pending item manually
 
@@ -32,5 +38,13 @@ Creating the item writes only a pending proposal inside the selected project's `
 4. Confirm the decision and re-check the inbox.
 
 If the preview changed after you opened it, approval fails as stale. Re-open the proposal and review the new exact change; never bypass the hash check.
+
+## Batch review actions
+
+Select multiple inbox items (individually, per group with **Select group**, or across the view with **Select all**) and choose **Approve selected**, **Defer selected**, or **Reject selected** (`POST /api/inbox/batch`, capped at 50 items per batch):
+
+- Every item in a batch approval still requires its own fresh `preview_hash`. If any item's preview is stale, the entire batch is refused (`STALE_PREVIEW`, HTTP 409) before any file is written.
+- Batch approval is all-or-nothing under a single `withRegistryLock`: changes compose deterministically in batch order, and any write, conflict, or post-approval validation failure rolls back every target file, proposal record, archive, and receipt across the batch.
+- One receipt (`proposals/receipts/<proposal_id>-<decision>.json`) is written per proposal. Batches mixing spaces from different canonical self roots are refused (`MIXED_SELF_ROOTS`).
 
 [Next: Conversations](conversations.md) · [Back to the Workbench tour](index.md)

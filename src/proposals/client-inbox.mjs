@@ -11,7 +11,7 @@ import { join } from 'node:path'
 
 export const CLIENT_INBOX_LIMIT = 50
 
-function inboxError(message, code) {
+function clientInboxError(message, code) {
   return Object.assign(new Error(message), { code })
 }
 export const CLIENT_INBOX_LOCK_STALE_MS = 10000
@@ -78,7 +78,7 @@ export function withClientInboxLock(self, fn, { timeoutMs = 15000 } = {}) {
     } catch (error) {
       if (error.code !== 'EEXIST') throw error
       const info = lstatSync(lockPath, { throwIfNoEntry: false })
-      if (info?.isSymbolicLink()) throw inboxError('client inbox lock is a symlink; refusing', 'CLIENT_INBOX_LOCK_UNSAFE')
+      if (info?.isSymbolicLink()) throw clientInboxError('client inbox lock is a symlink; refusing', 'CLIENT_INBOX_LOCK_UNSAFE')
       let stale = false,
         held = null,
         staleRaw = null
@@ -94,7 +94,7 @@ export function withClientInboxLock(self, fn, { timeoutMs = 15000 } = {}) {
         breakStaleLock(lockPath, held, staleRaw)
         continue
       }
-      if (Date.now() > deadline) throw inboxError('timed out waiting for the client inbox lock', 'CLIENT_INBOX_LOCK_TIMEOUT')
+      if (Date.now() > deadline) throw clientInboxError('timed out waiting for the client inbox lock', 'CLIENT_INBOX_LOCK_TIMEOUT')
       sleepSync(Math.min(50, 5 + attempt * 5))
     }
   }
@@ -122,11 +122,11 @@ export function pendingInboxCount(self, clientId) {
 // existing document the client's lens can read; `view` narrows duplicate checks to what that lens delivers.
 export function createInboxProposal(self, client, input, { view = null } = {}) {
   const evidence = typeof input.evidence === 'string' ? input.evidence : ''
-  if (!evidence.trim()) throw inboxError('client proposals require evidence text (1-4,000 characters)', 'EVIDENCE_REQUIRED')
-  if (evidence.length > INBOX_EVIDENCE_MAX) throw inboxError(`evidence is longer than ${INBOX_EVIDENCE_MAX} characters`, 'INVALID_ARGUMENT')
-  if (typeof input.claim !== 'string' || !input.claim.trim()) throw inboxError('client proposals require claim text', 'INVALID_ARGUMENT')
+  if (!evidence.trim()) throw clientInboxError('client proposals require evidence text (1-4,000 characters)', 'EVIDENCE_REQUIRED')
+  if (evidence.length > INBOX_EVIDENCE_MAX) throw clientInboxError(`evidence is longer than ${INBOX_EVIDENCE_MAX} characters`, 'INVALID_ARGUMENT')
+  if (typeof input.claim !== 'string' || !input.claim.trim()) throw clientInboxError('client proposals require claim text', 'INVALID_ARGUMENT')
   if ([input.claim, evidence, input.confidence].some(text => typeof text === 'string' && SECRET_RE.test(text)))
-    throw inboxError('proposal text looks like a secret or credential and was rejected', 'SECRET_REJECTED')
+    throw clientInboxError('proposal text looks like a secret or credential and was rejected', 'SECRET_REJECTED')
   const p = {
     schema_version: 2,
     proposal_id: randomUUID(),
@@ -150,12 +150,12 @@ export function createInboxProposal(self, client, input, { view = null } = {}) {
   }
   Object.defineProperty(p, '_inbox', { value: true, enumerable: false })
   const errors = validateProposal(p, { inbox: true })
-  if (errors.length) throw inboxError(errors.join('; '), 'INVALID_ARGUMENT')
+  if (errors.length) throw clientInboxError(errors.join('; '), 'INVALID_ARGUMENT')
   planProposalChanges(p, self, view)
   // The cap check and the write happen under one lock, so concurrent creates can never exceed the cap.
   return withClientInboxLock(self, () => {
     if (pendingInboxCount(self, client.client_id) >= CLIENT_INBOX_LIMIT)
-      throw inboxError(`client inbox is full (${CLIENT_INBOX_LIMIT} pending proposals); ask the owner to review it`, 'CLIENT_INBOX_FULL')
+      throw clientInboxError(`client inbox is full (${CLIENT_INBOX_LIMIT} pending proposals); ask the owner to review it`, 'CLIENT_INBOX_FULL')
     const dir = inboxDir(self)
     ensureDir(dir)
     saveProposal(p, join(dir, `${p.proposal_id}.yaml`))

@@ -5,6 +5,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileS
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { normalizeProjectPath, readBindings } from '../bindings.mjs'
+import { canonicalPath, samePath } from '../path-guard.mjs'
 import { PACKAGE_ROOT as BASE } from '../shared/package-root.mjs'
 import { escapeRegExp, redactRootPaths } from '../shared/redact.mjs'
 import { VERSION } from '../version.mjs'
@@ -219,16 +220,22 @@ export function writeCatalog(root, value) {
 }
 export function reconcileCatalog(root) {
   const previous = readCatalog(root),
-    known = new Map(previous.spaces.map(item => [normalizeProjectPath(item.path), item])),
+    prevSpaces = Array.isArray(previous?.spaces) ? previous.spaces : [],
+    known = new Map(prevSpaces.filter(item => item?.path).map(item => [normalizeProjectPath(item.path), item])),
     bindings = readBindings(root)
-  const spaces = Object.entries(bindings.bindings).map(([project, binding]) => ({
-    ...(known.get(project) || { id: randomUUID(), addedAt: new Date().toISOString() }),
-    path: project,
-    name: basename(project),
-    lens: binding.default_lens,
-    secondary_lenses: binding.secondary_lenses,
-    discoveredFrom: 'lenses/bindings.json'
-  }))
+  const spaces = Object.entries(bindings.bindings).map(([project, binding]) => {
+    const canonProject = canonicalPath(project),
+      existing =
+        known.get(project) || prevSpaces.find(item => item?.path && samePath(canonicalPath(item.path), canonProject))
+    return {
+      ...(existing || { id: randomUUID(), addedAt: new Date().toISOString() }),
+      path: project,
+      name: basename(project),
+      lens: binding.default_lens,
+      secondary_lenses: binding.secondary_lenses,
+      discoveredFrom: 'lenses/bindings.json'
+    }
+  })
   const catalog = { schemaVersion: 1, spaces }
   if (JSON.stringify(previous) !== JSON.stringify(catalog)) writeCatalog(root, catalog)
   return { ...catalog, discovered: spaces.map(item => item.path) }

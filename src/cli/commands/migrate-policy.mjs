@@ -11,7 +11,10 @@ export async function runMigratePolicy(o, sub) {
     throw new Error(`migrate policy requires a valid canonical self root: ${selfRoot}`)
   }
   if (o.apply) {
-    const receipt = applyPolicyMigration(selfRoot, o.apply, { confirmNarrowing: o.confirmNarrowing })
+    const receipt = applyPolicyMigration(selfRoot, o.apply, {
+      confirmNarrowing: o.confirmNarrowing,
+      confirmActivation: o.confirmActivation
+    })
     console.log(
       JSON.stringify(
         {
@@ -19,7 +22,8 @@ export async function runMigratePolicy(o, sub) {
           receipt_id: receipt.receipt_id,
           applied_at: receipt.applied_at,
           entries: receipt.entries.length,
-          narrowing_confirmed: receipt.narrowing_confirmed
+          narrowing_confirmed: receipt.narrowing_confirmed,
+          ...(receipt.activation_confirmed ? { activation_confirmed: receipt.activation_confirmed } : {})
         },
         null,
         2
@@ -34,7 +38,14 @@ export async function runMigratePolicy(o, sub) {
     )
     return true
   }
-  const plan = planPolicyMigration(selfRoot, { includeLinked: o.includeLinked, dryRun: Boolean(o.dryRun) })
+  const plan = planPolicyMigration(selfRoot, {
+    includeLinked: o.includeLinked,
+    dryRun: Boolean(o.dryRun),
+    confirmActivation: Boolean(o.confirmActivation)
+  })
+  for (const w of plan.warnings || []) {
+    console.error(`[warn] ${w}`)
+  }
   console.log(
     JSON.stringify(
       {
@@ -43,6 +54,13 @@ export async function runMigratePolicy(o, sub) {
         generated_at: plan.generated_at,
         self_root: plan.self_root,
         include_linked: plan.include_linked,
+        ...(plan.activations.length > 0 || o.confirmActivation
+          ? {
+              confirm_activation: plan.confirm_activation,
+              activations: plan.activations,
+              ...(plan.warnings.length > 0 ? { warnings: plan.warnings } : {})
+            }
+          : {}),
         summary: plan.summary,
         plan_file: o.dryRun ? null : slash(join(selfRoot, '.holoself', 'migrations', `plan-${plan.plan_id}.json`))
       },

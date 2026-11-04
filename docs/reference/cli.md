@@ -83,7 +83,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `link backfill` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--all`, `--lenses` |
 | `link prune` | `--root`, `--data-root`, `--data-dir`, `--self` |
 | `link skill migrate-global` | `--project`, `--target`, `--platform`, `--instructions`, `--skill-home`, `--force`, `--dry-run`, `--yes`, `--confirm` |
-| `migrate policy` | `--root`, `--data-root`, `--data-dir`, `--self`, `--apply`, `--revert`, `--confirm-narrowing`, `--allow-partial`, `--include-linked`, `--dry-run`, `--json` |
+| `migrate policy` | `--root`, `--data-root`, `--data-dir`, `--self`, `--apply`, `--revert`, `--confirm-narrowing`, `--confirm-activation`, `--allow-partial`, `--include-linked`, `--dry-run`, `--json` |
 | `context` | `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--need`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--output`, `--snapshot`, `--yes`, `--confirm` |
 | `analyze overlap` | `--project`, `--target`, `--json` |
 | `analyze conflicts` | `--project`, `--target`, `--json` |
@@ -160,7 +160,8 @@ propose --project <dir> [--claim <text>] [--evidence <text>]
         [--source-file <relative-path>] [--target-file <relative-path>]
         [--proposal-type <type>] [--confidence <value>] [--visibility <value>]
 proposals list|audit --project <dir>
-proposals show|approve|reject|defer|supersede <id> --project <dir> [--yes]
+proposals show|supersede <id> --project <dir> [--yes]
+proposals approve|reject|defer <id> [<id> ...] --project <dir> [--yes]
 proposals list|audit --inbox --root <self-root>
 proposals show|approve|reject|defer|supersede <id> --inbox --root <self-root> [--yes]
 index [status|rebuild] --project <dir> [--changed]

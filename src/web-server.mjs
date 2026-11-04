@@ -15,6 +15,7 @@ import { ensureHoloselfGitignore } from './link/config.mjs'
 import { readLedgerEntries, recordServedPacket } from './ledger.mjs'
 import { mcpClientOverview } from './mcp-config.mjs'
 import { contextData } from './retrieval/context.mjs'
+import { applyInboxBatch, buildReviewInbox } from './proposals/inbox.mjs'
 import { canonicalPath, samePath } from './path-guard.mjs'
 import { resolveDocumentPolicy } from './policy/policy-defaults.mjs'
 import { excludedCanonicalDocuments } from './policy/validate-fix.mjs'
@@ -158,8 +159,9 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
         if (typeof b.path !== 'string' || !b.path.trim()) throw new HttpError(400, 'INVALID_INPUT', 'project path required')
         const path = resolve(b.path)
         await serializeSpaceMutation(() => cli(['link', 'add', '--project', path, '--self', root, '--lens', b.lens || 'general', '--yes']))
-        const c = reconcileCatalog(root)
-        return send(res, 201, { ok: true, data: c.spaces.find(x => normalizeProjectPath(x.path) === normalizeProjectPath(path)) })
+        const c = reconcileCatalog(root),
+          canonPath = canonicalPath(path)
+        return send(res, 201, { ok: true, data: c.spaces.find(x => samePath(canonicalPath(x.path), canonPath)) })
       }
       const spaceRoute = url.pathname.match(/^\/api\/spaces\/([^/]+)$/)
       if (spaceRoute && req.method === 'DELETE') {
@@ -300,6 +302,32 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
             'INVALID_DOCUMENT'
           )
         return send(res, 200, { ok: true, data: saved })
+      }
+      if (url.pathname === '/api/inbox' && req.method === 'GET') {
+        const catalog = reconcileCatalog(root),
+          spaceParam = (url.searchParams.get('space') || 'all').trim(),
+          limitParam = url.searchParams.get('limit'),
+          offsetParam = url.searchParams.get('offset') ?? url.searchParams.get('cursor'),
+          inbox = clientCheck(
+            () =>
+              buildReviewInbox(root, {
+                space: spaceParam,
+                spaces: catalog.spaces,
+                ...(limitParam !== null && limitParam !== '' ? { limit: limitParam } : {}),
+                ...(offsetParam !== null && offsetParam !== '' ? { offset: offsetParam } : {})
+              }),
+            'INVALID_INBOX_FILTER'
+          )
+        return send(res, 200, { ok: true, data: inbox })
+      }
+      if (url.pathname === '/api/inbox/batch' && req.method === 'POST') {
+        const b = await body(req),
+          catalog = reconcileCatalog(root),
+          result = await clientCheckAsync(
+            () => applyInboxBatch(root, { action: b.action, items: b.items, spaces: catalog.spaces, allowAbsoluteSpace: false }),
+            'INVALID_INBOX_BATCH'
+          )
+        return send(res, 200, { ok: true, data: result })
       }
       // The desktop-client inbox (<self>/proposals/inbox/) is reviewed through the same CLI paths with --inbox --root.
       const inboxScope = ['--inbox', '--root', root]
@@ -631,17 +659,22 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
       try {
         if (res.headersSent) return res.destroy()
         if (error?.status === 413) res.once('finish', () => req.destroy())
+        let scrubRoots = [root, project]
+        try {
+          const catalogSpaces = readCatalog(root)?.spaces
+          if (Array.isArray(catalogSpaces)) scrubRoots = [root, project, ...catalogSpaces.map(s => s?.path).filter(Boolean)]
+        } catch {}
         if (CONFLICT_CODES.has(error?.code) || error?.status === 409)
           return send(res, 409, {
             ok: false,
-            error: { code: error.code || 'CONFLICT', message: scrubMessage(error.message, [root, project]), current_hash: error.current_hash }
+            error: { code: error.code || 'CONFLICT', message: scrubMessage(error.message, scrubRoots), current_hash: error.current_hash }
           })
         if (error instanceof HttpError)
           return send(res, error.status || 400, {
             ok: false,
-            error: { code: error.code || 'INVALID_INPUT', message: scrubMessage(error.message, [root, project]), current_hash: error.current_hash }
+            error: { code: error.code || 'INVALID_INPUT', message: scrubMessage(error.message, scrubRoots), current_hash: error.current_hash }
           })
-        console.error('[holoself web] internal error', scrubMessage(error?.stack || error?.message || String(error), [root, project]))
+        console.error('[holoself web] internal error', scrubMessage(error?.stack || error?.message || String(error), scrubRoots))
         send(res, 500, { ok: false, error: { code: 'INTERNAL', message: 'internal error' } })
       } catch {
         res.destroy()
