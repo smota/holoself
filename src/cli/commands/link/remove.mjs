@@ -61,12 +61,15 @@ export async function linkRemove(o, sub, project) {
       }
     } catch {}
   }
+  if (!selfReachable && !o.force) {
+    const err = new Error(`sovereign self at ${selfRoot || '(unspecified)'} is unreachable or invalid; refusing removal without sovereign revocation`)
+    err.code = 'SOVEREIGN_SELF_UNREACHABLE'
+    throw err
+  }
+  // Local activation is removed before the registry is revoked, so a refused deactivation leaves the link intact.
+  for (const item of deactivateProject(project, { dryRun: o.dryRun }).filter(x => x.result === 'unremovable'))
+    console.warn(`Warning: ${item.file}: ${item.message}`)
   if (!selfReachable) {
-    if (!o.force) {
-      const err = new Error(`sovereign self at ${selfRoot || '(unspecified)'} is unreachable or invalid; refusing removal without sovereign revocation`)
-      err.code = 'SOVEREIGN_SELF_UNREACHABLE'
-      throw err
-    }
     console.warn(
       `Warning: sovereign self at ${selfRoot || '(unspecified)'} is unreachable or invalid; local link configuration and adapters removed, ` +
         `but sovereign registry was NOT updated. Run 'holoself link approve --project <dir> --revoke' from self root to complete sovereign revocation.`
@@ -87,7 +90,6 @@ export async function linkRemove(o, sub, project) {
     })
   }
   if (!o.dryRun && selfReachable) writeBinding(selfRoot, project, null)
-  deactivateProject(project, { dryRun: o.dryRun })
   if (!o.dryRun) rmSync(path)
   console.log(`[ok] removed ${path}; indexes, reports, and proposals preserved`)
   return true

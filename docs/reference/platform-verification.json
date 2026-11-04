@@ -167,9 +167,15 @@
         "marker_returned": true,
         "receipt_returned": true,
         "no_canonical_write": true,
-        "invocation": "claude -p --output-format json --model haiku --permission-mode dontAsk (two runs: synthetic marker, then context receipt)",
+        "invocation": "claude -p --output-format json --model haiku --permission-mode dontAsk; one run asked for the synthetic marker and the context receipt",
         "headless_requirements": "None: claude -p loaded .claude/settings.local.json and ran the hook without a trust prompt or extra setting. Interactive sessions were not tested.",
-        "evidence": "Hook audit log (HOLOSELF_HOOK_AUDIT_LOG) recorded ok=true with a packet id and receipt for each run; the host reply contained the synthetic marker and the exact receipt hash from the audit line."
+        "evidence": "Hook audit log (HOLOSELF_HOOK_AUDIT_LOG) recorded ok=true with a packet id and receipt; the host reply contained the synthetic marker and the exact receipt hash from the audit line. An earlier run the same day with a shell-expanded $CLAUDE_PROJECT_DIR command also passed.",
+        "command": "holoself context --session-start --budget small --format packet --hook holoself-session-start (project from CLAUDE_PROJECT_DIR)",
+        "verified_os": [
+          "linux (WSL2)"
+        ],
+        "windows": "unverified",
+        "output_limit": "Claude Code 2.1.318 persists hook output above 10,000 characters to a file and shows a preview; hook packets are capped at 9,000 bytes"
       }
     },
     {

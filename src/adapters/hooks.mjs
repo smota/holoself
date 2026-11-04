@@ -3,6 +3,7 @@
 // Holoself entry changes, so a canonically formatted file round-trips byte-for-byte through install and removal.
 import { existsSync, lstatSync, readFileSync } from 'node:fs'
 import { loadVerificationMatrix } from '../mcp-verification.mjs'
+import { fileModeOr } from '../shared/fs.mjs'
 import { safeProjectFile } from './registry.mjs'
 
 export const HOOK_ID = 'holoself-session-start'
@@ -16,7 +17,9 @@ export const HOOK_HOSTS = {
     file: '.claude/settings.local.json',
     event: 'SessionStart',
     matcher: 'startup|resume|clear|compact',
-    command: `holoself context --project "$CLAUDE_PROJECT_DIR" --session-start --budget small --format packet ${HOOK_MARKER}`,
+    // No shell syntax: hook mode reads CLAUDE_PROJECT_DIR from the environment, so the command runs the same under
+    // a POSIX shell and on Windows.
+    command: `holoself context --session-start --budget small --format packet ${HOOK_MARKER}`,
     timeout: 30
   }
 }
@@ -84,30 +87,38 @@ export function inspectHook(project, id) {
 }
 
 // Next file content for `install` (true) or removal (false); null content means delete the file.
-export function hookChange(project, id, install, { createdFile = false } = {}) {
+// `createdContainers` lists the containers ('hooks', the event array) that Holoself added on install; removal drops
+// them only when Holoself created them and they are empty again, so pre-existing empty containers are kept.
+// Existing files keep their permission bits; files Holoself creates are 0600 (per-machine settings can hold secrets).
+export function hookChange(project, id, install, { createdFile = false, createdContainers = null } = {}) {
   const host = HOOK_HOSTS[id],
     inspected = inspectHook(project, id)
   if (['unsafe', 'invalid'].includes(inspected.state)) throw new Error(`${host.file}: ${inspected.state} hook settings (${inspected.detail})`)
   if (inspected.mixed) throw new Error(`${host.file}: the Holoself ${host.event} hook shares a group with other hooks; move it out by hand`)
   const read = readHookSettings(inspected.path),
     before = read.text,
-    groups = read.config.hooks?.[host.event] || [],
+    hooks = read.config.hooks,
+    groups = hooks?.[host.event] || [],
     index = groups.findIndex(group => groupHooks(group).some(ownedHook)),
-    kept = groups.filter(group => !groupHooks(group).some(ownedHook))
-  if (install && inspected.state === 'installed') return { path: inspected.path, file: host.file, before, after: before, action: 'unchanged', existed: read.exists }
-  if (!install && inspected.state === 'missing') return { path: inspected.path, file: host.file, before, after: before, action: 'unchanged', existed: read.exists }
-  const nextGroups = install ? [...kept.slice(0, index < 0 ? kept.length : index), desiredHookGroup(id), ...kept.slice(index < 0 ? kept.length : index)] : kept
-  const next = { ...read.config, hooks: { ...(read.config.hooks || {}), [host.event]: nextGroups } }
-  if (!nextGroups.length) delete next.hooks[host.event]
-  if (!Object.keys(next.hooks).length) delete next.hooks
+    kept = groups.filter(group => !groupHooks(group).some(ownedHook)),
+    mode = fileModeOr(inspected.path, 0o600),
+    base = { path: inspected.path, file: host.file, before, existed: read.exists, mode }
+  const created =
+    createdContainers ??
+    (install ? [...(hooks === undefined ? ['hooks'] : []), ...(hooks?.[host.event] === undefined ? [host.event] : [])] : [])
+  if (install && inspected.state === 'installed') return { ...base, after: before, action: 'unchanged', createdContainers: created }
+  if (!install && inspected.state === 'missing') return { ...base, after: before, action: 'unchanged', createdContainers: created }
+  const at = index < 0 ? kept.length : index,
+    nextGroups = install ? [...kept.slice(0, at), desiredHookGroup(id), ...kept.slice(at)] : kept
+  const next = { ...read.config, hooks: { ...(hooks || {}), [host.event]: nextGroups } }
+  if (!install && !nextGroups.length && created.includes(host.event)) delete next.hooks[host.event]
+  if (!install && !Object.keys(next.hooks).length && created.includes('hooks')) delete next.hooks
   const remove = !install && createdFile && !Object.keys(next).length,
     after = remove ? null : JSON.stringify(next, null, 2) + '\n'
   return {
-    path: inspected.path,
-    file: host.file,
-    before,
+    ...base,
     after,
-    existed: read.exists,
+    createdContainers: created,
     action: install ? (read.exists ? 'update' : 'create') : remove ? 'delete' : 'remove'
   }
 }

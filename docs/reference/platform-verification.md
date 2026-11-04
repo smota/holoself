@@ -54,7 +54,7 @@ Each platform entry in `platform-verification.json` can carry a `session_start_h
 
 | Platform | Host version | Date | Result | Notes |
 |---|---:|---|---|---|
-| Claude Code | 2.1.318 | 2026-11-04 | pass | Hook in `.claude/settings.local.json` ran in `claude -p`; the reply contained the synthetic marker and, in a second run, the exact context receipt |
+| Claude Code | 2.1.318 | 2026-11-04 | pass (Linux/WSL2; Windows unverified) | Hook in `.claude/settings.local.json` ran in `claude -p`; the reply contained the synthetic marker and the exact context receipt |
 | Codex | 0.166.0 | 2026-11-04 | host-supported-not-installed | `hooks` feature is stable; project `.codex/hooks.json` supports `SessionStart`, but each hook runs only after the user trusts it (`trusted_hash` in `~/.codex/config.toml`) |
 | AGY | 1.5.0 | 2026-11-04 | host-supported-not-installed | The bundled `hooks.json` reference lists `SessionStart` in `<workspace>/.agents/hooks.json` with a JSON `injectSteps` output; workspace hooks load only for trusted folders |
 
@@ -63,10 +63,14 @@ Claude Code run:
 1. A new temporary directory held a synthetic self root whose `profile/identity.md` contained a random marker, and a linked project initialised as a git repository. `HOLOSELF_HOME` pointed there and `HOME` was left alone.
 2. `link add --project <project> --self <self> --lens general --hooks --yes` created `.claude/settings.local.json` with the Holoself entry.
 3. A `holoself` wrapper first on `PATH` set `HOLOSELF_HOOK_AUDIT_LOG`.
-4. `claude -p "<question>" --output-format json --model haiku --permission-mode dontAsk` ran in the project twice: once asking for the marker, once for the context receipt. No tools were used.
-5. Each run added an `ok: true` audit line with a packet id and receipt. The replies were the marker and the receipt hash from the audit line. Files in the self root outside `.holoself/` were unchanged.
+4. `claude -p "<question>" --output-format json --model haiku --permission-mode dontAsk` ran in the project and asked for the marker and the context receipt. No tools were used.
+5. The run added an `ok: true` audit line with a packet id and receipt. The reply was the marker and the receipt hash from the audit line. Files in the self root outside `.holoself/` were unchanged.
+
+The recorded run used the installed command `holoself context --session-start --budget small --format packet --hook holoself-session-start`, which reads the project from `CLAUDE_PROJECT_DIR`. Earlier runs the same day with a shell-expanded `--project "$CLAUDE_PROJECT_DIR"` form also passed. Windows hosts were not tested.
 
 Headless `claude -p` needed no trust prompt or extra setting for the project hook. Interactive sessions were not tested. The run showed that `.claude/settings.local.json` was ignored only through the user's global git ignore file (pattern `**/.claude/settings.local.json`), not by the repository.
+
+Claude Code 2.1.318 persists hook output above 10,000 characters to a file and shows the model a preview (the hook output threshold is `1e4` in the bundled hook runner), so hook packets are capped at 9,000 bytes.
 
 Sources: `claude --version`; Claude Code hooks documentation (`SessionStart` matchers `startup`, `resume`, `clear`, `compact`; command stdout is added to the session context); `codex --version`, `codex features list`, and the hook trust state format in `~/.codex/config.toml`; `agy --version`, `agy changelog`, and the `hooks.json` reference text bundled in the `agy` binary.
 

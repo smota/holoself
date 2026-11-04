@@ -30,7 +30,9 @@ export function fitEnvelope(
 
   // The envelope cap (2x the content budget) bounds the emitted packet on every path, not only --manifest.
   // Under pressure the envelope shrinks first (restrictions grouped by reason, proposals reduced to ids); documents go last.
-  const envelopeCap = ENVELOPE_BYTE_CAPS[budgetName] || ENVELOPE_BYTE_CAPS.standard,
+  // o.envelopeCapBytes is an internal, tighter cap for hosts with an output limit (session-start hook mode); never a CLI flag.
+  const budgetCap = ENVELOPE_BYTE_CAPS[budgetName] || ENVELOPE_BYTE_CAPS.standard,
+    envelopeCap = Number.isInteger(o.envelopeCapBytes) && o.envelopeCapBytes > 0 ? Math.min(budgetCap, o.envelopeCapBytes) : budgetCap,
     dropped = []
   // Size fields are present (with values at least as wide as the final ones) while trimming, so adding them cannot push past the cap.
   const widest = envelopeCap === Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : envelopeCap

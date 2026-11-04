@@ -1,6 +1,6 @@
 // Filesystem and path helpers shared by the ecosystem modules (moved verbatim from ecosystem.mjs).
 import { createHash, randomBytes } from 'node:crypto'
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, realpathSync, renameSync, rmSync, writeSync } from 'node:fs'
+import { closeSync, existsSync, fchmodSync, fsyncSync, lstatSync, mkdirSync, openSync, realpathSync, renameSync, rmSync, writeSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { assertNoLinkBelow, canonicalPath, isWithin, locateBelow, lstat } from '../path-guard.mjs'
 
@@ -25,6 +25,15 @@ export function sleepSync(ms) {
     while (Date.now() < end) {}
   }
 }
+// Permission bits of an existing regular file, else the fallback (for new files).
+export function fileModeOr(path, fallback) {
+  try {
+    const info = lstatSync(path)
+    return info.isFile() ? info.mode & 0o777 : fallback
+  } catch {
+    return fallback
+  }
+}
 export function atomicWrite(targetPath, content, options = {}) {
   const mode = typeof options === 'number' ? options : (options?.mode ?? 0o600)
   const targetDir = dirname(targetPath)
@@ -37,6 +46,8 @@ export function atomicWrite(targetPath, content, options = {}) {
     while (written < buf.length) {
       written += writeSync(fd, buf, written, buf.length - written)
     }
+    // exactMode applies the mode despite the process umask (used to keep an existing file's permissions).
+    if (options?.exactMode && process.platform !== 'win32') fchmodSync(fd, mode)
     fsyncSync(fd)
   } finally {
     closeSync(fd)

@@ -119,7 +119,7 @@ function recordedHook(runtime, id) {
 function applyHookChange(change) {
   if (change.action === 'unchanged') return
   if (change.after === null) rmSync(change.path, { force: true })
-  else atomicWrite(change.path, change.after, { mode: 0o666 })
+  else atomicWrite(change.path, change.after, { mode: change.mode, exactMode: true })
 }
 // Hook entries to remove on deactivation: recorded installations plus any Holoself-owned entry still on disk.
 function hookRemovalTargets(project, runtime, ids = null) {
@@ -133,15 +133,26 @@ function hookRemovalTargets(project, runtime, ids = null) {
         return false
       }
     })
-    .map(id => ({ adapter: id, file: HOOK_HOSTS[id].file, createdFile: recordedHook(runtime, id)?.createdFile === true }))
+    .map(id => ({ adapter: id, file: HOOK_HOSTS[id].file, ...hookRecordOptions(recordedHook(runtime, id)) }))
 }
+function hookRecordOptions(record) {
+  return { createdFile: record?.createdFile === true, createdContainers: Array.isArray(record?.createdContainers) ? record.createdContainers : null }
+}
+// A hook that cannot be removed safely (invalid or unsafe settings) is reported, not fatal: deactivation continues.
 function hookRemovalChanges(project, targets) {
   return targets.map(target => {
     try {
-      return { ...target, change: hookChange(project, target.adapter, false, { createdFile: target.createdFile }) }
+      return { ...target, change: hookChange(project, target.adapter, false, target) }
     } catch (error) {
-      throw new Error(`deactivation preflight failed: ${error.message}`)
+      return { ...target, change: null, message: `session-start hook left in place: ${error.message}; remove the holoself-session-start entry by hand` }
     }
+  })
+}
+function applyHookRemovals(removals, dryRun) {
+  return removals.map(({ adapter, file, change, message }) => {
+    if (!change) return { adapter, file, kind: 'session-start-hook', result: 'unremovable', message }
+    if (!dryRun) applyHookChange(change)
+    return { adapter, file, kind: 'session-start-hook', result: change.action === 'unchanged' ? 'unchanged' : `hook-${change.action}` }
   })
 }
 function generatedSkillOutside(text, info) {
@@ -208,7 +219,7 @@ function preflight(project, plan, options = {}) {
   const runtime = readRuntime(project)
   for (const hook of plan.hooks || []) {
     try {
-      const change = hookChange(project, hook.adapter, hook.install, { createdFile: recordedHook(runtime, hook.adapter)?.createdFile === true })
+      const change = hookChange(project, hook.adapter, hook.install, hookRecordOptions(recordedHook(runtime, hook.adapter)))
       hook.action = change.action
       if (change.action !== 'unchanged' && !plan.writes.includes(hook.file)) plan.writes.push(hook.file)
     } catch (error) {
@@ -279,7 +290,7 @@ export function activateProject(project, link, options = {}) {
     const hookInstallations = []
     for (const hook of plan.hooks) {
       const previous = recordedHook(previousRuntime, hook.adapter),
-        change = hookChange(project, hook.adapter, hook.install, { createdFile: previous?.createdFile === true })
+        change = hookChange(project, hook.adapter, hook.install, hookRecordOptions(previous))
       applyHookChange(change)
       hookResults.push({ ...hook, action: change.action, result: change.action })
       if (hook.install)
@@ -291,6 +302,7 @@ export function activateProject(project, link, options = {}) {
           command: hook.command,
           status: 'installed',
           createdFile: previous ? previous.createdFile === true : !change.existed,
+          createdContainers: change.createdContainers,
           support: hook.support,
           tested_version: hook.tested_version,
           last_verified: hook.last_verified
@@ -444,10 +456,7 @@ function deactivateAdapters(project, ids, options = {}) {
         results.push({ adapter, file, result: 'removed' })
       } else results.push({ adapter, file, result: removeSkill(project, file, options.dryRun) })
     }
-    for (const { adapter, file, change } of hookRemovals) {
-      if (!options.dryRun) applyHookChange(change)
-      results.push({ adapter, file, kind: 'session-start-hook', result: change.action === 'unchanged' ? 'unchanged' : `hook-${change.action}` })
-    }
+    results.push(...applyHookRemovals(hookRemovals, options.dryRun))
     for (const adapter of ids.filter(id => !active.includes(id))) results.push({ adapter, file: null, result: 'not-active' })
     if (!options.dryRun && runtime) {
       const keep = x => !selected.includes(x.id)
@@ -460,7 +469,9 @@ function deactivateAdapters(project, ids, options = {}) {
             ...(runtime.skillInstallations ? { skillInstallations: runtime.skillInstallations.filter(keep) } : {}),
             ...(runtime.skillShims ? { skillShims: runtime.skillShims.filter(keep) } : {}),
             ...(runtime.globalSkillInstallations ? { globalSkillInstallations: runtime.globalSkillInstallations.filter(keep) } : {}),
-            ...(runtime.hookInstallations ? { hookInstallations: runtime.hookInstallations.filter(keep) } : {})
+            ...(runtime.hookInstallations
+              ? { hookInstallations: runtime.hookInstallations.filter(x => keep(x) || hookRemovals.some(r => r.adapter === x.id && !r.change)) }
+              : {})
           },
           null,
           2
@@ -502,10 +513,7 @@ export function deactivateProject(project, options = {}) {
     snapshots = snapshotPaths(project, rels)
   try {
     for (const file of instructionFiles) results.push({ file, result: removeMarker(project, file, options.dryRun) })
-    for (const { adapter, file, change } of hookRemovals) {
-      if (!options.dryRun) applyHookChange(change)
-      results.push({ adapter, file, kind: 'session-start-hook', result: change.action === 'unchanged' ? 'unchanged' : `hook-${change.action}` })
-    }
+    results.push(...applyHookRemovals(hookRemovals, options.dryRun))
     for (const file of skillFiles) {
       const path = safeProjectFile(project, file, 'skill discovery'),
         state = skillState(path)

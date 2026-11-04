@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,6 +9,8 @@ import { activateProject, readRuntime } from '../src/adapters.mjs'
 import { HOOK_HOSTS, hookSupport } from '../src/adapters/hooks.mjs'
 import { run } from '../src/cli.mjs'
 import { readLink } from '../src/link/config.mjs'
+import { applyMcpConfiguration } from '../src/mcp-config.mjs'
+import { appendAuditLine } from '../src/shared/audit-log.mjs'
 
 const BIN = fileURLToPath(new URL('../bin/holoself.mjs', import.meta.url))
 const SETTINGS = '.claude/settings.local.json'
@@ -63,7 +65,8 @@ test('Claude Code SessionStart hook is verified in the matrix and uses no absolu
   assert.equal(hookSupport('codex').support, 'unsupported')
   assert.equal(hookSupport('agy').support, 'unsupported')
   const command = HOOK_HOSTS.claude.command
-  assert.match(command, /^holoself context --project "\$CLAUDE_PROJECT_DIR" --session-start --budget small --format packet --hook holoself-session-start$/)
+  assert.equal(command, 'holoself context --session-start --budget small --format packet --hook holoself-session-start')
+  assert.doesNotMatch(command, /[$"'%]/, 'no shell expansion or quoting')
 })
 
 test('activate installs one owned hook, deactivate restores foreign settings byte-for-byte, repair restores it', async () => {
@@ -264,6 +267,13 @@ test('hook mode prints only the packet and exits 0; it fails open and closed on 
       'no --project'
     )
     silent(runBin([...args, '--bogus-flag'], env), 'bad flag')
+    silent(runBin([...args, '--restricted-host'], env), 'restricted-host refused in hook mode')
+    // The installed command has no --project: the project comes from CLAUDE_PROJECT_DIR, and fails closed without it.
+    const installed = ['context', '--session-start', '--budget', 'small', '--format', 'packet', '--hook', 'holoself-session-start']
+    assert.match(runBin(installed, { ...env, CLAUDE_PROJECT_DIR: project }).stdout, /HOOK-SENTINEL-7/)
+    silent(runBin(installed, { ...env, CLAUDE_PROJECT_DIR: '' }), 'empty CLAUDE_PROJECT_DIR')
+    silent(runBin(installed, { ...env, CLAUDE_PROJECT_DIR: 'project' }), 'relative CLAUDE_PROJECT_DIR')
+    silent(runBin(installed, { ...env, CLAUDE_PROJECT_DIR: join(base, 'unlinked') }), 'unlinked CLAUDE_PROJECT_DIR')
 
     // Revoked link: registry entry no longer active.
     const registry = join(self, '.holoself', 'links.json'),
@@ -292,9 +302,139 @@ test('hook mode prints only the packet and exits 0; it fails open and closed on 
       .map(x => json(x))
       .filter(x => !x.ok)
       .map(x => x.code)
-    for (const code of ['HOOK_ID_UNKNOWN', 'HOOK_PROJECT_REQUIRED', 'LENS_NOT_GRANTED', 'LENS_BINDING_REQUIRED']) assert.ok(codes.includes(code), codes.join(','))
-    assert.equal(codes.length, 6)
+    for (const code of ['HOOK_ID_UNKNOWN', 'HOOK_PROJECT_REQUIRED', 'HOOK_OPTION_REFUSED', 'LINK_REQUIRED', 'LENS_NOT_GRANTED', 'LENS_BINDING_REQUIRED'])
+      assert.ok(codes.includes(code), codes.join(','))
+    assert.equal(codes.length, 10)
   } finally {
     rmSync(base, { recursive: true, force: true })
+  }
+})
+
+const posix = process.platform !== 'win32'
+const mode = file => statSync(file).mode & 0o777
+
+test('settings keep their file mode; files Holoself creates are 0600; MCP configuration keeps its mode', { skip: !posix }, async () => {
+  const { base, project, settings } = await fixture()
+  try {
+    chmodSync(settings, 0o640)
+    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    assert.equal(owned(settings).length, 1)
+    assert.equal(mode(settings), 0o640)
+    await capture(() => run(['link', 'deactivate', '--project', project, '--adapters', 'claude', '--yes']))
+    assert.equal(mode(settings), 0o640)
+    rmSync(settings)
+    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    assert.equal(mode(settings), 0o600)
+    const mcp = join(project, '.mcp.json')
+    writeFileSync(mcp, '{\n  "mcpServers": {}\n}\n')
+    chmodSync(mcp, 0o600)
+    applyMcpConfiguration(project, { platforms: ['claude'] })
+    assert.ok(json(readFileSync(mcp, 'utf8')).mcpServers.holoself)
+    assert.equal(mode(mcp), 0o600)
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('pre-existing empty hook containers survive install and removal byte-for-byte', async () => {
+  for (const original of [
+    JSON.stringify({ hooks: { SessionStart: [] } }, null, 2) + '\n',
+    JSON.stringify({ model: 'x', hooks: {} }, null, 2) + '\n'
+  ]) {
+    const { base, project, settings } = await fixture({ settings: original })
+    try {
+      await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+      assert.equal(owned(settings).length, 1)
+      await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
+      assert.equal(readFileSync(settings, 'utf8'), original)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  }
+})
+
+test('invalid settings make the hook unremovable without stopping deactivation or link remove', async () => {
+  const { base, self, project, settings } = await fixture()
+  try {
+    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    writeFileSync(settings, '{ broken')
+    const out = await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
+    assert.match(out, /\.claude\/settings\.local\.json: unremovable \(session-start hook left in place: .*invalid hook settings/)
+    assert.doesNotMatch(readFileSync(join(project, 'CLAUDE.md'), 'utf8'), /holoself/i)
+    assert.equal(existsSync(join(project, '.holoself', 'runtime.json')), false)
+    assert.equal(readFileSync(settings, 'utf8'), '{ broken')
+    // link remove: local deactivation runs first and an unremovable hook does not block revocation.
+    writeFileSync(settings, FOREIGN)
+    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    writeFileSync(settings, '{ broken')
+    const warn = console.warn
+    let warned = ''
+    console.warn = (...x) => {
+      warned += x.join(' ')
+    }
+    try {
+      await capture(() => run(['link', 'remove', '--project', project, '--yes']))
+    } finally {
+      console.warn = warn
+    }
+    assert.match(warned, /session-start hook left in place/)
+    assert.equal(existsSync(join(project, '.holoself', 'link.yaml')), false)
+    assert.ok(json(readFileSync(join(self, '.holoself', 'links.json'), 'utf8')).links.every(entry => entry.status === 'revoked'))
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('hook packets stay under the host output cap with a large profile and keep the receipt', async () => {
+  const { base, self, project } = await fixture()
+  try {
+    const filler = Array.from({ length: 400 }, (_, i) => `- Synthetic preference line ${i} with enough words to take space.`).join('\n')
+    for (const file of ['identity.md', 'preferences.md', 'work-context.md'])
+      writeFileSync(join(self, 'profile', file), `---\nvisibility: linked-projects\n---\n# ${file}\n\n${filler}\n`)
+    const args = ['context', '--project', project, '--session-start', '--budget', 'small', '--format', 'packet'],
+      env = { HOLOSELF_HOME: self },
+      plain = runBin(args, env),
+      hooked = runBin([...args, '--hook', 'holoself-session-start'], env)
+    assert.ok(Buffer.byteLength(plain.stdout) > 9000, `plain packet ${Buffer.byteLength(plain.stdout)} bytes`)
+    assert.equal(hooked.status, 0)
+    assert.ok(hooked.stdout.length > 0)
+    assert.ok(Buffer.byteLength(hooked.stdout) <= 9000, `hook packet ${Buffer.byteLength(hooked.stdout)} bytes`)
+    assert.match(hooked.stdout, /Context receipt: [0-9a-f]{64}/)
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('shared audit writer: absolute path only, no symlink or hard link, mode 0600, capped', { skip: !posix }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'holoself-audit-'))
+  try {
+    const log = join(dir, 'audit.log'),
+      target = join(dir, 'target.log'),
+      link = join(dir, 'link.log'),
+      hard = join(dir, 'hard.log')
+    appendAuditLine('relative.log', { event: 'x' })
+    assert.equal(existsSync('relative.log'), false)
+    writeFileSync(log, '')
+    chmodSync(log, 0o644)
+    appendAuditLine(log, { event: 'a' })
+    assert.equal(mode(log), 0o600)
+    assert.equal(readFileSync(log, 'utf8'), '{"event":"a"}\n')
+    writeFileSync(target, '')
+    symlinkSync(target, link)
+    appendAuditLine(link, { event: 'b' })
+    assert.equal(readFileSync(target, 'utf8'), '')
+    linkSync(target, hard)
+    appendAuditLine(hard, { event: 'c' })
+    assert.equal(readFileSync(target, 'utf8'), '')
+    for (let i = 0; i < 5; i++) appendAuditLine(log, { event: 'fill', i }, 60)
+    assert.match(readFileSync(log, 'utf8'), /\{"event":"audit_log_capped"\}\n$/)
+    assert.equal(readFileSync(log, 'utf8').match(/audit_log_capped/g).length, 1)
+    // Hook mode uses the same writer: a symlinked HOOK audit log is never written through.
+    const hookLink = join(dir, 'hook.log')
+    symlinkSync(target, hookLink)
+    runBin(['context', '--hook', 'holoself-session-start'], { HOLOSELF_HOOK_AUDIT_LOG: hookLink })
+    assert.equal(readFileSync(target, 'utf8'), '')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 })
