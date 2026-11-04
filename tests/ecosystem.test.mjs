@@ -2,8 +2,8 @@ import { indexEngine } from '../src/catalog/fts.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { access, mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
-import { linkSync, realpathSync } from 'node:fs'
+import { access, lstat, mkdtemp, mkdir, readFile, readdir, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { linkSync, lstatSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { run } from '../src/cli.mjs'
@@ -421,3 +421,165 @@ test('scoped deactivation keeps a canonical file shared with a remaining adapter
   assert.equal(JSON.parse(await capture(()=>run(['link','status','--project',project]))).state,'activated')
   await run(['link','deactivate','--project',project,'--adapters','all,claude','--yes']);await assert.rejects(access(join(project,'.holoself','runtime.json')))
 })
+
+async function snapshotTree(root, omit = new Set(), prefix = '') {
+  const out = {}
+  for (const entry of (await readdir(root, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name
+    if (omit.has(rel)) continue
+    const full = join(root, entry.name), st = await lstat(full)
+    if (st.isSymbolicLink()) out[rel] = `symlink:${await readlink(full)}`
+    else if (st.isDirectory()) Object.assign(out, await snapshotTree(full, omit, rel))
+    else if (st.isFile()) out[rel] = `file:${(await readFile(full)).toString('hex')}`
+  }
+  return out
+}
+
+test('link setup migrates a POSIX symlink legacy mount end to end without touching canonical self contents', async () => {
+  const self = await temp(), project = await temp()
+  await run(['init', '--root', self])
+  await writeFile(join(self, 'README.md'), '# Canonical self root\n\nOwner notes that must never be overwritten.\n')
+  await writeFile(join(self, 'profile', 'identity.md'), '---\nvisibility: linked-projects\nconfidence: confirmed\n---\n# Identity\n\nBuilds regulated AI systems.\n')
+  await writeFile(join(self, 'context', 'career.md'), '---\nvisibility: professional\npublic_safe: false\n---\n# Career\n\nLed 20 engineers in regulated AI.\n')
+  await writeFile(join(project, 'README.md'), '# Legacy project\n')
+  await symlink(self, join(project, '.holoself'), 'dir')
+  await assert.rejects(
+    run(['context', '--project', project, '--json']),
+    error => error.code === 'LEGACY_MOUNT_DETECTED' && /run holoself link setup to migrate to a bounded link/.test(error.message)
+  )
+  const selfContentBefore = await snapshotTree(self, new Set(['.holoself/links.json', 'lenses/bindings.json']))
+  const output = await capture(() => run(['link', 'setup', '--project', project, '--lens', 'professional', '--yes']))
+  assert.match(output, /\[ok\] setup complete; no files deleted or relocated/)
+  const jsonEnd = output.indexOf('\n}\n') + 2, preview = JSON.parse(output.slice(0, jsonEnd))
+  assert.equal(preview.mode, 'legacy-mount-migration')
+  assert.equal(preview.legacy, true)
+  assert.equal(preview.default_lens, 'professional')
+  assert.match(preview.plan_hash, /^[0-9a-f]{64}$/)
+  assert.ok(preview.files.some(file => file.path.endsWith('/.holoself') && file.operation === 'replace junction with directory'))
+  assert.ok(preview.files.some(file => file.path.endsWith('/.holoself/link.yaml') && file.operation === 'write file'))
+  assert.ok(preview.files.some(file => file.path.endsWith('/.holoself/BOOTSTRAP.md') && file.operation === 'write file'))
+  assert.ok(preview.files.some(file => file.path.endsWith('/AGENTS.md') && file.operation === 'write file'))
+  assert.equal((await lstat(join(project, '.holoself'))).isSymbolicLink(), false)
+  assert.equal((await lstat(join(project, '.holoself'))).isDirectory(), true)
+  const selfContentAfter = await snapshotTree(self, new Set(['.holoself/links.json', 'lenses/bindings.json']))
+  assert.deepEqual(selfContentAfter, selfContentBefore)
+  await assert.rejects(access(join(self, 'link.yaml')))
+  await assert.rejects(access(join(self, 'BOOTSTRAP.md')))
+  await assert.rejects(access(join(self, 'runtime.json')))
+  const ctx = JSON.parse(await capture(() => run(['context', '--project', project, '--task', 'regulated AI', '--json'])))
+  assert.equal(ctx.lens, 'professional')
+  assert.ok(ctx.sources.some(source => source.path === 'context/career.md'))
+  const status = JSON.parse(await capture(() => run(['link', 'status', '--project', project])))
+  assert.equal(status.state, 'activated')
+})
+
+test('link setup on a legacy mount supports dry-run and confirmation gates without writing', async () => {
+  const self = await temp(), project = await temp()
+  await run(['init', '--root', self])
+  await writeFile(join(self, 'README.md'), '# Self README\n')
+  await writeFile(join(project, 'README.md'), '# Project README\n')
+  await symlink(self, join(project, '.holoself'), 'dir')
+  const selfBefore = await snapshotTree(self), projectBefore = await snapshotTree(project)
+
+  const dryRunOut = await capture(() => run(['link', 'setup', '--project', project, '--lens', 'professional', '--dry-run']))
+  assert.match(dryRunOut, /"mode": "legacy-mount-migration"/)
+  assert.match(dryRunOut, /"replace junction with directory"/)
+  assert.match(dryRunOut, /\[dry-run\] setup complete; no files deleted or relocated/)
+  assert.deepEqual(await snapshotTree(self), selfBefore)
+  assert.deepEqual(await snapshotTree(project), projectBefore)
+
+  const dryRunYesOut = await capture(() => run(['link', 'setup', '--project', project, '--self', self, '--lens', 'professional', '--dry-run', '--yes']))
+  assert.match(dryRunYesOut, /\[dry-run\] setup complete; no files deleted or relocated/)
+  assert.deepEqual(await snapshotTree(self), selfBefore)
+  assert.deepEqual(await snapshotTree(project), projectBefore)
+
+  await assert.rejects(
+    capture(() => run(['link', 'setup', '--project', project, '--lens', 'professional'])),
+    /Migrate legacy mount .* to a metadata link using professional lens\? Re-run with --yes to confirm\./
+  )
+  assert.deepEqual(await snapshotTree(self), selfBefore)
+  assert.deepEqual(await snapshotTree(project), projectBefore)
+})
+
+test('link setup on a legacy mount preflights before unlinking and restores the symlink on post-unlink failure', async () => {
+  const self = await temp(), project = await temp()
+  await run(['init', '--root', self])
+  await writeFile(join(self, 'README.md'), '# Self README\n')
+  await writeFile(join(project, 'AGENTS.md'), '<!-- holoself-link-start schema=1 -->\nunterminated marker\n')
+  await symlink(self, join(project, '.holoself'), 'dir')
+  const selfBefore = await snapshotTree(self), projectBefore = await snapshotTree(project)
+
+  await assert.rejects(
+    run(['link', 'setup', '--project', project, '--lens', 'professional', '--yes']),
+    /activation preflight failed: .*AGENTS\.md: malformed/
+  )
+  assert.equal((await lstat(join(project, '.holoself'))).isSymbolicLink(), true)
+  assert.deepEqual(await snapshotTree(self), selfBefore)
+  assert.deepEqual(await snapshotTree(project), projectBefore)
+
+  await writeFile(join(project, 'AGENTS.md'), '# Clean project instructions\n')
+  const cleanProjectBefore = await snapshotTree(project)
+  let unlinkedDuringConfigure = false
+  await assert.rejects(
+    capture(() =>
+      run(['link', 'setup', '--project', project, '--lens', 'professional', '--yes'], {
+        afterConfigure: () => {
+          const st = lstatSync(join(project, '.holoself'))
+          unlinkedDuringConfigure = !st.isSymbolicLink() && st.isDirectory()
+          throw new Error('simulated failure after unlinking legacy mount')
+        }
+      })
+    ),
+    /simulated failure after unlinking legacy mount/
+  )
+  assert.equal(unlinkedDuringConfigure, true)
+  assert.equal((await lstat(join(project, '.holoself'))).isSymbolicLink(), true)
+  assert.equal(realpathSync(join(project, '.holoself')), realpathSync(self))
+  assert.deepEqual(await snapshotTree(self), selfBefore)
+  assert.deepEqual(await snapshotTree(project), cleanProjectBefore)
+})
+
+test('link setup refuses legacy mounts whose target is not a canonical self root or mismatches --self', async () => {
+  const self = await temp(), otherSelf = await temp(), notSelf = await temp(), project = await temp()
+  await run(['init', '--root', self])
+  await run(['init', '--root', otherSelf])
+  await writeFile(join(notSelf, 'notes.md'), '# Not a canonical self root\n')
+  await symlink(notSelf, join(project, '.holoself'), 'dir')
+
+  await assert.rejects(
+    run(['link', 'setup', '--project', project, '--yes']),
+    /not a canonical self root/
+  )
+  assert.equal((await lstat(join(project, '.holoself'))).isSymbolicLink(), true)
+
+  await rm(join(project, '.holoself'))
+  await symlink(self, join(project, '.holoself'), 'dir')
+  await assert.rejects(
+    run(['link', 'setup', '--project', project, '--self', otherSelf, '--yes']),
+    /legacy mount target does not match --self/
+  )
+  assert.equal((await lstat(join(project, '.holoself'))).isSymbolicLink(), true)
+  assert.equal(realpathSync(join(project, '.holoself')), realpathSync(self))
+
+  await rm(join(project, '.holoself'))
+  await symlink(join(project, 'missing-target'), join(project, '.holoself'), 'dir')
+  await assert.rejects(
+    run(['link', 'setup', '--project', project, '--yes']),
+    /legacy mount target is not a canonical self root/
+  )
+})
+
+test(
+  'link setup migrates a Windows NTFS junction legacy mount end to end',
+  { skip: process.platform !== 'win32' && 'Windows NTFS junctions require win32' },
+  async () => {
+    const self = await temp(), project = await temp()
+    await run(['init', '--root', self])
+    await symlink(self, join(project, '.holoself'), 'junction')
+    await run(['link', 'setup', '--project', project, '--lens', 'general', '--yes'])
+    assert.equal((await lstat(join(project, '.holoself'))).isSymbolicLink(), false)
+    assert.equal((await lstat(join(project, '.holoself'))).isDirectory(), true)
+    const status = JSON.parse(await capture(() => run(['link', 'status', '--project', project])))
+    assert.equal(status.state, 'activated')
+  }
+)
