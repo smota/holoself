@@ -41,7 +41,7 @@ Headless runs with each host's default settings, recorded the same day, show whi
 
 Codex loads project configuration only for trusted projects, so the script trusts the temporary project for that session only (`-c projects=...`). For AGY, the script uses `--new-project` so that workspace MCP configuration is active.
 
-Options: `--platform claude|codex|agy` (repeatable), `--approval scoped|host-default`, `--timeout-ms`, `--keep` (keep the temporary directory and host output), and `--write-matrix` (update `platform-verification.json`). A `host-default` run is recorded under `host_default`. It never replaces the scoped verification record.
+Options: `--platform claude|codex|agy` (repeatable), `--approval scoped|host-default`, `--timeout-ms`, `--keep` (keep the temporary directory and host output), and `--write-matrix` (update `platform-verification.json`). The temporary directory is removed even when a run fails, unless `--keep` is set. Paths are shell-quoted in the wrapper and escaped as TOML strings in the Codex trust override. Absolute paths in host-reported reasons are replaced with `<local-path>` before they are written to the matrix. A `host-default` run is recorded under `host_default`. It never replaces the scoped verification record.
 
 ## Fixes made during the 2026-11-04 verification
 

@@ -34,6 +34,22 @@ export const SMOKE_TOOLS = [
 ]
 const CLAIM = 'Synthetic smoke claim: the smoke project prefers concise release notes.'
 
+// POSIX single-quoted shell word: safe for any path, including ones that contain quotes or spaces.
+export function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`
+}
+// TOML basic string (also valid as a quoted key): JSON escapes are TOML escapes, plus DEL, which TOML forbids raw.
+export function tomlString(value) {
+  return JSON.stringify(String(value)).replaceAll('\x7f', '\\u007F')
+}
+// Host-reported text is recorded in the committed matrix; strip anything that looks like an absolute local path.
+export function sanitizeReason(text) {
+  return String(text ?? '')
+    .replace(/\\\\[^\s;'"`]+/g, '<local-path>')
+    .replace(/(^|[^A-Za-z])[A-Za-z]:[\\/][^\s;'"`]*/g, '$1<local-path>')
+    .replace(/(^|[\s("'=`:,[{])(?:~)?\/(?:[^\s;'"`)\]},]+\/?)+/g, '$1<local-path>')
+}
+
 function parseArgs(argv) {
   const options = { platforms: [], approval: 'scoped', timeoutMs: 300000, writeMatrix: false, keep: false }
   for (let i = 0; i < argv.length; i++) {
@@ -77,8 +93,16 @@ function changedFiles(before, after) {
 }
 
 // Synthetic self root and linked project. All content is invented for the smoke run.
-function buildFixture(platform) {
+function buildFixture(platform, { keep = false } = {}) {
   const base = mkdtempSync(join(tmpdir(), `holoself-smoke-${platform}-`))
+  try {
+    return populateFixture(base, platform)
+  } catch (error) {
+    if (!keep) rmSync(base, { recursive: true, force: true })
+    throw error
+  }
+}
+function populateFixture(base, platform) {
   const self = join(base, 'self'),
     project = join(base, 'smoke-project'),
     bin = join(base, 'bin'),
@@ -100,7 +124,7 @@ function buildFixture(platform) {
   // The host resolves `holoself` from PATH exactly as configured; a wrapper placed first on the host's PATH
   // adds the audit log without changing the generated client configuration.
   const wrapper = join(bin, 'holoself')
-  writeFileSync(wrapper, `#!/bin/sh\nHOLOSELF_MCP_AUDIT_LOG='${auditLog}' exec '${process.execPath}' '${cli}' "$@"\n`)
+  writeFileSync(wrapper, `#!/bin/sh\nHOLOSELF_MCP_AUDIT_LOG=${shellQuote(auditLog)} exec ${shellQuote(process.execPath)} ${shellQuote(cli)} "$@"\n`)
   chmodSync(wrapper, 0o755)
   const hostEnv = { ...env, PATH: `${bin}${delimiter}${process.env.PATH}` }
   return { base, self, project, auditLog, hostEnv }
@@ -133,7 +157,7 @@ function hostCommand(platform, project, approval) {
   if (platform === 'codex') {
     // Project config layers only load for trusted projects; trust is granted for this temporary project only.
     const args = ['exec', '--skip-git-repo-check', '--ephemeral', '--sandbox', 'read-only', '-C', project, '--json']
-    args.push('-c', `projects={ "${project}" = { trust_level = "trusted" } }`)
+    args.push('-c', `projects={ ${tomlString(project)} = { trust_level = "trusted" } }`)
     if (approval === 'scoped') args.push('-c', 'mcp_servers.holoself.default_tools_approval_mode="approve"')
     args.push(text)
     return { command: 'codex', args, approvalSetting: 'mcp_servers.holoself.default_tools_approval_mode = "approve" (generated default is "writes")' }
@@ -217,8 +241,8 @@ export function judgeTools(audit, report, hostText) {
     if (calls.some(call => call.ok)) tools[tool] = { result: 'pass', reason: `server audit recorded ${calls.length} call(s), ok` }
     else if (calls.length) tools[tool] = { result: 'fail', reason: `server returned error ${calls.map(call => call.error_code).join(', ')}` }
     else if (GATE.test(claimed?.note || '') || (!report && GATE.test(hostText)))
-      tools[tool] = { result: 'blocked', reason: `host did not invoke the server; host reported: ${(claimed?.note || gateExcerpt(hostText)).slice(0, 200)}` }
-    else tools[tool] = { result: 'not-run', reason: claimed?.note ? `host did not invoke the server; host reported: ${claimed.note.slice(0, 200)}` : 'no server call observed' }
+      tools[tool] = { result: 'blocked', reason: `host did not invoke the server; host reported: ${sanitizeReason(claimed?.note || gateExcerpt(hostText)).slice(0, 200)}` }
+    else tools[tool] = { result: 'not-run', reason: claimed?.note ? `host did not invoke the server; host reported: ${sanitizeReason(claimed.note).slice(0, 200)}` : 'no server call observed' }
   }
   // A tool whose required input comes from an earlier tool cannot pass on its own when that tool did not pass.
   for (const [tool, prerequisite] of Object.entries(DEPENDS))
@@ -238,41 +262,43 @@ function pendingProposals(project) {
 }
 
 async function smoke(platform, options) {
-  const fixture = buildFixture(platform)
-  const before = hashTree(fixture.self)
-  const { command, args, approvalSetting } = hostCommand(platform, fixture.project, options.approval)
-  const version = hostVersion(command)
-  process.stderr.write(`[smoke] ${platform} ${version || '(version unknown)'} approval=${options.approval} in ${fixture.base}\n`)
-  const host = await runHost(command, args, { cwd: fixture.project, env: fixture.hostEnv, timeoutMs: options.timeoutMs })
-  writeFileSync(join(fixture.base, 'host-stdout.txt'), host.stdout)
-  writeFileSync(join(fixture.base, 'host-stderr.txt'), host.stderr)
-  const after = hashTree(fixture.self)
-  const audit = readAudit(fixture.auditLog)
-  const report = selfReport(host.stdout.replaceAll('\\"', '"'))
-  const tools = judgeTools(audit, report, `${host.stdout}\n${host.stderr}`)
-  const proposals = pendingProposals(fixture.project)
-  const result = {
-    platform,
-    host_version: version,
-    verified_at: new Date().toISOString().slice(0, 10),
-    approval: options.approval,
-    approval_setting: approvalSetting,
-    discovery: audit.some(entry => entry.event === 'tools/list') ? 'verified' : 'failed',
-    tools,
-    no_canonical_write: before.sha256 === after.sha256,
-    canonical_hash_before: before.sha256,
-    canonical_hash_after: after.sha256,
-    canonical_changed_files: changedFiles(before, after),
-    pending_proposal_files: proposals.length,
-    audit,
-    self_report: report,
-    host_exit: host.status,
-    host_timed_out: host.timedOut,
-    host_ms: host.ms,
-    workdir: options.keep ? fixture.base : null
+  const fixture = buildFixture(platform, { keep: options.keep })
+  try {
+    const before = hashTree(fixture.self)
+    const { command, args, approvalSetting } = hostCommand(platform, fixture.project, options.approval)
+    const version = hostVersion(command)
+    process.stderr.write(`[smoke] ${platform} ${version || '(version unknown)'} approval=${options.approval} in ${fixture.base}\n`)
+    const host = await runHost(command, args, { cwd: fixture.project, env: fixture.hostEnv, timeoutMs: options.timeoutMs })
+    writeFileSync(join(fixture.base, 'host-stdout.txt'), host.stdout)
+    writeFileSync(join(fixture.base, 'host-stderr.txt'), host.stderr)
+    const after = hashTree(fixture.self)
+    const audit = readAudit(fixture.auditLog)
+    const report = selfReport(host.stdout.replaceAll('\\"', '"'))
+    const tools = judgeTools(audit, report, `${host.stdout}\n${host.stderr}`)
+    const proposals = pendingProposals(fixture.project)
+    return {
+      platform,
+      host_version: version,
+      verified_at: new Date().toISOString().slice(0, 10),
+      approval: options.approval,
+      approval_setting: approvalSetting,
+      discovery: audit.some(entry => entry.event === 'tools/list') ? 'verified' : 'failed',
+      tools,
+      no_canonical_write: before.sha256 === after.sha256,
+      canonical_hash_before: before.sha256,
+      canonical_hash_after: after.sha256,
+      canonical_changed_files: changedFiles(before, after),
+      pending_proposal_files: proposals.length,
+      audit,
+      self_report: report,
+      host_exit: host.status,
+      host_timed_out: host.timedOut,
+      host_ms: host.ms,
+      workdir: options.keep ? fixture.base : null
+    }
+  } finally {
+    if (!options.keep) rmSync(fixture.base, { recursive: true, force: true })
   }
-  if (!options.keep) rmSync(fixture.base, { recursive: true, force: true })
-  return result
 }
 
 // A scoped run (tool-scoped host allow rules) is the verification record. A host-default run records which

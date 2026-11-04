@@ -33,6 +33,15 @@ The `holoself` executable must be on the client process PATH. Install `holoself-
 
 The client starts `holoself mcp` as a STDIO subprocess. STDOUT is JSON-RPC only. The process exits with the client session; no service remains running. The server rejects missing, unsafe, or ambiguous project bindings before serving context.
 
+Tool calls run on a small pool of worker threads, so a slow context call never delays `ping`, `initialize`, `tools/list`, or other protocol messages. Responses are matched to requests by JSON-RPC id and can arrive in a different order from the requests. The CLI and MCP still use the same synchronous core.
+
+- At most two tool calls run at once (`HOLOSELF_MCP_CONCURRENCY`, 1–8). Read-only tools may run in parallel. `holoself_proposal_create` writes project state, so it waits for running calls and runs alone.
+- A repeated call with the same tool and arguments goes to the worker that served it before, so `context_receipt.cache.hit` behaves as it would in a single process.
+- `notifications/cancelled` (`params.requestId`) removes a queued call or stops the worker running it. A cancelled call gets no response and never a partial packet. The next call starts on a fresh worker.
+- Each call has a timeout of 60 seconds (`HOLOSELF_MCP_TOOL_TIMEOUT_MS`, 100–3600000). A call that runs past it returns JSON-RPC error `-32001` with `data.code` `TOOL_TIMEOUT`, and its worker is replaced.
+- When the client closes STDIN, the server finishes the calls it already accepted, writes their responses, stops the workers, and exits.
+- `HOLOSELF_MCP_AUDIT_LOG` (absolute path, opt-in) records one line per `tools/list` and `tools/call` with the event, tool name, outcome, and error code (`CANCELLED` and `TOOL_TIMEOUT` included). The server does not follow a symlink at that path, sets the file to mode 0600, and stops appending at 10 MiB after writing one final `{"event":"audit_log_capped"}` line.
+
 Recommended model flow:
 
 1. Call `holoself_status` when link health is uncertain.
