@@ -61,7 +61,8 @@ const runBin = (args, env = {}) =>
   spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', env: { ...process.env, HOLOSELF_ERROR_FORMAT: '', ...env } })
 
 test('Claude Code SessionStart hook is verified in the matrix and uses no absolute path', () => {
-  assert.equal(hookSupport('claude').support, 'verified')
+  assert.equal(hookSupport('claude', undefined, 'linux').support, 'verified')
+  assert.equal(hookSupport('claude', undefined, 'win32').support, 'unverified', 'Windows stays unverified without a Windows record')
   assert.equal(hookSupport('codex').support, 'unsupported')
   assert.equal(hookSupport('agy').support, 'unsupported')
   const command = HOOK_HOSTS.claude.command
@@ -72,25 +73,25 @@ test('Claude Code SessionStart hook is verified in the matrix and uses no absolu
 test('activate installs one owned hook, deactivate restores foreign settings byte-for-byte, repair restores it', async () => {
   const { base, project, settings } = await fixture()
   try {
-    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--yes']))
     const installed = readFileSync(settings, 'utf8')
     assert.equal(owned(settings).length, 1)
     assert.equal(sessionStart(settings)[0].hooks[0].command, 'echo foreign-start')
     assert.deepEqual(json(installed).permissions, { allow: ['Bash(ls)'] })
     assert.deepEqual(json(installed).hooks.PreToolUse, json(FOREIGN).hooks.PreToolUse)
     const runtime = readRuntime(project)
-    assert.equal(runtime.hookPolicy, 'auto')
+    assert.equal(runtime.hookPolicy, 'on')
     assert.deepEqual(
       runtime.hookInstallations.map(x => [x.id, x.file, x.event, x.createdFile]),
       [['claude', SETTINGS, 'SessionStart', false]]
     )
     // Idempotent: a second activation leaves the file untouched.
-    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--yes']))
     assert.equal(readFileSync(settings, 'utf8'), installed)
     const status = json(await capture(() => run(['link', 'status', '--project', project])))
     assert.deepEqual(
       status.session_start_hooks.map(x => [x.id, x.state, x.support]),
-      [['claude', 'installed', 'verified']]
+      [['claude', 'installed', process.platform === 'win32' ? 'unverified' : 'verified']]
     )
     // Dry-run deactivation previews the removal without writing.
     const preview = await capture(() => run(['link', 'deactivate', '--project', project, '--dry-run']))
@@ -99,7 +100,7 @@ test('activate installs one owned hook, deactivate restores foreign settings byt
     await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
     assert.equal(readFileSync(settings, 'utf8'), FOREIGN)
     // Repair after a scoped removal restores the recorded hook.
-    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--yes']))
     writeFileSync(settings, FOREIGN)
     assert.match(json(await capture(() => run(['link', 'doctor', '--project', project]).catch(() => {}))).checks.session_start_hook, /missing/)
     process.exitCode = 0
@@ -113,7 +114,7 @@ test('activate installs one owned hook, deactivate restores foreign settings byt
 test('activation dry-run previews the hook and writes nothing', async () => {
   const { base, project, settings } = await fixture()
   try {
-    const out = await capture(() => run(['link', 'activate', '--project', project, '--dry-run', '--yes']))
+    const out = await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--dry-run', '--yes']))
     assert.match(out, /"session_start_hooks"/)
     assert.match(out, /"action": "update"/)
     assert.equal(readFileSync(settings, 'utf8'), FOREIGN)
@@ -126,7 +127,7 @@ test('activation dry-run previews the hook and writes nothing', async () => {
 test('a settings file Holoself created is removed again; scoped deactivation drops only the claude hook', async () => {
   const { base, project, settings } = await fixture({ settings: null })
   try {
-    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--yes']))
     assert.equal(owned(settings).length, 1)
     assert.equal(readRuntime(project).hookInstallations[0].createdFile, true)
     const out = await capture(() => run(['link', 'deactivate', '--project', project, '--adapters', 'claude', '--yes']))
@@ -176,7 +177,7 @@ test('symlinked, invalid, and mixed hook settings are refused before any write',
     const outside = join(base, 'outside.json')
     writeFileSync(outside, FOREIGN)
     symlinkSync(outside, settings)
-    await assert.rejects(run(['link', 'activate', '--project', project, '--yes']), /activation preflight failed: .*symlink/)
+    await assert.rejects(run(['link', 'activate', '--project', project, '--hooks', '--yes']), /activation preflight failed: .*symlink/)
     assert.equal(existsSync(join(project, 'CLAUDE.md')), false)
     assert.equal(readFileSync(outside, 'utf8'), FOREIGN)
     rmSync(settings)
@@ -188,7 +189,7 @@ test('symlinked, invalid, and mixed hook settings are refused before any write',
     rmSync(join(project, '.claude'))
     mkdirSync(join(project, '.claude'))
     writeFileSync(settings, '{ "hooks": ')
-    await assert.rejects(run(['link', 'activate', '--project', project, '--yes']), /invalid hook settings/)
+    await assert.rejects(run(['link', 'activate', '--project', project, '--hooks', '--yes']), /invalid hook settings/)
     assert.equal(readFileSync(settings, 'utf8'), '{ "hooks": ')
     const mixed = JSON.stringify(
       {
@@ -207,7 +208,7 @@ test('symlinked, invalid, and mixed hook settings are refused before any write',
       2
     )
     writeFileSync(settings, mixed)
-    await assert.rejects(run(['link', 'activate', '--project', project, '--yes']), /shares a group with other hooks/)
+    await assert.rejects(run(['link', 'activate', '--project', project, '--hooks', '--yes']), /shares a group with other hooks/)
     assert.equal(readFileSync(settings, 'utf8'), mixed)
     assert.equal(existsSync(join(project, 'CLAUDE.md')), false)
   } finally {
@@ -222,6 +223,7 @@ test('a failure after the hook write rolls the settings file back', async () => 
       () =>
         activateProject(project, readLink(project), {
           activate: 'auto',
+          hooks: 'on',
           afterHooks: () => {
             assert.equal(owned(settings).length, 1)
             throw new Error('injected failure')
@@ -317,13 +319,13 @@ test('settings keep their file mode; files Holoself creates are 0600; MCP config
   const { base, project, settings } = await fixture()
   try {
     chmodSync(settings, 0o640)
-    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--yes']))
     assert.equal(owned(settings).length, 1)
     assert.equal(mode(settings), 0o640)
     await capture(() => run(['link', 'deactivate', '--project', project, '--adapters', 'claude', '--yes']))
     assert.equal(mode(settings), 0o640)
     rmSync(settings)
-    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--yes']))
     assert.equal(mode(settings), 0o600)
     const mcp = join(project, '.mcp.json')
     writeFileSync(mcp, '{\n  "mcpServers": {}\n}\n')
@@ -343,7 +345,7 @@ test('pre-existing empty hook containers survive install and removal byte-for-by
   ]) {
     const { base, project, settings } = await fixture({ settings: original })
     try {
-      await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+      await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--yes']))
       assert.equal(owned(settings).length, 1)
       await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
       assert.equal(readFileSync(settings, 'utf8'), original)
@@ -356,7 +358,7 @@ test('pre-existing empty hook containers survive install and removal byte-for-by
 test('invalid settings make the hook unremovable without stopping deactivation or link remove', async () => {
   const { base, self, project, settings } = await fixture()
   try {
-    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--yes']))
     writeFileSync(settings, '{ broken')
     const out = await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
     assert.match(out, /\.claude\/settings\.local\.json: unremovable \(session-start hook left in place: .*invalid hook settings/)
@@ -365,7 +367,7 @@ test('invalid settings make the hook unremovable without stopping deactivation o
     assert.equal(readFileSync(settings, 'utf8'), '{ broken')
     // link remove: local deactivation runs first and an unremovable hook does not block revocation.
     writeFileSync(settings, FOREIGN)
-    await capture(() => run(['link', 'activate', '--project', project, '--yes']))
+    await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--yes']))
     writeFileSync(settings, '{ broken')
     const warn = console.warn
     let warned = ''
@@ -436,5 +438,54 @@ test('shared audit writer: absolute path only, no symlink or hard link, mode 060
     assert.equal(readFileSync(target, 'utf8'), '')
   } finally {
     rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('link remove always revokes even when local deactivation is refused', async () => {
+  const { base, self, project } = await fixture()
+  try {
+    await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--yes']))
+    const skill = join(project, '.agents', 'skills', 'holoself', 'SKILL.md'),
+      start = '<!-- holoself-skill-start schema=1 -->'
+    writeFileSync(skill, `${start}\n${start}\nbroken\n`)
+    const warn = console.warn
+    let warned = ''
+    console.warn = (...x) => {
+      warned += x.join(' ') + '\n'
+    }
+    try {
+      await capture(() => run(['link', 'remove', '--project', project, '--yes']))
+    } finally {
+      console.warn = warn
+    }
+    assert.match(warned, /local activation was not fully removed/)
+    assert.ok(!warned.includes(base), 'warning carries no absolute paths')
+    assert.ok(json(readFileSync(join(self, '.holoself', 'links.json'), 'utf8')).links.every(entry => entry.status === 'revoked'))
+    assert.equal(Object.keys(json(readFileSync(join(self, 'lenses', 'bindings.json'), 'utf8')).bindings).length, 0)
+    assert.equal(existsSync(join(project, '.holoself', 'link.yaml')), false)
+    const hook = runBin(['context', '--session-start', '--budget', 'small', '--format', 'packet', '--hook', 'holoself-session-start'], {
+      HOLOSELF_HOME: self,
+      CLAUDE_PROJECT_DIR: project
+    })
+    assert.equal(hook.status, 0)
+    assert.equal(hook.stdout, '')
+    assert.equal(hook.stderr, '')
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('without a runtime record, removal drops containers left empty by the Holoself entry', async () => {
+  const original = JSON.stringify({ model: 'x' }, null, 2) + '\n'
+  const { base, project, settings } = await fixture({ settings: original })
+  try {
+    await capture(() => run(['link', 'activate', '--project', project, '--hooks', '--yes']))
+    assert.equal(owned(settings).length, 1)
+    rmSync(join(project, '.holoself', 'runtime.json'))
+    const out = await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
+    assert.match(out, /settings\.local\.json: hook-remove/)
+    assert.equal(readFileSync(settings, 'utf8'), original)
+  } finally {
+    rmSync(base, { recursive: true, force: true })
   }
 })

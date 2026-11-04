@@ -5,6 +5,7 @@ import { writeBinding } from '../../../bindings.mjs'
 import { isCanonicalSelf, linkPath } from '../../../link/config.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, registryFilePath, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { pathExists } from '../../../shared/fs.mjs'
+import { redactRootPaths } from '../../../shared/redact.mjs'
 import { parseYaml } from '../../../shared/yaml.mjs'
 import { askConfirm } from '../../link-helpers.mjs'
 
@@ -66,9 +67,17 @@ export async function linkRemove(o, sub, project) {
     err.code = 'SOVEREIGN_SELF_UNREACHABLE'
     throw err
   }
-  // Local activation is removed before the registry is revoked, so a refused deactivation leaves the link intact.
-  for (const item of deactivateProject(project, { dryRun: o.dryRun }).filter(x => x.result === 'unremovable'))
-    console.warn(`Warning: ${item.file}: ${item.message}`)
+  // Local activation is removed first, but a refused deactivation never blocks revocation: the registry, binding and
+  // link.yaml are always revoked/removed below, so the hook and every other surface stop resolving context.
+  try {
+    for (const item of deactivateProject(project, { dryRun: o.dryRun }).filter(x => x.result === 'unremovable'))
+      console.warn(`Warning: ${item.file}: ${redactRootPaths(item.message, [project, selfRoot])}`)
+  } catch (error) {
+    console.warn(
+      `Warning: local activation was not fully removed (${redactRootPaths(error.message, [project, selfRoot])}); ` +
+        `the link is still revoked. Fix the file and run 'holoself link deactivate --project <dir> --yes' to clean up.`
+    )
+  }
   if (!selfReachable) {
     console.warn(
       `Warning: sovereign self at ${selfRoot || '(unspecified)'} is unreachable or invalid; local link configuration and adapters removed, ` +

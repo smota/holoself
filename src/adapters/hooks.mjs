@@ -33,10 +33,13 @@ export const HOOK_NOT_INSTALLED = {
     'not installed or verified.'
 }
 
-export function hookSupport(id, matrix = loadVerificationMatrix()) {
+// Windows is reported `unverified` (and not installed by default) unless the record says Windows was verified.
+export function hookSupport(id, matrix = loadVerificationMatrix(), platform = process.platform) {
   if (!HOOK_HOSTS[id]) return { support: 'unsupported', tested_version: null, last_verified: null, reason: HOOK_NOT_INSTALLED[id] || null }
   const record = (matrix?.platforms || []).find(item => item?.platform === id)?.session_start_hook
   const verified = record?.result === 'pass' && record.marker_returned === true && record.hook_ran === true
+  if (verified && platform === 'win32' && record.windows !== 'verified')
+    return { support: 'unverified', tested_version: null, last_verified: null, reason: 'Session-start hook not verified on Windows.' }
   return verified
     ? { support: 'verified', tested_version: record.host_version, last_verified: record.verified_at, reason: null }
     : { support: 'configured', tested_version: null, last_verified: null, reason: 'No recorded native session-start verification.' }
@@ -105,7 +108,8 @@ export function hookChange(project, id, install, { createdFile = false, createdC
     base = { path: inspected.path, file: host.file, before, existed: read.exists, mode }
   const created =
     createdContainers ??
-    (install ? [...(hooks === undefined ? ['hooks'] : []), ...(hooks?.[host.event] === undefined ? [host.event] : [])] : [])
+    // Without a runtime record, containers left empty by removing the Holoself-owned entry are treated as Holoself's.
+    (install ? [...(hooks === undefined ? ['hooks'] : []), ...(hooks?.[host.event] === undefined ? [host.event] : [])] : ['hooks', host.event])
   if (install && inspected.state === 'installed') return { ...base, after: before, action: 'unchanged', createdContainers: created }
   if (!install && inspected.state === 'missing') return { ...base, after: before, action: 'unchanged', createdContainers: created }
   const at = index < 0 ? kept.length : index,
