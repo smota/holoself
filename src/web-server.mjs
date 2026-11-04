@@ -10,8 +10,10 @@ import { loadLensRegistry, removeCustomLens, saveCustomLens, saveLensInstruction
 import { connectorLaunchPlan, launchConnector, loadConnectors, saveConnectorExtension, validateConnector } from './connectors.mjs'
 import { annotationSchema, validateAnnotationMetadata } from './annotations.mjs'
 import { applyCleanupPlan } from './cleanup.mjs'
-import { readLedgerEntries } from './ledger.mjs'
+import { ensureHoloselfGitignore } from './link/config.mjs'
+import { readLedgerEntries, recordServedPacket } from './ledger.mjs'
 import { mcpClientOverview } from './mcp-config.mjs'
+import { contextData } from './retrieval/context.mjs'
 import { canonicalPath, samePath } from './path-guard.mjs'
 import {
   CONFLICT_CODES,
@@ -199,7 +201,10 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
                 : a === 'context'
                   ? ['context', '--project', s.path, '--budget', 'small', '--manifest', '--json']
                   : ['link', a, '--project', s.path]
-        return send(res, 200, { ok: true, data: { output: (await serializeSpaceMutation(() => cli(args))).stdout } })
+        return send(res, 200, {
+          ok: true,
+          data: { output: (await serializeSpaceMutation(() => cli(args, a === 'context' ? { env: { HOLOSELF_LEDGER: 'off' } } : {}))).stdout }
+        })
       }
       if (url.pathname === '/api/bindings' && req.method === 'GET') return send(res, 200, { ok: true, data: readBindings(root) })
       if (url.pathname === '/api/bindings' && ['PUT', 'DELETE'].includes(req.method)) {
@@ -444,7 +449,7 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
                 '--adapter',
                 b.harness
               ],
-              { env: { HOLOSELF_SURFACE: 'workbench', HOLOSELF_HOST: b.harness } }
+              { env: { HOLOSELF_LEDGER: 'off' } }
             )
           ).stdout
         const history = prior
@@ -456,6 +461,28 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
             `${context}${history ? `\n\nRecent conversation:\n${history}` : ''}\n\nUser request:\n${b.message}\n\nDurable ` +
             `self changes require a Holoself proposal and explicit approval.`
         const result = await runHarness(config, prompt, { cwd: project })
+        try {
+          const packetData = contextData({
+            project,
+            lens: b.lens || 'general',
+            task: String(b.message).slice(0, 500),
+            format: 'packet',
+            adapter: b.harness
+          })
+          const servedPacketId = context.match(/^Packet ID:\s*(\S+)/m)?.[1]
+          if (servedPacketId && packetData?.packet_metadata) packetData.packet_metadata.packet_id = servedPacketId
+          recordServedPacket({
+            data: packetData,
+            project,
+            self: root,
+            surface: 'workbench',
+            mode: 'packet',
+            host: b.harness
+          })
+        } catch {}
+        try {
+          ensureHoloselfGitignore(project)
+        } catch {}
         const dir = conversationDir(project)
         mkdirSync(dir, { recursive: true })
         appendFileSync(
@@ -503,23 +530,33 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
               surface: surfaceParam
             })
             for (const entry of items) {
+              const entryMode = entry.mode || 'packet'
+              const counts =
+                entryMode === 'manifest'
+                  ? {
+                      items_listed: entry.counts?.items_listed ?? 0,
+                      restricted: entry.counts?.restricted ?? 0,
+                      envelope_dropped: entry.counts?.envelope_dropped ?? 0
+                    }
+                  : {
+                      documents_delivered: entry.counts?.documents_delivered ?? 0,
+                      restricted: entry.counts?.restricted ?? 0,
+                      envelope_dropped: entry.counts?.envelope_dropped ?? 0
+                    }
               list.push({
                 schema_version: entry.schema_version,
                 served_at: entry.served_at,
                 surface: entry.surface,
+                mode: entryMode,
                 host: entry.host ?? null,
                 lens: entry.lens ?? null,
                 budget: entry.budget ?? 'standard',
                 need: entry.need ?? 'complete',
-                task_sha256: entry.task_sha256 ?? null,
+                task_hmac: entry.task_hmac ?? null,
                 context_hash: entry.context_hash ?? null,
                 packet_id: entry.packet_id ?? null,
                 source_ids: Array.isArray(entry.source_ids) ? entry.source_ids.filter(id => /^hs-[A-Za-z0-9_-]+$/.test(String(id))) : [],
-                counts: {
-                  documents_delivered: entry.counts?.documents_delivered ?? 0,
-                  restricted: entry.counts?.restricted ?? 0,
-                  envelope_dropped: entry.counts?.envelope_dropped ?? 0
-                },
+                counts,
                 total_bytes: entry.total_bytes ?? 0,
                 space_id: target.id,
                 space_name: target.name

@@ -259,12 +259,51 @@ export function writeLink(project, self, lens = 'general', secondary = [], proje
   atomicWrite(linkPath(project), yamlObject(data))
   return { ...data.self_context, default_lens: lens, secondary_lenses: secondary, project_context: data.project_context }
 }
+export const HOLOSELF_GITIGNORE_PATTERNS = [
+  'ledger*.ndjson',
+  'ledger*.lock',
+  'catalog/',
+  'index/',
+  'runtime/',
+  'runtime*',
+  'conversations/',
+  'reports/',
+  'links.json*'
+]
+export function managedGitignore() {
+  return (
+    `# Local-only Holoself runtime, cache, and ledger artifacts (never commit).\n` +
+    `# link.yaml, BOOTSTRAP.md, README.md, and proposals/ remain trackable.\n` +
+    `${HOLOSELF_GITIGNORE_PATTERNS.join('\n')}\n`
+  )
+}
+export function ensureHoloselfGitignore(baseDir) {
+  const resolvedBase = resolve(baseDir),
+    root = join(resolvedBase, '.holoself')
+  ensureDir(root)
+  const gitignorePath = assertContainedPath(resolvedBase, join(root, '.gitignore'), 'holoself .gitignore'),
+    st = lstatSync(gitignorePath, { throwIfNoEntry: false })
+  if (st && (st.isSymbolicLink() || !st.isFile())) throw new Error(`${gitignorePath} is not a regular file; refusing to modify`)
+  if (!st) {
+    atomicWrite(gitignorePath, managedGitignore())
+    return gitignorePath
+  }
+  const existing = readFileSync(gitignorePath, 'utf8'),
+    present = new Set(existing.split(/\r?\n/).map(line => line.trim())),
+    missing = HOLOSELF_GITIGNORE_PATTERNS.filter(pattern => !present.has(pattern))
+  if (missing.length) {
+    const prefix = existing.endsWith('\n') || !existing.length ? existing : `${existing}\n`
+    atomicWrite(gitignorePath, `${prefix}${missing.join('\n')}\n`)
+  }
+  return gitignorePath
+}
 export function managedReadme() {
   return (
     `# Linked Holoself context\n\nProject owns artifacts. Linked self owns approved reusable knowledge.\n\n` +
     `- \`link.yaml\` grants read access and proposal delivery; it never copies self files.\n` +
-    `- \`index/\` is local, rebuildable acceleration data. Markdown remains source of truth.\n` +
-    `- \`proposals/\` and \`reports/\` are review artifacts.\n`
+    `- \`index/\` and \`catalog/\` are local, rebuildable acceleration data. Markdown remains source of truth.\n` +
+    `- \`proposals/\` contains review artifacts that may be tracked in git.\n` +
+    `- \`.gitignore\` keeps local-only artifacts (\`ledger*.ndjson\`, \`catalog/\`, \`index/\`, \`runtime*\`, \`conversations/\`, \`reports/\`) out of git.\n`
   )
 }
 export function inspectLinkCollisions(project) {
@@ -279,6 +318,9 @@ export function inspectLinkCollisions(project) {
       if (rs.isSymbolicLink() || !rs.isFile()) throw new Error(`${readme} is not a regular file; refusing to replace`)
       if (readFileSync(readme, 'utf8') !== managedReadme()) collisions.push(readme)
     }
+    const gitignore = join(root, '.gitignore'),
+      gs = lstatSync(gitignore, { throwIfNoEntry: false })
+    if (gs && (gs.isSymbolicLink() || !gs.isFile())) throw new Error(`${gitignore} is not a regular file; refusing to replace`)
     const link = linkPath(project)
     if (pathExists(link)) collisions.push(link)
     for (const dir of ['catalog', 'proposals', 'reports']) {
@@ -297,6 +339,7 @@ export function createLinkDirs(project, { preserveReadme = false, purgeLegacy = 
     try {
       purgeLegacyIndex(project)
     } catch {}
+  ensureHoloselfGitignore(project)
   const readme = join(root, 'README.md')
   if (!pathExists(readme)) atomicWrite(readme, managedReadme())
   else if (!preserveReadme && readFileSync(readme, 'utf8') !== managedReadme()) throw new Error(`${readme} exists with user content; refusing to replace`)

@@ -42,6 +42,7 @@ export function hookContext(o, env = process.env) {
     data,
     project,
     surface: 'hook',
+    mode: 'packet',
     env,
     onFailure: err =>
       appendAuditLine(env.HOLOSELF_HOOK_AUDIT_LOG, {

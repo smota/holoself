@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { catalogBuildWarnings, ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
 import { seedLensDefinitions } from './lenses.mjs'
+import { ensureHoloselfGitignore } from './link/config.mjs'
 import { VERSION } from './version.mjs'
 import { mcpPlatformSupport } from './mcp-verification.mjs'
 import { buildLensMigrationPlan, buildTransformationPlan, applyTransformationPlan } from './maintenance.mjs'
@@ -361,11 +362,17 @@ export async function run(argv) {
     for (const state of ['pending', 'approved', 'rejected', 'deferred', 'superseded']) ensureDir(join(root, 'proposals', state))
     ensureDir(join(root, 'contribs', 'local'))
     ensureDir(join(root, 'profile'))
+    ensureHoloselfGitignore(root)
     ensureDir(join(root, '.holoself', 'runtime'))
     const cursorKeyPath = join(root, '.holoself', 'runtime', '.cursor.key')
     if (!existsSync(cursorKeyPath))
       try {
         writeFileSync(cursorKeyPath, randomBytes(32), { mode: 0o600 })
+      } catch {}
+    const ledgerKeyPath = join(root, '.holoself', 'runtime', 'ledger.key')
+    if (!existsSync(ledgerKeyPath))
+      try {
+        writeFileSync(ledgerKeyPath, randomBytes(32), { mode: 0o600 })
       } catch {}
     if (!existsSync(join(root, 'topics', '.current'))) atomicWrite(join(root, 'topics', '.current'), '', { mode: 0o666 })
     if (!existsSync(join(root, 'reference', 'README.md')))

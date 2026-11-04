@@ -322,10 +322,12 @@ export function createMcpSession({
   const idKey = id => JSON.stringify(id)
   function recordMcpLedger(name, packetData) {
     if (!CONTEXT_TOOLS.has(name) || !packetData) return
+    const mode = name === `${TOOL_PREFIX}context_manifest` ? 'manifest' : name === `${TOOL_PREFIX}context_get` ? 'get' : 'packet'
     recordServedPacket({
       data: packetData,
       project,
       surface: 'mcp',
+      mode,
       clientInfoName: clientHost,
       onFailure: err => log({ at: new Date().toISOString(), event: 'ledger/write', tool: name, ok: false, error_code: err.code })
     })
