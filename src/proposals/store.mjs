@@ -395,7 +395,7 @@ export function applyClaimChange(text, rel, change, p, view = null) {
     `- Retirement evidence: ${change.evidence}\n- Retirement provenance: ${p.provenance.join('; ')}\n${close}`
   return { after: splice(marked), claim_id: old.claim_id, before_block: old.raw, after_block: marked, preview: diffLines([old.raw], [marked]), visibility_change: null }
 }
-function emptyTarget(self) {
+export function emptyTarget(self) {
   return `---\naccess_lenses: [${loadLensRegistry(self)
     .lenses.map(lens => lens.id)
     .join(', ')}]\ndisclosure: review-required\nsensitivity: personal\ndocument_role: evidence\n---\n`
