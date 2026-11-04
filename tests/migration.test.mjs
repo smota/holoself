@@ -13,7 +13,7 @@ import {
   applyFrontmatterModifications
 } from '../src/migration.mjs'
 import { accessLenses, allowedDocument, disclosure, publicationAllowed, visibility, PUBLICATION_ADAPTERS } from '../src/policy/access.mjs'
-import { frontmatter } from '../src/policy/privacy-fields.mjs'
+import { canonicalPrivacyMetadataErrors, frontmatter } from '../src/policy/privacy-fields.mjs'
 
 async function temp(prefix = 'holoself-migration-') {
   return mkdtemp(join(tmpdir(), prefix))
@@ -260,7 +260,7 @@ test('regression (a): runtime-private doc with access_lenses: [] or present-but-
   const self = await temp()
   await mkdir(join(self, 'context'), { recursive: true })
 
-  // Doc with visibility: linked-projects and access_lenses: [] is restricted to private by runtime frontmatter()
+  // Doc with visibility: linked-projects and access_lenses: [] is excluded by the catalog before migration
   const docPath = join(self, 'context', 'empty-lenses.md')
   await writeFile(docPath, '---\nvisibility: linked-projects\naccess_lenses: []\n---\n# Restricted\n')
 
@@ -271,13 +271,34 @@ test('regression (a): runtime-private doc with access_lenses: [] or present-but-
   const emptyVisPath = join(self, 'context', 'empty-vis.md')
   await writeFile(emptyVisPath, '---\nvisibility: ""\n---\n# Empty Visibility\n')
 
-  const plan = planPolicyMigration(self, { dryRun: true })
+  // By default, catalog-excluded documents are skipped with a warning and listed under activations
+  const defaultPlan = planPolicyMigration(self, { dryRun: true })
+  assert.equal(defaultPlan.summary.non_amplification_verified, true)
+  assert.equal(defaultPlan.summary.modified_files, 0)
+  assert.equal(defaultPlan.activations.length, 3)
+  assert.equal(defaultPlan.warnings.length, 3)
+  for (const rel of ['context/empty-lenses.md', 'context/empty-block.md', 'context/empty-vis.md']) {
+    const act = defaultPlan.activations.find(a => a.path === rel)
+    assert.ok(act, `expected activation for ${rel}`)
+    assert.equal(act.skipped, true)
+    assert.deepEqual(act.lenses, ['private'])
+    assert.deepEqual(act.adapters, ['generic'])
+    assert.equal(act.publication_allowed, false)
+    const entry = defaultPlan.entries.find(e => e.path === rel)
+    assert.ok(entry, `expected entry for ${rel}`)
+    assert.equal(entry.needs_migration, false)
+  }
+
+  // With confirmActivation: true, they are migrated to private-only restricted metadata and never grant other lenses
+  const plan = planPolicyMigration(self, { dryRun: true, confirmActivation: true })
   assert.equal(plan.summary.non_amplification_verified, true)
   assert.deepEqual(plan.summary.coverage_loss, {})
+  assert.notEqual(plan.plan_id, defaultPlan.plan_id)
 
   for (const rel of ['context/empty-lenses.md', 'context/empty-block.md', 'context/empty-vis.md']) {
     const entry = plan.entries.find(e => e.path === rel)
     assert.ok(entry, `expected entry for ${rel}`)
+    assert.equal(entry.needs_migration, true)
     assert.deepEqual(entry.after_metadata.access_lenses, ['private'])
     assert.equal(entry.after_metadata.read_scope, 'restricted')
     const afterParsed = frontmatter(entry.after_text, { tolerant: true })
@@ -303,6 +324,11 @@ test('regression (a): runtime-private doc with access_lenses: [] or present-but-
     assert.deepEqual(meet.access_lenses, ['private'])
     assert.equal(meet.read_scope, 'restricted')
     assert.equal(meet.disclosure, 'internal-only')
+
+    // Even migrating an excluded doc to private-only counts as DENY -> ALLOW unless confirmActivation is set
+    const toPrivate = verifyNonAmplification(emptyMeta, meet)
+    assert.equal(toPrivate.valid, false)
+    assert.match(toPrivate.violation, /DENY -> ALLOW/)
 
     // Widening an empty-lenses or invalid doc to general lens must be refused
     const widened = verifyNonAmplification(emptyMeta, {
@@ -402,10 +428,16 @@ test('verifyNonAmplification evaluates custom lenses from registry across all ca
     })
   )
 
+  const baseCanonical = {
+    disclosure: 'internal-only',
+    sensitivity: 'personal',
+    document_role: 'content'
+  }
+
   // Granting custom lens 'coaching' when it was not granted before is refused as amplification
   const customWidened = verifyNonAmplification(
-    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'private'] },
-    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
+    { ...baseCanonical, visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'private'] },
+    { ...baseCanonical, visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
     { selfRoot: self }
   )
   assert.equal(customWidened.valid, false)
@@ -413,8 +445,8 @@ test('verifyNonAmplification evaluates custom lenses from registry across all ca
 
   // Preserving custom lens 'coaching' has 0 widening and 0 coverage loss
   const customExact = verifyNonAmplification(
-    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
-    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
+    { ...baseCanonical, visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
+    { ...baseCanonical, visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
     { selfRoot: self }
   )
   assert.equal(customExact.valid, true)
@@ -422,8 +454,8 @@ test('verifyNonAmplification evaluates custom lenses from registry across all ca
 
   // Removing custom lens 'coaching' is reported as coverage loss for 'coaching'
   const customNarrowed = verifyNonAmplification(
-    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
-    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'private'] },
+    { ...baseCanonical, visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
+    { ...baseCanonical, visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'private'] },
     { selfRoot: self }
   )
   assert.equal(customNarrowed.valid, true)
@@ -455,6 +487,8 @@ test('regression (d): synthetic exhaustive check over visibility x public_safe x
 
   let totalCombinations = 0
   let exactLegacyCombinations = 0
+  let appliedPlans = 0
+  let skippedActivations = 0
   let planWidened = 0
   let exactWidened = 0
   let exactFalseCoverageLoss = 0
@@ -477,14 +511,27 @@ test('regression (d): synthetic exhaustive check over visibility x public_safe x
               lines.push('---', '# Synthetic Doc', '')
               const rawText = lines.join('\n')
 
-              // Parse BEFORE exactly as catalog parses it
+              // Check whether the catalog excludes BEFORE
+              let beforeExcluded = false
+              try {
+                const strictParsed = frontmatter(rawText, { tolerant: false, registry })
+                beforeExcluded = canonicalPrivacyMetadataErrors(strictParsed.metadata, registry).length > 0
+              } catch {
+                beforeExcluded = true
+              }
+
+              // Parse BEFORE as tolerant fallback for meet computation
               const beforeParsed = frontmatter(rawText, { tolerant: true, registry })
               const beforeMeta = beforeParsed.metadata
 
-              // 1. Check the migration plan the tool would compute and apply
               const rawParsed = frontmatter(rawText, { tolerant: true, validatePrivacy: false, registry })
               const rawMeta = rawParsed.metadata
-              const wasRestricted = beforeParsed.warnings.some(w => w.includes('restricted'))
+              const wasRestricted =
+                beforeParsed.warnings.some(w => w.includes('restricted')) ||
+                (rawMeta.visibility === 'public-safe' && rawMeta.public_safe === false) ||
+                ((rawMeta.sensitivity === 'restricted' || rawMeta.read_scope === 'restricted') &&
+                  Array.isArray(rawMeta.access_lenses) &&
+                  rawMeta.access_lenses.some(l => l !== 'private'))
               const meetMeta = computeMeetMetadata(beforeMeta, 'self', registry)
 
               const changes = {}
@@ -500,12 +547,34 @@ test('regression (d): synthetic exhaustive check over visibility x public_safe x
                 if (rawMeta.sensitivity !== undefined && rawMeta.sensitivity !== meetMeta.sensitivity) changes.sensitivity = meetMeta.sensitivity
                 if (rawMeta.document_role !== undefined && rawMeta.document_role !== meetMeta.document_role) changes.document_role = meetMeta.document_role
               }
+              if (Object.keys(changes).length > 0 || beforeExcluded) {
+                for (const key of ['access_lenses', 'disclosure', 'sensitivity', 'document_role', 'read_scope']) {
+                  if (!Object.hasOwn(changes, key) && rawMeta[key] === undefined && meetMeta[key] !== undefined) {
+                    changes[key] = meetMeta[key]
+                  }
+                }
+              }
 
-              const afterText = Object.keys(changes).length > 0 ? applyFrontmatterModifications(rawText, changes) : rawText
-              const afterParsed = frontmatter(afterText, { tolerant: true, registry })
-              const afterMeta = afterParsed.metadata
+              const proposedAfterText = Object.keys(changes).length > 0 ? applyFrontmatterModifications(rawText, changes) : rawText
+              const proposedAfterParsed = frontmatter(proposedAfterText, { tolerant: true, registry })
+              const proposedAfterMeta = proposedAfterParsed.metadata
 
-              const planCheck = verifyNonAmplification(beforeMeta, afterMeta, { registry })
+              if (beforeExcluded) {
+                skippedActivations++
+                // Default plan skips excluded documents, so verifyNonAmplification on the proposed activation detects DENY -> ALLOW
+                const rawActivationCheck = verifyNonAmplification(rawText, proposedAfterText, { registry })
+                assert.equal(rawActivationCheck.valid, false, 'activating an excluded document without confirmActivation must be flagged as DENY -> ALLOW')
+                // Even when confirmed, the proposed activation must never widen beyond the conservative meet baseline
+                const confirmedCheck = verifyNonAmplification(beforeMeta, proposedAfterMeta, { registry, confirmActivation: true })
+                if (!confirmedCheck.valid) planWidened++
+                continue
+              }
+
+              appliedPlans++
+              const afterText = proposedAfterText
+              const afterMeta = proposedAfterMeta
+
+              const planCheck = verifyNonAmplification(rawText, afterText, { registry })
               if (!planCheck.valid) planWidened++
 
               // Directly verify with runtime allowedDocument & publicationAllowed across all lenses, callers, and adapters
@@ -524,20 +593,24 @@ test('regression (d): synthetic exhaustive check over visibility x public_safe x
                 }
               }
 
-              // 2. Check exact runtime mapping: must have 0 widened and 0 false coverage loss
+              // 2. Check exact runtime mapping on included docs: must have 0 widened and 0 false coverage loss
+              const exactReadScope = ['shared', 'local', 'restricted'].includes(beforeMeta.read_scope)
+                ? beforeMeta.read_scope
+                : visibility(beforeMeta) === 'private'
+                  ? 'restricted'
+                  : 'shared'
               const exactAfter = {
                 ...beforeMeta,
-                read_scope: ['shared', 'local', 'restricted'].includes(beforeMeta.read_scope)
-                  ? beforeMeta.read_scope
-                  : visibility(beforeMeta) === 'private'
-                    ? 'restricted'
-                    : 'shared',
-                access_lenses: accessLenses(beforeMeta),
+                read_scope: exactReadScope,
+                access_lenses:
+                  beforeMeta.sensitivity === 'restricted' || exactReadScope === 'restricted'
+                    ? ['private']
+                    : accessLenses(beforeMeta),
                 disclosure: disclosure(beforeMeta),
                 sensitivity: beforeMeta.sensitivity || 'personal',
                 document_role: beforeMeta.document_role || 'content'
               }
-              const exactCheck = verifyNonAmplification(beforeMeta, exactAfter, { registry })
+              const exactCheck = verifyNonAmplification(rawText, exactAfter, { registry })
               if (!exactCheck.valid) exactWidened++
               if (Object.keys(exactCheck.coverageLoss).length > 0) exactFalseCoverageLoss++
 
@@ -552,7 +625,9 @@ test('regression (d): synthetic exhaustive check over visibility x public_safe x
   }
 
   assert.equal(totalCombinations, 4320)
-  assert.equal(exactLegacyCombinations, 1728)
+  assert.equal(appliedPlans + skippedActivations, 4320)
+  assert.ok(appliedPlans > 0)
+  assert.ok(skippedActivations > 0)
   assert.equal(planWidened, 0)
   assert.equal(exactWidened, 0)
   assert.equal(exactFalseCoverageLoss, 0)
@@ -620,4 +695,153 @@ test('regression (e): applyFrontmatterModifications anchors keys at column 0 to 
     'applyFrontmatterModifications must not rewrite nested line when modifying visibility'
   )
   assert.match(directModified, /^visibility:\s*public-safe/m)
+})
+
+test('catalog-excluded documents require --confirm-activation while already-included documents migrate normally', async () => {
+  const self = await temp()
+  await run(['init', '--root', self])
+
+  // 1. Legacy incomplete/invalid visibility-only and partial documents excluded by the catalog
+  const legacyCareerPath = join(self, 'context', 'legacy-career.md')
+  const legacyCareerContent = '---\nvisibility: career\n---\n# Legacy Career\nExcluded by invalid legacy visibility.\n'
+  await writeFile(legacyCareerPath, legacyCareerContent)
+
+  const partialLegacyPath = join(self, 'context', 'partial-legacy.md')
+  const partialLegacyContent =
+    '---\nvisibility: professional\naccess_lenses: [general, professional, interview, private]\n---\n# Partial Legacy\nExcluded by missing disclosure, sensitivity, document_role.\n'
+  await writeFile(partialLegacyPath, partialLegacyContent)
+
+  const legacyPublicSafeOnlyPath = join(self, 'context', 'public-safe-only.md')
+  const legacyPublicSafeOnlyContent = '---\npublic_safe: true\n---\n# Public Safe Only\nExcluded because access_lenses and visibility are both missing.\n'
+  await writeFile(legacyPublicSafeOnlyPath, legacyPublicSafeOnlyContent)
+
+  // 2. Invalid-metadata document excluded by the catalog
+  const invalidMetaPath = join(self, 'context', 'invalid-meta.md')
+  const invalidMetaContent = '---\nvisibility: linked-projects\ndisclosure: invalid-value\n---\n# Invalid Disclosure\nExcluded by invalid disclosure value.\n'
+  await writeFile(invalidMetaPath, invalidMetaContent)
+
+  // 3. Already-included document with valid legacy visibility
+  const includedDocPath = join(self, 'context', 'included-doc.md')
+  const includedDocContent = '---\nvisibility: private\n---\n# Already Included\nIncluded in catalog before migration.\n'
+  await writeFile(includedDocPath, includedDocContent)
+
+  // Verify verifyNonAmplification treats each excluded document as denied everywhere before migration
+  for (const excludedText of [legacyCareerContent, partialLegacyContent, legacyPublicSafeOnlyContent, invalidMetaContent]) {
+    const check = verifyNonAmplification(excludedText, {
+      access_lenses: ['private'],
+      read_scope: 'restricted',
+      disclosure: 'internal-only',
+      sensitivity: 'restricted',
+      document_role: 'content'
+    })
+    assert.equal(check.valid, false)
+    assert.match(check.violation, /DENY -> ALLOW/)
+  }
+
+  // Default CLI plan: lists excluded docs under activations, emits warnings, skips them, and migrates included docs
+  const oldErr = console.error
+  let stderrOut = ''
+  console.error = (...x) => {
+    stderrOut += x.join(' ') + '\n'
+  }
+  let defaultPlanOut
+  try {
+    defaultPlanOut = JSON.parse(await capture(() => run(['migrate', 'policy', '--root', self])))
+  } finally {
+    console.error = oldErr
+  }
+
+  assert.equal(defaultPlanOut.confirm_activation, false)
+  assert.equal(defaultPlanOut.activations.length, 4)
+  assert.equal(defaultPlanOut.warnings.length, 4)
+  assert.match(stderrOut, /\[warn\].*context\/legacy-career\.md.*--confirm-activation/)
+  assert.match(stderrOut, /\[warn\].*context\/partial-legacy\.md.*--confirm-activation/)
+  assert.match(stderrOut, /\[warn\].*context\/invalid-meta\.md.*--confirm-activation/)
+
+  const partialActivation = defaultPlanOut.activations.find(a => a.path === 'context/partial-legacy.md')
+  assert.ok(partialActivation)
+  assert.equal(partialActivation.skipped, true)
+  assert.deepEqual(partialActivation.lenses, ['general', 'professional', 'interview', 'private'])
+  assert.deepEqual(partialActivation.adapters, ['generic'])
+  assert.equal(partialActivation.publication_allowed, false)
+
+  const invalidActivation = defaultPlanOut.activations.find(a => a.path === 'context/invalid-meta.md')
+  assert.ok(invalidActivation)
+  assert.equal(invalidActivation.skipped, true)
+  assert.deepEqual(invalidActivation.lenses, ['private'])
+  assert.deepEqual(invalidActivation.adapters, ['generic'])
+
+  // Apply default plan (with --confirm-narrowing for seeded docs): included-doc.md is migrated, excluded docs are untouched
+  await capture(() => run(['migrate', 'policy', '--root', self, '--apply', defaultPlanOut.plan_id, '--confirm-narrowing']))
+  assert.equal(await readFile(legacyCareerPath, 'utf8'), legacyCareerContent)
+  assert.equal(await readFile(partialLegacyPath, 'utf8'), partialLegacyContent)
+  assert.equal(await readFile(legacyPublicSafeOnlyPath, 'utf8'), legacyPublicSafeOnlyContent)
+  assert.equal(await readFile(invalidMetaPath, 'utf8'), invalidMetaContent)
+  const migratedIncluded = await readFile(includedDocPath, 'utf8')
+  assert.match(migratedIncluded, /access_lenses: \[private\]/)
+  assert.match(migratedIncluded, /read_scope: restricted/)
+
+  // Revert default plan so we can compare plan_id digest with and without --confirm-activation on identical disk state
+  await capture(() => run(['migrate', 'policy', '--root', self, '--revert', defaultPlanOut.plan_id]))
+  const recheckDefaultPlan = planPolicyMigration(self, { dryRun: true })
+  assert.equal(recheckDefaultPlan.plan_id, defaultPlanOut.plan_id)
+
+  // Plan with --confirm-activation: digest changes and activations have skipped: false
+  const confirmedPlanOut = JSON.parse(await capture(() => run(['migrate', 'policy', '--root', self, '--confirm-activation'])))
+  assert.equal(confirmedPlanOut.confirm_activation, true)
+  assert.notEqual(confirmedPlanOut.plan_id, defaultPlanOut.plan_id, 'plan digest must change when --confirm-activation is enabled')
+  assert.equal(confirmedPlanOut.activations.length, 4)
+  for (const act of confirmedPlanOut.activations) {
+    assert.equal(act.skipped, false)
+  }
+
+  // Tampering with confirm_activation in saved plan file must fail digest verification
+  const savedPlanPath = confirmedPlanOut.plan_file
+  const savedPlan = JSON.parse(await readFile(savedPlanPath, 'utf8'))
+  const tamperedPlan = { ...savedPlan, confirm_activation: false }
+  assert.throws(() => applyPolicyMigration(self, tamperedPlan, { confirmNarrowing: true }), /migration plan digest mismatch/)
+
+  // Apply with --confirm-activation: all 4 excluded documents are now migrated on disk to valid canonical metadata
+  const applyConfirmedOut = JSON.parse(
+    await capture(() => run(['migrate', 'policy', '--root', self, '--apply', confirmedPlanOut.plan_id, '--confirm-narrowing', '--confirm-activation']))
+  )
+  assert.equal(applyConfirmedOut.status, 'applied')
+  assert.equal(applyConfirmedOut.activation_confirmed, true)
+
+  for (const p of [legacyCareerPath, partialLegacyPath, legacyPublicSafeOnlyPath, invalidMetaPath]) {
+    const updatedText = await readFile(p, 'utf8')
+    const strictParsed = frontmatter(updatedText, { tolerant: false })
+    assert.deepEqual(canonicalPrivacyMetadataErrors(strictParsed.metadata), [])
+  }
+  assert.match(await readFile(partialLegacyPath, 'utf8'), /access_lenses: \[general, professional, interview, private\]/)
+  assert.match(await readFile(invalidMetaPath, 'utf8'), /access_lenses: \[private\]/)
+  assert.match(await readFile(legacyCareerPath, 'utf8'), /access_lenses: \[private\]/)
+})
+
+test('catalog exclusion check respects _policy.yaml inheritance and still refuses widening on already-included documents', async () => {
+  const self = await temp()
+  await run(['init', '--root', self])
+
+  // Directory with a broken _policy.yaml: incomplete document underneath is catalog-excluded and treated as activation
+  const brokenDir = join(self, 'topics', 'broken-policy')
+  await mkdir(brokenDir, { recursive: true })
+  await writeFile(join(brokenDir, '_policy.yaml'), 'unknown_key: invalid\n')
+  const excludedUnderBroken = join(brokenDir, 'incomplete.md')
+  await writeFile(excludedUnderBroken, '---\ndocument_role: evidence\n---\n# Incomplete Under Broken Policy\n')
+
+  const plan = planPolicyMigration(self, { dryRun: true })
+  const act = plan.activations.find(a => a.path === 'topics/broken-policy/incomplete.md')
+  assert.ok(act, 'document under broken _policy.yaml lacking required fields must be treated as catalog-excluded activation')
+  assert.equal(act.skipped, true)
+  assert.deepEqual(act.lenses, ['private'])
+  assert.deepEqual(act.adapters, ['generic'])
+
+  // Other widening (DENY -> ALLOW on an already-included document) is still refused even when confirmActivation: true
+  const widenedCheck = verifyNonAmplification(
+    '---\nvisibility: private\n---\n# Included Private\n',
+    '---\nvisibility: private\nread_scope: shared\naccess_lenses: [general, private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Widened\n',
+    { selfRoot: self, confirmActivation: true }
+  )
+  assert.equal(widenedCheck.valid, false)
+  assert.match(widenedCheck.violation, /DENY -> ALLOW/)
 })

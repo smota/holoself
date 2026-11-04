@@ -156,7 +156,18 @@ export const COMMAND_FLAGS = {
   'link backfill': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--all', '--lenses'],
   'link prune': [...ROOT_FLAGS, '--self'],
   'link skill migrate-global': [...PROJECT_FLAGS, '--platform', '--instructions', '--skill-home', '--force', '--dry-run', ...CONFIRM_FLAGS],
-  'migrate policy': [...ROOT_FLAGS, '--self', '--apply', '--revert', '--confirm-narrowing', '--allow-partial', '--include-linked', '--dry-run', ...JSON_FLAGS],
+  'migrate policy': [
+    ...ROOT_FLAGS,
+    '--self',
+    '--apply',
+    '--revert',
+    '--confirm-narrowing',
+    '--confirm-activation',
+    '--allow-partial',
+    '--include-linked',
+    '--dry-run',
+    ...JSON_FLAGS
+  ],
   context: CONTEXT_FLAGS,
   ...Object.fromEntries(['overlap', 'conflicts', 'stale', 'all'].map(sub => ['analyze ' + sub, [...PROJECT_FLAGS, ...JSON_FLAGS]])),
   propose: [
@@ -387,6 +398,7 @@ export function parse(args) {
     else if (a === '--all') o.all = true
     else if (a === '--revoke') o.revoke = true
     else if (a === '--confirm-narrowing') o.confirmNarrowing = true
+    else if (a === '--confirm-activation') o.confirmActivation = true
     else if (a === '--allow-partial') o.allowPartial = true
     else if (a === '--include-linked') o.includeLinked = true
     else if (a === '--fix') o.fix = true

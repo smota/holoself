@@ -14,6 +14,7 @@ import { CUSTOM_SENSITIVITY_CATEGORIES, DEFAULT_LENSES, DEFAULT_LENS_IDS } from 
 import {
   applyFrontmatterModifications,
   applyPolicyMigration,
+  computeActivationMetadata,
   computeMeetMetadata,
   migrationChanges,
   planPolicyMigration,
@@ -52,10 +53,10 @@ function documentText(meta, body = '# Synthetic\n\nSynthetic body.\n') {
   const lines = Object.entries(meta).map(([key, value]) => `${key}: ${Array.isArray(value) ? `[${value.join(', ')}]` : value}`)
   return ['---', ...lines, '---', body].join('\n')
 }
-function migrate(text) {
+function migrate(text, target = computeMeetMetadata) {
   const before = frontmatter(text, { tolerant: true, registry: REGISTRY }).metadata
   const raw = frontmatter(text, { tolerant: true, validatePrivacy: false, registry: REGISTRY }).metadata
-  const changes = migrationChanges(raw, computeMeetMetadata(before, 'self', REGISTRY))
+  const changes = migrationChanges(raw, target(before, 'self', REGISTRY))
   const afterText = Object.keys(changes).length ? applyFrontmatterModifications(text, changes) : text
   return { before, raw, changes, afterText, after: frontmatter(afterText, { tolerant: true, registry: REGISTRY }).metadata }
 }
@@ -101,7 +102,9 @@ test('document-level mapping is exact: 0 widened, 0 narrowed, 0 publication diff
               if (b && !a) narrowed++
               if (a !== b && examples.length < 5) examples.push({ meta, lens, adapter, subject: subject.kind, before: b, after: a })
             }
-    const gate = verifyNonAmplification(before, after, { registry: REGISTRY })
+    // Compared with the tolerant runtime (project and contrib documents, and canonical ones the catalog admits).
+    // Catalog-excluded canonical documents are activations, proved separately below.
+    const gate = verifyNonAmplification(before, after, { registry: REGISTRY, confirmActivation: true })
     if (!gate.valid) gateFailures++
     if (Object.keys(gate.coverageLoss).length) gateCoverageLoss++
     // A document the runtime admits canonically stays canonically valid after migration, except one that was already
@@ -123,6 +126,69 @@ test('document-level mapping is exact: 0 widened, 0 narrowed, 0 publication diff
   assert.equal(canonicalBroken, 0)
   assert.equal(aliasMismatch, 0, 'derivedPublicSafe is an alias of publicationAllowed')
   assert.equal(unreachable, 0)
+})
+
+test('catalog-excluded canonical documents: skipped by default, and an activation is never wider than the exact mapping', () => {
+  let excluded = 0,
+    included = 0,
+    widerThanExact = 0,
+    widerThanRuntime = 0,
+    gateFailures = 0,
+    invalidAfter = 0,
+    legacyLeft = 0
+  for (const meta of combinations()) {
+    const text = documentText(meta)
+    // Canonically admitted documents take the exact mapping (previous test): 0 widened, 0 narrowed.
+    if (canonicalValid(text)) {
+      included++
+      continue
+    }
+    excluded++
+    const exact = migrate(text).after
+    const { before, after, afterText } = migrate(text, computeActivationMetadata)
+    if (/^(visibility|public_safe):/m.test(afterText)) legacyLeft++
+    if (!canonicalValid(afterText) && after.access_lenses.some(lens => lens !== 'private')) invalidAfter++
+    for (const lens of LENS_IDS)
+      for (const resolution of RESOLUTIONS(lens))
+        for (const subject of SUBJECTS)
+          for (const adapter of ADAPTERS) {
+            const a = allowedDocument(after, lens, adapter, null, resolution, subject, 'self').allowed
+            if (a && !allowedDocument(exact, lens, adapter, null, resolution, subject, 'self').allowed) widerThanExact++
+            if (a && !allowedDocument(before, lens, adapter, null, resolution, subject, 'self').allowed) widerThanRuntime++
+          }
+    if (publicationAllowed(after) && !publicationAllowed(exact)) widerThanExact++
+    // The planner's activation gate (#115) runs with confirmActivation against the tolerant runtime metadata.
+    if (!verifyNonAmplification(before, after, { registry: REGISTRY, confirmActivation: true }).valid) gateFailures++
+  }
+  assert.equal(included + excluded, 10752)
+  assert.ok(excluded > 0 && included > 0)
+  assert.equal(widerThanExact, 0)
+  assert.equal(widerThanRuntime, 0)
+  assert.equal(gateFailures, 0)
+  assert.equal(invalidAfter, 0)
+  assert.equal(legacyLeft, 0)
+})
+
+test('planPolicyMigration lists catalog-excluded legacy documents as activations and skips them without --confirm-activation', async () => {
+  const self = await mkdtemp(join(tmpdir(), 'holoself-fields-activation-'))
+  await quiet(() => run(['init', '--root', self]))
+  const path = join(self, 'context', 'conflict.md'),
+    text = '---\nvisibility: public-safe\npublic_safe: false\n---\n# Conflict\n'
+  await writeFile(path, text)
+  const skipped = planPolicyMigration(self, { dryRun: true })
+  const activation = skipped.activations.find(a => a.path === 'context/conflict.md')
+  assert.equal(activation.skipped, true)
+  assert.equal(activation.changes.visibility, null)
+  assert.equal(activation.changes.public_safe, null)
+  assert.deepEqual(activation.changes.access_lenses, ['private'])
+  assert.equal(activation.publication_allowed, false)
+  assert.equal(skipped.entries.find(e => e.path === 'context/conflict.md').needs_migration, false)
+  const confirmed = planPolicyMigration(self, { confirmActivation: true })
+  assert.notEqual(confirmed.plan_id, skipped.plan_id, 'the digest covers the activation decision')
+  applyPolicyMigration(self, confirmed.plan_id, { confirmActivation: true, confirmNarrowing: true })
+  const migrated = await readFile(path, 'utf8')
+  assert.doesNotMatch(migrated, /^(visibility|public_safe):/m)
+  assert.ok(canonicalValid(migrated))
 })
 
 test('every migrated document carries the four required fields plus read_scope and no deprecated field', () => {
