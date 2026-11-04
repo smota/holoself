@@ -212,18 +212,18 @@ test('a call that exceeds the timeout returns a stable JSON-RPC error and the wo
   const { base, project } = await fixture(),
     dir = await mkdtemp(join(tmpdir(), 'holoself-mcp-audit-')),
     log = join(dir, 'audit.ndjson')
-  // The timeout covers a call from dispatch, including a fresh worker's start-up, so it must leave room for the
-  // queued status call on a replacement worker on slow CI hosts.
-  const m = pooled(project, { size: 1, timeoutMs: 2000, simulateWorkMs: { holoself_context: 20000 } }, { auditLog: log })
+  // The timeout covers a call from dispatch, including a fresh worker's start-up, so the follow-up status call on a
+  // replacement worker gets a generous timeout on slow CI hosts while the slow context call times out quickly.
+  const m = pooled(project, { size: 1, timeoutMs: { holoself_context: 500, holoself_status: 30000 }, simulateWorkMs: { holoself_context: 20000 } }, { auditLog: log })
   try {
-    const started = Date.now()
     m.call(2, 'holoself_context', { task: 'refactoring marker', budget: 'small' })
     m.call(3, 'holoself_status')
     await m.accept.drain()
-    assert.ok(Date.now() - started < 15000, `took ${Date.now() - started} ms`)
+    assert.deepEqual(m.output.map(item => item.id), [1, 2, 3])
     assert.deepEqual(m.errorOf(2), { code: TOOL_TIMEOUT_RPC_CODE, message: 'Tool call timed out', data: { code: 'TOOL_TIMEOUT' } })
     assert.equal(m.byId(2).result, undefined, m.show(2))
     assert.equal(m.data(3).project.linked, true, 'the queued call runs on a fresh worker')
+    assert.equal(m.pool.stats().spawned, 2, 'the timed-out worker was recycled and replaced')
     const audit = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
     assert.deepEqual(audit.map(({ at, ...rest }) => rest), [
       { event: 'tools/call', tool: 'holoself_context', ok: false, error_code: 'TOOL_TIMEOUT' },

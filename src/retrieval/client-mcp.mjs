@@ -6,6 +6,7 @@ import { readSelfIndex, searchIndex } from '../catalog/index.mjs'
 import { attestClient } from '../clients/attestation.mjs'
 import { loadLensRegistry, resolveLens } from '../lenses.mjs'
 import { parseClaimBlocks } from '../markdown/claim-blocks.mjs'
+import { canonicalPath } from '../path-guard.mjs'
 import { visibleUnderBehavior } from '../policy/access.mjs'
 import { createInboxProposal, inboxPreviewData, pendingInboxCount } from '../proposals/client-inbox.mjs'
 import { findInboxProposal } from '../proposals/client-inbox.mjs'
@@ -100,7 +101,8 @@ const TARGET_INVALID = 'proposal target must be an existing document readable un
 function visibleTarget(client, rawTarget) {
   let rel
   try {
-    rel = slash(relative(client.self, safeTarget(client.self, rawTarget || 'context/claims.md')))
+    const root = canonicalPath(client.self)
+    rel = slash(relative(root, safeTarget(root, rawTarget || 'context/claims.md')))
   } catch {
     throw refuse(TARGET_INVALID, 'PROPOSAL_TARGET_INVALID')
   }

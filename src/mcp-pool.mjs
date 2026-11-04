@@ -74,7 +74,12 @@ export function createToolPool({ size = 2, timeoutMs = 60000, writeTimeoutMs = 6
     slot.job = job
     job.state = 'running'
     slot.worker.ref()
-    job.timer = job.exclusive ? setTimeout(() => settle(job, { status: 'timeout' }), writeTimeoutMs) : setTimeout(() => recycle(slot, { status: 'timeout' }), timeoutMs)
+    const limitMs = job.exclusive
+      ? writeTimeoutMs
+      : typeof timeoutMs === 'object' && timeoutMs !== null
+        ? (timeoutMs[job.payload?.name] ?? 60000)
+        : timeoutMs
+    job.timer = job.exclusive ? setTimeout(() => settle(job, { status: 'timeout' }), limitMs) : setTimeout(() => recycle(slot, { status: 'timeout' }), limitMs)
     slot.worker.postMessage({ jobId: job.id, ...job.payload })
   }
   function slotFor(job) {
