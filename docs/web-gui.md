@@ -55,7 +55,7 @@ The Workbench turns the existing model into seven predictable areas:
 4. **Knowledge** — guarded human editing, lifecycle filters, and content-redacted cleanup previews for canonical local Markdown.
 5. **Review** — managed and invalid inbox items, review-item creation, grouped previews, and exact-hash approve, defer, reject or supersede decisions.
 6. **Conversations** — context-aware turns through an explicitly configured local CLI.
-7. **Setup** — canonical-root details and PI, CLAUDE, CODEX and GROK detection/configuration.
+7. **Setup** — canonical-root details, PI, CLAUDE, CODEX and GROK detection/configuration, and per linked space the MCP state of Claude Code, Codex and AGY (`not-detected`, `detected`, `configured`, `verified`, `failing`) from the read-only `GET /api/mcp/clients`, which returns states only (no file contents or error text). Configuration itself stays in the CLI.
 
 The conceptual flow remains Self → Lens → Project → Proposal → Approval. Projects keep their artifacts. Self keeps approved reusable knowledge.
 

@@ -25,6 +25,33 @@ Use repeatable `--platform codex|agy|claude` to select clients. Holoself writes 
 | AGY | `.agents/mcp_config.json` | fixed absolute `--project` and `cwd` |
 | Claude Code | `.mcp.json` | required client-provided `CLAUDE_PROJECT_DIR`; missing signal fails closed |
 
+### Every detected client at once
+
+```text
+holoself mcp configure --project C:/work/my-project --all-detected --dry-run
+holoself mcp configure --project C:/work/my-project --all-detected --yes
+```
+
+A client is detected when its executable (`claude`, `codex`, `agy`) is on PATH or the project already has its configuration (`.claude/`, `.mcp.json`, `CLAUDE.md`; `.codex/`, `CODEX.md`; `.agents/mcp_config.json`, `.agy/`, `AGY.md`). The plan lists the detection result, every file, its action and the expected SHA-256, and the exact Holoself-owned entry (`server`, or `managed_block` for Codex). It never prints the rest of your configuration. Apply writes exactly that plan: it refuses if the files changed after the preview (`plan_sha256`), and if any write fails it restores every file already written. When nothing is detected, nothing is written.
+
+An existing `holoself` server that differs from Holoself's is refused for every client in the plan, so nothing is written. To replace it, review it and pass `--force-replace` with `--yes` (or confirm in a terminal). Codex only replaces a plain `[mcp_servers.holoself]` table; other TOML spellings must be removed by hand.
+
+### Default during link activation
+
+`link setup`, `link add`, `link activate` and `link repair` configure MCP by default for each activated host whose MCP support is `verified` in [platform verification](../reference/platform-verification.md). Other hosts use `.holoself/BOOTSTRAP.md` and the CLI. `--mcp` / `--no-mcp` override this; the choice is recorded in `.holoself/runtime.json`. See [activated links](activated-links.md#mcp-servers).
+
+### Read-tool pre-approval (opt-in)
+
+Hosts ask before each MCP tool call in interactive sessions and refuse in headless runs. `--approve-read-tools` on `link setup|add|activate|repair` pre-approves only the read-only tools (`holoself_status`, `holoself_context`, `holoself_context_manifest`, `holoself_context_get`, `holoself_search`, `holoself_proposal_preview`). `holoself_proposal_create` is never pre-approved.
+
+| Client | Where | What |
+|---|---|---|
+| Claude Code | `.claude/settings.local.json` (per machine) | `permissions.allow` entries `mcp__holoself__<tool>` |
+| Codex | `.codex/config.toml` managed block | `[mcp_servers.holoself.tools.<tool>] approval_mode = "approve"` |
+| AGY | not written | AGY 1.5.0 reads permissions only from `~/.gemini/antigravity-cli/settings.json` or per-session `--settings`; use `agy --settings '{"permissions":{"allow":["mcp(holoself/holoself_status)", ...]}}'` with the six read tools |
+
+Holoself records which entries it added and removes only those; a rule you already had stays. Codex 0.166.0 already runs read-only tools without asking under the generated `default_tools_approval_mode = "writes"`; the per-tool entries make that explicit.
+
 Codex and AGY absolute bindings are intentionally deterministic local configuration. Do not commit them when a path identifies a private host or user. Claude's project file is path-portable. Existing divergent `holoself` entries and malformed managed markers are refused rather than overwritten.
 
 The `holoself` executable must be on the client process PATH. Install `holoself-ai` from npm (for example `npm install --global holoself-ai`) or, from a source checkout, use a reviewed local or managed package-bin installation that points at that checkout. Confirm `holoself --version` in the client environment before applying configuration; running `node bin/holoself.mjs` in a terminal proves only that the checkout works. See [CLI invocation](../reference/cli.md#invocation).
@@ -62,6 +89,7 @@ If MCP is unavailable, use `.holoself/BOOTSTRAP.md`, the installed public skill,
 - `LINK_REQUIRED`: link the project first or start from the correct project.
 - `PROJECT_BINDING_AMBIGUOUS`: remove conflicting startup roots; do not guess.
 - `missing-or-drifted`: rerun configuration preview and review the diff.
+- `mcp status` also reports `client_state` per client: `not-detected`, `detected` (not configured), `configured`, `verified` (configured and natively verified), or `failing` (divergent or drifted entry, unreadable file, or broken link). The Workbench Setup view shows the same states.
 - Client shows pending approval: approve the project-scoped server in that client. This is client trust, not Holoself canonical-write approval.
 - Headless or non-interactive runs refuse tool calls: allow the Holoself tools by name in that client. The exact per-client settings and the recorded results are in [platform verification](../reference/platform-verification.md#required-approval-settings).
 - Tool call returns a bounded error: repair the link/index/metadata through the CLI; MCP deliberately exposes no repair tool.

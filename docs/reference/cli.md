@@ -44,7 +44,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `web` | `--root`, `--data-root`, `--data-dir`, `--project`, `--port`, `--no-open` |
 | `mcp` | `--project`, `--claude-project-dir` |
 | `mcp status` | `--project`, `--platform`, `--json` |
-| `mcp configure` | `--project`, `--platform`, `--dry-run`, `--yes`, `--confirm`, `--json` |
+| `mcp configure` | `--project`, `--platform`, `--all-detected`, `--force-replace`, `--dry-run`, `--yes`, `--confirm`, `--json` |
 | `coaching` | _(none)_ |
 | `coaching start` | `--root`, `--data-root`, `--data-dir`, `--question`, `--json` |
 | `coaching note` | `--root`, `--data-root`, `--data-dir`, `--expected-revision`, `--kind`, `--text`, `--json` |
@@ -67,10 +67,10 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `lens bindings` | `--root`, `--data-root`, `--data-dir`, `--json` |
 | `lens bind` | `--root`, `--data-root`, `--data-dir`, `--project`, `--lens`, `--secondary-lenses`, `--binding-hash`, `--dry-run`, `--yes`, `--confirm`, `--json` |
 | `lens unbind` | `--root`, `--data-root`, `--data-dir`, `--project`, `--binding-hash`, `--dry-run`, `--yes`, `--confirm`, `--json` |
-| `link add` | `--project`, `--target`, `--self`, `--lens`, `--secondary-lenses`, `--project-include`, `--project-exclude`, `--project-assert-include`, `--project-assert-exclude`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--force`, `--dry-run`, `--yes`, `--confirm` |
-| `link setup` | `--project`, `--target`, `--self`, `--lens`, `--secondary-lenses`, `--project-include`, `--project-exclude`, `--project-assert-include`, `--project-assert-exclude`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--force`, `--dry-run`, `--yes`, `--confirm` |
-| `link activate` | `--project`, `--target`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--force`, `--dry-run`, `--yes`, `--confirm` |
-| `link repair` | `--project`, `--target`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--force`, `--dry-run`, `--yes`, `--confirm`, `--lens`, `--secondary-lenses` |
+| `link add` | `--project`, `--target`, `--self`, `--lens`, `--secondary-lenses`, `--project-include`, `--project-exclude`, `--project-assert-include`, `--project-assert-exclude`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--mcp`, `--no-mcp`, `--approve-read-tools`, `--no-approve-read-tools`, `--force`, `--dry-run`, `--yes`, `--confirm` |
+| `link setup` | `--project`, `--target`, `--self`, `--lens`, `--secondary-lenses`, `--project-include`, `--project-exclude`, `--project-assert-include`, `--project-assert-exclude`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--mcp`, `--no-mcp`, `--approve-read-tools`, `--no-approve-read-tools`, `--force`, `--dry-run`, `--yes`, `--confirm` |
+| `link activate` | `--project`, `--target`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--mcp`, `--no-mcp`, `--approve-read-tools`, `--no-approve-read-tools`, `--force`, `--dry-run`, `--yes`, `--confirm` |
+| `link repair` | `--project`, `--target`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--mcp`, `--no-mcp`, `--approve-read-tools`, `--no-approve-read-tools`, `--force`, `--dry-run`, `--yes`, `--confirm`, `--lens`, `--secondary-lenses` |
 | `link deactivate` | `--project`, `--target`, `--adapters`, `--dry-run`, `--yes`, `--confirm` |
 | `link status` | `--project`, `--target`, `--skill-home`, `--json` |
 | `link doctor` | `--project`, `--target`, `--skill-home`, `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--snapshot` |
@@ -157,7 +157,7 @@ proposals list|audit --project <dir>
 proposals show|approve|reject|defer|supersede <id> --project <dir> [--yes]
 index [status|rebuild] --project <dir> [--changed]
 search <query> --project <dir> [--lens <lens>]
-mcp configure --project <dir> [--platform codex|agy|claude] [--dry-run] [--yes]
+mcp configure --project <dir> [--platform codex|agy|claude | --all-detected] [--force-replace] [--dry-run] [--yes]
 mcp status --project <dir> [--platform codex|agy|claude]
 mcp [--project <dir>]
 instructions render|audit --project <dir> [--adapter generic] [--json]
@@ -170,7 +170,7 @@ knowledge cleanup [--root <self-root>] --apply <plan.json> --digest <sha256> --y
 
 `context` defaults to packet output unless `--json` is supplied. Every context packet stays within twice its budget (`selection.total_bytes`, `envelope_cap_bytes`). A packet that had to shrink lists dropped sources in `selection.envelope_dropped`, groups `restrictions` by reason (adding `count` and `sources`) and reduces `proposals` to ids. `--session-start` loads only the lens `session_start_sources`; see [context efficiency](../concepts/context-efficiency.md). Context and search index self only; `--self-only` remains a compatible explicit spelling, while `--federated` and `--no-cache` remain accepted as deprecated no-ops for one release and emit a stderr warning. Missing bindings fail closed. `--snapshot --yes` writes a reviewed project-only fallback; `--restricted-host` applies publication-safe filtering and adds default 24-hour expiry metadata. `--expires-hours` accepts values above 0 through 720. Link setup supports `--project-include`, `--project-exclude`, `--project-assert-include`, and `--project-assert-exclude`. `index` without subcommand builds/updates index; `index rebuild` also removes any legacy decision-cache files on disk. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation. Global skill installation is separately confirmed; project migration validates the global copy before removing managed local copies.
 
-`mcp configure` first prints exact project-local file actions and expected hashes. Without `--dry-run`, it requires confirmation or `--yes`. Existing divergent `holoself` server entries and malformed markers fail closed. Bare `mcp` uses explicit `--project`, trusted `CLAUDE_PROJECT_DIR`, or unambiguous cwd and requires a safe `.holoself/link.yaml`; tools cannot supply paths. See [MCP tools](mcp-tools.md).
+`mcp configure` first prints exact project-local file actions and expected hashes. Without `--dry-run`, it requires confirmation or `--yes`. Existing divergent `holoself` server entries and malformed markers fail closed; `--force-replace` with confirmation replaces a divergent entry. `--all-detected` selects every client whose executable is on PATH or whose configuration exists in the project, applies all changes or none, and refuses when the files changed after the preview. Link activation (`link setup|add|activate|repair`) configures MCP by default for verified hosts; `--mcp`/`--no-mcp` and opt-in `--approve-read-tools` control it. Bare `mcp` uses explicit `--project`, trusted `CLAUDE_PROJECT_DIR`, or unambiguous cwd and requires a safe `.holoself/link.yaml`; tools cannot supply paths. See [MCP tools](mcp-tools.md).
 
 ## Legacy live mount
 

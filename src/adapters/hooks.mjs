@@ -58,20 +58,23 @@ export function desiredHookGroup(id) {
 const ownedHook = hook => typeof hook?.command === 'string' && hook.command.includes(HOOK_MARKER)
 const groupHooks = group => (Array.isArray(group?.hooks) ? group.hooks : [])
 
-function readHookSettings(path) {
+// Reads a host settings file: { exists, text, config } or { unsafe } / { invalid } (never throws on content).
+export function readHookSettings(path) {
   if (!existsSync(path)) return { exists: false, text: '', config: {} }
   const info = lstatSync(path)
   if (info.isSymbolicLink() || !info.isFile()) return { exists: true, unsafe: true }
-  const text = readFileSync(path, 'utf8')
-  if (!text.trim()) return { exists: true, text, config: {} }
+  return parseHookSettings(readFileSync(path, 'utf8'))
+}
+export function parseHookSettings(text, exists = true) {
+  if (!text.trim()) return { exists, text, config: {} }
   let config
   try {
     config = JSON.parse(text)
   } catch (error) {
-    return { exists: true, text, invalid: `invalid JSON: ${error.message}` }
+    return { exists, text, invalid: `invalid JSON: ${error.message}` }
   }
-  if (!config || Array.isArray(config) || typeof config !== 'object') return { exists: true, text, invalid: 'root must be an object' }
-  return { exists: true, text, config }
+  if (!config || Array.isArray(config) || typeof config !== 'object') return { exists, text, invalid: 'root must be an object' }
+  return { exists, text, config }
 }
 
 // State of the host hook file: installed | missing | drifted | unsafe | invalid. `mixed` marks a group that holds
