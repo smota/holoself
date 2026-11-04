@@ -15,7 +15,7 @@ import { getIdentityId, getOrCreateCursorSecret } from './cursor-identity.mjs'
 import { createRecordDelivery } from './delivery.mjs'
 import { fitEnvelope } from './envelope.mjs'
 import { documentProjection, sourceIndexEntry, withoutPrivatePaths } from './projection.mjs'
-import { catalogCandidateRecords, deduplicateCandidates, resolvedContextAssertions } from './records.mjs'
+import { buildReceiptPolicySources, catalogCandidateRecords, deduplicateCandidates, resolvedContextAssertions } from './records.mjs'
 
 export function contextData(o) {
   if (o.federated || o.spaces?.length) {
@@ -90,7 +90,7 @@ function selectRecords(o, { project, self, identity, registry, lens, resolution,
   const budgetName = o.budget || 'standard'
   const reqSources = o.sources || o.source_ids || []
 
-  const delivery = createRecordDelivery(o, { project, identity, registry, lens, resolution, subject, adapter })
+  const delivery = createRecordDelivery(o, { project, self, identity, registry, lens, resolution, subject, adapter })
   const { deliveryRestrictions, deliverRecord } = delivery
 
   const selectionOptions = {
@@ -189,7 +189,8 @@ function assembleResult(
     context_receipt: {
       ...selected.receipt,
       status: queryStatus,
-      cache: selected.cache
+      cache: selected.cache,
+      ...(!isLinked && !isMcp ? { policy_sources: buildReceiptPolicySources(records) } : {})
     },
     proposals: isLinked && project ? withoutPrivatePaths(listProposalData(project).filter(p => p.status === 'pending')) : [],
     cache: selected.cache,

@@ -321,7 +321,7 @@ export function applySelectionPolicy(candidates, options = {}) {
       }
       content = delivered.content
       next = { ...record }
-      for (const key of ['source_hash', 'freshness', 'sections', 'claims', 'tags', 'links', 'search_text', 'metadata'])
+      for (const key of ['source_hash', 'freshness', 'sections', 'claims', 'tags', 'links', 'search_text', 'metadata', 'policy_sources'])
         if (delivered[key]) next[key] = delivered[key]
       if (delivered.estimated_tokens !== undefined) next.estimated_tokens = delivered.estimated_tokens
     }
@@ -428,7 +428,13 @@ export function selectContextRecords(records, options = {}) {
 // it only records that the inputs were seen before and keeps the earliest valid_until expiry.
 const CACHE = new Map()
 function cacheKey(records, options = {}) {
-  const state = records.map(record => [sourceId(record), record.source_hash, record.content?.length || 0])
+  const state = records.map(record => {
+    const base = [sourceId(record), record.source_hash, record.content?.length || 0]
+    if (record.policy_sources && Object.values(record.policy_sources).some(v => typeof v === 'string' && v.startsWith('policy:'))) {
+      base.push(record.metadata, record.policy_sources)
+    }
+    return base
+  })
   return hash(
     JSON.stringify({
       state,

@@ -4,11 +4,12 @@ import { readSourceWithStat } from '../catalog.mjs'
 import { buildCatalogSections, extractSectionAnnotations, privacySections } from '../catalog/source.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { allowed, filterClaimVisibility, filterFieldVisibility, privacyMetadata, visibleUnderBehavior } from '../policy/access.mjs'
-import { frontmatter } from '../policy/privacy-fields.mjs'
+import { resolveDocumentPolicy } from '../policy/policy-defaults.mjs'
+import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
 import { hash } from '../shared/fs.mjs'
 
 // Returns the deliver callback used by selection, the restrictions it records and its reconcile-read count.
-export function createRecordDelivery(o, { project, identity, registry, lens, resolution, subject, adapter }) {
+export function createRecordDelivery(o, { project, self, identity, registry, lens, resolution, subject, adapter }) {
   const deliveryRestrictions = []
   let reconcileReads = 0
   function deliverRecord(cand) {
@@ -42,8 +43,14 @@ export function createRecordDelivery(o, { project, identity, registry, lens, res
       cand.delivery_reason = 'invalid canonical privacy metadata; excluded fail-closed'
       return null
     }
-    const metadata =
-      cand.kind === 'contrib' && (!parsed.metadata || !Object.keys(parsed.metadata).length)
+    const resolvedPolicy = cand.kind === 'self' && self ? resolveDocumentPolicy(cand.absolute_path, self, parsed.metadata, registry) : null
+    if (resolvedPolicy && canonicalPrivacyMetadataErrors(resolvedPolicy.effectiveMetadata, registry).length) {
+      cand.delivery_reason = 'invalid canonical privacy metadata; excluded fail-closed'
+      return null
+    }
+    const metadata = resolvedPolicy
+      ? resolvedPolicy.effectiveMetadata
+      : cand.kind === 'contrib' && (!parsed.metadata || !Object.keys(parsed.metadata).length)
         ? cand.metadata
         : { ...(cand.kind === 'contrib' ? cand.metadata : {}), ...parsed.metadata }
     const { body } = parsed
@@ -107,6 +114,7 @@ export function createRecordDelivery(o, { project, identity, registry, lens, res
     return {
       content,
       metadata: privacyMetadata(metadata, registry),
+      ...(resolvedPolicy ? { policy_sources: resolvedPolicy.policySources } : {}),
       source_hash: rawHash,
       freshness,
       estimated_tokens: estimatedTokens,

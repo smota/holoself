@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/policy-defaults.schema.json",
+  "title": "Holoself directory privacy policy defaults (_policy.yaml)",
+  "description": "Directory-level default privacy and lifecycle fields for canonical Markdown documents under profile/, context/, history/, topics/, and reference/. Unknown or per-document-only keys are rejected fail-closed.",
+  "type": "object",
+  "minProperties": 1,
+  "additionalProperties": false,
+  "properties": {
+    "access_lenses": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "description": "Structurally valid lens id; runtime semantic validation requires a built-in or registry-known id.",
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+        "maxLength": 40
+      }
+    },
+    "exclude_lenses": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "description": "Structurally valid lens id; runtime semantic validation requires a built-in or registry-known id.",
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+        "maxLength": 40
+      }
+    },
+    "disclosure": {
+      "enum": ["internal-only", "review-required", "publish-approved"]
+    },
+    "sensitivity": {
+      "enum": [
+        "public",
+        "personal",
+        "compensation-confidential",
+        "third-party-personal",
+        "recruiter-confidential",
+        "employer-confidential",
+        "application-private",
+        "restricted",
+        "none"
+      ]
+    },
+    "document_role": {
+      "enum": ["policy", "evidence", "content"]
+    },
+    "read_scope": {
+      "description": "Access scope decoupling access grant from perspective lens.",
+      "enum": ["shared", "local", "restricted"]
+    },
+    "task_include": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "task_exclude": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "confidence": {
+      "type": "string",
+      "minLength": 1
+    },
+    "knowledge_status": {
+      "description": "Default lifecycle status for directory documents ('superseded' is disallowed as a directory default because it requires a per-document superseded_by target).",
+      "enum": ["current", "historical"]
+    },
+    "temporal_scope": {
+      "enum": ["current", "time-bounded", "historical", "timeless"]
+    }
+  }
+}

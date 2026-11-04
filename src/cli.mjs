@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { join, resolve, relative, dirname, basename } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
-import { catalogBuildWarnings, ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
+import { catalogBuildWarnings, ecosystemValidationErrors, policyProvenanceSummary, runEcosystem } from './ecosystem.mjs'
 import { seedLensDefinitions } from './lenses.mjs'
 import { VERSION } from './version.mjs'
 import { mcpPlatformSupport } from './mcp-verification.mjs'
@@ -430,7 +430,10 @@ export async function run(argv) {
     for (const e of [...new Set(errors)]) console.error(`[!!] ${e}`)
     if (errors.length) {
       process.exitCode = 1
-    } else console.log(`[ok] ${root} is valid`)
+    } else {
+      for (const line of policyProvenanceSummary(root)) console.log(line)
+      console.log(`[ok] ${root} is valid`)
+    }
     return
   }
   if (o.command === 'migrate') {

@@ -45,7 +45,8 @@ export async function runIndex(o, sub) {
     const input_state_hash = hash(
       canonicalJson({
         self: (selfCatalog?.sources || []).map(s => [s.file, s.source_text_hash]),
-        project: projectCatalog.sources.map(s => [s.file, s.source_text_hash])
+        project: projectCatalog.sources.map(s => [s.file, s.source_text_hash]),
+        ...(selfCatalog?.policy_files?.length ? { policy_files: selfCatalog.policy_files.map(p => [p.file, p.sha256]) } : {})
       })
     )
     console.log(

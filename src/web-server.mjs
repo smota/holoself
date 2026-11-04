@@ -12,6 +12,7 @@ import { annotationSchema, validateAnnotationMetadata } from './annotations.mjs'
 import { applyCleanupPlan } from './cleanup.mjs'
 import { mcpClientOverview } from './mcp-config.mjs'
 import { canonicalPath, samePath } from './path-guard.mjs'
+import { resolveDocumentPolicy } from './policy/policy-defaults.mjs'
 import {
   CONFLICT_CODES,
   HttpError,
@@ -251,12 +252,17 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
         if (b.metadata !== undefined && (!b.metadata || typeof b.metadata !== 'object' || Array.isArray(b.metadata)))
           throw new HttpError(400, 'INVALID_INPUT', 'metadata must be an object')
         const registry = loadLensRegistry(root),
+          resolved = typeof b.path === 'string' && b.path.trim() ? resolveDocumentPolicy(b.path, root, b.metadata || {}, registry) : null,
+          targetMeta = resolved ? resolved.effectiveMetadata : b.metadata,
           result = validateAnnotationMetadata(
-            b.metadata,
+            targetMeta,
             registry.lenses.map(lens => lens.id),
             { allowLegacy: true }
           )
-        return send(res, 200, { ok: true, data: result })
+        return send(res, 200, {
+          ok: true,
+          data: resolved ? { ...result, effective_policy: resolved.effectiveMetadata, policy_sources: resolved.policySources } : result
+        })
       }
       if (url.pathname === '/api/documents' && req.method === 'GET') return send(res, 200, { ok: true, data: listDocuments(root) })
       if (url.pathname === '/api/document' && req.method === 'GET')

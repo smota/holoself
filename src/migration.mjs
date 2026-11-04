@@ -3,6 +3,7 @@ import { join, relative } from 'node:path'
 import { canonicalJson } from './catalog.mjs'
 import { HASH_RE } from './catalog/schema.mjs'
 import { DEFAULT_LENS_IDS } from './lenses.mjs'
+import { resolveDocumentPolicy } from './policy/policy-defaults.mjs'
 import { frontmatter } from './policy/privacy-fields.mjs'
 import { atomicWrite, hash, slash } from './shared/fs.mjs'
 
@@ -283,13 +284,23 @@ export function planPolicyMigration(selfRoot, options = {}) {
     if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) continue
 
     const parsed = frontmatter(text, { tolerant: true, validatePrivacy: false })
-    const meetMeta = computeMeetMetadata(parsed.metadata, item.kind)
+    const resolvedPolicy = item.kind === 'self' ? resolveDocumentPolicy(item.absPath, selfRoot, parsed.metadata) : null
+    const governedByDirectoryPolicy = Boolean(
+      resolvedPolicy &&
+        !Object.hasOwn(parsed.metadata, 'visibility') &&
+        !Object.hasOwn(parsed.metadata, 'access_lenses') &&
+        Array.isArray(resolvedPolicy.policyDefaults.access_lenses) &&
+        resolvedPolicy.policyDefaults.access_lenses.length > 0
+    )
+    const meetMeta = governedByDirectoryPolicy ? resolvedPolicy.effectiveMetadata : computeMeetMetadata(parsed.metadata, item.kind)
 
     const changes = {}
-    if (parsed.metadata.read_scope !== meetMeta.read_scope) changes.read_scope = meetMeta.read_scope
-    const beforeAccess = Array.isArray(parsed.metadata.access_lenses) ? parsed.metadata.access_lenses : []
-    if (JSON.stringify(beforeAccess) !== JSON.stringify(meetMeta.access_lenses)) {
-      changes.access_lenses = meetMeta.access_lenses
+    if (!governedByDirectoryPolicy) {
+      if (parsed.metadata.read_scope !== meetMeta.read_scope) changes.read_scope = meetMeta.read_scope
+      const beforeAccess = Array.isArray(parsed.metadata.access_lenses) ? parsed.metadata.access_lenses : []
+      if (JSON.stringify(beforeAccess) !== JSON.stringify(meetMeta.access_lenses)) {
+        changes.access_lenses = meetMeta.access_lenses
+      }
     }
 
     const beforeSha256 = hash(text)

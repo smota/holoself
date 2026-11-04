@@ -192,7 +192,31 @@
               }
             }
           },
-          "estimated_tokens": { "type": "integer", "minimum": 0 }
+          "estimated_tokens": { "type": "integer", "minimum": 0 },
+          "policy_sources": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^(?:frontmatter|policy:.+)$"
+            }
+          }
+        }
+      }
+    },
+    "policy_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "size", "modified_ms", "mtime_ns", "ino", "dev", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "file": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0 },
+          "modified_ms": { "type": "number" },
+          "mtime_ns": { "type": "string", "pattern": "^[0-9]+$" },
+          "ino": { "type": "string", "pattern": "^[0-9]+$" },
+          "dev": { "type": "string", "pattern": "^[0-9]+$" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
         }
       }
     },
