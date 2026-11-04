@@ -42,6 +42,7 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 - [Retrieval evaluation](guides/retrieval-evaluation.md)
 - [Runtime adapters](guides/runtime-adapters.md)
 - [Local MCP integration](guides/local-mcp.md)
+- [Served-context ledger](guides/served-context-ledger.md)
 - [Common use cases](guides/common-use-cases.md)
 - [Migration](guides/migration.md)
 - [Adoption and rollback runbook](guides/adoption-and-rollback-runbook.md)
@@ -70,6 +71,7 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 
 - [AgentFlow SDLC framework placement](decisions/agentflow-placement.md)
 - [Local MCP architecture](decisions/local-mcp-architecture.md)
+- [Unlinked client identity for MCP clients without a project](decisions/unlinked-client-identity.md)
 - [External public skill deployments](decisions/external-skill-deployments.md)
 - [Link adapter scope for repair and deactivation](decisions/link-adapter-scope.md)
 - [ADR E01: Evidence ownership, storage and retention](decisions/evidence-01-ownership.md)

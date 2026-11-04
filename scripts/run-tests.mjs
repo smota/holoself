@@ -1,10 +1,19 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
+
+function supportsNodeTestTimeout() {
+  try {
+    const res = spawnSync(process.execPath, ['--help'], { encoding: 'utf8', windowsHide: true, timeout: 10000 })
+    return Boolean(res.stdout && res.stdout.includes('--test-timeout'))
+  } catch {
+    return false
+  }
+}
 
 if (process.env.TMPDIR) {
   process.env.TMP = process.env.TMPDIR
@@ -61,8 +70,12 @@ try {
     TEMP: runRoot
   }
   delete childEnv.NODE_TEST_CONTEXT
+  const runnerFlags = ['--test']
+  if (supportsNodeTestTimeout() && !testArgs.some(arg => arg.startsWith('--test-timeout'))) {
+    runnerFlags.push('--test-timeout=120000')
+  }
   ;({ code, signal } = await new Promise((resolve, reject) => {
-    child = spawn(process.execPath, ['--test', ...testArgs], {
+    child = spawn(process.execPath, [...runnerFlags, ...testArgs], {
       cwd: args.length > 0 ? process.cwd() : root,
       env: childEnv,
       shell: false,

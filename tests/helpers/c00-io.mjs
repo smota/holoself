@@ -64,7 +64,12 @@ export function installIoMeter({ roots, syntheticPaths = [] } = {}) {
     for (const name of callbackMeta) replace(fs, name, original => function (path, ...args) { const cb = args.pop(); return original.call(this, path, ...args, (...result) => { metadata(name, path); cb(...result) }) })
     for (const name of promiseMeta) replace(fsp, name, original => async function (path, ...args) { try { return await original.call(this, path, ...args) } finally { metadata(`promises.${name}`, path) } })
     for (const name of raw) if (typeof fs[name] === 'function') replace(fs, name, original => function (...args) {
-      if (name === 'openSync' && typeof args[1] === 'string' && (args[1].includes('w') || args[1].includes('a'))) {
+      const writeFlags = (fs.constants.O_WRONLY || 0) | (fs.constants.O_RDWR || 0) | (fs.constants.O_APPEND || 0) | (fs.constants.O_CREAT || 0)
+      if (
+        name === 'openSync' &&
+        ((typeof args[1] === 'string' && (args[1].includes('w') || args[1].includes('a'))) ||
+          (typeof args[1] === 'number' && (args[1] & writeFlags) !== 0))
+      ) {
         return local.run(true, () => original.apply(this, args))
       }
       unsupported(name, 'raw file descriptor operation'); return original.apply(this, args)

@@ -102,9 +102,31 @@ export function updateLinkBindingSaltInPlace(projectDir, salt) {
   }
   atomicWriteFile(filePath, lines.join('\n') + (raw.endsWith('\n') ? '' : '\n'))
 }
+export function ledgerConfigErrors(value, prefix = 'ledger') {
+  const errors = []
+  if (value === undefined) return errors
+  if (!value || Array.isArray(value) || typeof value !== 'object') return [`${prefix} must be a mapping`]
+  for (const key of Object.keys(value))
+    if (!['enabled', 'record_task_text'].includes(key)) errors.push(`unknown ${prefix} field: ${key}`)
+  if (value.enabled !== undefined && typeof value.enabled !== 'boolean') errors.push(`${prefix}.enabled must be a boolean`)
+  if (value.record_task_text !== undefined && typeof value.record_task_text !== 'boolean')
+    errors.push(`${prefix}.record_task_text must be a boolean`)
+  return errors
+}
 export function linkSchemaErrors(link, registry = null) {
   const errors = [],
-    allowedKeys = new Set(['path', 'access', 'proposals', 'index', 'default_lens', 'secondary_lenses', 'binding_salt', 'cache_limit_entries', 'cache_limit_bytes']),
+    allowedKeys = new Set([
+      'path',
+      'access',
+      'proposals',
+      'index',
+      'default_lens',
+      'secondary_lenses',
+      'binding_salt',
+      'cache_limit_entries',
+      'cache_limit_bytes',
+      'ledger'
+    ]),
     known = id => (registry ? registry.byId.has(id) : lensIdStructurallyValid(id))
   if (!link || Array.isArray(link) || typeof link !== 'object') return ['self_context must be a mapping']
   for (const key of Object.keys(link)) if (!allowedKeys.has(key)) errors.push(`unknown self_context field: ${key}`)
@@ -124,6 +146,7 @@ export function linkSchemaErrors(link, registry = null) {
   if (link.binding_salt !== undefined) {
     if (typeof link.binding_salt !== 'string' || !/^[0-9a-f]{32}$/.test(link.binding_salt)) errors.push('binding_salt must be a 32-character hex string')
   }
+  if (link.ledger !== undefined) errors.push(...ledgerConfigErrors(link.ledger, 'self_context.ledger'))
   return errors
 }
 export function projectContextErrors(value) {
@@ -155,9 +178,13 @@ export function readLink(project, { tolerant = false } = {}) {
   }
   if (!Object.hasOwn(parsed, 'self_context')) throw new Error(`malformed link configuration ${path}: self_context mapping missing`)
   for (const key of Object.keys(parsed))
-    if (!['self_context', 'project_context', 'cache_limit_entries', 'cache_limit_bytes'].includes(key))
+    if (!['self_context', 'project_context', 'ledger', 'cache_limit_entries', 'cache_limit_bytes'].includes(key))
       throw new Error(`malformed link configuration ${path}: unknown root field ${key}`)
-  const structuralErrors = [...linkSchemaErrors(parsed.self_context), ...projectContextErrors(parsed.project_context)]
+  const structuralErrors = [
+    ...linkSchemaErrors(parsed.self_context),
+    ...projectContextErrors(parsed.project_context),
+    ...ledgerConfigErrors(parsed.ledger, 'ledger')
+  ]
   if (structuralErrors.length && !tolerant) throw new Error(`invalid link configuration ${path}: ${structuralErrors.join('; ')}`)
   const selfPath = resolve(project, parsed.self_context.path)
   let registry = null
@@ -176,13 +203,21 @@ export function readLink(project, { tolerant = false } = {}) {
     if (!tolerant) throw error
     bindingError = error.message
   }
-  const { cache_limit_entries: _cle, cache_limit_bytes: _clb, ...selfContextFields } = parsed.self_context
+  const { cache_limit_entries: _cle, cache_limit_bytes: _clb, ledger: selfLedger, ...selfContextFields } = parsed.self_context
+  const rawLedger = parsed.ledger && typeof parsed.ledger === 'object' ? parsed.ledger : selfLedger && typeof selfLedger === 'object' ? selfLedger : null
+  const ledger = rawLedger
+    ? {
+        enabled: rawLedger.enabled !== false,
+        record_task_text: rawLedger.record_task_text === true
+      }
+    : undefined
   return {
     ...selfContextFields,
     ...(binding || {}),
     path: selfPath,
     secondary_lenses: [...(binding?.secondary_lenses || [])],
     binding_salt: parsed.self_context.binding_salt || null,
+    ...(ledger ? { ledger } : {}),
     project_context: {
       include: parsed.project_context?.include || [],
       exclude: [...DEFAULT_PROJECT_EXCLUDES, ...(parsed.project_context?.exclude || [])],
@@ -224,12 +259,51 @@ export function writeLink(project, self, lens = 'general', secondary = [], proje
   atomicWrite(linkPath(project), yamlObject(data))
   return { ...data.self_context, default_lens: lens, secondary_lenses: secondary, project_context: data.project_context }
 }
+export const HOLOSELF_GITIGNORE_PATTERNS = [
+  'ledger*.ndjson',
+  'ledger*.lock*',
+  'catalog/',
+  'index/',
+  'runtime/',
+  'runtime*',
+  'conversations/',
+  'reports/',
+  'links.json*'
+]
+export function managedGitignore() {
+  return (
+    `# Local-only Holoself runtime, cache, and ledger artifacts (never commit).\n` +
+    `# link.yaml, BOOTSTRAP.md, README.md, and proposals/ remain trackable.\n` +
+    `${HOLOSELF_GITIGNORE_PATTERNS.join('\n')}\n`
+  )
+}
+export function ensureHoloselfGitignore(baseDir) {
+  const resolvedBase = resolve(baseDir),
+    root = join(resolvedBase, '.holoself')
+  ensureDir(root)
+  const gitignorePath = assertContainedPath(resolvedBase, join(root, '.gitignore'), 'holoself .gitignore'),
+    st = lstatSync(gitignorePath, { throwIfNoEntry: false })
+  if (st && (st.isSymbolicLink() || !st.isFile())) throw new Error(`${gitignorePath} is not a regular file; refusing to modify`)
+  if (!st) {
+    atomicWrite(gitignorePath, managedGitignore())
+    return gitignorePath
+  }
+  const existing = readFileSync(gitignorePath, 'utf8'),
+    present = new Set(existing.split(/\r?\n/).map(line => line.trim())),
+    missing = HOLOSELF_GITIGNORE_PATTERNS.filter(pattern => !present.has(pattern))
+  if (missing.length) {
+    const prefix = existing.endsWith('\n') || !existing.length ? existing : `${existing}\n`
+    atomicWrite(gitignorePath, `${prefix}${missing.join('\n')}\n`)
+  }
+  return gitignorePath
+}
 export function managedReadme() {
   return (
     `# Linked Holoself context\n\nProject owns artifacts. Linked self owns approved reusable knowledge.\n\n` +
     `- \`link.yaml\` grants read access and proposal delivery; it never copies self files.\n` +
-    `- \`index/\` is local, rebuildable acceleration data. Markdown remains source of truth.\n` +
-    `- \`proposals/\` and \`reports/\` are review artifacts.\n`
+    `- \`index/\` and \`catalog/\` are local, rebuildable acceleration data. Markdown remains source of truth.\n` +
+    `- \`proposals/\` contains review artifacts that may be tracked in git.\n` +
+    `- \`.gitignore\` keeps local-only artifacts (\`ledger*.ndjson\`, \`catalog/\`, \`index/\`, \`runtime*\`, \`conversations/\`, \`reports/\`) out of git.\n`
   )
 }
 export function inspectLinkCollisions(project) {
@@ -244,6 +318,9 @@ export function inspectLinkCollisions(project) {
       if (rs.isSymbolicLink() || !rs.isFile()) throw new Error(`${readme} is not a regular file; refusing to replace`)
       if (readFileSync(readme, 'utf8') !== managedReadme()) collisions.push(readme)
     }
+    const gitignore = join(root, '.gitignore'),
+      gs = lstatSync(gitignore, { throwIfNoEntry: false })
+    if (gs && (gs.isSymbolicLink() || !gs.isFile())) throw new Error(`${gitignore} is not a regular file; refusing to replace`)
     const link = linkPath(project)
     if (pathExists(link)) collisions.push(link)
     for (const dir of ['catalog', 'proposals', 'reports']) {
@@ -262,6 +339,7 @@ export function createLinkDirs(project, { preserveReadme = false, purgeLegacy = 
     try {
       purgeLegacyIndex(project)
     } catch {}
+  ensureHoloselfGitignore(project)
   const readme = join(root, 'README.md')
   if (!pathExists(readme)) atomicWrite(readme, managedReadme())
   else if (!preserveReadme && readFileSync(readme, 'utf8') !== managedReadme()) throw new Error(`${readme} exists with user content; refusing to replace`)

@@ -5,7 +5,7 @@
   "type": "module",
   "bin": { "holoself": "bin/holoself.mjs" },
   "files": ["bin", "src", "web", "skills", "contribs", "docs", "schemas", "templates", "README.md", "CHANGELOG.md", "PRIVACY.md", "LICENSE"],
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=22" },
   "scripts": {
     "test": "node scripts/run-tests.mjs",
     "start": "node bin/holoself.mjs",

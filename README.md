@@ -6,7 +6,7 @@
   <a href="https://github.com/smota/holoself/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/smota/holoself?display_name=tag&amp;sort=semver&amp;style=flat-square&amp;color=245f50" /></a>
   <a href="https://github.com/smota/holoself/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/smota/holoself?style=flat-square&amp;color=245f50" /></a>
   <a href="docs/guides/local-mcp.md"><img alt="MCP: local STDIO" src="https://img.shields.io/badge/MCP-local%20STDIO-9be5c1?style=flat-square&amp;labelColor=10231d" /></a>
-  <a href="package.json"><img alt="Node.js 20 or newer" src="https://img.shields.io/badge/Node.js-%E2%89%A520-9be5c1?style=flat-square&amp;labelColor=10231d" /></a>
+  <a href="package.json"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-%E2%89%A522-9be5c1?style=flat-square&amp;labelColor=10231d" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-f09a62?style=flat-square&amp;labelColor=10231d" /></a>
 </p>
 
@@ -68,7 +68,7 @@ flowchart LR
 
 ## Start here
 
-Requirements: Node.js 20+ and a private location for personal context.
+Requirements: Node.js 22+ and a private location for personal context.
 
 Choose the path that matches what you want to do:
 
