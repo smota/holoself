@@ -1,3 +1,9 @@
 tests/fixtures/evidence/*.pdf binary
 tests/fixtures/evidence/*.docx binary
 scripts/evidence-supervisor-linux.sh text eol=lf
+
+# Shipped content and parity fixtures are hashed; keep LF on every platform.
+contribs/** text eol=lf
+templates/** text eol=lf
+skills/holoself/** text eol=lf
+tests/fixtures/parity/** text eol=lf
