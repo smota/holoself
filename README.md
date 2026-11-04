@@ -207,6 +207,8 @@ Approval prints target, evidence, affected files, and proposed diff before writi
 
 ## Development
 
+See the [repository map](docs/repository-map.md) for the split between shipped product sources, product tooling, and the vendored AgentFlow SDLC framework, and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
+
 ```bash
 npm test
 npm run audit:package

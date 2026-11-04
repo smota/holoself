@@ -4,6 +4,8 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- Document the product, tooling, AgentFlow SDLC framework, and owner-local repository layout in `docs/repository-map.md` and `docs/decisions/agentflow-placement.md`, index all architecture decisions in `docs/README.md`, and enforce the product/framework boundary in `tests/repository-boundary.test.mjs` (#56).
+
 - Move owner-specific working backlog files to the git-ignored `.local/backlog/`, add a synthetic backlog format reference in `docs/backlog/README.md`, and verify that tracked documentation contains no user-home or machine-specific paths (#55).
 
 - Holoself now works when the self root or a project sits below a symlinked folder (for example macOS `/var` or a symlinked home); symlinks inside the root are still refused. On case-insensitive filesystems such as macOS, instruction files that differ only by case (`CODEX.md`/`codex.md`) are detected once. Lens bindings fail closed when a bound project path is swapped for a symlink or several stored paths resolve to the same folder. CI now verifies Linux, Windows and macOS on Node 20 and the current LTS, and releases require that matrix.
