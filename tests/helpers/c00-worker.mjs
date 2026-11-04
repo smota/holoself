@@ -168,7 +168,7 @@ async function characterize() {
   const privateMcp = call('holoself_context_manifest', { lens: 'private' })
   E['E-04'] = { reproduced: privateCli.data?.lens === 'private' && privateMcp.error?.code === 'LENS_NOT_GRANTED', cliLens: privateCli.data?.lens ?? null, cliErrorCode: privateCli.error?.code ?? null, mcpErrorCode: privateMcp.error?.code ?? null }
   const mechanical = await cli(['context', '--project', fixture.project, '--task', 'format this JSON', '--budget', 'small', '--json'])
-  E['E-07'] = { reproduced: mechanical.data.selection.context_need === 'not-needed' && content(mechanical.data).length > 0, need: mechanical.data.selection.context_need, bodyChars: content(mechanical.data).length }
+  E['E-07'] = { reproduced: mechanical.data.selection.context_need === 'not-needed' && content(mechanical.data).includes('C00_SCALE_'), need: mechanical.data.selection.context_need, bodyChars: content(mechanical.data).length }
   const envelopes = []
   for (const budget of ['small', 'standard', 'deep']) {
     const normal = await cli(['context', '--project', fixture.project, '--task', task, '--budget', budget, '--manifest', '--json'])

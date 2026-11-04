@@ -66,25 +66,26 @@ export function fitEnvelope(
       sources: cleanNext.sources
     })
     result.packet_metadata.source_hashes = next.source_hashes
-    const receipt = selectionReceipt(records, { budget: budgetName, taskHash: selected.taskHash, lens, temporal: selected.temporalVal })
+    const receipt = selectionReceipt(records, {
+      budget: budgetName,
+      taskHash: selected.taskHash,
+      lens,
+      temporal: selected.temporalVal,
+      need: result.selection.context_need,
+      needReason: result.selection.need_reason
+    })
     result.context_receipt = {
       ...result.context_receipt,
       context_hash: receipt.context_hash,
       source_ids: receipt.source_ids,
       source_hashes: receipt.source_hashes
     }
+    const chars = records.reduce((sum, r) => sum + (r.content?.length || 0), 0)
     Object.assign(result.selection, {
       selected_count: records.length,
       selected_sources: records.map(r => r.source_id),
       omitted_count: result.selection.omitted_count + 1,
-      truncated: true
-    })
-    payloadBytes = measurePayload(result)
-  }
-  if (dropped.length) {
-    // Keep content statistics and validation consistent with the records that remain.
-    const chars = records.reduce((sum, r) => sum + (r.content?.length || 0), 0)
-    Object.assign(result.selection, {
+      truncated: true,
       content_chars: chars,
       estimated_tokens: estimateTokens(chars),
       truncated_sources: records.filter(r => r.truncated).map(r => r.source_id),
@@ -92,15 +93,16 @@ export function fitEnvelope(
       contradiction_digest: contradictionDigest(records)
     })
     result.validation = resolvedContextAssertions(records, lens, o.task, adapter, link, resolution, subject)
-    if (o.manifest) {
-      const candidateList = selected.candidates || candidates,
-        startOffset = selected.startOffset || 0
-      const nextOffset = records.length === 0 && startOffset < candidateList.length ? startOffset + 1 : startOffset + records.length
-      result.selection.next_cursor =
-        nextOffset < candidateList.length
-          ? buildCursor(identityId, lens, budgetName, true, selfId, selected.taskHash, selected.temporalVal, nextOffset, selected.stateHash, cursorSecret)
-          : null
-    }
+    payloadBytes = measurePayload(result)
+  }
+  if (dropped.length && o.manifest) {
+    const candidateList = selected.candidates || candidates,
+      startOffset = selected.startOffset || 0
+    const nextOffset = records.length === 0 && startOffset < candidateList.length ? startOffset + 1 : startOffset + records.length
+    result.selection.next_cursor =
+      nextOffset < candidateList.length
+        ? buildCursor(identityId, lens, budgetName, true, selfId, selected.taskHash, selected.temporalVal, nextOffset, selected.stateHash, cursorSecret)
+        : null
   }
   if (payloadBytes > envelopeCap) {
     result.selection.truncated = true
@@ -117,5 +119,6 @@ export function fitEnvelope(
       estimated_tokens_total_heuristic: Math.ceil(bytes / 4)
     })
   }
+  Object.defineProperty(result.selection, 'need', { get() { return this.context_need }, enumerable: false, configurable: true })
   return result
 }
