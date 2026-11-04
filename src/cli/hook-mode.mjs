@@ -1,8 +1,10 @@
 // Host session-start hook mode (`holoself context ... --hook holoself-session-start`).
 // Fail-open for the session: the process always exits 0 and writes nothing to stderr, so the host session starts.
 // Fail-closed for privacy: stdout carries the packet only after full link/lens authority checks succeed; any error
-// (revoked link, missing binding, missing self root, missing project, bad arguments) produces no output at all.
-import { isAbsolute } from 'node:path'
+// (revoked link, missing binding, missing self root, missing project, bad arguments) produces no output (or an empty
+// injectSteps envelope for `--hook-format agy-json`).
+import { existsSync } from 'node:fs'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { HOOK_ID } from '../adapters/hooks.mjs'
 import { recordServedPacket } from '../ledger.mjs'
 import { packetFormat } from '../render/packet.mjs'
@@ -13,30 +15,68 @@ import { parseArguments } from './args.mjs'
 // Claude Code persists hook output above 10,000 characters to a file and shows the model only a preview
 // (threshold 1e4 in the 2.1.318 hook runner), so the hook packet is capped below it. Bytes >= characters.
 export const HOOK_PACKET_MAX_BYTES = 9000
+export const HOOK_FORMATS = ['text', 'agy-json']
+export const AGY_EMPTY_ENVELOPE = '{"injectSteps":[]}\n'
 
 export function isHookInvocation(argv) {
   return argv[0] === 'context' && argv.includes('--hook')
 }
 
-// The project comes from --project or, without it, from the host's CLAUDE_PROJECT_DIR environment variable,
-// so the installed command needs no shell expansion (Windows hosts may not run hooks through a POSIX shell).
-function hookProject(o, env) {
-  const project = o.project || env.CLAUDE_PROJECT_DIR || ''
-  return project.trim() && isAbsolute(project) ? project : null
+export function agyHookEnvelope(packetText) {
+  return JSON.stringify({ injectSteps: [{ systemMessage: { systemMessage: packetText } }] }) + '\n'
+}
+
+function requestedHookFormat(argv) {
+  const index = argv.lastIndexOf('--hook-format')
+  return index !== -1 && argv[index + 1] === 'agy-json' ? 'agy-json' : 'text'
+}
+
+// The project comes from --project, else the host's CLAUDE_PROJECT_DIR environment variable (Claude Code), else the
+// process working directory (Codex runs in the project root; AGY runs in the directory of <workspace>/.agents/hooks.json).
+// The resolved path must always be absolute.
+export function hookProject(o, env = process.env, cwd = process.cwd()) {
+  if (o.project !== undefined || o.projectRaw !== undefined) {
+    const raw = (o.projectRaw ?? o.project ?? '').trim()
+    return raw && isAbsolute(raw) ? resolve(raw) : null
+  }
+  if (env.CLAUDE_PROJECT_DIR !== undefined) {
+    const fromEnv = String(env.CLAUDE_PROJECT_DIR).trim()
+    return fromEnv && isAbsolute(fromEnv) ? resolve(fromEnv) : null
+  }
+  const dir = typeof cwd === 'string' ? cwd.trim() : ''
+  if (!dir || !isAbsolute(dir)) return null
+  const resolved = resolve(dir)
+  if (
+    ['.agents', '.codex', '.claude'].includes(basename(resolved)) &&
+    !existsSync(join(resolved, '.holoself', 'link.yaml')) &&
+    existsSync(join(dirname(resolved), '.holoself', 'link.yaml'))
+  )
+    return dirname(resolved)
+  return resolved
 }
 
 // Resolves the session-start packet for a hook; throws on any refusal.
-export function hookContext(o, env = process.env) {
+export function hookContext(o, env = process.env, cwd = process.cwd()) {
   const refuse = (code, message) => Object.assign(new Error(message), { code })
   if (o.hook !== HOOK_ID) throw refuse('HOOK_ID_UNKNOWN', `unknown hook id: ${o.hook}`)
-  const project = hookProject(o, env)
-  if (!project) throw refuse('HOOK_PROJECT_REQUIRED', 'hook mode requires --project or an absolute CLAUDE_PROJECT_DIR')
+  const hookFormat = o.hookFormat || 'text'
+  if (!HOOK_FORMATS.includes(hookFormat)) throw refuse('HOOK_OPTION_REFUSED', `unsupported hook format: ${hookFormat}`)
+  const project = hookProject(o, env, cwd)
+  if (!project) throw refuse('HOOK_PROJECT_REQUIRED', 'hook mode requires an absolute --project, CLAUDE_PROJECT_DIR, or working directory')
   if (o.output || o.snapshot || o.json || o.task || o.need || o.manifest || o.cursor || o.sources?.length || o.restrictedHost)
     throw refuse('HOOK_OPTION_REFUSED', 'hook mode emits only the live session-start packet')
   if (o.format && o.format !== 'packet') throw refuse('HOOK_OPTION_REFUSED', 'hook mode emits only the packet format')
-  const options = { ...o, project, sessionStart: true, envelopeCapBytes: HOOK_PACKET_MAX_BYTES },
-    data = contextData(options),
-    content = packetFormat(data, o.adapter || 'packet').trimEnd() + '\n'
+  const buildPacket = capBytes => {
+    const data = contextData({ ...o, project, sessionStart: true, envelopeCapBytes: capBytes }),
+      packet = packetFormat(data, o.adapter || 'packet').trimEnd(),
+      content = hookFormat === 'agy-json' ? agyHookEnvelope(packet) : packet + '\n'
+    return { data, packet, content }
+  }
+  let { data, packet, content } = buildPacket(HOOK_PACKET_MAX_BYTES)
+  if (hookFormat === 'agy-json' && Buffer.byteLength(content) > HOOK_PACKET_MAX_BYTES) {
+    const overhead = Buffer.byteLength(content) - Buffer.byteLength(packet) + 64
+    ;({ data, packet, content } = buildPacket(Math.max(1024, HOOK_PACKET_MAX_BYTES - overhead)))
+  }
   if (Buffer.byteLength(content) > HOOK_PACKET_MAX_BYTES) throw refuse('HOOK_PACKET_TOO_LARGE', 'session-start packet exceeds the hook output cap')
   recordServedPacket({
     data,
@@ -69,7 +109,8 @@ function auditHook(entry) {
 
 export async function runHookInvocation(argv) {
   const quiet = () => {},
-    saved = { log: console.log, error: console.error, warn: console.warn, info: console.info }
+    saved = { log: console.log, error: console.error, warn: console.warn, info: console.info },
+    format = requestedHookFormat(argv)
   Object.assign(console, { log: quiet, error: quiet, warn: quiet, info: quiet })
   let result = null
   try {
@@ -80,10 +121,11 @@ export async function runHookInvocation(argv) {
   } finally {
     Object.assign(console, saved)
   }
-  if (result) {
+  const output = result ? result.content : format === 'agy-json' ? AGY_EMPTY_ENVELOPE : ''
+  if (output) {
     process.stdout.on('error', () => {})
     try {
-      process.stdout.write(result.content)
+      process.stdout.write(output)
     } catch {}
   }
   process.exitCode = 0

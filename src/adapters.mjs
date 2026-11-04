@@ -123,7 +123,8 @@ export function activationPlan(project, options = {}) {
     .filter(adapter => HOOK_HOSTS[adapter.id])
     .map(adapter => {
       const host = HOOK_HOSTS[adapter.id],
-        support = hookSupport(adapter.id)
+        support = hookSupport(adapter.id),
+        install = hookPolicy === 'on' || (hookPolicy === 'auto' && support.support === 'verified')
       return {
         adapter: adapter.id,
         file: host.file,
@@ -133,7 +134,8 @@ export function activationPlan(project, options = {}) {
         support: support.support,
         tested_version: support.tested_version,
         last_verified: support.last_verified,
-        install: hookPolicy === 'on' || (hookPolicy === 'auto' && support.support === 'verified'),
+        install,
+        ...(install && host.trustStep ? { trust_step: host.trustStep } : {}),
         action: 'pending'
       }
     })
@@ -163,8 +165,12 @@ function recordedHook(runtime, id) {
 }
 function applyHookChange(change) {
   if (change.action === 'unchanged') return
-  if (change.after === null) rmSync(change.path, { force: true })
-  else atomicWrite(change.path, change.after, { mode: change.mode, exactMode: true })
+  if (change.after === null) {
+    rmSync(change.path, { force: true })
+    removeEmptyMcpDirs(change.project, change.createdDirs)
+    return
+  }
+  atomicWrite(change.path, change.after, { mode: change.mode, exactMode: true })
 }
 // Hook entries to remove on deactivation: recorded installations plus any Holoself-owned entry still on disk.
 function hookRemovalTargets(project, runtime, ids = null) {
@@ -173,7 +179,7 @@ function hookRemovalTargets(project, runtime, ids = null) {
     .filter(id => {
       if (recordedHook(runtime, id)) return true
       try {
-        return ['installed', 'drifted'].includes(inspectHook(project, id).state)
+        return ['installed', 'installed-trust-unverified', 'installed-untrusted', 'drifted'].includes(inspectHook(project, id).state)
       } catch {
         return false
       }
@@ -181,7 +187,11 @@ function hookRemovalTargets(project, runtime, ids = null) {
     .map(id => ({ adapter: id, file: HOOK_HOSTS[id].file, ...hookRecordOptions(recordedHook(runtime, id)) }))
 }
 function hookRecordOptions(record) {
-  return { createdFile: record?.createdFile === true, createdContainers: Array.isArray(record?.createdContainers) ? record.createdContainers : null }
+  return {
+    createdFile: record?.createdFile === true,
+    createdContainers: Array.isArray(record?.createdContainers) ? record.createdContainers : null,
+    createdDirs: Array.isArray(record?.createdDirs) ? record.createdDirs.filter(dir => typeof dir === 'string') : null
+  }
 }
 // A hook that cannot be removed safely (invalid or unsafe settings) is reported, not fatal: deactivation continues.
 function hookRemovalChanges(project, targets) {
@@ -329,7 +339,7 @@ export function activateProject(project, link, options = {}) {
       plan,
       results: plan.adapters.map(x => ({ ...x, result: 'planned' })),
       skillResults: plan.skills.map(x => ({ ...x, result: 'planned' })),
-      hookResults: plan.hooks.map(x => ({ ...x, result: 'planned' })),
+      hookResults: plan.hooks.filter(x => x.install || x.action !== 'unchanged').map(x => ({ ...x, result: 'planned' })),
       mcpResults: plan.mcp.map(x => ({ ...x, result: x.action === 'skipped' ? 'skipped' : 'planned' })),
       runtime: null
     }
@@ -364,9 +374,11 @@ export function activateProject(project, link, options = {}) {
     for (const hook of plan.hooks) {
       const previous = recordedHook(previousRuntime, hook.adapter),
         change = hookChange(project, hook.adapter, hook.install, hookRecordOptions(previous))
+      if (change.action !== 'unchanged') mcpCreatedDirs.push(...(change.createdDirs || []))
       applyHookChange(change)
-      hookResults.push({ ...hook, action: change.action, result: change.action })
-      if (hook.install)
+      if (hook.install || change.action !== 'unchanged') hookResults.push({ ...hook, action: change.action, result: change.action })
+      if (hook.install) {
+        const createdDirs = previous ? previous.createdDirs || [] : change.createdDirs || []
         hookInstallations.push({
           id: hook.adapter,
           file: hook.file,
@@ -376,10 +388,12 @@ export function activateProject(project, link, options = {}) {
           status: 'installed',
           createdFile: previous ? previous.createdFile === true : !change.existed,
           createdContainers: change.createdContainers,
+          ...(createdDirs.length ? { createdDirs } : {}),
           support: hook.support,
           tested_version: hook.tested_version,
           last_verified: hook.last_verified
         })
+      }
     }
     const installations = skillResults.map(x => {
       const text = readFileSync(safeProjectFile(project, x.file, 'skill runtime hash'), 'utf8'),
@@ -403,7 +417,12 @@ export function activateProject(project, link, options = {}) {
         ...(changes.approval ? { approval_action: changes.approval.action } : {}),
         result: changes.server?.action ?? 'unchanged'
       })
-      if (entry.install) mcpInstallations.push(mcpInstallationRecord(entry, changes, previous))
+      if (entry.install) {
+        const record = mcpInstallationRecord(entry, changes, previous),
+          hookDirs = hookInstallations.find(h => h.id === entry.adapter)?.createdDirs || []
+        if (!record.createdDirs.length && hookDirs.length) record.createdDirs = [...hookDirs]
+        mcpInstallations.push(record)
+      }
     }
     if (options.afterMcp) options.afterMcp()
     const globalInstallations = (plan.globalSkills || []).map(x => ({
@@ -561,6 +580,7 @@ function deactivateAdapters(project, ids, options = {}) {
     }
     results.push(...applyHookRemovals(hookRemovals, options.dryRun))
     results.push(...applyMcpRemovals(mcpRemovals, options.dryRun))
+    if (!options.dryRun) removeEmptyMcpDirs(project, hookRemovals.flatMap(r => r.createdDirs || []))
     for (const adapter of ids.filter(id => !active.includes(id))) results.push({ adapter, file: null, result: 'not-active' })
     if (!options.dryRun && runtime) {
       const keep = x => !selected.includes(x.id)
@@ -621,6 +641,7 @@ export function deactivateProject(project, options = {}) {
     for (const file of instructionFiles) results.push({ file, result: removeMarker(project, file, options.dryRun) })
     results.push(...applyHookRemovals(hookRemovals, options.dryRun))
     results.push(...applyMcpRemovals(mcpRemovals, options.dryRun))
+    if (!options.dryRun) removeEmptyMcpDirs(project, hookRemovals.flatMap(r => r.createdDirs || []))
     for (const file of skillFiles) {
       const path = safeProjectFile(project, file, 'skill discovery'),
         state = skillState(path)
@@ -698,7 +719,7 @@ export function activationStatus(project, options = {}) {
   }
 }
 
-// Per activated host: installed | missing | drifted | unsafe | invalid | untracked | disabled | not-installed | unsupported.
+// Per activated host: installed | installed-trust-unverified | installed-untrusted | missing | drifted | unsafe | invalid | untracked | disabled | not-installed | unsupported.
 export function sessionStartHookStatus(project, runtime = readRuntime(project)) {
   return activeAdapterIds(project, runtime)
     .filter(id => id !== 'agents')
@@ -726,9 +747,11 @@ export function sessionStartHookStatus(project, runtime = readRuntime(project)) 
         hook_id: HOOK_ID,
         state,
         ...(inspected.detail ? { detail: inspected.detail } : {}),
+        ...(state === 'installed-untrusted' && inspected.trust_step ? { trust_step: inspected.trust_step } : {}),
         support: support.support,
         tested_version: support.tested_version,
-        last_verified: support.last_verified
+        last_verified: support.last_verified,
+        ...(state === 'not-installed' && support.reason ? { reason: support.reason } : {})
       }
     })
 }

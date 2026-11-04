@@ -76,12 +76,15 @@
         }
       },
       "session_start_hook": {
-        "result": "host-supported-not-installed",
+        "result": "unverified",
         "host_version": "1.5.0",
-        "verified_at": "2026-11-04",
+        "verified_at": null,
+        "settings_file": ".agents/hooks.json",
+        "event": "SessionStart",
         "hook_ran": false,
         "marker_returned": false,
-        "evidence": "The hooks.json reference bundled in agy 1.5.0 lists a SessionStart event (flat handler list) in <workspace>/.agents/hooks.json whose stdout is JSON {\"injectSteps\":[{\"systemMessage\":{...}}]}; workspace hooks load only for trusted folders (agy changelog). Holoself does not install this hook yet."
+        "command": "holoself context --session-start --budget small --format packet --hook holoself-session-start --hook-format agy-json",
+        "evidence": "The hooks.json reference bundled in agy 1.5.0 lists a SessionStart event (named hook entry with a flat SessionStart handler list) in <workspace>/.agents/hooks.json whose stdout is JSON {\"injectSteps\":[{\"systemMessage\":{\"systemMessage\":\"...\"}}]}; workspace hooks load only for trusted folders (agy changelog). Installed only with --hooks until verified in a live run."
       }
     },
     {
@@ -252,12 +255,15 @@
         }
       },
       "session_start_hook": {
-        "result": "host-supported-not-installed",
+        "result": "unverified",
         "host_version": "0.166.0",
-        "verified_at": "2026-11-04",
+        "verified_at": null,
+        "settings_file": ".codex/hooks.json",
+        "event": "SessionStart",
         "hook_ran": false,
         "marker_returned": false,
-        "evidence": "codex features list shows hooks (stable, enabled); project .codex/hooks.json takes a SessionStart event; each hook runs only after the user trusts it (hooks.state.<source>:<event>:<i>:<j>.trusted_hash in ~/.codex/config.toml). Holoself does not write user Codex config, so it does not install this hook."
+        "command": "holoself context --session-start --budget small --format packet --hook holoself-session-start",
+        "evidence": "codex features list shows hooks (stable, enabled); project .codex/hooks.json takes a SessionStart matcher group; each hook runs only after the user trusts it (hooks.state.\"<file>:session_start:0:0\".trusted_hash in ~/.codex/config.toml). Holoself never writes user Codex config; installed only with --hooks until verified in a live run."
       }
     }
   ]
