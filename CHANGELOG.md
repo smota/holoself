@@ -4,6 +4,8 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- Workbench hardening: the local server answers only `127.0.0.1:<port>` and `localhost:<port>` hosts, requires the session token on every `/api` request (the page now receives it in the served HTML, not from `/api/session`), accepts changes only from a loopback origin, and serves only regular files from its web directory.
+
 - An explicit canonical root containing the current directory now resolves owner-direct even when nested inside a linked project. Explicit project selection and callers outside that root retain linked authority.
 
 - Workbench activate, deactivate, relink and setup now preview every affected file and require the unchanged plan hash to apply. Content or configuration drift returns `PLAN_CHANGED` (409). Relink preserves project metadata and activation choices; legacy setup preflights without unlinking and restores the junction on recoverable failure (#39).
