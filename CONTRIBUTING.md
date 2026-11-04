@@ -24,7 +24,7 @@ Thank you for helping improve Holoself. Small, focused contributions are welcome
 6. Address review feedback and keep the branch current until the required check passes.
 7. A maintainer squash-merges an accepted pull request. Branches in this repository are deleted automatically after merge; contributors can delete branches in their own forks.
 
-Holoself requires Node.js 20 or newer. The repository currently has no third-party runtime dependencies, so no install step is required before verification.
+Holoself requires Node.js 22 or newer. The repository currently has no third-party runtime dependencies, so no install step is required before verification.
 
 ## Pull-request titles
 

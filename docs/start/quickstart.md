@@ -11,7 +11,7 @@ npm install --global holoself-ai
 holoself --help
 ```
 
-Node.js 20+ is required.
+Node.js 22+ is required.
 
 This guide uses the installed `holoself` package bin. To evaluate or develop from a repository checkout instead, clone the repository and replace `holoself` with `node bin/holoself.mjs`; see [CLI invocation](../reference/cli.md#invocation).
 
