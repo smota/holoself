@@ -2,7 +2,7 @@
 import { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES } from '../annotations.mjs'
 import { KNOWLEDGE_STATUSES, TEMPORAL_SCOPES, dateValue } from '../context-selection.mjs'
 import { DEFAULT_LENS_IDS } from '../lenses.mjs'
-import { claimBlockPattern, claimStatus, parseClaimAttrs } from '../markdown/claim-blocks.mjs'
+import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
 
 export const LENSES = DEFAULT_LENS_IDS
 export const SENSITIVITY_LENSES = {
@@ -111,9 +111,10 @@ export function allowed(meta, lens, adapter = 'generic', task = null, resolution
 }
 export function filterClaimVisibility(body, lens, source, restrictions, resolution = null, identityKind = 'owner:direct') {
   const behaviorLens = lens
-  return body.replace(claimBlockPattern(), (block, claimVisibility) => {
-    if (visibleUnderBehavior(claimVisibility, behaviorLens, 'generic')) return block
-    if (identityKind === 'owner:direct') restrictions.push({ source, reason: `claim visibility ${claimVisibility} excluded by ${lens} lens` })
+  return replaceClaimBlocks(body, block => {
+    if (visibleUnderBehavior(block.visibility, behaviorLens, 'generic')) return block.raw
+    if (identityKind === 'owner:direct')
+      restrictions.push({ source, reason: block.malformed ? 'malformed claim marker excluded' : `claim visibility ${block.visibility} excluded by ${lens} lens` })
     return ''
   })
 }
@@ -123,9 +124,9 @@ export function claimStatusIncluded(status = 'current', temporal = 'current') {
   return status === 'current' || temporal === 'all' || temporal === status
 }
 export function filterClaimStatus(body, temporal, source, restrictions, identityKind = 'owner:direct') {
-  return body.replace(claimBlockPattern(), (block, _visibility, rawAttrs) => {
-    const status = claimStatus(parseClaimAttrs(rawAttrs))
-    if (claimStatusIncluded(status, temporal || 'current')) return block
+  return replaceClaimBlocks(body, block => {
+    const status = block.status
+    if (claimStatusIncluded(status, temporal || 'current')) return block.raw
     if (identityKind === 'owner:direct' && !restrictions.some(x => x.source === source && x.reason === `claim status ${status} excluded by temporal selector`))
       restrictions.push({ source, reason: `claim status ${status} excluded by temporal selector` })
     return ''

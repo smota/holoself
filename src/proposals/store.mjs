@@ -6,7 +6,7 @@ import { VISIBILITIES } from '../annotations.mjs'
 import { canonicalSort } from '../catalog.mjs'
 import { loadLensRegistry } from '../lenses.mjs'
 import { createLinkDirs, readLink } from '../link/config.mjs'
-import { CLAIM_ID_RE, claimBlockPattern, claimStatus, formatClaimMarker, normalize, parseClaimAttrs, parseClaimBlocks, proposalClaimId } from '../markdown/claim-blocks.mjs'
+import { CLAIM_ID_RE, CLAIM_MARKER_RE, formatClaimMarker, normalize, parseClaimBlocks, proposalClaimId, replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { claims } from '../markdown/text.mjs'
 import { canonicalPath, samePath } from '../path-guard.mjs'
 import { assertContainedPath, atomicWrite, ensureDir, hash, slash } from '../shared/fs.mjs'
@@ -35,6 +35,8 @@ const CHANGE_FIELDS = {
 const DEFAULT_PROPOSAL_TYPE = { append_claim: 'new_fact', replace_claim: 'fact_correction', supersede_claim: 'fact_update', retire_claim: 'fact_update' }
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 export const UUID_PREFIX_RE = /^[0-9a-f-]{8,36}$/i
+export const CHANGE_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
+const COMMIT_TIME_RESERVED = /@@holoself-commit-time/i
 export function proposalDir(project) {
   return assertContainedPath(project, join(project, '.holoself', 'proposals'), 'proposal directory')
 }
@@ -103,6 +105,8 @@ export function validateProposal(p) {
       }
       for (const key of ['change_id', 'target', 'operation'])
         if (typeof change[key] !== 'string' || !change[key].trim()) errors.push(`proposal change ${key} must be a non-empty string`)
+      if (typeof change.change_id === 'string' && !CHANGE_ID_RE.test(change.change_id))
+        errors.push('proposal change_id must match ^[a-z0-9][a-z0-9_-]{0,63}$')
       if (ids.has(change.change_id)) errors.push(`duplicate change_id: ${change.change_id}`)
       ids.add(change.change_id)
       const fields = CHANGE_FIELDS[change.operation]
@@ -159,10 +163,11 @@ export function validateProposal(p) {
     p.claim,
     p.evidence,
     p.confidence,
-    ...proposalChanges(p).flatMap(x => [x.claim, x.evidence, x.confidence, x.reason]),
+    ...proposalChanges(p).flatMap(x => [x.change_id, x.claim, x.evidence, x.confidence, x.reason]),
     ...(Array.isArray(p.provenance) ? p.provenance : [])
   ]
-  if (textFields.some(x => typeof x === 'string' && /<!--\s*\/?holoself-claim/i.test(x))) errors.push('proposal text contains reserved claim markers')
+  if (textFields.some(x => typeof x === 'string' && (CLAIM_MARKER_RE.test(x) || COMMIT_TIME_RESERVED.test(x))))
+    errors.push('proposal text contains reserved claim markers')
   return errors
 }
 export function readProposal(path) {
@@ -281,7 +286,8 @@ function proposalChange(input, sourceFiles, changeId) {
   if (operation === 'append_claim' && input.claim_id) throw claimError('append_claim does not accept claim_id', 'INVALID_ARGUMENT')
   return change
 }
-export function createProposal(project, input) {
+// `view` (MCP only) narrows every claim check to what the caller's link can read; see planProposalChanges.
+export function createProposal(project, input, { view = null } = {}) {
   const link = readLink(project)
   if (link.proposals !== 'enabled') throw new Error('proposals are not enabled for link')
   const sourceFiles = input.source_files || []
@@ -304,80 +310,90 @@ export function createProposal(project, input) {
       changes: inputs.map((item, i) => proposalChange(item, sourceFiles, item.change_id || (inputs.length === 1 ? 'claim' : `change-${i + 1}`)))
     }
   const errors = validateProposal(p)
-  if (errors.length) throw new Error(errors.join('; '))
+  if (errors.length) throw claimError(errors.join('; '), 'INVALID_ARGUMENT')
   // Refuse early when a targeted claim is missing, ambiguous or no longer current, exactly as preview would.
-  planProposalChanges(p, link.path)
+  planProposalChanges(p, link.path, view)
   createLinkDirs(project, { preserveReadme: true })
   saveProposal(p, proposalFile(project, p.proposal_id))
   return p
 }
-// Current claim lines of a document, ignoring superseded/retired history and optionally one block being rewritten.
-function currentClaimLines(text, skip = null) {
+// Placeholder for the approval time, unique per proposal so user text can never collide with it.
+export function commitTimeToken(p) {
+  return `@@holoself-commit-time-${hash(p.proposal_id).slice(0, 16)}@@`
+}
+// Current claim lines of a document, ignoring superseded/retired history, blocks the view cannot see, and optionally
+// the block being rewritten (by offset in the full text, or by claim id in delivered text).
+function currentClaimLines(text, { skip = null, keep = () => true } = {}) {
   return claims(
-    text.replace(claimBlockPattern(), (block, _visibility, rawAttrs, _body, offset) =>
-      (skip && offset === skip.start) || claimStatus(parseClaimAttrs(rawAttrs)) !== 'current' ? '' : block
-    )
+    replaceClaimBlocks(text, block => (block.start === skip?.start || block.status !== 'current' || !keep(block) ? '' : block.raw), { failClosed: false })
   )
 }
 function claimBody(p, change, visibility) {
   return (
     `## Approved proposal ${p.proposal_id}/${change.change_id}\n\n${change.claim}\n\n` +
     `- Evidence: ${change.evidence}\n- Confidence: ${change.confidence}\n- Visibility: ${visibility}\n` +
-    `- Provenance: ${p.provenance.join('; ')}\n- Approved: <commit-time>\n`
+    `- Provenance: ${p.provenance.join('; ')}\n- Approved: ${commitTimeToken(p)}\n`
   )
 }
-function targetedClaim(text, rel, change) {
-  const found = parseClaimBlocks(text, rel).filter(block => block.claim_id === change.claim_id)
+function targetedClaim(text, rel, change, view) {
+  // Under an MCP view, blocks the caller cannot read behave as absent, so errors never reveal hidden claims.
+  const found = parseClaimBlocks(text, rel).filter(block => block.claim_id === change.claim_id && (!view || view.visible(rel, block)))
   if (!found.length) throw claimError(`claim not found in ${rel}: ${change.claim_id} (${change.change_id})`, 'CLAIM_NOT_FOUND')
   if (found.length > 1) throw claimError(`claim id is ambiguous in ${rel}: ${change.claim_id} (${change.change_id})`, 'CLAIM_AMBIGUOUS')
   const block = found[0]
+  if (block.malformed) throw claimError(`claim marker is malformed: ${change.claim_id} (${change.change_id})`, 'CLAIM_MALFORMED')
   if (block.status !== 'current') throw claimError(`claim is already ${block.status}: ${change.claim_id} (${change.change_id})`, 'CLAIM_NOT_CURRENT')
   return block
 }
-function refuseDuplicate(text, change, skip = null) {
-  if (currentClaimLines(text, skip).some(x => normalize(x) === normalize(change.claim)))
+function refuseDuplicate(text, rel, change, view, skip = null) {
+  const lines = view
+    ? view.delivered(rel).flatMap(content => currentClaimLines(content, { keep: block => !skip || block.claim_id !== skip.claim_id }))
+    : currentClaimLines(text, { skip })
+  if (lines.some(x => normalize(x) === normalize(change.claim)))
     throw claimError(`proposal duplicates an existing canonical claim: ${change.change_id}`, 'DUPLICATE_CLAIM')
 }
 const diffLines = (removed, added) => [...removed.map(x => x.split('\n').map(line => `-${line}`).join('\n')), ...added.map(x => x.split('\n').map(line => `+${line}`).join('\n'))].join('\n')
-// Applies one change to the current text of its target. `<commit-time>` stays a placeholder until approval commits.
-export function applyClaimChange(text, rel, change, p) {
-  const close = '<!-- /holoself-claim -->'
+// Applies one change to the current text of its target. The approval time stays a placeholder until approval commits.
+export function applyClaimChange(text, rel, change, p, view = null) {
+  const close = '<!-- /holoself-claim -->',
+    time = commitTimeToken(p)
   if (change.operation === 'append_claim') {
-    refuseDuplicate(text, change)
+    refuseDuplicate(text, rel, change, view)
     const claimId = proposalClaimId(p.proposal_id, change.change_id),
       block = `\n\n${formatClaimMarker(change.visibility, { id: claimId })}\n${claimBody(p, change, change.visibility)}${close}\n`
-    return { after: text.trimEnd() + block, claim_id: claimId, before_block: null, after_block: block.trim(), preview: block.trim() }
+    return { after: text.trimEnd() + block, claim_id: claimId, before_block: null, after_block: block.trim(), preview: block.trim(), visibility_change: null }
   }
-  const old = targetedClaim(text, rel, change),
+  const old = targetedClaim(text, rel, change, view),
     splice = replacement => text.slice(0, old.start) + replacement + text.slice(old.end),
-    attrs = { ...old.attrs, id: old.claim_id }
+    attrs = { ...old.attrs, id: old.claim_id },
+    visibility = change.visibility || old.visibility,
+    visibilityChange = visibility === old.visibility ? null : { from: old.visibility, to: visibility }
   if (change.operation === 'replace_claim') {
     if (normalize(old.text) === normalize(change.claim)) throw claimError(`replacement wording matches the existing claim: ${change.change_id}`, 'CLAIM_UNCHANGED')
-    refuseDuplicate(text, change, old)
-    const visibility = change.visibility || old.visibility,
-      block = `${formatClaimMarker(visibility, { id: old.claim_id, supersedes: old.attrs.supersedes })}\n${claimBody(p, change, visibility)}${close}`
-    return { after: splice(block), claim_id: old.claim_id, before_block: old.raw, after_block: block, preview: diffLines([old.raw], [block]) }
+    refuseDuplicate(text, rel, change, view, old)
+    const block = `${formatClaimMarker(visibility, { id: old.claim_id, supersedes: old.attrs.supersedes })}\n${claimBody(p, change, visibility)}${close}`
+    return { after: splice(block), claim_id: old.claim_id, before_block: old.raw, after_block: block, preview: diffLines([old.raw], [block]), visibility_change: visibilityChange }
   }
   if (change.operation === 'supersede_claim') {
     if (normalize(old.text) === normalize(change.claim)) throw claimError(`superseding wording matches the existing claim: ${change.change_id}`, 'CLAIM_UNCHANGED')
-    refuseDuplicate(text, change, old)
+    refuseDuplicate(text, rel, change, view, old)
     const claimId = proposalClaimId(p.proposal_id, change.change_id),
-      visibility = change.visibility || old.visibility,
-      marked = `${formatClaimMarker(old.visibility, { ...attrs, status: 'superseded', superseded_by: claimId, superseded_at: '<commit-time>' })}${old.body}${close}`,
+      marked = `${formatClaimMarker(old.visibility, { ...attrs, status: 'superseded', superseded_by: claimId, superseded_at: time })}${old.body}${close}`,
       block = `${formatClaimMarker(visibility, { id: claimId, supersedes: old.claim_id })}\n${claimBody(p, change, visibility)}${close}`
     return {
       after: `${splice(marked).trimEnd()}\n\n${block}\n`,
       claim_id: claimId,
       before_block: old.raw,
       after_block: `${marked}\n\n${block}`,
-      preview: diffLines([old.raw], [marked, '', block])
+      preview: diffLines([old.raw], [marked, '', block]),
+      visibility_change: visibilityChange
     }
   }
   const marked =
-    `${formatClaimMarker(old.visibility, { ...attrs, status: 'historical', retired_at: '<commit-time>' })}${old.body.trimEnd()}\n` +
-    `- Retired: <commit-time> by proposal ${p.proposal_id}/${change.change_id}\n- Retirement reason: ${change.reason}\n` +
+    `${formatClaimMarker(old.visibility, { ...attrs, status: 'historical', retired_at: time })}${old.body.trimEnd()}\n` +
+    `- Retired: ${time} by proposal ${p.proposal_id}/${change.change_id}\n- Retirement reason: ${change.reason}\n` +
     `- Retirement evidence: ${change.evidence}\n- Retirement provenance: ${p.provenance.join('; ')}\n${close}`
-  return { after: splice(marked), claim_id: old.claim_id, before_block: old.raw, after_block: marked, preview: diffLines([old.raw], [marked]) }
+  return { after: splice(marked), claim_id: old.claim_id, before_block: old.raw, after_block: marked, preview: diffLines([old.raw], [marked]), visibility_change: null }
 }
 function emptyTarget(self) {
   return `---\naccess_lenses: [${loadLensRegistry(self)
@@ -385,39 +401,50 @@ function emptyTarget(self) {
     .join(', ')}]\ndisclosure: review-required\nsensitivity: personal\ndocument_role: evidence\n---\n`
 }
 // Applies every change in order, grouping by target so several changes to one file compose deterministically.
-export function planProposalChanges(p, self) {
+// Each preview entry hashes the file as that change found and left it, so hashes chain across changes to one file.
+// With an MCP `view`, claim lookups and duplicate checks see only what the link's lenses deliver; approval always
+// re-plans without a view, so the full checks still run before anything is written.
+export function planProposalChanges(p, self, view = null) {
   const grouped = new Map(),
-    previews = []
+    previews = [],
+    steps = [],
+    time = commitTimeToken(p),
+    shown = text => (text === null ? null : text.replaceAll(time, '<commit-time>'))
   for (const change of proposalChanges(p)) {
     const target = safeTarget(self, change.target),
       rel = slash(relative(self, target)),
       state = grouped.get(target),
       existed = state?.existed ?? existsSync(target),
       before = state?.before ?? (existed ? readFileSync(target, 'utf8') : emptyTarget(self)),
-      applied = applyClaimChange(state?.after ?? before, rel, { ...change, operation: change.operation || 'append_claim' }, p)
+      current = state?.after ?? before
+    if (!state && before.includes(time)) throw claimError(`target already contains this proposal's reserved placeholder: ${rel}`, 'INVALID_TARGET')
+    const applied = applyClaimChange(current, rel, { ...change, operation: change.operation || 'append_claim' }, p, view)
     grouped.set(target, { target, before, after: applied.after, existed })
+    steps.push({ before: current, after: applied.after })
     previews.push({
       change_id: change.change_id,
       operation: change.operation || 'append_claim',
       target: rel,
       claim_id: applied.claim_id,
-      before_sha256: hash(before),
+      evidence: change.evidence,
+      visibility_change: applied.visibility_change,
+      before_sha256: hash(current),
       after_sha256: hash(applied.after),
-      before_block: applied.before_block,
-      after_block: applied.after_block,
-      preview: applied.preview
+      before_block: shown(applied.before_block),
+      after_block: shown(applied.after_block),
+      preview: shown(applied.preview)
     })
   }
-  return { grouped, previews }
+  return { grouped, previews, steps, commit_time_token: time }
 }
-export function proposalPreviewData(project, id) {
+export function proposalPreviewData(project, id, { view = null } = {}) {
   const p = findProposal(project, id)
   if (p.status !== 'pending') throw new Error(`proposal is ${p.status}, expected pending`)
   const projectErrors = proposalProjectErrors(p, project)
   if (projectErrors.length) throw new Error(`proposal provenance validation failed: ${projectErrors.join('; ')}`)
   const link = readLink(project),
-    { grouped, previews } = planProposalChanges(p, link.path)
-  return { proposal: p, link, grouped, changes: previews, preview_hash: hash(JSON.stringify(previews)) }
+    { grouped, previews, steps, commit_time_token } = planProposalChanges(p, link.path, view)
+  return { proposal: p, link, grouped, steps, commit_time_token, changes: previews, preview_hash: hash(JSON.stringify(previews)) }
 }
 export function stateProposal(project, p, state, details = {}) {
   if (!UUID_RE.test(p.proposal_id)) throw new Error('proposal_id must be a UUID')

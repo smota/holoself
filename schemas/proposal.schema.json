@@ -124,7 +124,7 @@
         "properties": {
           "change_id": {
             "type": "string",
-            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*$"
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
           },
           "target": {
             "type": "string",

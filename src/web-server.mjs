@@ -321,7 +321,8 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
             proposalId: data.proposal_id,
             changes: data.changes,
             previewHash: data.preview_hash,
-            affectedFiles: [...new Set(data.changes.map(x => x.target))]
+            affectedFiles: [...new Set(data.changes.map(x => x.target))],
+            evidence: [...new Set(data.changes.map(x => x.evidence).filter(Boolean))].join('; ')
           }
         })
       }

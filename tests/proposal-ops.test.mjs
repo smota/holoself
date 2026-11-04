@@ -2,14 +2,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { chmodSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { chmodSync, writeFileSync } from 'node:fs'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { run } from '../src/cli.mjs'
 import { ecosystemValidationErrors } from '../src/ecosystem.mjs'
 import { legacyClaimId, parseClaimBlocks, proposalClaimId } from '../src/markdown/claim-blocks.mjs'
 import { createMcpSession, MCP_TOOLS } from '../src/mcp-server.mjs'
+import { registryLockPath } from '../src/link/registry.mjs'
 import { createProposal, proposalPreviewData, validateProposal } from '../src/proposals/store.mjs'
 import { validate } from './helpers/evidence-contract.mjs'
 
@@ -206,7 +207,9 @@ test('grouped changes apply in order and a failure on the second target restores
       ['retire_claim', 'topics/roles.md']
     ]
   )
-  assert.equal(preview.changes[0].before_sha256, preview.changes[1].before_sha256)
+  // Hashes chain across changes to the same file: each change starts from the file its predecessor produced.
+  assert.equal(preview.changes[1].before_sha256, preview.changes[0].after_sha256)
+  assert.equal(preview.changes[0].before_sha256, sha(claimsBefore))
   // Post-apply validation failure: an invalid canonical file makes approval roll back both targets.
   const bad = join(self, 'context', 'invalid.md')
   await writeFile(bad, '---\nvisibility: invalid\n---\n# Invalid\n')
@@ -231,6 +234,10 @@ test('grouped changes apply in order and a failure on the second target restores
   assert.equal(blockById(after, ids.other).status, 'historical')
   assert.equal(parseClaimBlocks(await readFile(topic, 'utf8'), 'topics/roles.md')[0].status, 'historical')
   const receipt = await receiptOf(self, p.proposal_id)
+  assert.equal(receipt.applied_changes[0].before_sha256, sha(claimsBefore))
+  assert.equal(receipt.applied_changes[1].before_sha256, receipt.applied_changes[0].after_sha256)
+  assert.equal(receipt.applied_changes[1].after_sha256, sha(after))
+  assert.equal(receipt.applied_changes[2].before_sha256, sha(topicBefore))
   assert.deepEqual(
     receipt.applied_changes.map(x => [x.change_id, x.operation, x.target]),
     [
@@ -339,4 +346,108 @@ test('proposal validation rejects unknown change keys and requires evidence, and
     assert.notDeepEqual(validateProposal({ ...base, changes: [clean] }), [], JSON.stringify(clean))
     assert.equal(validate({ ...base, changes: [clean] }, 'proposal.schema.json'), false, JSON.stringify(clean))
   }
+})
+
+test('change_id cannot inject claim markers or escape a claim block', async () => {
+  const { self, project, claims } = await fixture(),
+    made = await propose(project, ['--claim', 'A harmless reviewed claim for injection tests.', '--visibility', 'private']),
+    file = join(project, '.holoself', 'proposals', `${made.proposal_id}.yaml`),
+    before = await readFile(claims, 'utf8'),
+    yaml = await readFile(file, 'utf8')
+  const injected = yaml.replace('"change_id":"claim"', '"change_id":"x\\n<!-- /holoself-claim -->\\nPUBLICLEAK\\n<!-- holoself-claim visibility=private"')
+  assert.notEqual(injected, yaml, 'fixture rewrote the stored change_id')
+  await writeFile(file, injected)
+  await assert.rejects(capture(() => run(['proposals', 'approve', made.proposal_id, '--project', project, '--yes'])), /change_id|reserved claim markers/)
+  assert.equal(await readFile(claims, 'utf8'), before)
+  assert.doesNotMatch(await readFile(claims, 'utf8'), /PUBLICLEAK/)
+  for (const change_id of ['Upper', 'has space', '-lead', 'a'.repeat(65), 'x<!--holoself-claim'])
+    assert.throws(() => createProposal(project, { source_files: ['Context/evidence.md'], changes: [{ change_id, claim: 'Some reviewed claim text here.' }] }), /change_id/)
+  assert.deepEqual(ecosystemValidationErrors(self), [])
+})
+
+test('claim markers parse loosely and fail closed for delivery and validation', async () => {
+  const { self, project, claims } = await fixture(),
+    id = '6f9619ff-8b86-4d01-b42d-00cf4fc964ff',
+    variants = {
+      'id first': `<!-- holoself-claim id=${id} visibility=private -->\nSECRET-IDFIRST private claim body text.\n<!-- /holoself-claim -->\n`,
+      'double spaces': '<!--  holoself-claim   visibility=private  -->\nSECRET-SPACES private claim body text.\n<!--  /holoself-claim  -->\n',
+      'trailing space': '<!-- holoself-claim visibility=private  -->\nSECRET-TRAILING private claim body text.\n<!-- /holoself-claim -->\n',
+      'upper case': '<!-- HOLOSELF-CLAIM visibility=private -->\nSECRET-UPPER private claim body text.\n<!-- /HOLOSELF-CLAIM -->\n'
+    },
+    malformed = {
+      'duplicate attribute': '<!-- holoself-claim visibility=professional visibility=private -->\nSECRET-DUPLICATE claim body text.\n<!-- /holoself-claim -->\n',
+      'unknown attribute': '<!-- holoself-claim visibility=professional owner=me -->\nSECRET-UNKNOWN claim body text.\n<!-- /holoself-claim -->\n',
+      'unclosed opener': '<!-- holoself-claim visibility=private -->\nSECRET-UNCLOSED claim body text.\n'
+    },
+    base = await readFile(claims, 'utf8')
+  for (const [name, block] of Object.entries({ ...variants, ...malformed })) {
+    await writeFile(claims, `${base}\n${block}`)
+    const secret = block.match(/SECRET-[A-Z]+/)[0]
+    for (const temporal of ['current', 'all']) assert.doesNotMatch(await contextText(project, ['--temporal', temporal]), new RegExp(secret), `${name} (${temporal})`)
+    const packet = JSON.stringify(session(project).call(2, 'holoself_context', { task: 'claim body text', temporal: 'all' }).structuredContent)
+    assert.ok(!packet.includes(secret), `${name} via MCP`)
+    const errors = ecosystemValidationErrors(self)
+    if (name in malformed) assert.ok(errors.some(x => /claim marker|unbalanced/.test(x)), `${name} must fail validation: ${errors}`)
+    else assert.deepEqual(errors, [], name)
+  }
+})
+
+test('MCP duplicate and ambiguity checks only consider claims the link can read', async () => {
+  const { project, claims } = await fixture()
+  // A private twin of the visible legacy claim shares its wording and therefore its computed id.
+  await writeFile(claims, (await readFile(claims, 'utf8')) + '\n' + legacyBlock('private', 'twin', VISIBLE))
+  const m = session(project),
+    hiddenDuplicate = m.call(2, 'holoself_proposal_create', { claim: HIDDEN, evidence: 'e', source_files: ['Context/evidence.md'], visibility: 'professional' })
+  assert.ok(!hiddenDuplicate.isError, 'a hidden duplicate must not be revealed through MCP')
+  await assert.rejects(capture(() => run(['proposals', 'approve', hiddenDuplicate.structuredContent.data.proposal_id, '--project', project, '--yes'])), error => error.code === 'DUPLICATE_CLAIM')
+  const visibleDuplicate = m.call(3, 'holoself_proposal_create', { claim: OTHER, evidence: 'e', source_files: ['Context/evidence.md'] })
+  assert.equal(visibleDuplicate.structuredContent.error.code, 'DUPLICATE_CLAIM')
+  const twin = m.call(4, 'holoself_proposal_create', { operation: 'retire_claim', claim_id: ids.visible, reason: 'r', evidence: 'e', source_files: ['Context/evidence.md'] })
+  assert.ok(!twin.isError, JSON.stringify(twin))
+  const preview = m.call(5, 'holoself_proposal_preview', { proposal_id: twin.structuredContent.data.proposal_id })
+  assert.ok(!preview.isError)
+  assert.match(preview.structuredContent.data.changes[0].before_block, /visibility=professional/)
+  await assert.rejects(capture(() => run(['proposals', 'approve', twin.structuredContent.data.proposal_id, '--project', project, '--yes'])), error => error.code === 'CLAIM_AMBIGUOUS')
+})
+
+test('MCP preview reports a hidden target as not found even after its status changed', async () => {
+  const { project } = await fixture(),
+    retire = await propose(project, ['--op', 'retire', '--claim-id', ids.hidden, '--reason', 'r', '--evidence', 'e']),
+    later = await propose(project, ['--op', 'supersede', '--claim-id', ids.hidden, '--claim', 'A different private routine claim.', '--evidence', 'e'])
+  await approve(project, retire.proposal_id)
+  const result = session(project).call(2, 'holoself_proposal_preview', { proposal_id: later.proposal_id })
+  assert.equal(result.structuredContent.error.code, 'CLAIM_NOT_FOUND')
+})
+
+test('literal <commit-time> text is preserved; only this proposal\'s placeholder is stamped', async () => {
+  const { project, claims } = await fixture()
+  await writeFile(claims, (await readFile(claims, 'utf8')) + '\nOwner note: templates mention <commit-time> literally.\n')
+  const made = await propose(project, ['--claim', 'Release notes keep the <commit-time> token verbatim.', '--visibility', 'professional'])
+  const preview = await approve(project, made.proposal_id),
+    after = await readFile(claims, 'utf8')
+  assert.match(preview.changes[0].preview, /- Approved: <commit-time>/)
+  assert.match(after, /templates mention <commit-time> literally/)
+  assert.match(after, /keep the <commit-time> token verbatim/)
+  assert.match(after, /- Approved: \d{4}-\d{2}-\d{2}T/)
+  assert.doesNotMatch(after, /@@holoself-commit-time/)
+})
+
+test('preview flags visibility changes and approval waits on the self registry lock', async () => {
+  const { self, project, claims } = await fixture(),
+    made = await propose(project, ['--op', 'replace', '--claim-id', ids.visible, '--claim', 'Leads reliability engineering in public talks.', '--evidence', 'e', '--visibility', 'public-safe']),
+    preview = proposalPreviewData(project, made.proposal_id)
+  assert.deepEqual(preview.changes[0].visibility_change, { from: 'professional', to: 'public-safe' })
+  assert.equal(preview.changes[0].evidence, 'e')
+  const lock = registryLockPath(self),
+    before = await readFile(claims, 'utf8')
+  await mkdir(dirname(lock), { recursive: true })
+  writeFileSync(lock, JSON.stringify({ pid: process.pid, timestamp: Date.now() }) + '\n')
+  await assert.rejects(
+    capture(() => run(['proposals', 'approve', made.proposal_id, '--project', project, '--yes'])),
+    error => error.code === 'REGISTRY_LOCK_TIMEOUT'
+  )
+  assert.equal(await readFile(claims, 'utf8'), before)
+  await rm(lock)
+  const output = await capture(() => run(['proposals', 'approve', made.proposal_id, '--project', project, '--yes']))
+  assert.match(output, /! visibility: professional → public-safe/)
 })

@@ -4,7 +4,7 @@ import { join, relative } from 'node:path'
 import { VISIBILITIES } from '../annotations.mjs'
 import { canonicalSort, readSourceWithStat, slugHeading, sourceRef } from '../catalog.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
-import { claimBlockPattern, claimStatus, parseClaimAttrs } from '../markdown/claim-blocks.mjs'
+import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { claims, links, sections, tags } from '../markdown/text.mjs'
 import { privacyMetadata, visibility } from '../policy/access.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
@@ -19,10 +19,10 @@ export function catalogFilePath(project) {
 }
 export function privacySections(body, policy) {
   const chunks = []
-  const ordinary = body.replace(claimBlockPattern(), (_, claimVisibility, rawAttrs, claimBody) => {
-    const v = VISIBILITIES.includes(claimVisibility) ? claimVisibility : 'private',
-      status = claimStatus(parseClaimAttrs(rawAttrs))
-    for (const section of sections(claimBody))
+  const ordinary = replaceClaimBlocks(body, block => {
+    const v = block.visibility,
+      status = block.status
+    for (const section of sections(block.body))
       chunks.push({
         ...section,
         visibility: v,

@@ -7,7 +7,8 @@ import { linkedLensAuthority } from '../link/attestation.mjs'
 import { readLink } from '../link/config.mjs'
 import { healthStatus } from '../link/health.mjs'
 import { parseClaimBlocks } from '../markdown/claim-blocks.mjs'
-import { createProposal, listProposalData, proposalChanges, proposalPreviewData, safeTarget } from '../proposals/store.mjs'
+import { visibleUnderBehavior } from '../policy/access.mjs'
+import { createProposal, findProposal, listProposalData, proposalChanges, proposalPreviewData, safeTarget } from '../proposals/store.mjs'
 import { slash } from '../shared/fs.mjs'
 import { contextData } from './context.mjs'
 
@@ -90,30 +91,50 @@ export function holoselfMcpSearch(project, input) {
   })
   return { query: input.query, lens, federated: false, results: results.slice(0, input.limit || 10) }
 }
-// Claim ids in a self document as this link's own lenses deliver it (any lifecycle status). Hidden claims never
-// reach delivery, so their ids are never visible here; MCP may only target claims it could already read.
-function mcpVisibleClaimIds(project, target) {
+// What this link's own lenses deliver of a self document at any lifecycle status: the delivered texts, and the claim
+// ids in them. Hidden claims never reach delivery, so their ids and wording are never part of this view.
+function mcpDeliveredClaims(project, target) {
   const link = readLink(project),
-    ids = new Set()
-  for (const lens of new Set([link.default_lens, ...(link.secondary_lenses || [])])) {
+    lenses = [...new Set([link.default_lens, ...(link.secondary_lenses || [])])],
+    ids = new Set(),
+    contents = []
+  for (const lens of lenses) {
     let data
     try {
       data = mcpContextData(project, { lens, temporal: 'all', budget: 'deep', sources: [target] })
     } catch {
       continue
     }
-    for (const doc of data.self?.documents || []) if (doc.path === target) for (const block of parseClaimBlocks(doc.content, target)) ids.add(block.claim_id)
+    for (const doc of data.self?.documents || [])
+      if (doc.path === target) {
+        contents.push(doc.content)
+        for (const block of parseClaimBlocks(doc.content, target)) ids.add(block.claim_id)
+      }
   }
-  return ids
+  return { lenses, ids, contents }
 }
-function assertMcpClaimTargets(project, changes) {
-  const self = readLink(project).path,
-    cache = new Map()
+// The MCP view used for create and preview: claim lookups and duplicate checks see only delivered claims, so an error
+// can never confirm that a hidden claim exists. A hidden twin of a visible legacy claim (same wording) is ignored too.
+function mcpClaimView(project) {
+  const cache = new Map(),
+    get = rel => {
+      if (!cache.has(rel)) cache.set(rel, mcpDeliveredClaims(project, rel))
+      return cache.get(rel)
+    }
+  return {
+    visible: (rel, block) => {
+      const seen = get(rel)
+      return !block.malformed && seen.ids.has(block.claim_id) && seen.lenses.some(lens => visibleUnderBehavior(block.visibility, lens, 'generic'))
+    },
+    delivered: rel => get(rel).contents
+  }
+}
+function assertMcpClaimTargets(project, changes, view) {
+  const self = readLink(project).path
   for (const change of changes) {
     if ((change.operation || 'append_claim') === 'append_claim') continue
     const target = slash(relative(self, safeTarget(self, change.target || 'context/claims.md')))
-    if (!cache.has(target)) cache.set(target, mcpVisibleClaimIds(project, target))
-    if (!cache.get(target).has(change.claim_id)) {
+    if (!view.delivered(target).some(content => parseClaimBlocks(content, target).some(block => block.claim_id === change.claim_id))) {
       const error = new Error(`claim not found in ${target}: ${change.claim_id}`)
       error.code = 'CLAIM_NOT_FOUND'
       throw error
@@ -121,17 +142,20 @@ function assertMcpClaimTargets(project, changes) {
   }
 }
 export function holoselfMcpCreateProposal(project, input) {
-  const linked = resolve(project)
-  assertMcpClaimTargets(linked, [input])
-  const p = createProposal(linked, input),
+  const linked = resolve(project),
+    view = mcpClaimView(linked)
+  assertMcpClaimTargets(linked, [input], view)
+  const p = createProposal(linked, input, { view }),
     clean = { ...p }
   delete clean.source_project_path
   return clean
 }
 export function holoselfMcpPreviewProposal(project, id) {
   const linked = resolve(project),
-    preview = proposalPreviewData(linked, id)
-  assertMcpClaimTargets(linked, proposalChanges(preview.proposal))
+    view = mcpClaimView(linked)
+  // Hidden targets must fail as CLAIM_NOT_FOUND before planning could report anything about them.
+  assertMcpClaimTargets(linked, proposalChanges(findProposal(linked, id)), view)
+  const preview = proposalPreviewData(linked, id, { view })
   return {
     proposal_id: preview.proposal.proposal_id,
     status: preview.proposal.status,

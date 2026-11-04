@@ -1,17 +1,22 @@
 // Approved claim blocks: marker parsing, stable claim identity and claim lifecycle status.
+// Parsing is deliberately loose about spacing, case and attribute order, and fails closed: an opener that does not
+// parse cleanly makes its block private and historical, and text after an unclosed opener is never delivered.
+import { VISIBILITIES } from '../annotations.mjs'
 import { hash, slash } from '../shared/fs.mjs'
 
 export const CLAIM_STATUSES = ['current', 'superseded', 'historical']
 // Marker attributes in their canonical write order; `visibility` always comes first and is not listed here.
 export const CLAIM_MARKER_ATTRS = ['id', 'status', 'supersedes', 'superseded_by', 'superseded_at', 'retired_at']
 export const CLAIM_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+// Any text that opens or closes a claim block, however it is spaced or cased.
+export const CLAIM_MARKER_RE = /<!--\s*\/?\s*holoself-claim\b/i
+const OPENER = String.raw`<!--\s*holoself-claim\b([^>]*?)-->`
+const CLOSER = String.raw`<!--\s*\/\s*holoself-claim\s*-->`
+const MARKER_KEYS = new Set(['visibility', ...CLAIM_MARKER_ATTRS])
 // Lines inside a claim block that carry review metadata rather than claim wording.
 const CLAIM_METADATA_LINE = /^[-*]\s+(?:Evidence|Confidence|Visibility|Provenance|Approved|Retired|Retirement reason|Retirement evidence|Retirement provenance):/i
 
-// A fresh global regex over complete claim blocks: groups are visibility, raw attribute string and block body.
-export function claimBlockPattern(visibility = '[a-z-]+') {
-  return new RegExp(`<!-- holoself-claim visibility=(${visibility})((?: [a-z_]+=\\S+?)*) -->([\\s\\S]*?)<!-- \\/holoself-claim -->`, 'g')
-}
+const blockPattern = () => new RegExp(`${OPENER}([\\s\\S]*?)${CLOSER}`, 'gi')
 export function normalize(text) {
   return text
     .toLowerCase()
@@ -19,18 +24,22 @@ export function normalize(text) {
     .replace(/[^\p{L}\p{N} ]/gu, '')
     .trim()
 }
-export function parseClaimAttrs(raw = '') {
-  const attrs = {}
-  for (const pair of String(raw).trim().split(/\s+/).filter(Boolean)) {
-    const at = pair.indexOf('=')
-    if (at > 0) attrs[pair.slice(0, at)] = pair.slice(at + 1)
+// Attributes of one opener in any order and spacing; problems make the block malformed.
+export function parseClaimOpener(raw = '') {
+  const attrs = {},
+    problems = [],
+    tokens = String(raw).trim() ? String(raw).trim().split(/\s+/) : []
+  for (const token of tokens) {
+    const match = token.match(/^([a-z_]+)=(\S+)$/)
+    if (!match) problems.push(`malformed claim marker attribute ${JSON.stringify(token)}`)
+    else if (!MARKER_KEYS.has(match[1])) problems.push(`unknown claim marker attribute ${match[1]}`)
+    else if (Object.hasOwn(attrs, match[1])) problems.push(`duplicate claim marker attribute ${match[1]}`)
+    else attrs[match[1]] = match[2]
   }
-  return attrs
-}
-// Unknown status values fail closed as historical so they never reach current context.
-export function claimStatus(attrs = {}) {
-  if (attrs.status === undefined) return 'current'
-  return CLAIM_STATUSES.includes(attrs.status) ? attrs.status : 'historical'
+  if (attrs.visibility === undefined) problems.push('claim marker has no visibility')
+  if (attrs.status !== undefined && !['superseded', 'historical'].includes(attrs.status)) problems.push(`invalid claim status ${attrs.status}`)
+  if (attrs.id !== undefined && !CLAIM_ID_RE.test(attrs.id)) problems.push(`invalid claim id ${attrs.id}`)
+  return { attrs, problems }
 }
 export function claimBlockText(body) {
   return String(body)
@@ -55,32 +64,67 @@ export function formatClaimMarker(visibility, attrs = {}) {
   const parts = CLAIM_MARKER_ATTRS.filter(key => attrs[key] !== undefined && attrs[key] !== null && attrs[key] !== '').map(key => ` ${key}=${attrs[key]}`)
   return `<!-- holoself-claim visibility=${visibility}${parts.join('')} -->`
 }
+function blockInfo(raw, rawAttrs, body, start, target) {
+  const { attrs, problems } = parseClaimOpener(rawAttrs)
+  if (CLAIM_MARKER_RE.test(body)) problems.push('nested claim marker')
+  const malformed = problems.length > 0,
+    wording = claimBlockText(body)
+  return {
+    start,
+    end: start + raw.length,
+    raw,
+    rawVisibility: attrs.visibility,
+    // Malformed blocks fail closed: private and historical, so they never reach current or shared context.
+    visibility: !malformed && VISIBILITIES.includes(attrs.visibility) ? attrs.visibility : 'private',
+    attrs,
+    body,
+    text: wording,
+    status: malformed ? 'historical' : attrs.status || 'current',
+    malformed,
+    problems,
+    legacy: !attrs.id,
+    claim_id: !malformed && attrs.id ? attrs.id : legacyClaimId(target, wording)
+  }
+}
 // Every complete claim block in a document, with offsets, parsed attributes and its effective claim id.
 export function parseClaimBlocks(text, target = '') {
-  const blocks = []
-  for (const match of String(text).matchAll(claimBlockPattern())) {
-    const attrs = parseClaimAttrs(match[2]),
-      wording = claimBlockText(match[3])
-    blocks.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      raw: match[0],
-      visibility: match[1],
-      attrs,
-      body: match[3],
-      text: wording,
-      status: claimStatus(attrs),
-      legacy: !attrs.id,
-      claim_id: attrs.id || legacyClaimId(target, wording)
-    })
+  return [...String(text).matchAll(blockPattern())].map(match => blockInfo(match[0], match[1], match[2], match.index, target))
+}
+// Rewrites each claim block through `fn`. With failClosed, everything from an unclosed or stray opener onwards is
+// dropped, so a broken marker can never expose the claim text that follows it.
+export function replaceClaimBlocks(text, fn, { failClosed = true, target = '' } = {}) {
+  const source = String(text)
+  let out = '',
+    last = 0
+  const gap = segment => {
+    const stray = failClosed ? segment.search(/<!--\s*holoself-claim\b/i) : -1
+    out += stray < 0 ? segment : segment.slice(0, stray)
+    return stray < 0
   }
-  return blocks
+  for (const match of source.matchAll(blockPattern())) {
+    if (!gap(source.slice(last, match.index))) return out
+    out += fn(blockInfo(match[0], match[1], match[2], match.index, target))
+    last = match.index + match[0].length
+  }
+  gap(source.slice(last))
+  return out
+}
+// Validation problems: malformed openers and markers that do not pair up into complete blocks.
+export function claimMarkerProblems(text) {
+  const source = String(text),
+    blocks = parseClaimBlocks(source),
+    openers = (source.match(/<!--\s*holoself-claim\b/gi) || []).length,
+    closers = (source.match(new RegExp(CLOSER, 'gi')) || []).length,
+    problems = blocks.flatMap(block => block.problems)
+  if (openers !== blocks.length || closers !== blocks.length)
+    problems.push(`unbalanced claim markers (${openers} opening, ${closers} closing, ${blocks.length} complete blocks)`)
+  return [...new Set(problems)]
 }
 // Adds the deterministic legacy id to delivered claim markers that have none, so agents can reference them.
 export function withClaimIds(body, target) {
-  return String(body).replace(claimBlockPattern(), (block, visibility, rawAttrs, inner) => {
-    const attrs = parseClaimAttrs(rawAttrs)
-    if (attrs.id) return block
-    return formatClaimMarker(visibility, { ...attrs, id: legacyClaimId(target, claimBlockText(inner)) }) + inner + '<!-- /holoself-claim -->'
-  })
+  return replaceClaimBlocks(
+    body,
+    block => (block.malformed || block.attrs.id ? block.raw : formatClaimMarker(block.visibility, { ...block.attrs, id: block.claim_id }) + block.body + '<!-- /holoself-claim -->'),
+    { target }
+  )
 }

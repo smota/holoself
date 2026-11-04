@@ -8,10 +8,10 @@ import {
   proposalChanges,
   proposalPreviewData,
   proposalText,
-  safeTarget,
   scanProposalStore,
   stateProposal
 } from '../../proposals/store.mjs'
+import { withRegistryLock } from '../../link/registry.mjs'
 import { atomicWrite, hash } from '../../shared/fs.mjs'
 import { askConfirm, projectPath } from '../link-helpers.mjs'
 
@@ -74,7 +74,9 @@ export async function runProposals(o, sub) {
               .map(x =>
                 x.operation === 'append_claim'
                   ? `--- ${x.change_id}: ${x.target} ---\n+${x.preview.replaceAll('\n', '\n+')}`
-                  : `--- ${x.change_id}: ${x.operation} ${x.claim_id} in ${x.target} ---\n${x.preview}`
+                  : `--- ${x.change_id}: ${x.operation} ${x.claim_id} in ${x.target} ---\n` +
+                    (x.visibility_change ? `! visibility: ${x.visibility_change.from} → ${x.visibility_change.to}\n` : '') +
+                    x.preview
               )
               .join('\n')}`
     )
@@ -90,44 +92,51 @@ export async function runProposals(o, sub) {
     const proposalBefore = readFileSync(p._path),
       receipt = join(link.path, 'proposals', 'receipts', `${p.proposal_id}-approved.json`),
       commitTime = new Date().toISOString(),
-      appliedChanges = previews.map(item => ({
+      token = prepared.commit_time_token,
+      stamp = text => text.replaceAll(token, commitTime),
+      appliedChanges = previews.map((item, i) => ({
         ...item,
-        after_sha256: hash(grouped.get(safeTarget(link.path, item.target)).after.replaceAll('<commit-time>', commitTime))
+        before_sha256: hash(stamp(prepared.steps[i].before)),
+        after_sha256: hash(stamp(prepared.steps[i].after))
       }))
-    // A target edited after the preview was computed (for example while confirmation was pending) is stale.
-    for (const item of grouped.values()) {
-      const current = existsSync(item.target) ? readFileSync(item.target, 'utf8') : null
-      if (item.existed ? current !== item.before : current !== null) {
-        const error = new Error(`proposal preview is stale: ${item.target} changed after preview`)
-        error.code = 'STALE_PREVIEW'
+    // The stale check, writes, archive and validation run under the self root's registry lock, so two approvals
+    // (or an approval and a Workbench registry change) cannot interleave between the check and the write.
+    await withRegistryLock(link.path, async () => {
+      // A target edited after the preview was computed (for example while confirmation was pending) is stale.
+      for (const item of grouped.values()) {
+        const current = existsSync(item.target) ? readFileSync(item.target, 'utf8') : null
+        if (item.existed ? current !== item.before : current !== null) {
+          const error = new Error(`proposal preview is stale: ${item.target} changed after preview`)
+          error.code = 'STALE_PREVIEW'
+          throw error
+        }
+      }
+      try {
+        for (const item of grouped.values()) atomicWrite(item.target, stamp(item.after))
+        stateProposal(project, p, 'approved', {
+          preview_sha256: previewHash,
+          applied_changes: appliedChanges.map(({ change_id, operation, target, claim_id, before_sha256, after_sha256 }) => ({
+            change_id,
+            operation,
+            target,
+            claim_id,
+            before_sha256,
+            after_sha256
+          }))
+        })
+        const errors = ecosystemValidationErrors(link.path, project)
+        if (errors.length) throw new Error(`post-approval validation failed: ${errors.join('; ')}`)
+      } catch (error) {
+        for (const item of grouped.values()) {
+          if (item.existed) atomicWrite(item.target, item.before)
+          else if (existsSync(item.target)) rmSync(item.target)
+        }
+        atomicWrite(p._path, proposalBefore)
+        if (existsSync(archive)) rmSync(archive, { force: true })
+        if (existsSync(receipt)) rmSync(receipt, { force: true })
         throw error
       }
-    }
-    try {
-      for (const item of grouped.values()) atomicWrite(item.target, item.after.replaceAll('<commit-time>', commitTime))
-      stateProposal(project, p, 'approved', {
-        preview_sha256: previewHash,
-        applied_changes: appliedChanges.map(({ change_id, operation, target, claim_id, before_sha256, after_sha256 }) => ({
-          change_id,
-          operation,
-          target,
-          claim_id,
-          before_sha256,
-          after_sha256
-        }))
-      })
-      const errors = ecosystemValidationErrors(link.path, project)
-      if (errors.length) throw new Error(`post-approval validation failed: ${errors.join('; ')}`)
-    } catch (error) {
-      for (const item of grouped.values()) {
-        if (item.existed) atomicWrite(item.target, item.before)
-        else if (existsSync(item.target)) rmSync(item.target)
-      }
-      atomicWrite(p._path, proposalBefore)
-      if (existsSync(archive)) rmSync(archive, { force: true })
-      if (existsSync(receipt)) rmSync(receipt, { force: true })
-      throw error
-    }
+    })
     console.log(`[ok] approved ${p.proposal_id}; ${changes.length} change(s), validation passed`)
     return true
   }

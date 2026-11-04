@@ -1,6 +1,6 @@
 // Markdown text helpers: sections, links, tags, claims and tokenization.
 import { frontmatter } from '../policy/privacy-fields.mjs'
-import { claimBlockPattern, parseClaimBlocks } from './claim-blocks.mjs'
+import { parseClaimBlocks, replaceClaimBlocks } from './claim-blocks.mjs'
 
 const STOPWORDS = new Set(
   (
@@ -64,7 +64,7 @@ export function canonicalClaims(text) {
   const { body } = frontmatter(text),
     found = []
   for (const block of parseClaimBlocks(body)) if (block.status === 'current' && block.text) found.push(block.text)
-  const withoutBlocks = body.replace(claimBlockPattern(), '')
+  const withoutBlocks = replaceClaimBlocks(body, () => '', { failClosed: false })
   for (const section of sections(withoutBlocks)) {
     if (!/^CLAIM(?:[- _]|$)/i.test(section.heading)) continue
     const approved = section.content
