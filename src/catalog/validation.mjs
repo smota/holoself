@@ -6,6 +6,7 @@ import { loadLensRegistry, resolveLens } from '../lenses.mjs'
 import { readLink } from '../link/config.mjs'
 import { canonicalFiles, markdownFiles, projectMarkdownFiles } from '../markdown/files.mjs'
 import { canonicalClaims } from '../markdown/text.mjs'
+import { canonicalPath, samePath } from '../path-guard.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
 import { normalize } from '../proposals/analysis.mjs'
 import { readProposal } from '../proposals/store.mjs'
@@ -34,7 +35,7 @@ export function catalogBuildWarnings(root, project = null) {
     }
   }
   if (existsSync(root) && rootRegistry) scanFiles(root, canonicalFiles(root, { includeHistory: true }), 'canonical', rootRegistry, false)
-  if (project && existsSync(project) && resolve(project) !== resolve(root)) {
+  if (project && existsSync(project) && !samePath(canonicalPath(project), canonicalPath(root))) {
     try {
       const link = readLink(project, { tolerant: true }),
         registry = rootRegistry || loadLensRegistry(link.path)

@@ -7,6 +7,7 @@ import { canonicalSort } from '../catalog.mjs'
 import { loadLensRegistry } from '../lenses.mjs'
 import { createLinkDirs, readLink } from '../link/config.mjs'
 import { claims } from '../markdown/text.mjs'
+import { canonicalPath, samePath } from '../path-guard.mjs'
 import { assertContainedPath, atomicWrite, ensureDir, hash, slash } from '../shared/fs.mjs'
 import { parseYaml, yamlObject } from '../shared/yaml.mjs'
 import { normalize } from './analysis.mjs'
@@ -210,7 +211,8 @@ export function findProposal(project, id) {
 export function proposalProjectErrors(p, project) {
   const errors = []
   if (p.source_project !== basename(project)) errors.push('proposal source_project does not match linked project')
-  if (p.source_project_path && resolve(p.source_project_path) !== resolve(project)) errors.push('proposal source_project_path does not match linked project')
+  if (p.source_project_path && !samePath(canonicalPath(p.source_project_path), canonicalPath(project)))
+    errors.push('proposal source_project_path does not match linked project')
   for (const source of p.source_files || []) {
     try {
       const path = assertContainedPath(project, resolve(project, source), 'proposal source file')

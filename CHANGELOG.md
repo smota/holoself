@@ -4,6 +4,8 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- Compare canonical paths (`canonicalPath` / `samePath`) when checking whether the caller working directory and `--root` or project refer to the same self root or project, avoiding spurious `"No project link found; resolved explicit/default self root."` warnings when `--root` or `TMPDIR` traverses a symlinked ancestor (#85).
+
 - Strip private local filesystem paths (`source_project_path`, `_path`, `absolute_path`) from linked-client CLI `holoself context` output before measuring envelope byte budgets, matching MCP context path stripping and making linked context packet sizes path-independent when pending proposals exist (#84).
 
 - Reconcile documentation drift with current runtime behavior: update `docs/contributing/status-and-roadmap.md` to version `0.10.1`, update MCP tool counts to seven (including `holoself_proposal_preview`), align `docs/guides/local-mcp.md` with npm `holoself-ai` availability, mark evidence ADRs E01–E06 superseded by `docs/specifications/external-sources-and-coaching-plan.md (2026-09-30)`, update remaining `career`/`publishing` references to `professional`/`public-voice`, align `public-voice` sensitivity/disclosure semantics across `docs/workbench/lenses.md` and `docs/concepts/lenses-and-privacy.md`, align `AGENTS.md` and `CONTRIBUTING.md` branch prefixes with `agent-workflow.config.json`, and generate CLI/MCP reference tables via `scripts/generate-reference.mjs` (`npm run docs:reference`) with drift checks in `tests/docs.test.mjs` (#54).

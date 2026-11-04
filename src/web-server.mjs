@@ -10,6 +10,7 @@ import { loadLensRegistry, removeCustomLens, saveCustomLens, saveLensInstruction
 import { connectorLaunchPlan, launchConnector, loadConnectors, saveConnectorExtension, validateConnector } from './connectors.mjs'
 import { annotationSchema, validateAnnotationMetadata } from './annotations.mjs'
 import { applyCleanupPlan } from './cleanup.mjs'
+import { canonicalPath, samePath } from './path-guard.mjs'
 import {
   CONFLICT_CODES,
   HttpError,
@@ -49,9 +50,10 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
   root = resolve(root)
   if (!existsSync(join(root, 'config.json')) || !existsSync(join(root, 'profile')) || !existsSync(join(root, 'context')))
     throw new Error(`invalid canonical self root: ${root}`)
-  if (linked && resolve(linked.self_context.path) !== root) throw new Error(`--root does not match linked project self root: ${root}`)
+  if (linked && !samePath(canonicalPath(linked.self_context.path), canonicalPath(root)))
+    throw new Error(`--root does not match linked project self root: ${root}`)
   const catalog = readCatalog(root)
-  if (linked && !catalog.spaces.some(item => resolve(item.path) === project)) {
+  if (linked && !catalog.spaces.some(item => samePath(canonicalPath(item.path), canonicalPath(project)))) {
     catalog.spaces.push({ id: randomUUID(), path: project, addedAt: new Date().toISOString() })
     writeCatalog(root, catalog)
   }
@@ -347,7 +349,7 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
         const b = await body(req)
         if (typeof b.space !== 'string' || !b.space.trim()) throw new HttpError(400, 'INVALID_INPUT', 'space path required')
         const catalog = reconcileCatalog(root),
-          space = catalog.spaces.find(item => resolve(item.path) === resolve(b.space))
+          space = catalog.spaces.find(item => samePath(canonicalPath(item.path), canonicalPath(b.space)))
         if (!space) throw new HttpError(400, 'SPACE_NOT_FOUND', 'space is not linked')
         const connectors = loadConnectors(root),
           plan = clientCheck(

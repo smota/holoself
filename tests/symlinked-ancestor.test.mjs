@@ -99,3 +99,40 @@ test('a loop link below the boundary is inspected under either spelling',t=>{
   assert.equal(linkBelow(env.real,join(env.link,'sub','loop','x')),join(env.link,'sub','loop'))
   rmSync(env.base,{recursive:true,force:true})
 })
+
+test('owner-direct context and linked authority across real and symlink-alias spellings (#85)',async t=>{
+  const env=linkedParent();if(!env)return t.skip('symlinks unavailable')
+  const prevCwd=process.cwd(),origCwdFn=process.cwd
+  const realSelf=join(realpathSync(env.real),'self'),aliasSelf=join(env.link,'self')
+  const realProj=join(realpathSync(env.real),'proj'),aliasProj=join(env.link,'proj')
+  mkdirSync(realProj)
+  try{
+    await capture(()=>run(['init','--root',aliasSelf]))
+    await capture(()=>run(['link','add','--project',aliasProj,'--self',aliasSelf,'--lens','professional','--secondary-lenses','general','--install-skill','none','--yes']))
+    // cwd = real spelling, --root = alias spelling, and vice versa -> owner:direct, no warning
+    for(const [cwdPath,rootArg] of [[realSelf,aliasSelf],[aliasSelf,realSelf]]){
+      assert.notEqual(cwdPath,rootArg)
+      process.chdir(cwdPath)
+      process.cwd=()=>cwdPath
+      const packet=JSON.parse(await capture(()=>run(['context','--root',rootArg,'--lens','private','--json'])))
+      assert.equal(packet.lens,'private')
+      assert.ok(packet.self.path,'expected owner:direct self.path')
+      assert.deepEqual(packet.warnings,[])
+    }
+    // Linked project under alias or real spelling -> linked authority preserved
+    for(const [cwdPath,rootArg] of [[aliasProj,realSelf],[realProj,aliasSelf]]){
+      assert.notEqual(cwdPath,rootArg)
+      process.chdir(cwdPath)
+      process.cwd=()=>cwdPath
+      const linked=JSON.parse(await capture(()=>run(['context','--root',rootArg,'--json'])))
+      assert.equal(linked.self.path,undefined)
+      assert.equal(linked.project.name,'proj')
+      assert.equal(linked.lens,'professional')
+      await assert.rejects(run(['context','--root',rootArg,'--lens','private','--json']),{code:'LENS_NOT_GRANTED'})
+    }
+  }finally{
+    process.cwd=origCwdFn
+    process.chdir(prevCwd)
+    rmSync(env.base,{recursive:true,force:true})
+  }
+})
