@@ -161,7 +161,8 @@ test('V-04 Privacy: Linked CLI context with a pending proposal strips private pa
     for (const root of roots) assert.equal(output.includes(root), false, `leaked root ${root}`)
     assert.doesNotMatch(output, /source_project_path|"_path"|absolute_path/)
     assert.doesNotMatch(output, /(?:^|[\s"'=(])\/[A-Za-z0-9._-]+/m)
-    assert.doesNotMatch(output, /[A-Za-z]:[\\/]/)
+    // A drive letter is never preceded by a letter or digit (avoids matching JSON text such as "involves:\n").
+    assert.doesNotMatch(output, /(?<![A-Za-z0-9])[A-Za-z]:[\\/]/)
   }
 })
 

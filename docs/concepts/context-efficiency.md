@@ -4,13 +4,17 @@ Holoself resolves context progressively. A request is classified as `required`, 
 
 The default `standard` budget is bounded. `small` and `deep` support lighter or richer work; `unbounded` is an explicit diagnostic mode. `--manifest` returns opaque stable source handles without bodies, and repeatable `--source <handle>` expands reviewed sources. At most two selected public contrib methods are injected for a task. `config.json.selectedContribs` controls availability, not automatic loading.
 
-Every result includes a context receipt: task hash, lens, temporal selector, budget, resolved `need` (`required`, `helpful`, `not-needed`), `need_reason` (`explicit`, `matched:personal:<pattern-id>`, `matched:mechanical:<pattern-id>`, or `default`), selected source handles and hashes, estimated tokens, truncation, and in-memory selection cache status (`persistent: false`). Selection telemetry also carries `need`, `need_reason`, and a content-redacted contradiction digest: explicit supersession edges and source-handle pairs with potentially conflicting metrics under shared headings. Source hashes make refresh incremental and receipts auditable without copying private body text.
+Every result includes a context receipt: task hash, lens, temporal selector, budget, resolved `need` (`required`, `helpful`, `not-needed`), `need_reason` (`explicit`, `matched:personal:<pattern-id>`, `matched:mechanical:<pattern-id>`, or `default`), selected source handles and hashes, estimated tokens, truncation, and in-memory selection cache status (`persistent: false`). When the optional FTS5 engine ranked the packet, the receipt also carries `engine: "fts5"`; without it the ranking was the deterministic JSON engine. Selection telemetry also carries `need`, `need_reason`, and a content-redacted contradiction digest: explicit supersession edges and source-handle pairs with potentially conflicting metrics under shared headings. Source hashes make refresh incremental and receipts auditable without copying private body text.
 
 ```powershell
 holoself context --project . --task "prepare the leadership interview" --budget small --manifest --json
 holoself context --project . --task "prepare the leadership interview" --budget deep --source hs-... --json
 holoself context --project . --task "format this JSON" --need not-needed --budget small --json
 ```
+
+## Ranking
+
+Relevance ranks candidates that already passed privacy and lifecycle rules. The JSON engine scores token overlap with the path (6 per token), headings (3) and catalog text (2), plus small boosts for policy and core profile documents. When the FTS5 engine is available, a BM25 score over the same candidates' filtered section snippets adds up to 4 points, scaled to the best-scoring candidate, so stemmed and diacritic-folded matches (`guaranteeing`/`guarantees`, `compensacao`/`compensação`) can lift a document into a small budget. Ordering is deterministic: score, then source id. See [Indexing and search](../guides/indexing-and-search.md#optional-fts5-engine).
 
 ## Packet size
 

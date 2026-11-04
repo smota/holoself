@@ -44,6 +44,17 @@ holoself link doctor --project .
 
 Use `--no-activate` only for deliberate configuration-only workflows. Use `--instructions <relative-file>` to identify an existing canonical manual. Use `--install-skill auto|project|global|none` to control skill resolution. `project` installs full public skills under `.agents`, `.claude`, and `.pi`; `global` requires validated user-level installations and creates no project copies; `none` disables skill management and validation. Preview lists every instruction, bootstrap/runtime artifact, and skill installation. Activation upgrades the old generated miniature shim in place, rejects symlink parents, malformed or reversed markers, and preserves unmanaged skill files unless `--force --yes` appends a bounded managed installation. Deactivation deletes an unchanged Holoself-owned install, but removes only the managed block when user content was appended. Managed writes roll back on failure.
 
+### Migrating a legacy `.holoself` mount
+
+Older workspaces that mounted the canonical self root directly at `<project>/.holoself` through a directory symlink or Windows junction fail closed with `LEGACY_MOUNT_DETECTED`. Migrate the mount to a bounded metadata link with `link setup`:
+
+```bash
+holoself link setup --project . --dry-run
+holoself link setup --project . --lens professional --yes
+```
+
+`link setup` verifies that the mount points to a canonical self root (and matches `--self` when provided), prints the exact file and activation plan (`plan_hash`, `.holoself` mount replacement, created metadata files, and host adapters), preflights instruction, skill, hook, and MCP targets before unlinking, and restores the original symlink or junction if any step fails. The canonical self root's contents are never modified.
+
 ## Session-start hooks
 
 Instruction pointers and skills ask the agent to load context; nothing guarantees it does. Where a host runs a command when a session starts, activation also installs a session-start hook, so the session begins with the bounded session-start packet for the bound lens. The hook only reads; it never writes canonical data.

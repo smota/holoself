@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 import {
   DEFAULT_BASELINE_PATH,
   DEFAULT_CASES_PATH,
+  DEFAULT_FTS5_BASELINE_PATH,
+  isKnownGap,
   compareWithBaseline,
   formatEvalTable,
   parseEvalOptions,
@@ -15,6 +17,7 @@ import {
   scoreCaseResult
 } from '../scripts/eval-retrieval.mjs'
 import { HOLOSELF_BIN, SYNTHETIC_DOCUMENTS, createRetrievalEvalFixture } from './fixtures/retrieval-eval/corpus.mjs'
+import { ftsSupport } from '../src/catalog/fts.mjs'
 
 const EVAL_SCRIPT = fileURLToPath(new URL('../scripts/eval-retrieval.mjs', import.meta.url))
 
@@ -61,7 +64,7 @@ test('synthetic retrieval-eval corpus has 40–60 valid documents across profile
   }
 })
 
-test('retrieval-eval golden set runs against CLI, matches baseline without regression, and has zero leaks', async () => {
+test('retrieval-eval golden set runs against CLI under the JSON engine, matches baseline without regression, and has zero leaks', async () => {
   const [rawCases, baseline] = await Promise.all([
     readFile(DEFAULT_CASES_PATH, 'utf8').then(JSON.parse),
     readFile(DEFAULT_BASELINE_PATH, 'utf8').then(JSON.parse)
@@ -75,7 +78,9 @@ test('retrieval-eval golden set runs against CLI, matches baseline without regre
   const languages = new Set(rawCases.cases.map(item => item.language))
   assert.deepEqual([...languages].sort(), ['en', 'pt'])
 
-  const report = await runRetrievalEval()
+  const report = await runRetrievalEval({ engine: 'json' })
+  assert.equal(report.engine, 'deterministic-json')
+  assert.equal(baseline.engine, 'deterministic-json')
 
   // (a) Zero forbidden leaks across all cases.
   assert.equal(report.summary.total_forbidden_leaks, 0, 'forbidden leaks must be 0')
@@ -98,6 +103,50 @@ test('retrieval-eval golden set runs against CLI, matches baseline without regre
   const table = formatEvalTable(report)
   assert.match(table, /Retrieval Evaluation Summary \(by category\)/)
   assert.match(table, /Known-Gap Cases/)
+})
+
+// The CI machine runs Node 22.13+ where node:sqlite loads unflagged; older builds skip this suite and keep the JSON gate.
+test('retrieval-eval golden set under the FTS5 engine has zero leaks, no regression against its baseline, and never loses recall versus JSON', { skip: ftsSupport() ? false : 'node:sqlite with FTS5 is unavailable' }, async () => {
+  const [baseline, jsonBaseline] = await Promise.all([
+    readFile(DEFAULT_FTS5_BASELINE_PATH, 'utf8').then(JSON.parse),
+    readFile(DEFAULT_BASELINE_PATH, 'utf8').then(JSON.parse)
+  ])
+  assert.equal(baseline.engine, 'fts5')
+  const report = await runRetrievalEval({ engine: 'fts5' })
+  assert.equal(report.engine, 'fts5')
+  assert.equal(report.summary.total_forbidden_leaks, 0, 'forbidden leaks must be 0')
+  const comparison = compareWithBaseline(report, baseline)
+  if (comparison.hint) process.stdout.write(`[retrieval-eval fts5] ${comparison.hint}\n`)
+  assert.equal(comparison.passed, true, comparison.failures.join('\n'))
+  assert.equal(report.cases_digest, baseline.cases_digest)
+
+  // FTS5 is an additional signal: no case may recall less than under the JSON engine.
+  const jsonById = new Map(jsonBaseline.cases.map(item => [item.id, item]))
+  for (const item of report.cases) {
+    const json = jsonById.get(item.id)
+    assert.ok(item.recall >= json.recall, `case ${item.id} recall ${item.recall} under fts5 is below json ${json.recall}`)
+  }
+  assert.ok(report.summary.mean_recall >= jsonBaseline.summary.mean_recall)
+  // Engine-specific known gaps: a case listed only for deterministic-json must meet expectations under fts5.
+  const cases = JSON.parse(await readFile(DEFAULT_CASES_PATH, 'utf8')).cases
+  for (const evalCase of cases.filter(c => Array.isArray(c.known_gap) && !isKnownGap(c, 'fts5'))) {
+    assert.equal(report.cases.find(item => item.id === evalCase.id).recall, 1, `${evalCase.id} must be resolved under fts5`)
+  }
+})
+
+test('eval engine selection: known_gap may name engines, and a baseline from another engine fails the gate', async () => {
+  assert.equal(parseEvalOptions(['--engine', 'json']).engine, 'json')
+  assert.equal(parseEvalOptions([]).engine, 'auto')
+  assert.throws(() => parseEvalOptions(['--engine', 'lucene']), /--engine must be one of/)
+  assert.equal(isKnownGap({ known_gap: true }, 'fts5'), true)
+  assert.equal(isKnownGap({ known_gap: ['deterministic-json'] }, 'fts5'), false)
+  assert.equal(isKnownGap({ known_gap: ['deterministic-json'] }, 'deterministic-json'), true)
+  assert.equal(isKnownGap({}, 'fts5'), false)
+  const baseline = JSON.parse(await readFile(DEFAULT_BASELINE_PATH, 'utf8'))
+  const other = { ...structuredClone(baseline), engine: 'fts5' }
+  const check = compareWithBaseline(other, baseline)
+  assert.equal(check.passed, false)
+  assert.match(check.failures.join(' '), /Engine mismatch/)
 })
 
 test('compareWithBaseline enforces zero leaks, aggregate recall floor, non-gap case floor, and improvement hints', async () => {

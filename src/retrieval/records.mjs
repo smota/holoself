@@ -120,6 +120,7 @@ export function catalogCandidateRecords(
       search_text: searchText,
       content: '',
       metadata,
+      ...(kind === 'self' && s.policy_sources ? { policy_sources: s.policy_sources } : {}),
       estimated_tokens: s.estimated_tokens,
       knowledge_status: metadata.knowledge_status || 'current',
       temporal_scope: metadata.temporal_scope || 'timeless'
@@ -187,4 +188,13 @@ export function deduplicateCandidates(cands, localSpaceId) {
     if (!key) return true
     return kept.has(c)
   })
+}
+export function buildReceiptPolicySources(records) {
+  const out = {}
+  for (const r of records) {
+    if (r.kind === 'self' && r.policy_sources && typeof r.policy_sources === 'object') {
+      out[r.path] = { ...r.policy_sources }
+    }
+  }
+  return out
 }

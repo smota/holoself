@@ -7,6 +7,7 @@ import { canonicalSpaceId } from '../link/registry.mjs'
 import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { claims, links, sections, tags } from '../markdown/text.mjs'
 import { privacyMetadata, visibility } from '../policy/access.mjs'
+import { resolveDocumentPolicy } from '../policy/policy-defaults.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
 import { SECRET_RE, secretFile } from '../policy/secrets.mjs'
 import { assertContainedPath, hash, slash } from '../shared/fs.mjs'
@@ -83,16 +84,18 @@ export function buildCatalogSource(file, sourceKind, root, registry, tolerant = 
     return { error: `${rel}: ${err.message}` }
   }
   const { metadata, body, warnings: docWarnings } = parsed
-  if (secretFile(file, root) || SECRET_RE.test(text) || ['secret', 'credential', 'credentials'].includes(metadata.sensitivity)) {
+  const resolvedPolicy = sourceKind === 'canonical' ? resolveDocumentPolicy(file, root, metadata, registry) : null
+  const effectiveMetadata = resolvedPolicy ? resolvedPolicy.effectiveMetadata : metadata
+  if (secretFile(file, root) || SECRET_RE.test(text) || ['secret', 'credential', 'credentials'].includes(effectiveMetadata.sensitivity)) {
     return { secret: true }
   }
   if (sourceKind === 'canonical') {
-    const metadataErrors = canonicalPrivacyMetadataErrors(metadata, registry)
+    const metadataErrors = canonicalPrivacyMetadataErrors(effectiveMetadata, registry)
     if (metadataErrors.length) return { error: `${rel}: ${metadataErrors.join('; ')}` }
   }
-  if (!VISIBILITIES.includes(visibility(metadata))) return null
+  if (!VISIBILITIES.includes(visibility(effectiveMetadata))) return null
 
-  const policy = privacyMetadata(metadata, registry)
+  const policy = privacyMetadata(effectiveMetadata, registry)
   const rawSections = privacySections(body, policy)
   const catalogSections = buildCatalogSections(rawSections)
   const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSections)
@@ -114,6 +117,7 @@ export function buildCatalogSource(file, sourceKind, root, registry, tolerant = 
       dev: stat.dev,
       source_text_hash: sourceTextHash,
       frontmatter: policy,
+      ...(resolvedPolicy ? { policy_sources: resolvedPolicy.policySources } : {}),
       sections: catalogSections,
       claims: annotatedClaims,
       tags: annotatedTags,
@@ -121,6 +125,6 @@ export function buildCatalogSource(file, sourceKind, root, registry, tolerant = 
       estimated_tokens: estimatedTokens
     },
     rawSections,
-    warnings: (docWarnings || []).map(w => `${rel}: ${w}`)
+    warnings: [...(resolvedPolicy?.policyErrors || []), ...(docWarnings || []).map(w => `${rel}: ${w}`)]
   }
 }
