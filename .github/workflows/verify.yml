@@ -15,18 +15,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: Verify
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  test:
+    name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ['20', 'lts/*']
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Use Node.js 20
+      - name: Use Node.js ${{ matrix.node }}
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
 
       - name: Run repository verification
         run: npm run verify
+
+  # Stable required-check name for the "Protect main" ruleset.
+  verify:
+    name: Verify
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every matrix job to pass
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "Matrix result: ${{ needs.test.result }}"
+            exit 1
+          fi
