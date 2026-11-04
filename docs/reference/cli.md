@@ -24,7 +24,7 @@ holoself <command> [options]
 <!-- generated:start -->
 Generated from `holoself capabilities --json` (product `holoself`, version `0.10.1`, context schema `v1`, index schema `v5`, proposal schemas `v1, v2`) and the CLI flag contract:
 
-- Capability command groups (11): `doctor`, `context`, `search`, `propose`, `proposals`, `instructions`, `knowledge`, `link`, `skill`, `mcp`, `coaching`
+- Capability command groups (12): `doctor`, `context`, `ledger`, `search`, `propose`, `proposals`, `instructions`, `knowledge`, `link`, `skill`, `mcp`, `coaching`
 - Coaching subcommands (7): `coaching start`, `coaching note`, `coaching action`, `coaching choose`, `coaching review`, `coaching material`, `coaching resume`
 - Context features: `need-gate`, `budgets`, `manifest`, `source-handles`, `lifecycle`, `receipts`, `task-contrib-routing`
 - MCP tools (7): `holoself_status`, `holoself_context`, `holoself_context_manifest`, `holoself_context_get`, `holoself_search`, `holoself_proposal_create`, `holoself_proposal_preview`
@@ -96,6 +96,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `index` | `--project`, `--target`, `--changed`, `--json` |
 | `index status` | `--project`, `--target`, `--json` |
 | `index rebuild` | `--project`, `--target`, `--json` |
+| `ledger` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--since`, `--lens`, `--surface`, `--limit`, `--json` |
 | `search` | `--project`, `--target`, `--lens`, `--temporal`, `--federated`, `--spaces`, `--json` |
 <!-- generated:end -->
 

@@ -13,6 +13,7 @@ import {
   validateCatalogSchema
 } from '../catalog.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
+import { ensureHoloselfGitignore } from '../link/config.mjs'
 import { canonicalFiles, globRegex, matchesAny } from '../markdown/files.mjs'
 import { sections } from '../markdown/text.mjs'
 import { SECRET_RE } from '../policy/secrets.mjs'
@@ -214,6 +215,9 @@ export function ensureCatalogPartition(spaceId, rootDir, files, registry, option
   const val = validateCatalogSchema(catalog)
   if (!val.valid) throw new Error(`catalog schema validation failed: ${val.errors.join('; ')}`)
 
+  try {
+    ensureHoloselfGitignore(rootDir)
+  } catch {}
   ensureDir(catalogRoot(rootDir))
   atomicWriteFile(catPath, JSON.stringify(catalog, null, 2) + '\n')
   return { catalog, fresh: false, skippedSecrets, warnings, catalog_reads: catalogReads }

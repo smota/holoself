@@ -50,9 +50,15 @@ export function taskAllowed(meta, task) {
   if (include.length && (!value || !include.some(pattern => value.includes(pattern.toLowerCase())))) return false
   return !value || !exclude.some(pattern => value.includes(pattern.toLowerCase()))
 }
+export const PUBLICATION_ADAPTERS = ['obsidian-public', 'public', 'restricted-host']
+export function publicationAdapter(adapter) {
+  return PUBLICATION_ADAPTERS.includes(adapter)
+}
+// A sub-document visibility (section, claim, field, tag, link) under a lens and adapter. On publication adapters only
+// `public-safe` is delivered: the sub-document equivalent of `disclosure: publish-approved` (see publicationAllowed).
 export function visibleUnderBehavior(visibility, behaviorLens, adapter = 'generic') {
   const v = VISIBILITIES.includes(visibility) ? visibility : 'private'
-  if (['obsidian-public', 'public', 'restricted-host'].includes(adapter)) return v === 'public-safe'
+  if (publicationAdapter(adapter)) return v === 'public-safe'
   if (v === 'linked-projects' || v === 'public-safe') return true
   return legacyAccessLenses({ visibility: v }).includes(behaviorLens)
 }
@@ -101,7 +107,7 @@ export function allowedDocument(meta, lens, adapter = 'generic', task = null, re
   ) {
     return { allowed: false, reason: `sensitivity ${sensitivity} excludes ${lens} lens`, phase: 6 }
   }
-  if ((adapter === 'obsidian-public' || adapter === 'public' || adapter === 'restricted-host') && !publicationAllowed(meta)) {
+  if (publicationAdapter(adapter) && !publicationAllowed(meta)) {
     return { allowed: false, reason: 'not approved for publication on public adapter', phase: 7 }
   }
   return { allowed: true, reason: null, phase: null }
@@ -109,12 +115,21 @@ export function allowedDocument(meta, lens, adapter = 'generic', task = null, re
 export function allowed(meta, lens, adapter = 'generic', task = null, resolution = null, subject = null, sourceSpaceId = null) {
   return allowedDocument(meta, lens, adapter, task, resolution, subject, sourceSpaceId).allowed
 }
-export function filterClaimVisibility(body, lens, source, restrictions, resolution = null, identityKind = 'owner:direct') {
+// Why a sub-document element was hidden: the lens, or (when the lens alone would show it) the publication adapter.
+function subDocumentExclusion(subject, value, lens, adapter) {
+  return publicationAdapter(adapter) && visibleUnderBehavior(value, lens, 'generic')
+    ? `${subject} not approved for publication on ${adapter} adapter`
+    : `${subject} excluded by ${lens} lens`
+}
+export function filterClaimVisibility(body, lens, source, restrictions, resolution = null, identityKind = 'owner:direct', adapter = 'generic') {
   const behaviorLens = lens
   return replaceClaimBlocks(body, block => {
-    if (visibleUnderBehavior(block.visibility, behaviorLens, 'generic')) return block.raw
+    if (visibleUnderBehavior(block.visibility, behaviorLens, adapter)) return block.raw
     if (identityKind === 'owner:direct')
-      restrictions.push({ source, reason: block.malformed ? 'malformed claim marker excluded' : `claim visibility ${block.visibility} excluded by ${lens} lens` })
+      restrictions.push({
+        source,
+        reason: block.malformed ? 'malformed claim marker excluded' : subDocumentExclusion(`claim visibility ${block.visibility}`, block.visibility, lens, adapter)
+      })
     return ''
   })
 }
@@ -132,7 +147,16 @@ export function filterClaimStatus(body, temporal, source, restrictions, identity
     return ''
   })
 }
-export function filterFieldVisibility(body, metadata, lens, source, restrictions, resolution = null, identityKind = 'owner:direct') {
+export function filterFieldVisibility(
+  body,
+  metadata,
+  lens,
+  source,
+  restrictions,
+  resolution = null,
+  identityKind = 'owner:direct',
+  adapter = 'generic'
+) {
   const behaviorLens = lens,
     configured =
       metadata.field_visibility && typeof metadata.field_visibility === 'object' && !Array.isArray(metadata.field_visibility) ? metadata.field_visibility : {}
@@ -146,15 +170,15 @@ export function filterFieldVisibility(body, metadata, lens, source, restrictions
       if (heading) {
         const key = heading[1].trim().toLowerCase(),
           rule = Object.entries(policies).find(([field]) => key.includes(field.toLowerCase()))
-        blockedHeading = Boolean(rule && !visibleUnderBehavior(rule[1], behaviorLens, 'generic'))
-        if (blockedHeading) restrictions.push({ source, reason: `field ${rule?.[0] || 'compensation'} excluded by ${lens} lens` })
+        blockedHeading = Boolean(rule && !visibleUnderBehavior(rule[1], behaviorLens, adapter))
+        if (blockedHeading) restrictions.push({ source, reason: subDocumentExclusion(`field ${rule[0]}`, rule[1], lens, adapter) })
         return !blockedHeading
       }
       if (blockedHeading) return false
       const field = line.match(/^\s*[-*]?\s*([^:]{2,40}):\s*(.+)$/),
         rule = field && Object.entries(policies).find(([name]) => field[1].trim().toLowerCase() === name.toLowerCase())
-      if (rule && !visibleUnderBehavior(rule[1], behaviorLens, 'generic')) {
-        restrictions.push({ source, reason: `field ${rule[0]} excluded by ${lens} lens` })
+      if (rule && !visibleUnderBehavior(rule[1], behaviorLens, adapter)) {
+        restrictions.push({ source, reason: subDocumentExclusion(`field ${rule[0]}`, rule[1], lens, adapter) })
         return false
       }
       return true

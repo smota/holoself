@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { catalogBuildWarnings, ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
 import { seedLensDefinitions } from './lenses.mjs'
+import { ensureHoloselfGitignore } from './link/config.mjs'
 import { VERSION } from './version.mjs'
 import { mcpPlatformSupport } from './mcp-verification.mjs'
 import { buildLensMigrationPlan, buildTransformationPlan, applyTransformationPlan } from './maintenance.mjs'
@@ -136,7 +137,8 @@ function help() {
       `add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  link deactivate ` +
       `--project <dir> [--adapters all|<list>] [--dry-run|--yes]\n  link skill migrate-global --project <dir> ` +
       `[--skill-home <dir>] [--dry-run|--yes]\n  context [--project <dir>] [--lens <lens>] [--task <text>] ` +
-      `[--session-start] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze ` +
+      `[--session-start] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  ledger [--project <dir>] ` +
+      `[--since <date>] [--lens <id>] [--surface <surface>] [--limit <n>] [--json]\n  analyze ` +
       `overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n` +
       `  propose --project <dir> --op replace|supersede|retire --claim-id <id> --evidence <text> ` +
       `--source-file <path> [--claim <text>|--reason <text>]\n` +
@@ -183,7 +185,7 @@ export async function run(argv) {
           version: VERSION,
           interface: 'local-cli',
           contextSchemaVersion: 1,
-          commands: ['doctor', 'context', 'search', 'propose', 'proposals', 'instructions', 'knowledge', 'link', 'skill', 'mcp', 'coaching'],
+          commands: ['doctor', 'context', 'ledger', 'search', 'propose', 'proposals', 'instructions', 'knowledge', 'link', 'skill', 'mcp', 'coaching'],
           coaching: {
             storage: 'self-root/coaching/sessions',
             commands: ['start', 'note', 'action', 'choose', 'review', 'material', 'resume'],
@@ -362,11 +364,17 @@ export async function run(argv) {
     for (const state of ['pending', 'approved', 'rejected', 'deferred', 'superseded']) ensureDir(join(root, 'proposals', state))
     ensureDir(join(root, 'contribs', 'local'))
     ensureDir(join(root, 'profile'))
+    ensureHoloselfGitignore(root)
     ensureDir(join(root, '.holoself', 'runtime'))
     const cursorKeyPath = join(root, '.holoself', 'runtime', '.cursor.key')
     if (!existsSync(cursorKeyPath))
       try {
         writeFileSync(cursorKeyPath, randomBytes(32), { mode: 0o600 })
+      } catch {}
+    const ledgerKeyPath = join(root, '.holoself', 'runtime', 'ledger.key')
+    if (!existsSync(ledgerKeyPath))
+      try {
+        writeFileSync(ledgerKeyPath, randomBytes(32), { mode: 0o600 })
       } catch {}
     if (!existsSync(join(root, 'topics', '.current'))) atomicWrite(join(root, 'topics', '.current'), '', { mode: 0o666 })
     if (!existsSync(join(root, 'reference', 'README.md')))
@@ -417,6 +425,15 @@ export async function run(argv) {
       if (c.product !== 'holoself') errors.push('config product must be holoself')
       if (!Array.isArray(c.selectedContribs)) errors.push('selectedContribs must be an array')
       else for (const id of c.selectedContribs) if (!availableContribs().includes(id)) errors.push(`unknown selected contrib: ${id}`)
+      if (c.ledger !== undefined) {
+        if (!c.ledger || Array.isArray(c.ledger) || typeof c.ledger !== 'object') errors.push('config ledger must be an object')
+        else {
+          for (const key of Object.keys(c.ledger)) if (!['enabled', 'record_task_text'].includes(key)) errors.push(`unknown config.ledger field: ${key}`)
+          if (c.ledger.enabled !== undefined && typeof c.ledger.enabled !== 'boolean') errors.push('config.ledger.enabled must be a boolean')
+          if (c.ledger.record_task_text !== undefined && typeof c.ledger.record_task_text !== 'boolean')
+            errors.push('config.ledger.record_task_text must be a boolean')
+        }
+      }
     } else errors.push(existsSync(configPath(root)) ? 'config.json is invalid JSON' : 'config.json missing')
     for (const name of Object.keys(PROFILE_FILES)) if (!existsSync(join(root, 'profile', name))) errors.push(`missing profile/${name}`)
     for (const name of Object.keys(CONTEXT_FILES)) if (!existsSync(join(root, 'context', name))) errors.push(`missing context/${name}`)

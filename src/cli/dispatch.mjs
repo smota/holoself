@@ -11,6 +11,7 @@ import { runAnalyze } from './commands/analyze.mjs'
 import { runPropose } from './commands/propose.mjs'
 import { runProposals } from './commands/proposals.mjs'
 import { runIndex } from './commands/index.mjs'
+import { runLedger } from './commands/ledger.mjs'
 import { runSearch } from './commands/search.mjs'
 
 // Entries are tried in the original order; an entry matches its command and, when listed, one of
@@ -33,6 +34,7 @@ export const COMMANDS = [
   { command: 'propose', run: runPropose },
   { command: 'proposals', run: runProposals },
   { command: 'index', run: runIndex },
+  { command: 'ledger', run: runLedger },
   { command: 'search', run: runSearch }
 ]
 

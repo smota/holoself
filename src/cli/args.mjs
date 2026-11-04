@@ -166,6 +166,7 @@ export const COMMAND_FLAGS = {
   index: [...PROJECT_FLAGS, '--changed', ...JSON_FLAGS],
   'index status': [...PROJECT_FLAGS, ...JSON_FLAGS],
   'index rebuild': [...PROJECT_FLAGS, ...JSON_FLAGS],
+  ledger: [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--since', '--lens', '--surface', '--limit', ...JSON_FLAGS],
   search: [...PROJECT_FLAGS, '--lens', '--temporal', '--federated', '--spaces', ...JSON_FLAGS]
 }
 export function commandKey(o) {
@@ -236,6 +237,9 @@ export function parse(args) {
         'Document import is unsupported. Have an external tool extract the text, then use coaching material --material-text with source provenance.'
       )
     else if (a === '--budget') o.budget = requiredValue(args, i++, a)
+    else if (a === '--since') o.since = requiredValue(args, i++, a)
+    else if (a === '--surface') o.surface = requiredValue(args, i++, a)
+    else if (a === '--limit') o.limit = requiredValue(args, i++, a)
     else if (a === '--temporal') o.temporal = requiredValue(args, i++, a)
     else if (a === '--cursor') o.cursor = requiredValue(args, i++, a)
     else if (a === '--source') {

@@ -66,13 +66,14 @@ export function catalogCandidateRecords(
       })
       .map(sec => {
         const filtered = filterFieldVisibility(
-          filterClaimVisibility(sec.snippet || '', lens, rel, dummyRes, resolution, identityKind),
+          filterClaimVisibility(sec.snippet || '', lens, rel, dummyRes, resolution, identityKind, adapter),
           metadata,
           lens,
           rel,
           dummyRes,
           resolution,
-          identityKind
+          identityKind,
+          adapter
         )
         return {
           ...sec,
