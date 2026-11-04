@@ -7,9 +7,13 @@ import { mkdir, mkdtemp, writeFile, lstat, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { run } from '../src/cli.mjs'
-import { startWebServer } from '../src/web-server.mjs'
+import { startWebServer as startServer } from '../src/web-server.mjs'
 
 const temp=()=>mkdtemp(join(tmpdir(),'holoself-web-project-'))
+// Every Workbench API route requires the session token and mutations require a loopback Origin, as the served page sends them.
+const tokens=new Map()
+async function startWebServer(options){const app=await startServer(options);tokens.set(app.url,app.token);return app}
+const fetch=(url,options={})=>{const origin=new URL(url).origin;return globalThis.fetch(url,{...options,headers:{'x-holoself-token':tokens.get(origin),origin,...options.headers}})}
 
 test('Workbench can derive root and lens from optional linked project',async()=>{
   const self=await temp(),project=await temp()
@@ -39,7 +43,7 @@ test('Workbench launches from product cwd with explicit canonical root',async()=
   }finally{await new Promise(resolveClose=>app.server.close(resolveClose))}
 })
 
-test('Workbench exposes dynamic annotation schema and policy validation',async()=>{const self=await temp();await run(['init','--root',self]);const app=await startWebServer({root:self,port:0});try{const session=(await(await fetch(`${app.url}/api/session`)).json()).data,schema=(await(await fetch(`${app.url}/api/annotations/schema`)).json()).data;assert.equal(schema.fields.access_lenses.type,'multi-select');assert.ok(schema.fields.access_lenses.options.some(option=>option.value==='professional'));const response=await fetch(`${app.url}/api/annotations/validate`,{method:'POST',headers:{'content-type':'application/json','x-holoself-token':session.token},body:JSON.stringify({metadata:{access_lenses:['professional'],disclosure:'publish-approved',sensitivity:'compensation-confidential',document_role:'content'}})}),result=(await response.json()).data;assert.equal(response.status,200);assert.equal(result.valid,false);assert.match(result.errors.join(' '),/publish-approved/)}finally{await new Promise(resolveClose=>app.server.close(resolveClose))}})
+test('Workbench exposes dynamic annotation schema and policy validation',async()=>{const self=await temp();await run(['init','--root',self]);const app=await startWebServer({root:self,port:0});try{const session=(await(await fetch(`${app.url}/api/session`)).json()).data,schema=(await(await fetch(`${app.url}/api/annotations/schema`)).json()).data;assert.equal(schema.fields.access_lenses.type,'multi-select');assert.ok(schema.fields.access_lenses.options.some(option=>option.value==='professional'));const response=await fetch(`${app.url}/api/annotations/validate`,{method:'POST',headers:{'content-type':'application/json','x-holoself-token':app.token},body:JSON.stringify({metadata:{access_lenses:['professional'],disclosure:'publish-approved',sensitivity:'compensation-confidential',document_role:'content'}})}),result=(await response.json()).data;assert.equal(response.status,200);assert.equal(result.valid,false);assert.match(result.errors.join(' '),/publish-approved/)}finally{await new Promise(resolveClose=>app.server.close(resolveClose))}})
 
 test('Workbench discovers canonical linked projects and lazily browses local folders',async()=>{
   const self=await temp(),project=await temp(),productCwd=await temp()
@@ -85,12 +89,12 @@ test('Workbench detects legacy mount, suggests migration setup, and migrates to 
 
     const migrateRes = await fetch(`${app.url}/api/spaces/${space.id}/setup`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-holoself-token': session.token }
+      headers: { 'content-type': 'application/json', 'x-holoself-token': app.token }
     })
     assert.equal(migrateRes.status, 200)
     const migrationPreview=(await migrateRes.json()).data.preview,canonicalBefore=tree(self)
     assert.equal((await lstat(join(project,'.holoself'))).isSymbolicLink(),true)
-    const applied=await fetch(`${app.url}/api/spaces/${space.id}/setup`,{method:'POST',headers:{'content-type':'application/json','x-holoself-token':session.token},body:JSON.stringify({apply:true,plan_hash:migrationPreview.plan_hash})})
+    const applied=await fetch(`${app.url}/api/spaces/${space.id}/setup`,{method:'POST',headers:{'content-type':'application/json','x-holoself-token':app.token},body:JSON.stringify({apply:true,plan_hash:migrationPreview.plan_hash})})
     assert.equal(applied.status,200,JSON.stringify(await applied.json()))
     const canonicalAfter=tree(self);for(const key of Object.keys(canonicalBefore))if(!key.startsWith('/.holoself')&&key!=='/lenses/bindings.json')assert.deepEqual(canonicalAfter[key],canonicalBefore[key],key)
 
@@ -107,7 +111,7 @@ test('Workbench detects legacy mount, suggests migration setup, and migrates to 
 
 test('Workbench binding CRUD uses optimistic hashes and prunes the catalog after unbinding',async()=>{
  const self=await temp(),project=await temp();await run(['init','--root',self]);await run(['link','add','--project',project,'--self',self,'--lens','professional','--no-activate','--yes']);const app=await startWebServer({root:self,port:0})
- try{const session=(await(await fetch(app.url+'/api/session')).json()).data,headers={'content-type':'application/json','x-holoself-token':session.token},store=(await(await fetch(app.url+'/api/bindings')).json()).data
+ try{const session=(await(await fetch(app.url+'/api/session')).json()).data,headers={'content-type':'application/json','x-holoself-token':app.token},store=(await(await fetch(app.url+'/api/bindings')).json()).data
  const changed=await fetch(app.url+'/api/bindings',{method:'PUT',headers,body:JSON.stringify({project,default_lens:'public-voice',secondary_lenses:['general'],expectedHash:store.hash})});assert.equal(changed.status,200);const current=(await changed.json()).data;assert.equal(current.bindings[normalizeProjectPath(project)].default_lens,'public-voice')
  const stale=await fetch(app.url+'/api/bindings',{method:'DELETE',headers,body:JSON.stringify({project,expectedHash:store.hash})});assert.equal(stale.status,409);assert.equal((await(await fetch(app.url+'/api/spaces')).json()).data.length,1)
  const removed=await fetch(app.url+'/api/bindings',{method:'DELETE',headers,body:JSON.stringify({project,expectedHash:current.hash})});assert.equal(removed.status,200);assert.deepEqual((await(await fetch(app.url+'/api/spaces')).json()).data,[])
@@ -120,7 +124,7 @@ test('Workbench repair previews the plan and applies only a matching plan hash',
   await run(['link','add','--project',project,'--self',self,'--activate','agents','--install-skill','none','--yes'])
   const app=await startWebServer({root:self,port:0})
   try{
-    const session=(await(await fetch(`${app.url}/api/session`)).json()).data,headers={'content-type':'application/json','x-holoself-token':session.token}
+    const session=(await(await fetch(`${app.url}/api/session`)).json()).data,headers={'content-type':'application/json','x-holoself-token':app.token}
     const space=(await(await fetch(`${app.url}/api/spaces`,{headers})).json()).data.find(item=>normalizeProjectPath(item.path)===normalizeProjectPath(project))
     const post=payload=>fetch(`${app.url}/api/spaces/${space.id}/repair`,{method:'POST',headers,body:JSON.stringify(payload)})
     const runtimeBefore=await readFile(join(project,'.holoself','runtime.json'),'utf8')
@@ -139,7 +143,7 @@ async function actionFixture({legacy=false}={}){
   const self=await temp(),project=await temp();await run(['init','--root',self])
   if(legacy){writeBinding(self,project,{default_lens:'general',secondary_lenses:[]});await run(['link','--root',self,'--target',project,'--yes'])}
   else await run(['link','add','--project',project,'--self',self,'--lens','professional','--secondary-lenses','general','--project-include','src/**','--activate','agents','--install-skill','none','--yes'])
-  const app=await startWebServer({root:self,port:0}),session=(await(await fetch(app.url+'/api/session')).json()).data,headers={'content-type':'application/json','x-holoself-token':session.token},space=(await(await fetch(app.url+'/api/spaces')).json()).data.find(item=>normalizeProjectPath(item.path)===normalizeProjectPath(project))
+  const app=await startWebServer({root:self,port:0}),session=(await(await fetch(app.url+'/api/session')).json()).data,headers={'content-type':'application/json','x-holoself-token':app.token},space=(await(await fetch(app.url+'/api/spaces')).json()).data.find(item=>normalizeProjectPath(item.path)===normalizeProjectPath(project))
   return {self,project,app,space,post:(action,payload={})=>fetch(`${app.url}/api/spaces/${space.id}/${action}`,{method:'POST',headers,body:JSON.stringify(payload)}),close:()=>new Promise(done=>app.server.close(done))}
 }
 test('space action previews write nothing',async()=>{
