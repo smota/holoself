@@ -55,13 +55,14 @@ export function createRecordDelivery(o, { project, identity, registry, lens, res
     const behaviorLens = lens
 
     const filteredBody = filterFieldVisibility(
-      filterClaimVisibility(body, lens, cand.path, deliveryRestrictions, resolution, identity.kind),
+      filterClaimVisibility(body, lens, cand.path, deliveryRestrictions, resolution, identity.kind, adapter),
       metadata,
       lens,
       cand.path,
       deliveryRestrictions,
       resolution,
-      identity.kind
+      identity.kind,
+      adapter
     )
     const content = filteredBody.trim()
 
@@ -85,13 +86,14 @@ export function createRecordDelivery(o, { project, identity, registry, lens, res
         })
         .map(sec => {
           const filtered = filterFieldVisibility(
-            filterClaimVisibility(sec.snippet || '', lens, cand.path, deliveryRestrictions, resolution, identity.kind),
+            filterClaimVisibility(sec.snippet || '', lens, cand.path, deliveryRestrictions, resolution, identity.kind, adapter),
             metadata,
             lens,
             cand.path,
             deliveryRestrictions,
             resolution,
-            identity.kind
+            identity.kind,
+            adapter
           )
           return { ...sec, snippet: filtered }
         })

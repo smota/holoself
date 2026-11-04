@@ -128,6 +128,7 @@ export function runHarness(config, prompt, { cwd, timeoutMs, onData, maxStdout =
     })
     child.on('error', finish)
     child.on('close', code => (code === 0 ? finish() : finish(new Error(stderr || `harness exited ${code}`))))
+    child.stdin.on('error', () => {})
     if (config.promptTransport === 'stdin') child.stdin.end(prompt)
     else child.stdin.end()
     const timer = setTimeout(

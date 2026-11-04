@@ -96,6 +96,7 @@ export function planSpaceAction({ root, project, action, lens = 'general' }, { a
       if (virtual(path) || !stat(path)) add(path, 'create directory')
     }
     if (legacy || !stat(join(metadata, 'README.md'))) add(join(metadata, 'README.md'), 'create file')
+    if (legacy || !stat(join(metadata, '.gitignore'))) add(join(metadata, '.gitignore'), 'create file')
     for (const path of [join(metadata, 'link.yaml'), join(root, 'lenses/bindings.json'), join(root, '.holoself/links.json')]) add(path, 'write file')
   }
   if (activation) {
