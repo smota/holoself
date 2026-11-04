@@ -409,8 +409,8 @@ function markdownFiles(root,{includeHoloself=false,skipDirs=SKIP_DIRS}={}){
   walk(root); return files.sort()
 }
 function projectMarkdownFiles(root,link){const config=link?.project_context||{include:['**/*.md'],exclude:DEFAULT_PROJECT_EXCLUDES};return markdownFiles(root,{skipDirs:new Set(['.git','node_modules','.holoself'])}).filter(path=>{const rel=slash(relative(root,path));return matchesAny(rel,config.include)&&!matchesAny(rel,config.exclude)})}
-const PRIVACY_FIELDS=new Set(['access_lenses','disclosure','sensitivity','document_role','task_include','task_exclude','visibility','read_scope','public_safe','confidence','exclude_lenses','field_visibility','knowledge_status','temporal_scope','valid_from','valid_until','review_after','supersedes','superseded_by'])
-function privacyValueValid(key,value,registry=null){
+export const PRIVACY_FIELDS=new Set(['access_lenses','disclosure','sensitivity','document_role','task_include','task_exclude','visibility','read_scope','public_safe','confidence','exclude_lenses','field_visibility','knowledge_status','temporal_scope','valid_from','valid_until','review_after','supersedes','superseded_by'])
+export function privacyValueValid(key,value,registry=null){
   const known=item=>typeof item==='string'&&(registry?registry.byId.has(item):lensIdStructurallyValid(item))
   if(key==='access_lenses')return Array.isArray(value)&&value.length>0&&value.every(known)&&new Set(value).size===value.length
   if(key==='disclosure')return typeof value==='string'&&DISCLOSURES.includes(value)
@@ -427,11 +427,11 @@ function privacyValueValid(key,value,registry=null){
   if(key==='temporal_scope')return typeof value==='string'&&TEMPORAL_SCOPES.includes(value)
   if(['valid_from','valid_until','review_after'].includes(key))return typeof value==='string'&&/^(?:\d{4}-\d{2}-\d{2}|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))$/.test(value)&&!Number.isNaN(Date.parse(value.includes('T')?value:value+'T00:00:00.000Z'))
   if(key==='supersedes')return Array.isArray(value)&&value.every(item=>typeof item==='string'&&Boolean(item.trim()))
-  if(key==='superseded_by')return typeof value==='string'&&Boolean(item.trim())
+  if(key==='superseded_by')return typeof value==='string'&&Boolean(value.trim())
   return true
 }
-function privacyMetadataErrors(metadata,registry=null){const errors=[];for(const key of PRIVACY_FIELDS)if(Object.hasOwn(metadata,key)&&!privacyValueValid(key,metadata[key],registry)){const value=typeof metadata[key]==='string'?metadata[key]:JSON.stringify(metadata[key]);errors.push(key==='visibility'?`invalid visibility ${value}`:`invalid ${key} value ${value}`)}return errors}
-function canonicalPrivacyMetadataErrors(metadata,registry=null){
+export function privacyMetadataErrors(metadata,registry=null){const errors=[];for(const key of PRIVACY_FIELDS)if(Object.hasOwn(metadata,key)&&!privacyValueValid(key,metadata[key],registry)){const value=typeof metadata[key]==='string'?metadata[key]:JSON.stringify(metadata[key]);errors.push(key==='visibility'?`invalid visibility ${value}`:`invalid ${key} value ${value}`)}return errors}
+export function canonicalPrivacyMetadataErrors(metadata,registry=null){
   const errors=privacyMetadataErrors(metadata,registry)
   if(!Object.hasOwn(metadata,'access_lenses')&&!Object.hasOwn(metadata,'visibility'))errors.push('canonical privacy metadata missing access_lenses or legacy visibility')
   if(Object.hasOwn(metadata,'access_lenses'))for(const key of ['disclosure','sensitivity','document_role']){
@@ -2035,6 +2035,46 @@ function searchIndex(index,query,lens='general',registry=null,resolution=null,te
 
   return results.sort((a,b)=>b.score-a.score||canonicalSort(a.source_file,b.source_file))
 }
+function escapeRegExp(str){return str.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
+export function redactRootPaths(message,roots=[],{platform=process.platform}={}){
+  let out=slash(String(message||''))
+  const candidates=new Set()
+  for(const root of roots){
+    if(!root)continue
+    const raw=String(root),res=resolve(raw),real=safeRealpath(raw)
+    for(const p of [raw,res,real]){
+      const norm=slash(p).replace(/\/+$/,'')
+      if(norm&&norm.length>1)candidates.add(norm)
+    }
+  }
+  const sorted=[...candidates].sort((a,b)=>b.length-a.length)
+  const flags=platform==='win32'?'gi':'g'
+  for(const norm of sorted){
+    const re=new RegExp(`${escapeRegExp(norm)}(?:/+|$)`,flags)
+    out=out.replace(re,'')
+  }
+  out=out.replace(/((?:invalid visibility|invalid [a-z_]+ value|invalid YAML scalar:) )([^\n;]+)/g,(_,prefix,val)=>prefix+(val.length>80?val.slice(0,80)+'...':val))
+  return out
+}
+export function catalogBuildWarnings(root,project=null){
+  const warnings=[];let rootRegistry=null
+  if(existsSync(root)){try{rootRegistry=loadLensRegistry(root)}catch{}}
+  const scanFiles=(base,files,sourceKind,registry,tolerant)=>{
+    for(const file of files){
+      const rel=slash(relative(base,file));let built
+      try{built=buildCatalogSource(file,sourceKind,base,registry,tolerant)}catch(err){built={unreadable:true,error:`${rel}: unreadable (${err.message})`}}
+      if(built?.error)warnings.push(redactRootPaths(built.error,[base,root,project]))
+    }
+  }
+  if(existsSync(root)&&rootRegistry)scanFiles(root,canonicalFiles(root,{includeHistory:true}),'canonical',rootRegistry,false)
+  if(project&&existsSync(project)&&resolve(project)!==resolve(root)){
+    try{
+      const link=readLink(project,{tolerant:true}),registry=rootRegistry||loadLensRegistry(link.path)
+      scanFiles(project,projectMarkdownFiles(project,link),'project',registry,true)
+    }catch{}
+  }
+  return [...new Set(warnings)]
+}
 export function ecosystemValidationErrors(root,project=null){
   const errors=[];let rootRegistry=null
   if(existsSync(root)){try{rootRegistry=loadLensRegistry(root)}catch(error){errors.push(error.message)}}
@@ -2763,7 +2803,7 @@ export async function runEcosystem(o){
       if(o.dryRun||!await askConfirm(o,'Apply this deactivation plan? Link metadata is preserved.'))return true
       const results=deactivateProject(project,{adapters:o.adapters});console.log('Applied:');for(const item of results)console.log(line(item));return true
     }
-    if(sub==='doctor'){const link=readLink(project),health=healthStatus(project,link,o),projectHealthy=health.activation.skillInstallations.length&&health.activation.skillInstallations.every(x=>x.kind==='full-public-skill'&&x.installed),globalHealthy=health.activation.globalSkillInstallations.length&&health.activation.globalSkillInstallations.every(x=>x.kind==='full-public-skill'&&x.installed),skillHealthy=health.skillPolicy==='none'||(health.skillPolicy==='global'?globalHealthy:projectHealthy),checks={link:'valid',self_root:existsSync(link.path)?'valid':'missing',lens:loadLensRegistry(link.path).byId.has(link.default_lens)?'valid':'invalid',bootstrap:health.activation.bootstrap?'valid':'missing',activation:health.activation.active?'valid':'degraded',skill_installation:health.skillPolicy==='none'?'disabled':health.skillPolicy==='global'?(globalHealthy?'global-full-public-skill':'degraded'):skillHealthy?'full-public-skill':'degraded',project_skill_overrides:health.skillPolicy==='global'?(health.activation.projectSkillOverrides.length?'present':'absent'):'not-applicable',cli_command:commandStatus(),context:'unknown'};try{const data=contextData({...o,project});checks.context=data.sources.length?'valid':'empty';checks.warnings=data.warnings}catch(error){checks.context='broken';checks.context_error=error.message}const ok=!Object.values(checks).some(x=>['missing','invalid','degraded','broken','present'].includes(x));console.log(JSON.stringify({state:ok?'activated':'degraded',checks,errors:health.errors,project_skill_override_details:health.activation.projectSkillOverrideDetails,project_skill_deployments:health.activation.projectSkillDeployments},null,2));if(!ok)process.exitCode=1;return true}
+    if(sub==='doctor'){const link=readLink(project),health=healthStatus(project,link,o),projectHealthy=health.activation.skillInstallations.length&&health.activation.skillInstallations.every(x=>x.kind==='full-public-skill'&&x.installed),globalHealthy=health.activation.globalSkillInstallations.length&&health.activation.globalSkillInstallations.every(x=>x.kind==='full-public-skill'&&x.installed),skillHealthy=health.skillPolicy==='none'||(health.skillPolicy==='global'?globalHealthy:projectHealthy),checks={link:'valid',self_root:existsSync(link.path)?'valid':'missing',lens:loadLensRegistry(link.path).byId.has(link.default_lens)?'valid':'invalid',bootstrap:health.activation.bootstrap?'valid':'missing',activation:health.activation.active?'valid':'degraded',skill_installation:health.skillPolicy==='none'?'disabled':health.skillPolicy==='global'?(globalHealthy?'global-full-public-skill':'degraded'):skillHealthy?'full-public-skill':'degraded',project_skill_overrides:health.skillPolicy==='global'?(health.activation.projectSkillOverrides.length?'present':'absent'):'not-applicable',cli_command:commandStatus(),context:'unknown'};try{const data=contextData({...o,project});checks.context=data.sources.length?'valid':'empty';checks.warnings=(data.warnings||[]).map(w=>redactRootPaths(w,[link.path,project]))}catch(error){checks.context='broken';checks.context_error=redactRootPaths(error.message,[link.path,project])}const ok=!Object.values(checks).some(x=>['missing','invalid','degraded','broken','present'].includes(x));console.log(JSON.stringify({state:ok?'activated':'degraded',checks,warnings:checks.warnings||[],errors:health.errors,project_skill_override_details:health.activation.projectSkillOverrideDetails,project_skill_deployments:health.activation.projectSkillDeployments},null,2));if(!ok)process.exitCode=1;return true}
     const findings=setupFindings(project);console.log(JSON.stringify(findings,null,2));let self=o.self;if(!self&&input.isTTY&&output.isTTY){const answer=await askValue('Canonical self path');if(answer)self=resolve(answer)}if(!self){if(o.yes)throw new Error('link setup requires --self <path> before confirmation');console.log('No changes made. Re-run with --self <path> --yes to create link.');return true}if(!existsSync(join(self,'profile'))||!existsSync(join(self,'context')))throw new Error(`self path lacks profile/context layout: ${resolve(self)}`);const setupRegistry=loadLensRegistry(resolve(self));resolveLens(setupRegistry,o.lens||findings.suggested_lens);for(const lens of o.secondaryLenses||[])resolveLens(setupRegistry,lens);const collisions=inspectLinkCollisions(project);if(collisions.length&&!o.force)throw new Error(`existing Holoself metadata collision: ${collisions.join(', ')}; use --force with explicit confirmation`);if(!o.noActivate){const {plan}=preflightActivation(project,{activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||'auto',skillHome:o.skillHome,dryRun:o.dryRun,force:o.force});console.log(JSON.stringify({activation_plan:{canonical:plan.canonical,adapters:plan.adapters,skills:plan.skills,global_skills:plan.globalSkills,writes:plan.writes}},null,2))}if(!await askConfirm(o,`${collisions.length?'Replace link configuration while preserving existing README and artifacts':'Create and activate link'} using ${self} and ${o.lens||findings.suggested_lens} lens?`)){console.log('Cancelled.');return true}let link;if(o.dryRun)link={path:resolve(self),access:'read',proposals:'enabled',index:'local',default_lens:o.lens||findings.suggested_lens,secondary_lenses:o.secondaryLenses||[],project_context:{include:o.projectContext?.include||[],exclude:[...DEFAULT_PROJECT_EXCLUDES,...(o.projectContext?.exclude||[])]}};else{createLinkDirs(project,{preserveReadme:o.force});link=writeLink(project,self,o.lens||findings.suggested_lens,o.secondaryLenses||[],o.projectContext||{})}if(!o.noActivate){const result=activateProject(project,link,{activate:o.activate||'auto',platforms:o.platforms||[],instructions:o.instructions,installSkill:o.installSkill||'auto',skillHome:o.skillHome,dryRun:o.dryRun,force:o.force});for(const item of result.results)console.log(` - ${item.id}: ${item.file} (${item.result})`)}console.log(`${o.dryRun?'[dry-run] ':'[ok] '}setup complete; no files deleted or relocated`);return true
   }
   if(o.command==='context'){

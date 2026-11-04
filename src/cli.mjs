@@ -8,7 +8,7 @@ import { join, resolve, relative, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
-import { ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
+import { catalogBuildWarnings, ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
 import { DEFAULT_LENS_IDS, seedLensDefinitions } from './lenses.mjs'
 import { VERSION } from './version.mjs'
 import { buildLensMigrationPlan, buildTransformationPlan, applyTransformationPlan } from './maintenance.mjs'
@@ -499,7 +499,10 @@ export async function run(argv){
   }
   if(o.command==='doctor'){
     const checks=[['node',Number(process.versions.node.split('.')[0])>=20],['data root',existsSync(root)],['config',existsSync(configPath(root))],['profile',existsSync(join(root,'profile'))],['context',existsSync(join(root,'context'))]]
-    checks.forEach(([n,ok])=>console.log(`${ok?'[ok]':'[!!]'} ${n}`)); if(checks.some(([,ok])=>!ok))process.exitCode=1; return
+    checks.forEach(([n,ok])=>console.log(`${ok?'[ok]':'[!!]'} ${n}`))
+    const warnings=checks.every(([,ok])=>ok)?catalogBuildWarnings(root):[]
+    for(const w of warnings)console.log(`[warn] ${w}`)
+    if(checks.some(([,ok])=>!ok))process.exitCode=1; return
   }
   if(o.command==='validate'){
     const errors=[]; if(!existsSync(root))errors.push('data root does not exist')
@@ -513,6 +516,8 @@ export async function run(argv){
     for(const name of Object.keys(CONTEXT_FILES))if(!existsSync(join(root,'context',name)))errors.push(`missing context/${name}`)
     const rootAgentsError=markerError(join(root,'AGENTS.md'),ROOT_START,ROOT_END); if(rootAgentsError)errors.push(rootAgentsError)
     for(const file of ['CLAUDE.md','CODEX.md']) { const error=markerError(join(root,file)); if(error)errors.push(error) }
+    const warnings=existsSync(root)?catalogBuildWarnings(root,o.project):[]
+    for(const w of warnings)console.log(`[warn] ${w}`)
     errors.push(...ecosystemValidationErrors(root,o.project))
     for(const e of [...new Set(errors)])console.error(`[!!] ${e}`); if(errors.length){process.exitCode=1}else console.log(`[ok] ${root} is valid`); return
   }

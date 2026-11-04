@@ -48,6 +48,7 @@ export function validateAnnotationMetadata(metadata={},knownLenses=[],{allowLega
   if(from>until)errors.push('valid_from must not be after valid_until.')
  }
  if(metadata.knowledge_status==='superseded'&&!metadata.superseded_by)errors.push('superseded knowledge must name superseded_by.')
+ if(metadata.superseded_by!==undefined&&metadata.superseded_by!==null&&(typeof metadata.superseded_by!=='string'||!metadata.superseded_by.trim()))errors.push('superseded_by must be a non-empty string.')
  if(metadata.supersedes!==undefined&&(!Array.isArray(metadata.supersedes)||metadata.supersedes.some(x=>typeof x!=='string'||!x.trim())))errors.push('supersedes must be a string array.')
  return {valid:errors.length===0,errors,warnings,derived_public_safe:derivedPublicSafe(metadata),unknown_lenses:unknown}
 }
