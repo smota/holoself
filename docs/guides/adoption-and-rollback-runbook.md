@@ -6,7 +6,7 @@ Este documento fornece instruções práticas, verificadas e determinísticas pa
 
 ## 1. Pré-Requisitos e Instalação
 
-- **Runtime Requerido:** Node.js $\ge 20.0.0$ (ESM nativo).
+- **Runtime Requerido:** Node.js $\ge 22.0.0$ (ESM nativo).
 - **Instalação Global / CLI:**
   ```bash
   npm install -g holoself-ai

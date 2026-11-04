@@ -70,6 +70,7 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 
 - [AgentFlow SDLC framework placement](decisions/agentflow-placement.md)
 - [Local MCP architecture](decisions/local-mcp-architecture.md)
+- [Unlinked client identity for MCP clients without a project](decisions/unlinked-client-identity.md)
 - [External public skill deployments](decisions/external-skill-deployments.md)
 - [Link adapter scope for repair and deactivation](decisions/link-adapter-scope.md)
 - [ADR E01: Evidence ownership, storage and retention](decisions/evidence-01-ownership.md)
