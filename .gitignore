@@ -26,3 +26,6 @@ scratch/
 /.agentflow/transactions/
 .agent-runs/
 .worktrees/
+
+# Owner-specific working notes (never commit)
+.local/

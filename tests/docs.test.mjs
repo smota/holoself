@@ -1,6 +1,8 @@
 import { parseArguments } from '../src/cli.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { access, readFile, readdir } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
@@ -151,4 +153,26 @@ test('documented invocations parse under strict flag validation',async()=>{
 test('strict command changes are documented',async()=>{
   const text=await readFile(join(root,'CHANGELOG.md'),'utf8')
   for(const word of ['OPTION_NOT_SUPPORTED','coaching','knowledge','instructions','proposals','index','search','mcp','lens','skill','link'])assert.ok(text.includes(word),word)
+})
+
+test('tracked documentation contains no user-home or machine-specific paths',async()=>{
+  const files=execFileSync('git',['ls-files','--cached','--others','--exclude-standard','--','docs/','README.md','AGENTS.md','CONTRIBUTING.md'],{cwd:root,encoding:'utf8'})
+    .split(/\r?\n/)
+    .filter(rel=>rel&&!/\.png$/i.test(rel)&&existsSync(join(root,rel)))
+  const allowedPlaceholder=/^(?:<user>|<name>|<you>|user|name|you|example|runner)$/i
+  const patterns=[
+    /[A-Za-z]:[/\\]Users[/\\]([^/\\\s`'")\]]+)/g,
+    /\/(?:home|Users)\/([^/\s`'")\]]+)\//g,
+    /([A-Za-z]:[/\\]Cowork[/\\][^\s`'")>\]]*)/gi
+  ]
+  const hits=[]
+  for(const rel of files){
+    const text=await readFile(join(root,rel),'utf8')
+    for(const pattern of patterns){
+      for(const match of text.matchAll(pattern)){
+        if(!allowedPlaceholder.test(match[1]))hits.push(`${rel}: ${match[0]}`)
+      }
+    }
+  }
+  assert.deepEqual(hits,[])
 })

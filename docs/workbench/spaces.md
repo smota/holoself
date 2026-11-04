@@ -4,7 +4,7 @@ A Space is an independent project folder linked to canonical self. The project k
 
 ![Spaces showing three real activated projects](../assets/workbench/spaces.png)
 
-The screenshot shows three real projects linked from their current folders under `C:\Users\samue\work`. Each link is activated and passes its Space health checks. A missing index is reported separately because indexes are rebuildable project artifacts, not a broken link.
+The screenshot shows three real projects linked from their current folders under `C:\Users\<you>\work`. Each link is activated and passes its Space health checks. A missing index is reported separately because indexes are rebuildable project artifacts, not a broken link.
 
 ## Link or discover a project
 
