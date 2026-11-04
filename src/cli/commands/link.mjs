@@ -36,5 +36,6 @@ export async function runLink(o, sub) {
     const result = await run(o, sub, project)
     if (result !== undefined) return result
   }
+  // Unreachable: every subcommand handler returns true.
   return linkSetup(o, sub, project)
 }

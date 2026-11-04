@@ -245,7 +245,7 @@ export function serializeSpaceMutation(operation) {
   queue = result.catch(() => {})
   return result
 }
-export function applySpaceAction(request, planHash, { afterConfigure = request?.afterConfigure } = {}) {
+export function applySpaceAction(request, planHash, { afterConfigure } = {}) {
   return serializeSpaceMutation(async () => {
     if (typeof planHash !== 'string' || !planHash) throw changed('missing plan hash; review the space action first')
     const checked = options => {
