@@ -195,6 +195,12 @@
           "estimated_tokens": { "type": "integer", "minimum": 0 },
           "policy_sources": {
             "type": "object",
+            "properties": {
+              "policy_skipped": {
+                "type": "string",
+                "const": "legacy-visibility"
+              }
+            },
             "additionalProperties": {
               "type": "string",
               "pattern": "^(?:frontmatter|policy:.+)$"

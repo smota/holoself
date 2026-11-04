@@ -288,6 +288,7 @@ export function planPolicyMigration(selfRoot, options = {}) {
     const governedByDirectoryPolicy = Boolean(
       resolvedPolicy &&
         !Object.hasOwn(parsed.metadata, 'visibility') &&
+        !Object.hasOwn(parsed.metadata, 'public_safe') &&
         !Object.hasOwn(parsed.metadata, 'access_lenses') &&
         Array.isArray(resolvedPolicy.policyDefaults.access_lenses) &&
         resolvedPolicy.policyDefaults.access_lenses.length > 0

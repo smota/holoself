@@ -430,7 +430,10 @@ const CACHE = new Map()
 function cacheKey(records, options = {}) {
   const state = records.map(record => {
     const base = [sourceId(record), record.source_hash, record.content?.length || 0]
-    if (record.policy_sources && Object.values(record.policy_sources).some(v => typeof v === 'string' && v.startsWith('policy:'))) {
+    if (
+      record.policy_sources &&
+      Object.entries(record.policy_sources).some(([k, v]) => k === 'policy_skipped' || (typeof v === 'string' && v.startsWith('policy:')))
+    ) {
       base.push(record.metadata, record.policy_sources)
     }
     return base

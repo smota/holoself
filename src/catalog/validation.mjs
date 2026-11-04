@@ -183,7 +183,7 @@ export function policyProvenanceSummary(root) {
     }
     const resolved = resolveDocumentPolicy(path, root, metadata, registry)
     const entries = Object.entries(resolved.policySources || {})
-    if (entries.some(([, src]) => src.startsWith('policy:'))) {
+    if (entries.some(([field, src]) => src.startsWith('policy:') || field === 'policy_skipped')) {
       const formatted = entries.map(([field, src]) => `${field}=${src}`).join(', ')
       lines.push(`[policy] ${rel}: ${formatted}`)
     }

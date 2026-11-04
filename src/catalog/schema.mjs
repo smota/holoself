@@ -231,6 +231,12 @@ export function validateCatalogSchema(catalog) {
           errors.push(`${prefix}.policy_sources must be an object`)
         } else {
           for (const [pk, pv] of Object.entries(s.policy_sources)) {
+            if (pk === 'policy_skipped') {
+              if (pv !== 'legacy-visibility') {
+                errors.push(`${prefix}.policy_sources.policy_skipped must be "legacy-visibility"`)
+              }
+              continue
+            }
             if (!ALLOWED_FRONTMATTER_KEYS.has(pk)) errors.push(`${prefix}.policy_sources unknown property: ${pk}`)
             if (typeof pv !== 'string' || (!pv.startsWith('policy:') && pv !== 'frontmatter')) {
               errors.push(`${prefix}.policy_sources.${pk} must be "frontmatter" or "policy:<relative-path>"`)

@@ -22,6 +22,7 @@ import { loadLensRegistry } from '../src/lenses.mjs';
 import { readDocument, listDocuments, saveAnnotatedDocument } from '../src/documents.mjs';
 import { planPolicyMigration, verifyNonAmplification } from '../src/migration.mjs';
 import { frontmatter as parseFrontmatter } from '../src/policy/privacy-fields.mjs';
+import { analysis } from '../src/proposals/analysis.mjs';
 
 const CLI = path.resolve('bin/holoself.mjs');
 
@@ -565,4 +566,288 @@ test('migrate policy respects _policy.yaml defaults and preserves verifyNonAmpli
   const legacyEntry = plan.entries.find((f) => f.path === 'context/legacy.md');
   assert.ok(legacyEntry);
   assert.equal(legacyEntry.needs_migration, true);
+});
+
+test('legacy visibility and public_safe documents skip directory policy defaults without widening and report policy_skipped', () => {
+  const root = makeTempDir();
+  initDataRoot({ root });
+
+  const contextDir = path.join(root, 'context');
+  fs.mkdirSync(contextDir, { recursive: true });
+  fs.writeFileSync(path.join(contextDir, '_policy.yaml'), [
+    'access_lenses: [general, professional, public-voice, technical, private]',
+    'exclude_lenses: [leadership]',
+    'disclosure: publish-approved',
+    'sensitivity: personal',
+    'document_role: content',
+    'read_scope: shared'
+  ].join('\n') + '\n', 'utf8');
+
+  // 1. visibility: private under permissive _policy.yaml (read_scope: shared, access_lenses including general)
+  fs.writeFileSync(path.join(contextDir, 'legacy-private.md'), [
+    '---',
+    'visibility: private',
+    '---',
+    '# Legacy Private',
+    '',
+    'Must never leak to general lens LEGACY_PRIV_TOKEN.'
+  ].join('\n') + '\n', 'utf8');
+
+  // 2. visibility: professional (with exclude_lenses: [general] and bare) under permissive _policy.yaml
+  fs.writeFileSync(path.join(contextDir, 'legacy-prof.md'), [
+    '---',
+    'visibility: professional',
+    'exclude_lenses: [general]',
+    '---',
+    '# Legacy Professional',
+    '',
+    'Must not leak to general or public-voice lens LEGACY_PROF_TOKEN.'
+  ].join('\n') + '\n', 'utf8');
+
+  fs.writeFileSync(path.join(contextDir, 'legacy-prof-bare.md'), [
+    '---',
+    'visibility: professional',
+    '---',
+    '# Legacy Professional Bare',
+    '',
+    'Must not inherit public-voice or technical from policy LEGACY_PROF_BARE_TOKEN.'
+  ].join('\n') + '\n', 'utf8');
+
+  // 3. public_safe: false under publish-approved _policy.yaml
+  fs.writeFileSync(path.join(contextDir, 'legacy-public-safe.md'), [
+    '---',
+    'visibility: private',
+    'public_safe: false',
+    '---',
+    '# Legacy Public Safe',
+    '',
+    'Must not inherit policy defaults LEGACY_PUBSAFE_TOKEN.'
+  ].join('\n') + '\n', 'utf8');
+
+  // 4. Modern document with explicit exclude_lenses: [] overrides policy exclude_lenses: [leadership]
+  fs.writeFileSync(path.join(contextDir, 'modern-unexcluded.md'), [
+    '---',
+    'exclude_lenses: []',
+    '---',
+    '# Modern Unexcluded',
+    '',
+    'Explicit empty exclude_lenses widens leadership MODERN_UNEXCLUDED_TOKEN.'
+  ].join('\n') + '\n', 'utf8');
+
+  const catalog = buildSelfCatalog(root);
+  const privEntry = catalog.sources.find((s) => s.file === 'context/legacy-private.md');
+  assert.ok(privEntry);
+  assert.deepEqual(privEntry.frontmatter.access_lenses, ['private']);
+  assert.equal(privEntry.frontmatter.read_scope, 'restricted');
+  assert.equal(privEntry.frontmatter.disclosure, 'internal-only');
+  assert.deepEqual(privEntry.policy_sources, {
+    policy_skipped: 'legacy-visibility',
+    visibility: 'frontmatter'
+  });
+
+  const profEntry = catalog.sources.find((s) => s.file === 'context/legacy-prof.md');
+  assert.ok(profEntry);
+  assert.deepEqual(profEntry.frontmatter.access_lenses, ['general', 'professional', 'interview', 'private']);
+  assert.deepEqual(profEntry.frontmatter.exclude_lenses, ['general']);
+  assert.equal(profEntry.frontmatter.disclosure, 'internal-only');
+  assert.deepEqual(profEntry.policy_sources, {
+    exclude_lenses: 'frontmatter',
+    policy_skipped: 'legacy-visibility',
+    visibility: 'frontmatter'
+  });
+
+  const profBareEntry = catalog.sources.find((s) => s.file === 'context/legacy-prof-bare.md');
+  assert.ok(profBareEntry);
+  assert.deepEqual(profBareEntry.frontmatter.access_lenses, ['general', 'professional', 'interview', 'private']);
+  assert.equal(profBareEntry.frontmatter.disclosure, 'internal-only');
+  assert.deepEqual(profBareEntry.policy_sources, {
+    policy_skipped: 'legacy-visibility',
+    visibility: 'frontmatter'
+  });
+
+  const pubSafeEntry = catalog.sources.find((s) => s.file === 'context/legacy-public-safe.md');
+  assert.ok(pubSafeEntry);
+  assert.equal(pubSafeEntry.frontmatter.disclosure, 'review-required');
+  assert.equal(pubSafeEntry.frontmatter.publication_allowed, false);
+  assert.deepEqual(pubSafeEntry.policy_sources, {
+     policy_skipped: 'legacy-visibility',
+    public_safe: 'frontmatter',
+    visibility: 'frontmatter'
+  });
+
+  // Delivery under general lens must NOT include legacy-private.md or legacy-prof.md
+  const generalCtx = JSON.parse(runCli([
+    'context',
+    '--root', root,
+    '--lens', 'general',
+    '--task', 'LEGACY_PRIV_TOKEN LEGACY_PROF_TOKEN',
+    '--budget', 'standard',
+    '--format', 'json'
+  ], { cwd: root }));
+  const generalPaths = generalCtx.self.documents.map((d) => d.path);
+  assert.ok(!generalPaths.includes('context/legacy-private.md'), 'visibility: private must not be delivered under general');
+  assert.ok(!generalPaths.includes('context/legacy-prof.md'), 'visibility: professional with exclude_lenses: [general] must not be delivered under general');
+
+  // Delivery under public-voice lens must NOT include legacy-prof-bare.md
+  const pubVoiceCtx = JSON.parse(runCli([
+    'context',
+    '--root', root,
+    '--lens', 'public-voice',
+    '--task', 'LEGACY_PROF_BARE_TOKEN',
+    '--budget', 'standard',
+    '--format', 'json'
+  ], { cwd: root }));
+  const pubVoicePaths = pubVoiceCtx.self.documents.map((d) => d.path);
+  assert.ok(!pubVoicePaths.includes('context/legacy-prof-bare.md'), 'visibility: professional must not inherit public-voice from policy');
+
+  // Modern document with exclude_lenses: [] overrides policy exclude_lenses: [leadership]
+  const modernEntry = catalog.sources.find((s) => s.file === 'context/modern-unexcluded.md');
+  assert.ok(modernEntry);
+  assert.deepEqual(modernEntry.frontmatter.exclude_lenses, []);
+  assert.equal(modernEntry.policy_sources.exclude_lenses, 'frontmatter');
+
+  // Validate CLI reports policy_skipped=legacy-visibility
+  const validateOut = runCli(['validate', '--root', root]);
+  assert.match(validateOut, /\[policy\] context\/legacy-private\.md:.*policy_skipped=legacy-visibility/);
+  assert.match(validateOut, /\[policy\] context\/legacy-prof\.md:.*policy_skipped=legacy-visibility/);
+});
+
+test('analysis passes self to createRecordDelivery so policy defaults apply during delivery', () => {
+  const root = makeTempDir();
+  initDataRoot({ root });
+
+  const contextDir = path.join(root, 'context');
+  fs.mkdirSync(contextDir, { recursive: true });
+  fs.writeFileSync(path.join(contextDir, '_policy.yaml'), [
+    'access_lenses: [professional, private]',
+    'disclosure: internal-only',
+    'sensitivity: personal',
+    'document_role: content'
+  ].join('\n') + '\n', 'utf8');
+
+  // Self document with partial frontmatter (only document_role), relying on _policy.yaml for access_lenses/disclosure/sensitivity
+  const sharedBody = '# Architecture Playbook\n\nWe use event-driven projections with 99.9% uptime guarantees.\n';
+  fs.writeFileSync(path.join(contextDir, 'playbook.md'), [
+    '---',
+    'document_role: evidence',
+    '---',
+    sharedBody.trim()
+  ].join('\n') + '\n', 'utf8');
+
+  // Restricted directory where _policy.yaml excludes private via task_include or invalid policy fails closed
+  const brokenDir = path.join(contextDir, 'broken');
+  fs.mkdirSync(brokenDir, { recursive: true });
+  fs.writeFileSync(path.join(brokenDir, '_policy.yaml'), 'unknown_key: bad\n', 'utf8');
+  fs.writeFileSync(path.join(brokenDir, 'incomplete.md'), [
+    '---',
+    'document_role: evidence',
+    '---',
+    '# Incomplete Doc',
+    '',
+    'Should be rejected by delivery because _policy.yaml is invalid.'
+  ].join('\n') + '\n', 'utf8');
+
+  const projectDir = makeTempDir('holoself-analysis-proj-');
+  fs.writeFileSync(path.join(projectDir, 'playbook-copy.md'), sharedBody, 'utf8');
+  runCli([
+    'link', 'add',
+    '--project', projectDir,
+    '--self', root,
+    '--lens', 'professional',
+    '--project-include', '**/*.md',
+    '--no-mcp',
+    '--no-hooks',
+    '--yes'
+  ]);
+
+  const report = analysis(projectDir);
+  const dup = report.findings.find(
+    (f) => f.classification === 'Exact duplicate' && f.self_file === 'context/playbook.md' && f.project_file === 'playbook-copy.md'
+  );
+  assert.ok(dup, 'analysis must deliver canonical doc governed by _policy.yaml and detect duplicate');
+  assert.ok(!report.findings.some((f) => f.self_file === 'context/broken/incomplete.md'));
+});
+
+test('documents.mjs loads lens registry so unregistered lenses in _policy.yaml fail closed like catalog', async () => {
+  const root = makeTempDir();
+  initDataRoot({ root });
+
+  const topicsDir = path.join(root, 'topics');
+  fs.mkdirSync(topicsDir, { recursive: true });
+  fs.writeFileSync(path.join(topicsDir, '_policy.yaml'), [
+    'access_lenses: [unregistered-lens, private]',
+    'disclosure: internal-only',
+    'sensitivity: personal',
+    'document_role: content'
+  ].join('\n') + '\n', 'utf8');
+
+  const docPath = path.join(topicsDir, 'note.md');
+  fs.writeFileSync(docPath, [
+    '---',
+    'schema_version: 1',
+    'document_role: evidence',
+    '---',
+    '# Note'
+  ].join('\n') + '\n', 'utf8');
+
+  // Catalog rejects unregistered-lens in _policy.yaml
+  const catalog = buildSelfCatalog(root);
+  assert.ok(!catalog.sources.some((s) => s.file === 'topics/note.md'));
+
+  // readDocument and listDocuments also reject unregistered-lens in _policy.yaml (no inherited defaults)
+  const doc = readDocument(root, 'topics/note.md');
+  assert.deepEqual(doc.policy_defaults, {});
+  assert.deepEqual(doc.effective_policy, { schema_version: 1, document_role: 'evidence' });
+  assert.deepEqual(doc.policy_sources, { document_role: 'frontmatter' });
+
+  const listed = listDocuments(root).find((d) => d.path === 'topics/note.md');
+  assert.ok(listed);
+  assert.deepEqual(listed.policy_sources, { document_role: 'frontmatter' });
+
+  // saveAnnotatedDocument rejects saving incomplete metadata when _policy.yaml has an unregistered lens
+  await assert.rejects(
+    () =>
+      saveAnnotatedDocument(
+        root,
+        'topics/note.md',
+        {
+          expectedHash: doc.hash,
+          metadata: { schema_version: 1, document_role: 'evidence' },
+          segments: doc.annotations.segments
+        },
+        { knownLenses: ['general', 'professional', 'public-voice', 'technical', 'leadership', 'interview', 'private'] }
+      ),
+    /Select at least one Access Lens|access_lenses/
+  );
+});
+
+test('BOM-prefixed _policy.yaml is parsed after stripping leading UTF-8 BOM while real YAML errors still fail closed', () => {
+  const root = makeTempDir();
+  initDataRoot({ root });
+
+  const contextDir = path.join(root, 'context', 'bom');
+  fs.mkdirSync(contextDir, { recursive: true });
+  const bomPolicy = '\uFEFF' + [
+    'access_lenses: [professional, private]',
+    'disclosure: internal-only',
+    'sensitivity: personal',
+    'document_role: content'
+  ].join('\n') + '\n';
+  fs.writeFileSync(path.join(contextDir, '_policy.yaml'), bomPolicy, 'utf8');
+  fs.writeFileSync(path.join(contextDir, 'doc.md'), '# BOM Policy Doc\n\nContent.\n', 'utf8');
+
+  const badBomDir = path.join(root, 'context', 'bom-bad');
+  fs.mkdirSync(badBomDir, { recursive: true });
+  fs.writeFileSync(path.join(badBomDir, '_policy.yaml'), '\uFEFFaccess_lenses: [unclosed\n: invalid\n', 'utf8');
+  fs.writeFileSync(path.join(badBomDir, 'doc.md'), '# Bad BOM Policy Doc\n', 'utf8');
+
+  const catalog = buildSelfCatalog(root);
+  const goodDoc = catalog.sources.find((s) => s.file === 'context/bom/doc.md');
+  assert.ok(goodDoc, 'BOM-prefixed valid _policy.yaml must be accepted');
+  assert.deepEqual(goodDoc.frontmatter.access_lenses, ['professional', 'private']);
+
+  assert.ok(!catalog.sources.some((s) => s.file === 'context/bom-bad/doc.md'), 'BOM-prefixed malformed _policy.yaml must still fail closed');
+  const errors = ecosystemValidationErrors(root);
+  assert.ok(!errors.some((e) => e.includes('context/bom/_policy.yaml')));
+  assert.ok(errors.some((e) => e.includes('context/bom-bad/_policy.yaml')));
 });

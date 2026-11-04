@@ -120,9 +120,10 @@ export function readPolicyFile(policyPath, selfRoot, registry = null) {
     }
   }
   const fileHash = hash(read.text)
+  const yamlText = read.text.startsWith('\uFEFF') ? read.text.slice(1) : read.text
   let parsed
   try {
-    parsed = parseYaml(read.text)
+    parsed = parseYaml(yamlText)
   } catch (err) {
     return {
       valid: false,
@@ -292,6 +293,36 @@ export function resolveDocumentPolicy(docFile, selfRoot, docMetadata = {}, regis
     }
   }
 
+  const hasLegacyVisibility = Boolean(
+    docMetadata &&
+      typeof docMetadata === 'object' &&
+      ((docMetadata.visibility !== undefined && docMetadata.visibility !== null) ||
+        (docMetadata.public_safe !== undefined && docMetadata.public_safe !== null))
+  )
+
+  if (hasLegacyVisibility) {
+    const effectiveMetadata = {}
+    for (const [key, val] of Object.entries(docMetadata)) {
+      if (val === undefined || val === null) continue
+      effectiveMetadata[key] = Array.isArray(val) ? [...val] : val
+    }
+    const rawSources = frontmatterOnlySources(docMetadata)
+    if (chainResults.length > 0) {
+      rawSources.policy_skipped = 'legacy-visibility'
+    }
+    const policySources = {}
+    for (const key of Object.keys(rawSources).sort(canonicalSort)) {
+      policySources[key] = rawSources[key]
+    }
+    return {
+      effectiveMetadata,
+      policyDefaults: {},
+      policySources,
+      policySkipped: chainResults.length > 0 ? 'legacy-visibility' : null,
+      policyErrors: []
+    }
+  }
+
   const effectiveMetadata = {}
   const rawSources = {}
   for (const [key, val] of Object.entries(policyDefaults)) {
@@ -317,6 +348,7 @@ export function resolveDocumentPolicy(docFile, selfRoot, docMetadata = {}, regis
     effectiveMetadata,
     policyDefaults,
     policySources,
+    policySkipped: null,
     policyErrors: []
   }
 }
