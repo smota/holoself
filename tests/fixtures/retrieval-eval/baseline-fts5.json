@@ -5,19 +5,19 @@
   "dataset_version": 1,
   "corpus_document_count": 53,
   "corpus_digest": "26e4c4bf4cc690e848080456bab23495f73e0b15489693f48b3d8cecc822bae2",
-  "cases_digest": "6096aeac2ebd16215e22ae0475e314752cc84df557b5e715d95c4018c1280ba9",
+  "cases_digest": "bff83d9940750729e79f1268f9a8bb9f03ef68d11dfaabe52921da670dc42ae0",
   "summary": {
     "total_cases": 48,
-    "non_gap_cases": 38,
-    "known_gap_cases": 10,
-    "mean_recall": 0.7917,
+    "non_gap_cases": 41,
+    "known_gap_cases": 7,
+    "mean_recall": 0.875,
     "non_gap_mean_recall": 1,
-    "known_gap_mean_recall": 0,
-    "mean_precision": 0.3978,
+    "known_gap_mean_recall": 0.1429,
+    "mean_precision": 0.4394,
     "total_forbidden_leaks": 0,
-    "mean_bytes_used": 19605,
-    "total_bytes_used": 941030,
-    "total_content_bytes": 166409,
+    "mean_bytes_used": 20874,
+    "total_bytes_used": 1001945,
+    "total_content_bytes": 191936,
     "by_category": {
       "personal": {
         "cases": 10,
@@ -28,22 +28,22 @@
         "known_gap_mean_recall": null,
         "mean_precision": 0.4667,
         "forbidden_leaks": 0,
-        "mean_bytes_used": 14418,
-        "total_bytes_used": 144177,
+        "mean_bytes_used": 14534,
+        "total_bytes_used": 145344,
         "total_content_bytes": 25181
       },
       "mechanical": {
         "cases": 10,
-        "non_gap_cases": 5,
-        "known_gap_cases": 5,
-        "mean_recall": 0.5,
+        "non_gap_cases": 8,
+        "known_gap_cases": 2,
+        "mean_recall": 0.9,
         "non_gap_mean_recall": 1,
-        "known_gap_mean_recall": 0,
-        "mean_precision": 0.5,
+        "known_gap_mean_recall": 0.5,
+        "mean_precision": 0.7,
         "forbidden_leaks": 0,
-        "mean_bytes_used": 9252,
-        "total_bytes_used": 92515,
-        "total_content_bytes": 0
+        "mean_bytes_used": 14980,
+        "total_bytes_used": 149799,
+        "total_content_bytes": 25527
       },
       "synonyms": {
         "cases": 6,
@@ -54,8 +54,8 @@
         "known_gap_mean_recall": 0,
         "mean_precision": 0.0556,
         "forbidden_leaks": 0,
-        "mean_bytes_used": 14030,
-        "total_bytes_used": 84182,
+        "mean_bytes_used": 14113,
+        "total_bytes_used": 84680,
         "total_content_bytes": 14607
       },
       "lifecycle": {
@@ -67,8 +67,8 @@
         "known_gap_mean_recall": null,
         "mean_precision": 0.4167,
         "forbidden_leaks": 0,
-        "mean_bytes_used": 14531,
-        "total_bytes_used": 101717,
+        "mean_bytes_used": 14623,
+        "total_bytes_used": 102362,
         "total_content_bytes": 13685
       },
       "privacy": {
@@ -80,8 +80,8 @@
         "known_gap_mean_recall": null,
         "mean_precision": 0.1689,
         "forbidden_leaks": 0,
-        "mean_bytes_used": 38443,
-        "total_bytes_used": 307541,
+        "mean_bytes_used": 38531,
+        "total_bytes_used": 308248,
         "total_content_bytes": 67206
       },
       "budget": {
@@ -93,8 +93,8 @@
         "known_gap_mean_recall": null,
         "mean_precision": 0.4561,
         "forbidden_leaks": 0,
-        "mean_bytes_used": 41699,
-        "total_bytes_used": 166797,
+        "mean_bytes_used": 41791,
+        "total_bytes_used": 167162,
         "total_content_bytes": 37883
       },
       "session-start": {
@@ -106,37 +106,37 @@
         "known_gap_mean_recall": null,
         "mean_precision": 1,
         "forbidden_leaks": 0,
-        "mean_bytes_used": 14700,
-        "total_bytes_used": 44101,
+        "mean_bytes_used": 14783,
+        "total_bytes_used": 44350,
         "total_content_bytes": 7847
       }
     },
     "by_language": {
       "en": {
         "cases": 33,
-        "non_gap_cases": 26,
-        "known_gap_cases": 7,
-        "mean_recall": 0.7879,
+        "non_gap_cases": 27,
+        "known_gap_cases": 6,
+        "mean_recall": 0.8485,
         "non_gap_mean_recall": 1,
-        "known_gap_mean_recall": 0,
-        "mean_precision": 0.3995,
+        "known_gap_mean_recall": 0.1667,
+        "mean_precision": 0.4298,
         "forbidden_leaks": 0,
-        "mean_bytes_used": 21629,
-        "total_bytes_used": 713748,
-        "total_content_bytes": 132526
+        "mean_bytes_used": 22750,
+        "total_bytes_used": 750748,
+        "total_content_bytes": 147830
       },
       "pt": {
         "cases": 15,
-        "non_gap_cases": 12,
-        "known_gap_cases": 3,
-        "mean_recall": 0.8,
+        "non_gap_cases": 14,
+        "known_gap_cases": 1,
+        "mean_recall": 0.9333,
         "non_gap_mean_recall": 1,
         "known_gap_mean_recall": 0,
-        "mean_precision": 0.394,
+        "mean_precision": 0.4607,
         "forbidden_leaks": 0,
-        "mean_bytes_used": 15152,
-        "total_bytes_used": 227282,
-        "total_content_bytes": 33883
+        "mean_bytes_used": 16746,
+        "total_bytes_used": 251197,
+        "total_content_bytes": 44106
       }
     }
   },
@@ -160,7 +160,7 @@
       "precision": 0.6667,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 15418,
+      "bytes_used": 15538,
       "content_bytes": 2616,
       "content_chars": 2597,
       "expected_source_paths": [
@@ -194,7 +194,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14808,
+      "bytes_used": 14924,
       "content_bytes": 2718,
       "content_chars": 2701,
       "expected_source_paths": [
@@ -227,7 +227,7 @@
       "precision": 0.6667,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 13699,
+      "bytes_used": 13813,
       "content_bytes": 2424,
       "content_chars": 2418,
       "expected_source_paths": [
@@ -261,7 +261,7 @@
       "precision": 0.6667,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 13888,
+      "bytes_used": 14012,
       "content_bytes": 2411,
       "content_chars": 2401,
       "expected_source_paths": [
@@ -295,7 +295,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14292,
+      "bytes_used": 14414,
       "content_bytes": 2498,
       "content_chars": 2486,
       "expected_source_paths": [
@@ -328,7 +328,7 @@
       "precision": 0.6667,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 15348,
+      "bytes_used": 15468,
       "content_bytes": 2536,
       "content_chars": 2506,
       "expected_source_paths": [
@@ -362,7 +362,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14165,
+      "bytes_used": 14248,
       "content_bytes": 2594,
       "content_chars": 2548,
       "expected_source_paths": [
@@ -395,7 +395,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 13705,
+      "bytes_used": 13829,
       "content_bytes": 2381,
       "content_chars": 2351,
       "expected_source_paths": [
@@ -428,7 +428,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14226,
+      "bytes_used": 14348,
       "content_bytes": 2436,
       "content_chars": 2404,
       "expected_source_paths": [
@@ -461,7 +461,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14628,
+      "bytes_used": 14750,
       "content_bytes": 2567,
       "content_chars": 2504,
       "expected_source_paths": [
@@ -487,20 +487,28 @@
       "known_gap": false,
       "gap_issue": null,
       "context_need": "not-needed",
-      "expected_count": 0,
-      "expected_found": 0,
-      "delivered_count": 0,
+      "expected_count": 3,
+      "expected_found": 3,
+      "delivered_count": 3,
       "recall": 1,
       "precision": 1,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 9333,
-      "content_bytes": 0,
-      "content_chars": 0,
-      "expected_source_paths": [],
-      "delivered_source_paths": [],
+      "bytes_used": 15803,
+      "content_bytes": 2616,
+      "content_chars": 2597,
+      "expected_source_paths": [
+        "profile/identity.md",
+        "profile/preferences.md",
+        "profile/work-context.md"
+      ],
+      "delivered_source_paths": [
+        "profile/identity.md",
+        "profile/preferences.md",
+        "profile/work-context.md"
+      ],
       "missing_source_paths": [],
-      "notes": "Pure mechanical lint fix requires no personal self context (context_need: not-needed)."
+      "notes": "Pure mechanical lint fix (context_need: not-needed) keeps only session-start/policy sources and omits zero-overlap content/evidence."
     },
     {
       "id": "mechanical-en-sort-imports",
@@ -514,20 +522,28 @@
       "known_gap": false,
       "gap_issue": null,
       "context_need": "not-needed",
-      "expected_count": 0,
-      "expected_found": 0,
-      "delivered_count": 0,
+      "expected_count": 3,
+      "expected_found": 3,
+      "delivered_count": 3,
       "recall": 1,
       "precision": 1,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 9352,
-      "content_bytes": 0,
-      "content_chars": 0,
-      "expected_source_paths": [],
-      "delivered_source_paths": [],
+      "bytes_used": 15810,
+      "content_bytes": 2616,
+      "content_chars": 2597,
+      "expected_source_paths": [
+        "profile/identity.md",
+        "profile/preferences.md",
+        "profile/work-context.md"
+      ],
+      "delivered_source_paths": [
+        "profile/identity.md",
+        "profile/preferences.md",
+        "profile/work-context.md"
+      ],
       "missing_source_paths": [],
-      "notes": "Pure mechanical import sorting skips all self records."
+      "notes": "Pure mechanical import sorting keeps only session-start/policy sources and omits broad personal context."
     },
     {
       "id": "mechanical-en-rename-variable",
@@ -541,20 +557,28 @@
       "known_gap": false,
       "gap_issue": null,
       "context_need": "not-needed",
-      "expected_count": 0,
-      "expected_found": 0,
-      "delivered_count": 0,
+      "expected_count": 3,
+      "expected_found": 3,
+      "delivered_count": 3,
       "recall": 1,
       "precision": 1,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 9037,
-      "content_bytes": 0,
-      "content_chars": 0,
-      "expected_source_paths": [],
-      "delivered_source_paths": [],
+      "bytes_used": 14628,
+      "content_bytes": 2615,
+      "content_chars": 2596,
+      "expected_source_paths": [
+        "profile/identity.md",
+        "profile/preferences.md",
+        "context/technical.md"
+      ],
+      "delivered_source_paths": [
+        "profile/identity.md",
+        "profile/preferences.md",
+        "context/technical.md"
+      ],
       "missing_source_paths": [],
-      "notes": "Pure mechanical variable rename skips all self records."
+      "notes": "Pure mechanical variable rename under technical lens keeps only technical session_start_sources/policy and omits non-overlapping content."
     },
     {
       "id": "mechanical-pt-corrigir-sintaxe",
@@ -568,20 +592,28 @@
       "known_gap": false,
       "gap_issue": null,
       "context_need": "not-needed",
-      "expected_count": 0,
-      "expected_found": 0,
-      "delivered_count": 0,
+      "expected_count": 3,
+      "expected_found": 3,
+      "delivered_count": 3,
       "recall": 1,
       "precision": 1,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 9345,
-      "content_bytes": 0,
-      "content_chars": 0,
-      "expected_source_paths": [],
-      "delivered_source_paths": [],
+      "bytes_used": 15849,
+      "content_bytes": 2616,
+      "content_chars": 2597,
+      "expected_source_paths": [
+        "profile/identity.md",
+        "profile/preferences.md",
+        "profile/work-context.md"
+      ],
+      "delivered_source_paths": [
+        "profile/identity.md",
+        "profile/preferences.md",
+        "profile/work-context.md"
+      ],
       "missing_source_paths": [],
-      "notes": "Portuguese pure mechanical JSON syntax fix skips all self records."
+      "notes": "Portuguese pure mechanical JSON syntax fix keeps only session-start/policy sources and omits non-overlapping content."
     },
     {
       "id": "mechanical-pt-ordenar-numeros",
@@ -595,20 +627,28 @@
       "known_gap": false,
       "gap_issue": null,
       "context_need": "not-needed",
-      "expected_count": 0,
-      "expected_found": 0,
-      "delivered_count": 0,
+      "expected_count": 3,
+      "expected_found": 3,
+      "delivered_count": 3,
       "recall": 1,
       "precision": 1,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 9355,
-      "content_bytes": 0,
-      "content_chars": 0,
-      "expected_source_paths": [],
-      "delivered_source_paths": [],
+      "bytes_used": 15761,
+      "content_bytes": 2616,
+      "content_chars": 2597,
+      "expected_source_paths": [
+        "profile/identity.md",
+        "profile/preferences.md",
+        "profile/work-context.md"
+      ],
+      "delivered_source_paths": [
+        "profile/identity.md",
+        "profile/preferences.md",
+        "profile/work-context.md"
+      ],
       "missing_source_paths": [],
-      "notes": "Portuguese pure mechanical integer sorting skips all self records."
+      "notes": "Portuguese pure mechanical integer sorting keeps only session-start/policy sources and omits non-overlapping content."
     },
     {
       "id": "mechanical-gap-en-format-readme",
@@ -621,27 +661,30 @@
       "budget": "small",
       "known_gap": true,
       "gap_issue": "#68",
-      "context_need": "not-needed",
+      "context_need": "helpful",
       "expected_count": 2,
-      "expected_found": 0,
-      "delivered_count": 0,
-      "recall": 0,
-      "precision": 0,
+      "expected_found": 1,
+      "delivered_count": 3,
+      "recall": 0.5,
+      "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 9366,
-      "content_bytes": 0,
-      "content_chars": 0,
+      "bytes_used": 15403,
+      "content_bytes": 2474,
+      "content_chars": 2457,
       "expected_source_paths": [
         "profile/preferences.md",
         "profile/voice.md"
       ],
-      "delivered_source_paths": [],
-      "missing_source_paths": [
+      "delivered_source_paths": [
         "profile/preferences.md",
+        "profile/communication-style.md",
+        "profile/thinking.md"
+      ],
+      "missing_source_paths": [
         "profile/voice.md"
       ],
-      "notes": "Contains 'Format' which triggers MECHANICAL_PATTERN ('not-needed') and drops all self records, losing profile/preferences.md and profile/voice.md (#68)."
+      "notes": "Domain nouns ('README', 'documentation', 'style') prevent mechanical 'not-needed' classification and retrieve profile/preferences.md; profile/voice.md remains #4 under small budget due to exact token overlap (#68, #69)."
     },
     {
       "id": "mechanical-gap-en-testing-philosophy",
@@ -654,27 +697,30 @@
       "budget": "small",
       "known_gap": true,
       "gap_issue": "#68",
-      "context_need": "not-needed",
+      "context_need": "helpful",
       "expected_count": 2,
-      "expected_found": 0,
-      "delivered_count": 0,
-      "recall": 0,
-      "precision": 0,
+      "expected_found": 1,
+      "delivered_count": 3,
+      "recall": 0.5,
+      "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 9057,
-      "content_bytes": 0,
-      "content_chars": 0,
+      "bytes_used": 14182,
+      "content_bytes": 2568,
+      "content_chars": 2548,
       "expected_source_paths": [
         "context/testing-philosophy.md",
         "context/technical.md"
       ],
-      "delivered_source_paths": [],
-      "missing_source_paths": [
+      "delivered_source_paths": [
         "context/testing-philosophy.md",
+        "profile/voice.md",
+        "profile/preferences.md"
+      ],
+      "missing_source_paths": [
         "context/technical.md"
       ],
-      "notes": "Contains 'testing' which triggers MECHANICAL_PATTERN ('not-needed') and drops all self context despite asking an architectural testing question (#68)."
+      "notes": "Domain nouns ('deterministic', 'simulation', 'harness') override 'testing' and retrieve context/testing-philosophy.md; context/technical.md remains #4 under small budget (#68)."
     },
     {
       "id": "mechanical-gap-en-fix-onboarding",
@@ -685,27 +731,29 @@
       "temporal": "current",
       "lens": "leadership",
       "budget": "small",
-      "known_gap": true,
+      "known_gap": false,
       "gap_issue": "#68",
-      "context_need": "not-needed",
+      "context_need": "helpful",
       "expected_count": 1,
-      "expected_found": 0,
-      "delivered_count": 0,
-      "recall": 0,
-      "precision": 0,
+      "expected_found": 1,
+      "delivered_count": 3,
+      "recall": 1,
+      "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 9074,
-      "content_bytes": 0,
-      "content_chars": 0,
+      "bytes_used": 13862,
+      "content_bytes": 2415,
+      "content_chars": 2398,
       "expected_source_paths": [
         "context/onboarding-playbook.md"
       ],
-      "delivered_source_paths": [],
-      "missing_source_paths": [
-        "context/onboarding-playbook.md"
+      "delivered_source_paths": [
+        "context/onboarding-playbook.md",
+        "profile/change.md",
+        "profile/preferences.md"
       ],
-      "notes": "Contains 'Fix' without a PERSONAL_PATTERN keyword, triggering 'not-needed' and omitting context/onboarding-playbook.md (#68)."
+      "missing_source_paths": [],
+      "notes": "Domain nouns ('onboarding', 'plan', 'engineers') outweigh 'Fix' (context_need: helpful) and retrieve context/onboarding-playbook.md (#68)."
     },
     {
       "id": "mechanical-gap-pt-corrigir-artigo",
@@ -716,29 +764,30 @@
       "temporal": "current",
       "lens": "public-voice",
       "budget": "small",
-      "known_gap": true,
+      "known_gap": false,
       "gap_issue": "#68",
-      "context_need": "not-needed",
+      "context_need": "helpful",
       "expected_count": 2,
-      "expected_found": 0,
-      "delivered_count": 0,
-      "recall": 0,
-      "precision": 0,
+      "expected_found": 2,
+      "delivered_count": 3,
+      "recall": 1,
+      "precision": 0.6667,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 9197,
-      "content_bytes": 0,
-      "content_chars": 0,
+      "bytes_used": 13782,
+      "content_bytes": 2424,
+      "content_chars": 2418,
       "expected_source_paths": [
         "profile/voice.md",
         "context/publishing.md"
       ],
-      "delivered_source_paths": [],
-      "missing_source_paths": [
+      "delivered_source_paths": [
         "profile/voice.md",
-        "context/publishing.md"
+        "context/publishing.md",
+        "profile/change.md"
       ],
-      "notes": "Contains 'Corrija' without a PERSONAL_PATTERN keyword, triggering 'not-needed' and omitting voice and publishing policies (#68)."
+      "missing_source_paths": [],
+      "notes": "Portuguese domain nouns ('rascunho', 'artigo', 'estilo', 'editorial') outweigh 'Corrija' (context_need: helpful) and retrieve profile/voice.md and context/publishing.md (#68)."
     },
     {
       "id": "mechanical-gap-pt-testar-hipoteses",
@@ -749,27 +798,29 @@
       "temporal": "current",
       "lens": "professional",
       "budget": "small",
-      "known_gap": true,
+      "known_gap": false,
       "gap_issue": "#68",
-      "context_need": "not-needed",
+      "context_need": "helpful",
       "expected_count": 1,
-      "expected_found": 0,
-      "delivered_count": 0,
-      "recall": 0,
-      "precision": 0,
+      "expected_found": 1,
+      "delivered_count": 3,
+      "recall": 1,
+      "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 9399,
-      "content_bytes": 0,
-      "content_chars": 0,
+      "bytes_used": 14719,
+      "content_bytes": 2567,
+      "content_chars": 2504,
       "expected_source_paths": [
         "context/descoberta-produto-pt.md"
       ],
-      "delivered_source_paths": [],
-      "missing_source_paths": [
-        "context/descoberta-produto-pt.md"
+      "delivered_source_paths": [
+        "context/descoberta-produto-pt.md",
+        "context/entrevista-casos-pt.md",
+        "profile/preferences.md"
       ],
-      "notes": "Contains 'testar' which matches MECHANICAL_PATTERN ('not-needed') and drops all self records (#68)."
+      "missing_source_paths": [],
+      "notes": "Portuguese domain nouns ('hipóteses', 'produto', 'clientes', 'trimestre') outweigh 'testar' (context_need: helpful) and retrieve context/descoberta-produto-pt.md (#68)."
     },
     {
       "id": "synonym-gap-en-oncall-pager",
@@ -790,7 +841,7 @@
       "precision": 0,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 13902,
+      "bytes_used": 13985,
       "content_bytes": 2316,
       "content_chars": 2301,
       "expected_source_paths": [
@@ -825,7 +876,7 @@
       "precision": 0,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14084,
+      "bytes_used": 14167,
       "content_bytes": 2536,
       "content_chars": 2522,
       "expected_source_paths": [
@@ -860,7 +911,7 @@
       "precision": 0,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 13688,
+      "bytes_used": 13771,
       "content_bytes": 2389,
       "content_chars": 2377,
       "expected_source_paths": [
@@ -895,7 +946,7 @@
       "precision": 0,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14100,
+      "bytes_used": 14183,
       "content_bytes": 2362,
       "content_chars": 2350,
       "expected_source_paths": [
@@ -930,7 +981,7 @@
       "precision": 0,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14440,
+      "bytes_used": 14523,
       "content_bytes": 2537,
       "content_chars": 2502,
       "expected_source_paths": [
@@ -965,7 +1016,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 13968,
+      "bytes_used": 14051,
       "content_bytes": 2467,
       "content_chars": 2417,
       "expected_source_paths": [
@@ -998,7 +1049,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 13997,
+      "bytes_used": 14080,
       "content_bytes": 2392,
       "content_chars": 2385,
       "expected_source_paths": [
@@ -1031,7 +1082,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14650,
+      "bytes_used": 14766,
       "content_bytes": 2692,
       "content_chars": 2677,
       "expected_source_paths": [
@@ -1064,7 +1115,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14259,
+      "bytes_used": 14342,
       "content_bytes": 2535,
       "content_chars": 2518,
       "expected_source_paths": [
@@ -1097,7 +1148,7 @@
       "precision": 0.25,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 15301,
+      "bytes_used": 15384,
       "content_bytes": 1816,
       "content_chars": 1810,
       "expected_source_paths": [
@@ -1131,7 +1182,7 @@
       "precision": 0.5,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14826,
+      "bytes_used": 14909,
       "content_bytes": 889,
       "content_chars": 889,
       "expected_source_paths": [
@@ -1163,7 +1214,7 @@
       "precision": 0.6667,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 13838,
+      "bytes_used": 13952,
       "content_bytes": 2496,
       "content_chars": 2489,
       "expected_source_paths": [
@@ -1197,7 +1248,7 @@
       "precision": 0.5,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14846,
+      "bytes_used": 14929,
       "content_bytes": 865,
       "content_chars": 846,
       "expected_source_paths": [
@@ -1229,7 +1280,7 @@
       "precision": 0.0769,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 46792,
+      "bytes_used": 46875,
       "content_bytes": 10451,
       "content_chars": 10403,
       "expected_source_paths": [
@@ -1272,7 +1323,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14339,
+      "bytes_used": 14422,
       "content_bytes": 2526,
       "content_chars": 2516,
       "expected_source_paths": [
@@ -1305,7 +1356,7 @@
       "precision": 0.0769,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 46361,
+      "bytes_used": 46444,
       "content_bytes": 10182,
       "content_chars": 10134,
       "expected_source_paths": [
@@ -1348,7 +1399,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 13576,
+      "bytes_used": 13659,
       "content_bytes": 2291,
       "content_chars": 2275,
       "expected_source_paths": [
@@ -1381,7 +1432,7 @@
       "precision": 0.0769,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 46965,
+      "bytes_used": 47048,
       "content_bytes": 10597,
       "content_chars": 10541,
       "expected_source_paths": [
@@ -1424,7 +1475,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 13945,
+      "bytes_used": 14028,
       "content_bytes": 2255,
       "content_chars": 2248,
       "expected_source_paths": [
@@ -1457,7 +1508,7 @@
       "precision": 0.0435,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 78913,
+      "bytes_used": 79039,
       "content_bytes": 18494,
       "content_chars": 18319,
       "expected_source_paths": [
@@ -1510,7 +1561,7 @@
       "precision": 0.0769,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 46650,
+      "bytes_used": 46733,
       "content_bytes": 10410,
       "content_chars": 10340,
       "expected_source_paths": [
@@ -1553,7 +1604,7 @@
       "precision": 0.6667,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14399,
+      "bytes_used": 14482,
       "content_bytes": 2486,
       "content_chars": 2474,
       "expected_source_paths": [
@@ -1587,7 +1638,7 @@
       "precision": 0.6667,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 13878,
+      "bytes_used": 13961,
       "content_bytes": 2373,
       "content_chars": 2359,
       "expected_source_paths": [
@@ -1621,7 +1672,7 @@
       "precision": 0.3333,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14172,
+      "bytes_used": 14255,
       "content_bytes": 2594,
       "content_chars": 2548,
       "expected_source_paths": [
@@ -1654,7 +1705,7 @@
       "precision": 0.1579,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 124348,
+      "bytes_used": 124464,
       "content_bytes": 30430,
       "content_chars": 30137,
       "expected_source_paths": [
@@ -1727,7 +1778,7 @@
       "precision": 1,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 15568,
+      "bytes_used": 15651,
       "content_bytes": 2616,
       "content_chars": 2597,
       "expected_source_paths": [
@@ -1762,7 +1813,7 @@
       "precision": 1,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14358,
+      "bytes_used": 14441,
       "content_bytes": 2616,
       "content_chars": 2597,
       "expected_source_paths": [
@@ -1797,7 +1848,7 @@
       "precision": 1,
       "forbidden_leaks": 0,
       "leaked_paths": [],
-      "bytes_used": 14175,
+      "bytes_used": 14258,
       "content_bytes": 2615,
       "content_chars": 2596,
       "expected_source_paths": [

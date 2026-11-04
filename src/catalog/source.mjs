@@ -4,6 +4,7 @@ import { join, relative } from 'node:path'
 import { VISIBILITIES } from '../annotations.mjs'
 import { canonicalSort, readSourceWithStat, slugHeading, sourceRef } from '../catalog.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
+import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { claims, links, sections, tags } from '../markdown/text.mjs'
 import { privacyMetadata, visibility } from '../policy/access.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
@@ -17,12 +18,18 @@ export function catalogFilePath(project) {
   return join(catalogRoot(project), 'catalog.json')
 }
 export function privacySections(body, policy) {
-  const chunks = [],
-    claimPattern = /<!-- holoself-claim visibility=([a-z-]+) -->([\s\S]*?)<!-- \/holoself-claim -->/g
-  const ordinary = body.replace(claimPattern, (_, claimVisibility, claimBody) => {
-    const v = VISIBILITIES.includes(claimVisibility) ? claimVisibility : 'private'
-    for (const section of sections(claimBody))
-      chunks.push({ ...section, visibility: v, claim: true, disclosure: v === 'public-safe' ? 'publish-approved' : 'review-required' })
+  const chunks = []
+  const ordinary = replaceClaimBlocks(body, block => {
+    const v = block.visibility,
+      status = block.status
+    for (const section of sections(block.body))
+      chunks.push({
+        ...section,
+        visibility: v,
+        claim: true,
+        disclosure: v === 'public-safe' ? 'publish-approved' : 'review-required',
+        ...(status === 'current' ? {} : { claim_status: status })
+      })
     return ''
   })
   for (const section of sections(ordinary)) {
@@ -47,12 +54,15 @@ export function buildCatalogSections(rawSections, defaults = {}) {
       visibility: sec.visibility ?? defaults.visibility,
       disclosure: sec.disclosure ?? defaults.disclosure,
       claim: Boolean(sec.claim ?? defaults.claim),
+      ...(sec.claim_status ? { claim_status: sec.claim_status } : {}),
       snippet
     }
   })
 }
 export function extractSectionAnnotations(rawSections) {
-  const annotatedClaims = rawSections.flatMap(sec => claims(sec.content).map(text => ({ text, visibility: sec.visibility })))
+  const annotatedClaims = rawSections.flatMap(sec =>
+    claims(sec.content).map(text => ({ text, visibility: sec.visibility, ...(sec.claim_status ? { claim_status: sec.claim_status } : {}) }))
+  )
   const annotatedLinks = rawSections.flatMap(sec => links(sec.content).map(value => ({ value, visibility: sec.visibility })))
   const annotatedTags = rawSections.flatMap(sec => tags(sec.content).map(value => ({ value, visibility: sec.visibility })))
   annotatedClaims.sort((a, b) => canonicalSort(a.text, b.text))

@@ -14,6 +14,7 @@ import { contextData } from '../src/ecosystem.mjs'
 import { ensureCatalog } from '../src/catalog/partitions.mjs'
 import { ENGINE_FTS5, FTS_FILE, STALE_TMP_MS, ftsIndexPath, ftsSupport, indexEngine, lexicalScores, normalizeText, openFtsIndex, removeStaleTempFiles, requestedEngine } from '../src/catalog/fts.mjs'
 import { loadLensRegistry } from '../src/lenses.mjs'
+import { buildIndex, searchIndex } from '../src/catalog/index.mjs'
 
 const BIN = fileURLToPath(new URL('../bin/holoself.mjs', import.meta.url))
 const skip = ftsSupport() ? false : 'node:sqlite with FTS5 is unavailable on this Node build'
@@ -341,4 +342,32 @@ test('capabilities --json reports the available and selected index engines', asy
   assert.equal(caps.index.engine.selected, indexEngine())
   const forced = await withEngine('json', async () => JSON.parse(await quiet(() => run(['capabilities', '--json']))))
   assert.equal(forced.index.engine.selected, 'deterministic-json')
+})
+
+test('FTS5 on publication adapters scores only adapter-filtered claim and field text (#110)', { skip }, async () => {
+  const doc = hobby =>
+    meta(['general', 'public-voice'], 'field_visibility:\n  Motto: public-safe\n  Hobby: private\n').replace('disclosure: internal-only', 'disclosure: publish-approved') +
+    '# Published doc\n\n## Motto\n\npublicorchard motto line.\n' +
+    (hobby ? '- Hobby: privatepear orchard motto\n\n<!-- holoself-claim visibility=private -->\nclaimpear orchard motto.\n<!-- /holoself-claim -->\n' : '')
+  const withHidden = await fixture('holoself-fts-adapter-a-', { 'context/published.md': doc(true) })
+  const without = await fixture('holoself-fts-adapter-b-', { 'context/published.md': doc(false) })
+  try {
+    await withEngine(undefined, async () => {
+      const searchWith = query => searchIndex(buildIndex(withHidden.project), query, 'general', null, null, 'current', { adapter: 'public' })
+      const searchWithout = query => searchIndex(buildIndex(without.project), query, 'general', null, null, 'current', { adapter: 'public' })
+      for (const secret of ['privatepear', 'claimpear']) assert.deepEqual(searchWith(secret), [], `${secret} hidden on the public adapter`)
+      const a = searchWith('publicorchard motto'),
+        b = searchWithout('publicorchard motto')
+      assert.equal(a.engine, 'fts5')
+      assert.ok(a.length > 0)
+      const shape = rows => rows.map(r => [r.source_file, r.section, r.matching_passage, r.bm25])
+      assert.deepEqual(shape(a), shape(b), 'hidden field lines and claims do not change passages or BM25')
+      assert.doesNotMatch(JSON.stringify(a), /privatepear|claimpear/)
+      // The standard adapter on the same document sees no private text either under the general lens.
+      assert.deepEqual(searchIndex(buildIndex(withHidden.project), 'privatepear', 'general'), [])
+    })
+  } finally {
+    rmSync(withHidden.base, { recursive: true, force: true })
+    rmSync(without.base, { recursive: true, force: true })
+  }
 })

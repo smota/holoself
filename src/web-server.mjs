@@ -289,16 +289,22 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
       }
       if (url.pathname === '/api/proposals' && req.method === 'POST') {
         const b = await body(req)
+        const retire = b.operation === 'retire' || b.operation === 'retire_claim'
         if (
           typeof b.project !== 'string' ||
           !b.project.trim() ||
-          typeof b.claim !== 'string' ||
-          !b.claim.trim() ||
+          (!retire && (typeof b.claim !== 'string' || !b.claim.trim())) ||
           typeof b.sourceFile !== 'string' ||
           !b.sourceFile.trim()
         )
           throw new HttpError(400, 'INVALID_INPUT', 'project, claim, and sourceFile are required')
-        const args = ['propose', '--project', b.project, '--claim', b.claim, '--source-file', b.sourceFile]
+        for (const key of ['operation', 'claimId', 'reason'])
+          if (b[key] !== undefined && typeof b[key] !== 'string') throw new HttpError(400, 'INVALID_INPUT', `${key} must be a string`)
+        const args = ['propose', '--project', b.project, '--source-file', b.sourceFile]
+        if (!retire) args.push('--claim', b.claim)
+        if (b.operation) args.push('--op', b.operation)
+        if (b.claimId) args.push('--claim-id', b.claimId)
+        if (b.reason) args.push('--reason', b.reason)
         if (b.target) args.push('--target-file', b.target)
         if (b.evidence) args.push('--evidence', b.evidence)
         return send(res, 201, { ok: true, data: JSON.parse((await cli(args)).stdout) })
@@ -321,7 +327,8 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
             proposalId: data.proposal_id,
             changes: data.changes,
             previewHash: data.preview_hash,
-            affectedFiles: [...new Set(data.changes.map(x => x.target))]
+            affectedFiles: [...new Set(data.changes.map(x => x.target))],
+            evidence: [...new Set(data.changes.map(x => x.evidence).filter(Boolean))].join('; ')
           }
         })
       }

@@ -1,14 +1,15 @@
 # Context efficiency and receipts
 
-Holoself resolves context progressively. A request is classified as `required`, `helpful`, or `not-needed`; linked agents should avoid personal context for mechanical work. When context is useful, the resolver applies privacy and lifecycle rules before relevance and budget selection.
+Holoself resolves context progressively. A request is classified as `required`, `helpful`, or `not-needed`. Bilingual (English and Portuguese) keyword scoring weighs personal and domain nouns against mechanical verbs (`tie → helpful`), so architectural or editorial tasks that contain words like `format`, `fix`, or `testing` stay `helpful` or `required`. When the default classifier returns `not-needed`, Holoself avoids broad personal context while still keeping `document_role: policy` documents, the lens's `session_start_sources`, and any self records whose tokens overlap the task. Callers can override classification on any request with `--need required|helpful|not-needed` (CLI) or `need` (MCP `holoself_context` and `holoself_context_manifest`); an explicit `--need not-needed` (or `need: "not-needed"`) strictly omits all self records. When context is useful, the resolver applies privacy and lifecycle rules before relevance and budget selection.
 
 The default `standard` budget is bounded. `small` and `deep` support lighter or richer work; `unbounded` is an explicit diagnostic mode. `--manifest` returns opaque stable source handles without bodies, and repeatable `--source <handle>` expands reviewed sources. At most two selected public contrib methods are injected for a task. `config.json.selectedContribs` controls availability, not automatic loading.
 
-Every result includes a context receipt: task hash, lens, temporal selector, budget, selected source handles and hashes, estimated tokens, truncation, and in-memory selection cache status (`persistent: false`). When the optional FTS5 engine ranked the packet, the receipt also carries `engine: "fts5"`; without it the ranking was the deterministic JSON engine. Selection telemetry also carries a content-redacted contradiction digest: explicit supersession edges and source-handle pairs with potentially conflicting metrics under shared headings. Source hashes make refresh incremental and receipts auditable without copying private body text.
+Every result includes a context receipt: task hash, lens, temporal selector, budget, resolved `need` (`required`, `helpful`, `not-needed`), `need_reason` (`explicit`, `matched:personal:<pattern-id>`, `matched:mechanical:<pattern-id>`, or `default`), selected source handles and hashes, estimated tokens, truncation, and in-memory selection cache status (`persistent: false`). When the optional FTS5 engine ranked the packet, the receipt also carries `engine: "fts5"`; without it the ranking was the deterministic JSON engine. Selection telemetry also carries `need`, `need_reason`, and a content-redacted contradiction digest: explicit supersession edges and source-handle pairs with potentially conflicting metrics under shared headings. Source hashes make refresh incremental and receipts auditable without copying private body text.
 
 ```powershell
 holoself context --project . --task "prepare the leadership interview" --budget small --manifest --json
 holoself context --project . --task "prepare the leadership interview" --budget deep --source hs-... --json
+holoself context --project . --task "format this JSON" --need not-needed --budget small --json
 ```
 
 ## Ranking

@@ -152,6 +152,7 @@
                 "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] },
                 "disclosure": { "type": "string", "enum": ["internal-only", "review-required", "publish-approved"] },
                 "claim": { "type": "boolean" },
+                "claim_status": { "type": "string", "enum": ["superseded", "historical"] },
                 "snippet": { "type": "string" }
               }
             }
@@ -164,7 +165,8 @@
               "additionalProperties": false,
               "properties": {
                 "text": { "type": "string" },
-                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] }
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] },
+                "claim_status": { "type": "string", "enum": ["superseded", "historical"] }
               }
             }
           },

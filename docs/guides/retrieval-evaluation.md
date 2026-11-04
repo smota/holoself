@@ -51,7 +51,7 @@ The golden set (`tests/fixtures/retrieval-eval/cases.json`) covers seven categor
 | Category | What it verifies |
 |---|---|
 | `personal` | Identity, career progression, writing voice, leadership, and interview preparation queries retrieve the right `profile/` and `context/` sources. |
-| `mechanical` | Pure mechanical code tasks (`Fix lint warnings`, `Sort the import statements`) skip personal context (`context_need: not-needed`), while tasks containing mechanical verbs that still require personal or architectural context are tracked as `known_gap: true` (#68). |
+| `mechanical` | Pure mechanical code tasks (`Fix lint warnings`, `Sort the import statements`) classify as `context_need: not-needed` and keep only `session_start_sources` and policy documents while omitting broad personal content, whereas tasks pairing mechanical verbs with domain or personal nouns resolve to `helpful` or `required` (#68). |
 | `synonyms` | Queries phrased with synonyms or paraphrases that share zero exact tokens with the target document are tracked as `known_gap: true` (#69). |
 | `lifecycle` | Default `current` selection excludes `superseded`, `historical`, and expired (`valid_until` in the past) documents; explicit `--temporal historical` and `--temporal superseded` selectors retrieve them. |
 | `privacy` | Sensitivity gates (`compensation-confidential`, `third-party-personal`, `recruiter-confidential`, `employer-confidential`, `application-private`) block unauthorized lenses, and `restricted` documents never appear in linked-project responses. |

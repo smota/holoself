@@ -7,7 +7,7 @@ import { loadLensRegistry } from '../lenses.mjs'
 import { readLink } from '../link/config.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { tokenize } from '../markdown/text.mjs'
-import { allowed, filterClaimVisibility, filterFieldVisibility, visibleUnderBehavior } from '../policy/access.mjs'
+import { allowed, claimStatusIncluded, filterClaimVisibility, filterFieldVisibility, visibleUnderBehavior } from '../policy/access.mjs'
 import { hash, slash } from '../shared/fs.mjs'
 import { ensureFtsIndex, indexEngine, lexicalScores } from './fts.mjs'
 import { ensureCatalog } from './partitions.mjs'
@@ -89,7 +89,7 @@ export function searchIndex(index, query, lens = 'general', registry = null, res
       continue
     for (const section of entry.sections || []) {
       const sectionVisibility = VISIBILITIES.includes(section.visibility) ? section.visibility : 'private'
-      if (!visibleUnderBehavior(sectionVisibility, behaviorLens, adapter)) continue
+      if (!visibleUnderBehavior(sectionVisibility, behaviorLens, adapter) || !claimStatusIncluded(section.claim_status, temporal)) continue
       const restrictions = []
       const filtered = filterFieldVisibility(
         filterClaimVisibility(section.snippet || '', lens, entry.file, restrictions, resolution, 'owner:direct', adapter),

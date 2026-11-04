@@ -4,18 +4,12 @@ import { buildCatalogSource } from '../catalog/source.mjs'
 import { readLink } from '../link/config.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { canonicalFiles, projectMarkdownFiles } from '../markdown/files.mjs'
+import { normalize } from '../markdown/claim-blocks.mjs'
 import { tokenize } from '../markdown/text.mjs'
 import { createRecordDelivery } from '../retrieval/delivery.mjs'
 import { catalogCandidateRecords } from '../retrieval/records.mjs'
 import { slash } from '../shared/fs.mjs'
 
-export function normalize(text) {
-  return text
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/[^\p{L}\p{N} ]/gu, '')
-    .trim()
-}
 export function similarity(a, b) {
   const aa = new Set(tokenize(a, { stopwords: false })),
     bb = new Set(tokenize(b, { stopwords: false }))

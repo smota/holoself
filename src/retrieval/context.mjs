@@ -116,6 +116,7 @@ function selectRecords(o, { project, self, identity, registry, lens, resolution,
 
   const selectionOptions = {
     task: o.task,
+    need: o.need || null,
     lens,
     budget: budgetName,
     manifest: o.manifest,
@@ -205,10 +206,14 @@ function assembleResult(
     restrictions: [...selfData.restrictions, ...local.restrictions, ...deliveryRestrictions, ...selected.omitted, ...selected.temporalExcluded],
     warnings,
     validation,
-    selection: {
-      ...selected.selection,
-      ...(!isLinked && unauthorizedSourcesOmitted > 0 ? { unauthorized_sources_omitted: unauthorizedSourcesOmitted } : {})
-    },
+    selection: Object.defineProperty(
+      {
+        ...selected.selection,
+        ...(!isLinked && unauthorizedSourcesOmitted > 0 ? { unauthorized_sources_omitted: unauthorizedSourcesOmitted } : {})
+      },
+      'need',
+      { value: selected.selection.context_need, enumerable: false, configurable: true, writable: true }
+    ),
     context_receipt: {
       ...selected.receipt,
       // Present only when FTS5 ranked the packet; absent means deterministic-json, so JSON-engine packets stay byte-identical.
