@@ -13,7 +13,7 @@ holoself web --root C:/Users/<you>/holoself
 
 Canonical root contains `config.json`, `profile/`, `context/`, `topics/`, and related Markdown data; it does not need `.holoself/link.yaml`. Optional `--project <linked-project>` adds a linked project context and must resolve to the same root.
 
-It binds only to `127.0.0.1`, opens no hosted account, uses no remote application service, and has no runtime dependencies beyond Node.js 20. Stop it with Ctrl+C. All CLI workflows continue to work without it.
+It binds only to `127.0.0.1`, opens no hosted account, uses no remote application service, and has no runtime dependencies beyond Node.js 22. Stop it with Ctrl+C. All CLI workflows continue to work without it.
 
 ## First run
 
