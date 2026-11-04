@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { createInterface } from 'node:readline'
-import { closeSync, constants as fsConstants, existsSync, fchmodSync, fstatSync, lstatSync, openSync, readSync, writeSync } from 'node:fs'
+import { existsSync, lstatSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import {
   holoselfMcpContext,
@@ -14,6 +14,7 @@ import {
 } from './ecosystem.mjs'
 import { readLink } from './link/config.mjs'
 import { createToolPool } from './mcp-pool.mjs'
+import { AUDIT_LOG_MAX_BYTES, appendAuditLine } from './shared/audit-log.mjs'
 import { VERSION } from './version.mjs'
 
 const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26']
@@ -22,7 +23,6 @@ const MAX_LINE_BYTES = 1024 * 1024
 const MAX_RESULT_BYTES = 512 * 1024
 const TEMPORAL = ['current', 'historical', 'superseded', 'all']
 const BUDGETS = ['small', 'standard', 'deep']
-const AUDIT_LOG_MAX_BYTES = 10 * 1024 * 1024
 export const DEFAULT_TOOL_TIMEOUT_MS = 60000
 export const DEFAULT_TOOL_CONCURRENCY = 2
 export const DEFAULT_MAX_PENDING_CALLS = 256
@@ -292,49 +292,8 @@ function response(id, result, error) {
 
 // Opt-in verification audit (HOLOSELF_MCP_AUDIT_LOG, absolute path): one NDJSON line per tools/list and per
 // tools/call with only the event, tool name, outcome, and error code. Arguments, results, and paths are never
-// recorded; unknown tool names are recorded as 'unknown'. The log is never followed through a symlink, is kept at
-// mode 0600 even when it already exists, and stops growing at maxBytes after one final audit_log_capped line.
-const CAPPED_LINE = `${JSON.stringify({ event: 'audit_log_capped' })}\n`
-function audit(logPath, entry, maxBytes = AUDIT_LOG_MAX_BYTES) {
-  if (!logPath || !isAbsolute(logPath)) return
-  let fd
-  try {
-    const noFollow = fsConstants.O_NOFOLLOW || 0
-    if (!noFollow || process.platform === 'win32') {
-      try {
-        if (lstatSync(logPath).isSymbolicLink()) return
-      } catch (error) {
-        if (error.code !== 'ENOENT') return
-      }
-    }
-    // O_RDWR (not O_WRONLY) so the tail can be checked for an existing cap marker.
-    fd = openSync(logPath, fsConstants.O_APPEND | fsConstants.O_CREAT | fsConstants.O_RDWR | noFollow, 0o600)
-    const stat = fstatSync(fd)
-    // A hard-linked log could append into another file the server has no business writing.
-    if (!stat.isFile() || stat.nlink > 1) return
-    if (process.platform !== 'win32')
-      try {
-        fchmodSync(fd, 0o600)
-      } catch {
-        // Best effort: a file owned by another user keeps its mode.
-      }
-    const line = `${JSON.stringify(entry)}\n`
-    if (stat.size + Buffer.byteLength(line) <= maxBytes) {
-      writeSync(fd, line)
-      return
-    }
-    const tail = Buffer.alloc(Math.min(stat.size, Buffer.byteLength(CAPPED_LINE)))
-    if (tail.length) readSync(fd, tail, 0, tail.length, stat.size - tail.length)
-    if (tail.toString('utf8') !== CAPPED_LINE) writeSync(fd, CAPPED_LINE)
-  } catch {
-    // Auditing is diagnostic only; a failed append never changes the protocol response.
-  } finally {
-    if (fd !== undefined)
-      try {
-        closeSync(fd)
-      } catch {}
-  }
-}
+// recorded; unknown tool names are recorded as 'unknown'. The hardened writer is src/shared/audit-log.mjs.
+const audit = appendAuditLine
 function auditToolCall(log, name, result) {
   const tool = MCP_TOOLS.some(item => item.name === name) ? name : 'unknown',
     error_code = result.isError ? result.structuredContent?.error?.code || 'HOLOSELF_ERROR' : null

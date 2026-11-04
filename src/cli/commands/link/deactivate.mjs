@@ -3,7 +3,7 @@ import { deactivateProject } from '../../../adapters.mjs'
 import { askConfirm } from '../../link-helpers.mjs'
 
 export async function linkDeactivate(o, sub, project) {
-  const line = item => ` - ${item.adapter ? `${item.adapter}: ` : ''}${item.file || '(no files)'}: ${item.result}`,
+  const line = item => ` - ${item.adapter ? `${item.adapter}: ` : ''}${item.file || '(no files)'}: ${item.result}${item.message ? ` (${item.message})` : ''}`,
     planned = deactivateProject(project, { dryRun: true, adapters: o.adapters })
   console.log(`Deactivation plan${o.adapters ? ` for ${o.adapters}` : ''}:`)
   for (const item of planned) console.log(line(item))

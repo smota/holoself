@@ -3,7 +3,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { holoselfMcpStatus } from './ecosystem.mjs'
 import { mcpPlatformSupport } from './mcp-verification.mjs'
 import { assertNoLinkBelow } from './path-guard.mjs'
-import { atomicWrite, hash, slash } from './shared/fs.mjs'
+import { atomicWrite, fileModeOr, hash, slash } from './shared/fs.mjs'
 
 const PLATFORMS = ['codex', 'agy', 'claude']
 const MCP_START = '# holoself-mcp-managed-start'
@@ -131,7 +131,12 @@ export function mcpConfigurationPlan(projectInput, { platforms = PLATFORMS } = {
 export function applyMcpConfiguration(projectInput, options = {}, io = {}) {
   const plan = mcpConfigurationPlan(projectInput, options),
     written = []
-  const write = io.write || ((path, content) => atomicWrite(path, content, { mode: 0o666 })),
+  // Existing configuration keeps its permission bits (it can hold env secrets); new files follow the umask.
+  const writeMode = path => {
+      const mode = fileModeOr(path, null)
+      return mode === null ? { mode: 0o666 } : { mode, exactMode: true }
+    },
+    write = io.write || ((path, content) => atomicWrite(path, content, writeMode(path))),
     remove = io.remove || (path => rmSync(path, { force: true }))
   try {
     for (const change of plan._changes)
@@ -141,7 +146,7 @@ export function applyMcpConfiguration(projectInput, options = {}, io = {}) {
       }
   } catch (error) {
     for (const change of written.reverse()) {
-      if (change.existed) atomicWrite(change.path, change.before, { mode: 0o666 })
+      if (change.existed) atomicWrite(change.path, change.before, writeMode(change.path))
       else remove(change.path)
     }
     throw error

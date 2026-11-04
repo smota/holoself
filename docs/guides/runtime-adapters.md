@@ -21,6 +21,10 @@ Null `tested_version` or `last_verified` means no bundled, versioned application
 
 Activation plans and `.holoself/runtime.json` expose these fields. Product support should move to `verified` only after an application-level test records version, instruction discovery, lens resolution, disclosure behavior, and evidence.
 
+## Session-start hooks
+
+A startup adapter can also carry a session-start hook: a host-run command that loads the packet when a session starts, instead of relying on the agent to follow `BOOTSTRAP.md`. Holoself installs it for Claude Code (`.claude/settings.local.json`, verified on Claude Code 2.1.318). Codex 0.166.0 and AGY 1.5.0 have their own session-start hooks, but Holoself doesn't install them yet and reports them as `unsupported`. The hook support level comes only from the `session_start_hook` record in [platform verification](../reference/platform-verification.md). Install, removal, repair and status are described in [activated links](activated-links.md#session-start-hooks).
+
 ## Packet formatters
 
 Packet formatter names change delivery framing only. They are not startup adapters and do not assert product discovery.

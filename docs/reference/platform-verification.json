@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Native MCP host verification matrix. Written by `npm run smoke:mcp -- --write-matrix` from synthetic-data runs; consumed by `holoself capabilities --json` (mcp.platforms) and `holoself mcp status`. A platform is reported verified only when every tool passes with server-side audit evidence.",
+  "description": "Native MCP host verification matrix. Written by `npm run smoke:mcp -- --write-matrix` from synthetic-data runs; consumed by `holoself capabilities --json` (mcp.platforms) and `holoself mcp status`. A platform is reported verified only when every tool passes with server-side audit evidence. Each platform may also carry a session_start_hook record (recorded by hand from a synthetic-data run, see platform-verification.md); `link activate` installs the Holoself SessionStart hook by default only where that record shows result pass, hook_ran and marker_returned.",
   "platforms": [
     {
       "platform": "agy",
@@ -74,6 +74,14 @@
             "reason": "host did not invoke the server; host reported: denied_actions mcp:CallMcpTool"
           }
         }
+      },
+      "session_start_hook": {
+        "result": "host-supported-not-installed",
+        "host_version": "1.5.0",
+        "verified_at": "2026-11-04",
+        "hook_ran": false,
+        "marker_returned": false,
+        "evidence": "The hooks.json reference bundled in agy 1.5.0 lists a SessionStart event (flat handler list) in <workspace>/.agents/hooks.json whose stdout is JSON {\"injectSteps\":[{\"systemMessage\":{...}}]}; workspace hooks load only for trusted folders (agy changelog). Holoself does not install this hook yet."
       }
     },
     {
@@ -148,6 +156,26 @@
             "reason": "host did not invoke the server; host reported: skipped: no proposal_id because create was denied"
           }
         }
+      },
+      "session_start_hook": {
+        "result": "pass",
+        "host_version": "2.1.318",
+        "verified_at": "2026-11-04",
+        "settings_file": ".claude/settings.local.json",
+        "event": "SessionStart",
+        "hook_ran": true,
+        "marker_returned": true,
+        "receipt_returned": true,
+        "no_canonical_write": true,
+        "invocation": "claude -p --output-format json --model haiku --permission-mode dontAsk; one run asked for the synthetic marker and the context receipt",
+        "headless_requirements": "None: claude -p loaded .claude/settings.local.json and ran the hook without a trust prompt or extra setting. Interactive sessions were not tested.",
+        "evidence": "Hook audit log (HOLOSELF_HOOK_AUDIT_LOG) recorded ok=true with a packet id and receipt; the host reply contained the synthetic marker and the exact receipt hash from the audit line. An earlier run the same day with a shell-expanded $CLAUDE_PROJECT_DIR command also passed.",
+        "command": "holoself context --session-start --budget small --format packet --hook holoself-session-start (project from CLAUDE_PROJECT_DIR)",
+        "verified_os": [
+          "linux (WSL2)"
+        ],
+        "windows": "unverified",
+        "output_limit": "Claude Code 2.1.318 persists hook output above 10,000 characters to a file and shows a preview; hook packets are capped at 9,000 bytes"
       }
     },
     {
@@ -222,6 +250,14 @@
             "reason": "requires output of holoself_proposal_create (blocked); server returned error INVALID_ARGUMENT"
           }
         }
+      },
+      "session_start_hook": {
+        "result": "host-supported-not-installed",
+        "host_version": "0.166.0",
+        "verified_at": "2026-11-04",
+        "hook_ran": false,
+        "marker_returned": false,
+        "evidence": "codex features list shows hooks (stable, enabled); project .codex/hooks.json takes a SessionStart event; each hook runs only after the user trusts it (hooks.state.<source>:<event>:<i>:<j>.trusted_hash in ~/.codex/config.toml). Holoself does not write user Codex config, so it does not install this hook."
       }
     }
   ]
