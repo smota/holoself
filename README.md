@@ -57,7 +57,7 @@ flowchart LR
 | Project metadata links and lenses | Available |
 | Context packets and JSON adapters | Available |
 | Proposal/review workflow | Available |
-| Deterministic local index and federated search | Available |
+| Deterministic local index and search | Available |
 | Local project-bound STDIO MCP | Available; preferred per platform after native verification |
 | Overlap/conflict/stale reports | Available |
 | Legacy packet export and filesystem junction | Supported compatibility path |
@@ -181,7 +181,7 @@ holoself proposals approve <id> --project C:/work/my-project --yes
 
 # Build and query disposable local indexes
 holoself index rebuild --project C:/work/my-project
-holoself search "regulated AI" --project C:/work/my-project --federated
+holoself search "regulated AI" --project C:/work/my-project
 ```
 
 Approval prints target, evidence, affected files, and proposed diff before writing. Automation must pass `--yes` explicitly.

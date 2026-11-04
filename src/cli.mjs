@@ -138,7 +138,7 @@ function help() {
       `[--session-start] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze ` +
       `overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n` +
       `  proposals list|audit --project <dir>\n  proposals show|approve|reject|defer|supersede <id> --project <dir>\n` +
-      `  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir> [--federated]\n  ` +
+      `  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir>\n  ` +
       `instructions render|audit --project <dir> [--json]\n  knowledge migrate-lenses [--output <plan>] | --apply ` +
       `<plan> --digest <sha256> --yes\n  knowledge transform --replacements <json> [--plan-kind ` +
       `section-replacement|instruction-replacement] [--output <plan>]\n  knowledge cleanup [--output <plan>] | ` +
@@ -186,7 +186,7 @@ export async function run(argv) {
             commands: ['start', 'note', 'action', 'choose', 'review', 'material', 'resume'],
             externalTextOnly: true
           },
-          contextFeatures: ['need-gate', 'budgets', 'manifest', 'source-handles', 'lifecycle', 'receipts', 'persistent-cache', 'task-contrib-routing'],
+          contextFeatures: ['need-gate', 'budgets', 'manifest', 'source-handles', 'lifecycle', 'receipts', 'task-contrib-routing'],
           proposalSchemaVersions: [1, 2],
           indexSchemaVersion: 5,
           mcp: {

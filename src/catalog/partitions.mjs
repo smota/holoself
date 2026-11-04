@@ -1,5 +1,5 @@
-// Catalog partitions (self, project, contrib, federated) and their freshness checks.
-import { existsSync, lstatSync, readFileSync } from 'node:fs'
+// Catalog partitions (self, project, contrib) and their freshness checks.
+import { existsSync, lstatSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import {
   CATALOG_SCHEMA_VERSION,
@@ -16,8 +16,10 @@ import { canonicalSpaceId } from '../link/registry.mjs'
 import { canonicalFiles, globRegex, matchesAny } from '../markdown/files.mjs'
 import { sections } from '../markdown/text.mjs'
 import { SECRET_RE } from '../policy/secrets.mjs'
+import { linkBelow, locateBelow, lstat } from '../path-guard.mjs'
 import { ensureDir, hash, slash } from '../shared/fs.mjs'
 import { PACKAGE_ROOT } from '../shared/package-root.mjs'
+import { redactRootPaths } from '../shared/redact.mjs'
 import { buildCatalogSections, buildCatalogSource, catalogFilePath, catalogRoot } from './source.mjs'
 
 export function isPartitionFresh(catalog, rootDir, files, registry, expectedContextHash, spaceId) {
@@ -363,11 +365,61 @@ export function ensureContribPartition(packageRoot, registry, selfRoot = null) {
   return { ...catalog, catalog: catalog, fresh: false, catalog_reads: catalogReads }
 }
 export function ensureCatalog(selfRoot, projectDir, link, registry, options = {}) {
+  const cleanupWarnings = []
   if (projectDir) {
     try {
       purgeLegacyIndex(projectDir)
     } catch (err) {
       if (err.code === 'LEGACY_INDEX_PURGE_FAILED') throw err
+    }
+    if (options.rebuild) {
+      const catDir = catalogRoot(projectDir)
+      try {
+        if (!locateBelow(projectDir, catDir) || linkBelow(projectDir, catDir) !== null) {
+          throw new Error('refused symlink during legacy cache cleanup')
+        }
+        const catStat = lstat(catDir)
+        if (catStat?.isSymbolicLink()) {
+          throw new Error('refused symlink during legacy cache cleanup')
+        }
+        if (catStat && catStat.isDirectory()) {
+          for (const entry of readdirSync(catDir, { withFileTypes: true })) {
+            if (!/^[0-9a-f]{64}\.json$/i.test(entry.name)) continue
+            const target = join(catDir, entry.name)
+            try {
+              if (!locateBelow(projectDir, target) || linkBelow(projectDir, target) !== null) {
+                throw new Error('refused symlink during legacy cache cleanup')
+              }
+              const targetStat = lstat(target)
+              if (targetStat?.isSymbolicLink()) {
+                throw new Error('refused symlink during legacy cache cleanup')
+              }
+              if (targetStat?.isFile()) {
+                rmSync(target)
+              }
+            } catch (err) {
+              cleanupWarnings.push(`.holoself/catalog/${entry.name}: ${redactRootPaths(err.message, [projectDir, selfRoot])}`)
+            }
+          }
+        }
+      } catch (err) {
+        cleanupWarnings.push(`.holoself/catalog: ${redactRootPaths(err.message, [projectDir, selfRoot])}`)
+      }
+      const legacyCacheDir = join(projectDir, '.holoself', 'runtime', 'context-cache')
+      try {
+        if (!locateBelow(projectDir, legacyCacheDir) || linkBelow(projectDir, legacyCacheDir) !== null) {
+          throw new Error('refused symlink during legacy cache cleanup')
+        }
+        const cacheStat = lstat(legacyCacheDir)
+        if (cacheStat?.isSymbolicLink()) {
+          throw new Error('refused symlink during legacy cache cleanup')
+        }
+        if (cacheStat && cacheStat.isDirectory()) {
+          rmSync(legacyCacheDir, { recursive: true })
+        }
+      } catch (err) {
+        cleanupWarnings.push(`.holoself/runtime/context-cache: ${redactRootPaths(err.message, [projectDir, selfRoot])}`)
+      }
     }
   }
   const selfFiles = canonicalFiles(selfRoot, { includeHistory: true })
@@ -385,22 +437,15 @@ export function ensureCatalog(selfRoot, projectDir, link, registry, options = {}
   }
   const contribResult = ensureContribPartition(PACKAGE_ROOT, registry, selfRoot)
 
-  const federated = []
-  const unreachable_spaces = []
-  let fedSkippedSecrets = 0,
-    fedCatalogReads = 0
-  let allFresh = selfResult.fresh && (!projectResult || projectResult.fresh) && Boolean(contribResult.fresh)
-  const fedWarnings = []
+  const allFresh = selfResult.fresh && (!projectResult || projectResult.fresh) && Boolean(contribResult.fresh)
 
   return {
     self: selfResult.catalog,
     project: projectResult ? projectResult.catalog : null,
     contrib: contribResult.catalog || contribResult,
-    federated,
-    unreachable_spaces: [...new Set(unreachable_spaces)].sort(),
     fresh: allFresh,
-    skippedSecrets: selfResult.skippedSecrets + (projectResult?.skippedSecrets || 0) + fedSkippedSecrets,
-    warnings: [...selfResult.warnings, ...(projectResult?.warnings || []), ...fedWarnings],
-    catalog_reads: selfResult.catalog_reads + (projectResult?.catalog_reads || 0) + (contribResult?.catalog_reads || 0) + fedCatalogReads
+    skippedSecrets: selfResult.skippedSecrets + (projectResult?.skippedSecrets || 0),
+    warnings: [...cleanupWarnings, ...selfResult.warnings, ...(projectResult?.warnings || [])],
+    catalog_reads: selfResult.catalog_reads + (projectResult?.catalog_reads || 0) + (contribResult?.catalog_reads || 0)
   }
 }

@@ -1,7 +1,7 @@
 // Public facade of the linked ecosystem. The implementation lives in focused modules (issue #58);
 // this file only re-exports the names that callers and tests have always imported from here.
 export { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES } from './annotations.mjs'
-export { validateCatalogSchema, validateDecisionCacheSchema } from './catalog.mjs'
+export { validateCatalogSchema } from './catalog.mjs'
 export { buildIndex, readIndex, searchIndex } from './catalog/index.mjs'
 export { ensureCatalog, ensureCatalogPartition, ensureContribPartition } from './catalog/partitions.mjs'
 export { buildCatalogSource } from './catalog/source.mjs'

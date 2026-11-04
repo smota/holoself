@@ -4,7 +4,7 @@ Holoself resolves context progressively. A request is classified as `required`, 
 
 The default `standard` budget is bounded. `small` and `deep` support lighter or richer work; `unbounded` is an explicit diagnostic mode. `--manifest` returns opaque stable source handles without bodies, and repeatable `--source <handle>` expands reviewed sources. At most two selected public contrib methods are injected for a task. `config.json.selectedContribs` controls availability, not automatic loading.
 
-Every result includes a context receipt: task hash, lens, temporal selector, budget, selected source handles and hashes, estimated tokens, truncation, and cache status. Selection telemetry also carries a content-redacted contradiction digest: explicit supersession edges and source-handle pairs with potentially conflicting metrics under shared headings. Source hashes make refresh incremental and receipts auditable without copying private body text.
+Every result includes a context receipt: task hash, lens, temporal selector, budget, selected source handles and hashes, estimated tokens, truncation, and in-memory selection cache status (`persistent: false`). Selection telemetry also carries a content-redacted contradiction digest: explicit supersession edges and source-handle pairs with potentially conflicting metrics under shared headings. Source hashes make refresh incremental and receipts auditable without copying private body text.
 
 ```powershell
 holoself context --project . --task "prepare the leadership interview" --budget small --manifest --json

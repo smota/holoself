@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 import { loadLensRegistry, resolveLens } from '../lenses.mjs'
 import { linkedLensAuthority } from '../link/attestation.mjs'
 import { findLinkUpwards, isCanonicalSelf, linkPath, readLink } from '../link/config.mjs'
-import { canonicalSpaceId, computeLinksRegisterHash, readRegistry } from '../link/registry.mjs'
+import { canonicalSpaceId } from '../link/registry.mjs'
 import { assertContainedPath, pathExists, safeRealpath, slash } from '../shared/fs.mjs'
 
 // Resolves who is asking: a linked project (explicit --project or found upwards from cwd) or the direct owner.
@@ -139,8 +139,6 @@ export function resolveCaller(o) {
 // Checks the requested lens against the self registry (owner) or the attested link grant (linked client).
 export function resolveLensAuthority(o, { project, link, self, identity }) {
   const registry = loadLensRegistry(self)
-  const registryLinksObj = readRegistry(self)
-  const links_register_hash = computeLinksRegisterHash(registryLinksObj.links)
   const lens = o.lens || link?.default_lens || 'general'
 
   switch (identity.kind) {
@@ -176,5 +174,5 @@ export function resolveLensAuthority(o, { project, link, self, identity }) {
     effective_allowed_lenses: identity.allowedLenses
   }
 
-  return { registry, links_register_hash, lens, resolution, subject }
+  return { registry, lens, resolution, subject }
 }

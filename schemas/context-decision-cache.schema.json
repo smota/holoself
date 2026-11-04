@@ -1,7 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://holoself.local/schemas/context-decision-cache.schema.json",
-  "title": "Holoself context decision cache (content-free)",
+  "title": "Holoself context decision cache (content-free, deprecated)",
+  "description": "Deprecated. The on-disk context decision cache has been removed; this schema is retained only for compatibility.",
+  "deprecated": true,
   "type": "object",
   "required": [
     "schema_version",

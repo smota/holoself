@@ -8,6 +8,7 @@ import { loadLensRegistry } from '../../lenses.mjs'
 import { readLink } from '../../link/config.mjs'
 import { canonicalFiles } from '../../markdown/files.mjs'
 import { hash, slash } from '../../shared/fs.mjs'
+import { redactRootPaths } from '../../shared/redact.mjs'
 import { projectPath } from '../link-helpers.mjs'
 
 export async function runIndex(o, sub) {
@@ -75,6 +76,7 @@ export async function runIndex(o, sub) {
   }
   const rebuild = sub === 'rebuild'
   const index = buildIndex(project, o.changed && !rebuild)
+  const warnings = (index.warnings || []).map(w => redactRootPaths(w, [link.path, project]))
   console.log(
     JSON.stringify(
       {
@@ -88,6 +90,7 @@ export async function runIndex(o, sub) {
         generated_at: index.generated_at,
         input_state_hash: index.input_state_hash,
         skipped_secret_files: index.skipped_secret_files,
+        ...(warnings.length ? { warnings } : {}),
         build_assertions: index.build_assertions
       },
       null,

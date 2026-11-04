@@ -8,16 +8,13 @@ import { readLink } from '../link/config.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { tokenize } from '../markdown/text.mjs'
 import { allowed, filterClaimVisibility, filterFieldVisibility, visibleUnderBehavior } from '../policy/access.mjs'
-import { getEligibleFederatedSpaces } from '../retrieval/records.mjs'
 import { hash, slash } from '../shared/fs.mjs'
 import { ensureCatalog } from './partitions.mjs'
 
-export function buildIndex(project, changed = false, persist = true, options = {}) {
+export function buildIndex(project, changed = false) {
   const link = readLink(project),
     registry = loadLensRegistry(link.path)
-  const federatedSpaces =
-    options.federated || options.spaces?.length ? getEligibleFederatedSpaces(link.path, project, options.lens || link.default_lens || 'general', options) : []
-  const result = ensureCatalog(link.path, project, link, registry, { rebuild: !changed, federatedSpaces })
+  const result = ensureCatalog(link.path, project, link, registry, { rebuild: !changed })
   const projectSpaceId = canonicalSpaceId(project)
   const projectEntries = (result.project?.sources || []).map(s => ({
     ...s,
@@ -26,19 +23,12 @@ export function buildIndex(project, changed = false, persist = true, options = {
     space_id: projectSpaceId
   }))
   const selfEntries = (result.self?.sources || []).map(s => ({ ...s, source_kind: 'canonical', source_project: 'self', space_id: 'self' }))
-  const fedEntries = []
-  for (const peer of result.federated || []) {
-    for (const s of peer.catalog?.sources || []) {
-      fedEntries.push({ ...s, source_kind: 'federated', source_project: peer.space_id, space_id: peer.space_id, peer_name: peer.name })
-    }
-  }
-  const entries = [...selfEntries, ...projectEntries, ...fedEntries]
+  const entries = [...selfEntries, ...projectEntries]
   entries.sort((a, b) => canonicalSort(`${a.source_kind}:${a.file}`, `${b.source_kind}:${b.file}`))
   const input_state_hash = hash(
     canonicalJson({
       self: result.self.sources.map(s => [s.file, s.source_text_hash]),
-      project: (result.project?.sources || []).map(s => [s.file, s.source_text_hash]),
-      federated: (result.federated || []).map(p => [p.space_id, (p.catalog?.sources || []).map(s => [s.file, s.source_text_hash])])
+      project: (result.project?.sources || []).map(s => [s.file, s.source_text_hash])
     })
   )
   return {
@@ -63,8 +53,8 @@ export function buildIndex(project, changed = false, persist = true, options = {
     sources: entries
   }
 }
-export function readIndex(project, auto = true, persist = true, options = {}) {
-  return buildIndex(project, true, persist, options)
+export function readIndex(project) {
+  return buildIndex(project, true)
 }
 export function searchIndex(index, query, lens = 'general', registry = null, resolution = null, temporal = 'current', options = {}) {
   const terms = [...tokenize(query, { stopwords: false })],
@@ -74,7 +64,6 @@ export function searchIndex(index, query, lens = 'general', registry = null, res
   const consumerSpaceId = index.project ? canonicalSpaceId(index.project) : null
   for (const entry of entries) {
     const entrySpaceId = entry.space_id || (entry.source_kind === 'canonical' ? 'self' : consumerSpaceId || 'project')
-    const isPeer = entry.source_kind === 'federated' || Boolean(consumerSpaceId && entrySpaceId !== consumerSpaceId && entrySpaceId !== 'self')
     const subj = consumerSpaceId
       ? {
           kind: 'client:linked',
@@ -106,12 +95,7 @@ export function searchIndex(index, query, lens = 'general', registry = null, res
         score = terms.filter(x => hay.includes(x)).length
       if (!score || score < terms.length) continue
       const passage = filtered.length > 360 ? filtered.slice(0, 357) + '...' : filtered
-      const provPrefix =
-        entry.source_kind === 'canonical'
-          ? 'self'
-          : entry.source_kind === 'federated'
-            ? entry.space_id
-            : entry.source_project || entry.space_id || entry.source_ref?.space_id
+      const provPrefix = entry.source_kind === 'canonical' ? 'self' : entry.source_project || entry.space_id || entry.source_ref?.space_id
       results.push({
         source_file: entry.file,
         source_kind: entry.source_kind === 'canonical' ? 'self' : entry.source_kind,
@@ -130,32 +114,6 @@ export function searchIndex(index, query, lens = 'general', registry = null, res
         score
       })
     }
-  }
-
-  if (options.federated || options.deduplicate) {
-    const localSpaceId = consumerSpaceId || 'project'
-    const scorePrec = r => {
-      if (r.space_id === localSpaceId || r.source_kind === 'project') return 1
-      if (r.space_id === 'self' || r.source_kind === 'canonical') return 2
-      return 3
-    }
-    const passageMap = new Map()
-    for (const r of results) {
-      const key = hash(r.matching_passage)
-      const existing = passageMap.get(key)
-      if (!existing) {
-        passageMap.set(key, r)
-      } else {
-        const pExist = scorePrec(existing)
-        const pCurr = scorePrec(r)
-        if (pCurr < pExist || (pCurr === pExist && (r.space_id || '') < (existing.space_id || ''))) {
-          passageMap.set(key, r)
-        }
-      }
-    }
-    return [...passageMap.values()].sort(
-      (a, b) => b.score - a.score || canonicalSort(a.source_file, b.source_file) || canonicalSort(a.provenance, b.provenance)
-    )
   }
 
   return results.sort((a, b) => b.score - a.score || canonicalSort(a.source_file, b.source_file))

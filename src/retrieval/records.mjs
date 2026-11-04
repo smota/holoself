@@ -186,6 +186,3 @@ export function deduplicateCandidates(cands, localSpaceId) {
     return kept.has(c)
   })
 }
-export function getEligibleFederatedSpaces() {
-  return []
-}

@@ -1,5 +1,7 @@
 # Holoself: contexto eficiente e lentes integradas
 
+> Superseded: the decision cache and federation described here were removed in #60.
+
 Historical design and evidence. The current contract is documented in [Lenses and privacy](../concepts/lenses-and-privacy.md): self-side bindings, uniform definitions and self-only indexing.
 
 | Campo | Valor |

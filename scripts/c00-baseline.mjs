@@ -156,8 +156,8 @@ async function runBenchmark(worker, fixture, count, scenario, iterations, timeou
       const response = await invokeWorker(worker, { ...request, iterations: 1 }, timeoutMs)
       if (!Array.isArray(response.value.samples) || response.value.samples.length !== 1) throw new Error(`${scenario} worker must return exactly one sample`)
       const sample = validateSample(response.value.samples[0], index, scenario)
-      if (scenario === 'context-cold' && (sample.cache?.hit !== false || sample.cache.persistent !== true)) throw new Error('cold context sample did not report a persistent cache miss')
-      if (scenario === 'context-disk-warm' && (sample.cache?.hit !== true || sample.cache.persistent !== true)) throw new Error('disk-warm context sample did not report a persistent cache hit')
+      if (scenario === 'context-cold' && (sample.cache?.hit !== false || sample.cache.persistent !== false)) throw new Error('cold context sample did not report a cache miss')
+      if (scenario === 'context-disk-warm' && (sample.cache?.hit !== false || sample.cache.persistent !== false)) throw new Error('disk-warm context sample did not report an in-memory cache miss')
       samples.push({ ...sample, externalDurationMs: response.externalDurationMs })
       processDurations.push(response.externalDurationMs)
     }

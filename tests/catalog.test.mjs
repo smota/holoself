@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
@@ -14,15 +14,7 @@ import {
   canonicalSort,
   sha256,
   validateCatalogSchema,
-  validateDecisionCacheSchema,
-  computeDecisionCacheKey,
-  getDecisionCacheLimits,
-  purgeInvalidDecisionCache,
-  evictDecisionCache,
-  readDecisionCache,
-  writeDecisionCache,
-  CATALOG_SCHEMA_VERSION,
-  CACHE_SCHEMA_VERSION
+  CATALOG_SCHEMA_VERSION
 } from '../src/catalog.mjs'
 import { run } from '../src/cli.mjs'
 
@@ -183,186 +175,6 @@ test('validateCatalogSchema enforces strict constraints for self and project par
   assert.equal(validateCatalogSchema(badProjectCatalog).valid, false)
 })
 
-test('validateDecisionCacheSchema validates content-free decision cache strictly', () => {
-  const dummyHash = 'c'.repeat(64)
-  const validCache = {
-    schema_version: CACHE_SCHEMA_VERSION,
-    catalog_hash: dummyHash,
-    lens_registry_hash: dummyHash,
-    links_register_hash: dummyHash,
-    contrib_selection_hash: dummyHash,
-    identity_id: 'user:direct',
-    lens: 'general',
-    allowed_lenses: ['general', 'professional'],
-    task_hash: dummyHash,
-    temporal: 'current',
-    include_history: false,
-    budget: 'standard',
-    manifest: false,
-    requested_source_ids: null,
-    cursor: null,
-    source_refs: [{
-      space_id: 'self',
-      source_id: 'hs-' + '2'.repeat(20),
-      revision: dummyHash,
-      section_id: null
-    }],
-    receipt: {
-      schema_version: 1,
-      context_hash: dummyHash,
-      task_hash: dummyHash,
-      lens: 'general',
-      budget: 'standard',
-      temporal: 'current',
-      source_ids: ['hs-' + '2'.repeat(20)],
-      source_hashes: [dummyHash]
-    },
-    state_hash: dummyHash,
-    valid_until_epoch_ms: null,
-    estimated_tokens_total: 150
-  }
-
-  assert.equal(validateDecisionCacheSchema(validCache).valid, true)
-
-  // Missing required field (e.g. cursor or requested_source_ids) fails validation
-  const { cursor, ...missingCursor } = validCache
-  assert.equal(validateDecisionCacheSchema(missingCursor).valid, false)
-
-  const { requested_source_ids, ...missingRequested } = validCache
-  assert.equal(validateDecisionCacheSchema(missingRequested).valid, false)
-
-  // Invalid budget fails validation
-  assert.equal(validateDecisionCacheSchema({ ...validCache, budget: 'massive' }).valid, false)
-})
-
-test('computeDecisionCacheKey is deterministic and canonicalizes arrays', () => {
-  const dummyHash = 'a'.repeat(64)
-  const base = {
-    catalog_hash: dummyHash,
-    lens_registry_hash: dummyHash,
-    contrib_selection_hash: dummyHash,
-    identity_id: 'client:proj',
-    lens: 'professional',
-    allowed_lenses: ['technical', 'professional', 'general'],
-    task_hash: dummyHash,
-    temporal: 'current',
-    include_history: false,
-    budget: 'standard',
-    manifest: false,
-    requested_source_ids: ['hs-bbbbbbbbbbbbbbbbbbbb', 'hs-aaaaaaaaaaaaaaaaaaaa'],
-    cursor: null
-  }
-  const key1 = computeDecisionCacheKey(base)
-  const key2 = computeDecisionCacheKey({
-    ...base,
-    allowed_lenses: ['professional', 'general', 'technical'],
-    requested_source_ids: ['hs-aaaaaaaaaaaaaaaaaaaa', 'hs-bbbbbbbbbbbbbbbbbbbb']
-  })
-  assert.equal(key1, key2)
-  assert.match(key1, /^[0-9a-f]{64}$/)
-})
-
-test('purgeInvalidDecisionCache removes legacy non-v2 files and preserves valid v2 files', () => {
-  const dir = temp()
-  const dummyHash = 'a'.repeat(64)
-  const validCache = {
-    schema_version: CACHE_SCHEMA_VERSION,
-    catalog_hash: dummyHash,
-    lens_registry_hash: dummyHash,
-    links_register_hash: dummyHash,
-    contrib_selection_hash: dummyHash,
-    identity_id: 'client:proj',
-    lens: 'professional',
-    allowed_lenses: ['professional'],
-    task_hash: dummyHash,
-    temporal: 'current',
-    include_history: false,
-    budget: 'standard',
-    manifest: false,
-    requested_source_ids: null,
-    cursor: null,
-    source_refs: [],
-    receipt: {
-      schema_version: 1,
-      context_hash: dummyHash,
-      task_hash: dummyHash,
-      lens: 'professional',
-      budget: 'standard',
-      temporal: 'current',
-      source_ids: [],
-      source_hashes: []
-    },
-    state_hash: dummyHash,
-    valid_until_epoch_ms: null,
-    estimated_tokens_total: 100
-  }
-
-  writeFileSync(join(dir, 'legacy.json'), JSON.stringify({ schema_version: 1, legacy_plaintext: 'secret body' }))
-  writeFileSync(join(dir, 'corrupted.json'), 'not json')
-  writeFileSync(join(dir, 'valid.json'), JSON.stringify(validCache))
-  writeFileSync(join(dir, '.tmp-123-file.json'), JSON.stringify({ temp: true }))
-
-  purgeInvalidDecisionCache(dir)
-
-  assert.equal(existsSync(join(dir, 'legacy.json')), false)
-  assert.equal(existsSync(join(dir, 'corrupted.json')), false)
-  assert.equal(existsSync(join(dir, 'valid.json')), true)
-  assert.equal(existsSync(join(dir, '.tmp-123-file.json')), true) // temp ignored
-})
-
-test('readDecisionCache, writeDecisionCache, expiry, and eviction work end-to-end', () => {
-  const dir = temp()
-  const dummyHash = 'a'.repeat(64)
-  const validCache = {
-    schema_version: CACHE_SCHEMA_VERSION,
-    catalog_hash: dummyHash,
-    lens_registry_hash: dummyHash,
-    links_register_hash: dummyHash,
-    contrib_selection_hash: dummyHash,
-    identity_id: 'client:proj',
-    lens: 'professional',
-    allowed_lenses: ['professional'],
-    task_hash: dummyHash,
-    temporal: 'current',
-    include_history: false,
-    budget: 'standard',
-    manifest: false,
-    requested_source_ids: null,
-    cursor: null,
-    source_refs: [],
-    receipt: {
-      schema_version: 1,
-      context_hash: dummyHash,
-      task_hash: dummyHash,
-      lens: 'professional',
-      budget: 'standard',
-      temporal: 'current',
-      source_ids: [],
-      source_hashes: []
-    },
-    state_hash: dummyHash,
-    valid_until_epoch_ms: Date.now() + 60000,
-    estimated_tokens_total: 100
-  }
-
-  writeDecisionCache(dir, 'key-1', validCache, { maxEntries: 2, maxBytes: 1000000 })
-  const read = readDecisionCache(dir, 'key-1')
-  assert.notEqual(read, null)
-  assert.equal(read.schema_version, CACHE_SCHEMA_VERSION)
-
-  // Expired entry returns null
-  const expiredCache = { ...validCache, valid_until_epoch_ms: Date.now() - 1000 }
-  writeDecisionCache(dir, 'key-expired', expiredCache)
-  assert.equal(readDecisionCache(dir, 'key-expired'), null)
-
-  // Eviction
-  writeDecisionCache(dir, 'key-2', validCache, { maxEntries: 2, maxBytes: 1000000 })
-  writeDecisionCache(dir, 'key-3', validCache, { maxEntries: 2, maxBytes: 1000000 })
-  // With maxEntries: 2, only 2 files remain
-  const remaining = existsSync(join(dir, 'key-3.json'))
-  assert.equal(remaining, true)
-})
-
 test('validateCatalogSchema strictly validates ignored_sources and rejects extra properties', () => {
   const dummyHash = 'a'.repeat(64)
   const baseCatalog = {
@@ -415,59 +227,6 @@ test('validateCatalogSchema strictly validates ignored_sources and rejects extra
     unrecognized_field: true
   }
   assert.equal(validateCatalogSchema(withTopLevelExtra).valid, false)
-})
-
-test('getDecisionCacheLimits guards non-positive limits and falls back to defaults', () => {
-  // Negative link values
-  const limits1 = getDecisionCacheLimits({ cache_limit_entries: -5, cache_limit_bytes: 0 })
-  assert.equal(limits1.maxEntries, 256)
-  assert.equal(limits1.maxBytes, 20 * 1024 * 1024)
-  assert.ok(limits1.warnings.length >= 2)
-
-  // Valid link values
-  const limits2 = getDecisionCacheLimits({ cache_limit_entries: 500, cache_limit_bytes: 50 * 1024 * 1024 })
-  assert.equal(limits2.maxEntries, 500)
-  assert.equal(limits2.maxBytes, 50 * 1024 * 1024)
-  assert.equal(limits2.warnings.length, 0)
-})
-
-test('validateDecisionCacheSchema strictly rejects unknown top-level properties', () => {
-  const dummyHash = 'a'.repeat(64)
-  const validCache = {
-    schema_version: CACHE_SCHEMA_VERSION,
-    catalog_hash: dummyHash,
-    lens_registry_hash: dummyHash,
-    links_register_hash: dummyHash,
-    contrib_selection_hash: dummyHash,
-    identity_id: 'client:proj',
-    lens: 'general',
-    allowed_lenses: ['general'],
-    task_hash: dummyHash,
-    temporal: 'current',
-    include_history: false,
-    budget: 'standard',
-    manifest: false,
-    requested_source_ids: null,
-    cursor: null,
-    source_refs: [],
-    receipt: {
-      schema_version: 1,
-      context_hash: dummyHash,
-      task_hash: dummyHash,
-      lens: 'general',
-      budget: 'standard',
-      temporal: 'current',
-      source_ids: [],
-      source_hashes: []
-    },
-    state_hash: dummyHash,
-    valid_until_epoch_ms: null,
-    estimated_tokens_total: 0
-  }
-  assert.equal(validateDecisionCacheSchema(validCache).valid, true)
-
-  const withExtra = { ...validCache, extra_secret_leak: true }
-  assert.equal(validateDecisionCacheSchema(withExtra).valid, false)
 })
 
 test('canonicalJson preserves undefined semantics (omits from objects, serializes as null in arrays)', () => {
@@ -556,7 +315,7 @@ test('validateCatalogSchema strictly validates sub-objects (sections, claims, ta
   assert.equal(validateCatalogSchema(badLink).valid, false)
 })
 
-test('persistent decision cache hit yields identical context_hash, omitted reasons, and audit counts', async () => {
+test('in-memory selection cache hit yields identical context_hash, omitted reasons, and audit counts without writing decision cache files', async () => {
   const self = temp()
   const project = temp()
   await capture(() => run(['init', '--root', self]))
@@ -575,20 +334,20 @@ test('persistent decision cache hit yields identical context_hash, omitted reaso
   const res1 = await capture(() => run(['context', '--project', project, '--lens', 'general', '--budget', 'standard', '--json']))
   const cold = JSON.parse(res1.stdout)
   assert.equal(cold.context_receipt.cache.hit, false)
+  assert.equal(cold.context_receipt.cache.persistent, false)
 
-  // Persistent cache hit query
+  // In-memory cache hit query
   const res2 = await capture(() => run(['context', '--project', project, '--lens', 'general', '--budget', 'standard', '--json']))
   const warm = JSON.parse(res2.stdout)
   assert.equal(warm.context_receipt.cache.hit, true)
-  assert.equal(warm.context_receipt.cache.persistent, true)
+  assert.equal(warm.context_receipt.cache.persistent, false)
+  assert.equal(existsSync(join(project, '.holoself', 'runtime', 'context-cache')), false)
 
-  // Critical H-E(a) check: exact context_hash parity between cold and persistent hit
   assert.equal(warm.context_receipt.context_hash, cold.context_receipt.context_hash)
   assert.equal(warm.context_receipt.task_hash, cold.context_receipt.task_hash)
   assert.deepEqual(warm.context_receipt.source_ids, cold.context_receipt.source_ids)
   assert.deepEqual(warm.context_receipt.source_hashes, cold.context_receipt.source_hashes)
 
-  // Critical M-A check: selection counts parity
   assert.equal(warm.selection.selected_count, cold.selection.selected_count)
   assert.equal(warm.selection.candidate_count, cold.selection.candidate_count)
   assert.equal(warm.selection.eligible_count, cold.selection.eligible_count)
@@ -596,7 +355,7 @@ test('persistent decision cache hit yields identical context_hash, omitted reaso
   assert.equal(warm.selection.omitted_count, cold.selection.omitted_count)
 })
 
-test('persistent decision cache preserves next_cursor on manifest pagination', async () => {
+test('in-memory selection cache preserves next_cursor on manifest pagination', async () => {
   const self = temp()
   const project = temp()
   await capture(() => run(['init', '--root', self]))
@@ -618,11 +377,100 @@ test('persistent decision cache preserves next_cursor on manifest pagination', a
   const res2 = await capture(() => run(['context', '--project', project, '--manifest', '--json']))
   const warm = JSON.parse(res2.stdout)
   assert.equal(warm.context_receipt.cache.hit, true)
-  assert.equal(warm.context_receipt.cache.persistent, true)
+  assert.equal(warm.context_receipt.cache.persistent, false)
 
-  // Critical H-E(b) / M-K check: next_cursor is preserved on persistent cache hit
   assert.equal(warm.selection.next_cursor, cold.selection.next_cursor)
   assert.equal(warm.context_receipt.context_hash, cold.context_receipt.context_hash)
+})
+
+test('--no-cache warns on stderr, link.yaml accepts deprecated cache_limit_* keys, and index rebuild removes legacy cache files', async () => {
+  const self = temp()
+  const project = temp()
+  await capture(() => run(['init', '--root', self]))
+  await capture(() => run(['link', 'add', '--project', project, '--self', self, '--lens', 'general', '--no-activate', '--yes']))
+
+  // Append deprecated cache_limit_* keys to link.yaml
+  const linkYaml = join(project, '.holoself', 'link.yaml')
+  const rawLink = readFileSync(linkYaml, 'utf8').replace(
+    '  index: "local"\n',
+    '  index: "local"\n  cache_limit_entries: 128\n  cache_limit_bytes: 1048576\n'
+  )
+  writeFileSync(linkYaml, rawLink)
+
+  const noCacheRes = await capture(() => run(['context', '--project', project, '--no-cache', '--json']))
+  assert.match(noCacheRes.stderr, /\[warn\] --no-cache is deprecated and has no effect; the on-disk decision cache has been removed\./)
+  assert.ok(JSON.parse(noCacheRes.stdout).sources.length > 0)
+
+  // Seed legacy <sha>.json in .holoself/catalog/ and .holoself/runtime/context-cache/
+  const legacyCatalogCache = join(project, '.holoself', 'catalog', 'a'.repeat(64) + '.json')
+  const legacyRuntimeCacheDir = join(project, '.holoself', 'runtime', 'context-cache')
+  mkdirSync(legacyRuntimeCacheDir, { recursive: true })
+  writeFileSync(legacyCatalogCache, '{}')
+  writeFileSync(join(legacyRuntimeCacheDir, 'b'.repeat(64) + '.json'), '{}')
+
+  const rebuildRes = await capture(() => run(['index', 'rebuild', '--project', project]))
+  const rebuildJson = JSON.parse(rebuildRes.stdout)
+  assert.equal(rebuildJson.warnings, undefined)
+  assert.equal(existsSync(legacyCatalogCache), false)
+  assert.equal(existsSync(legacyRuntimeCacheDir), false)
+  assert.equal(existsSync(join(project, '.holoself', 'catalog', 'catalog.json')), true)
+})
+
+test('index rebuild legacy cache cleanup refuses symlinks at runtime, context-cache, or catalog hex files and surfaces warnings without absolute paths', async () => {
+  const self = temp()
+  const project = temp()
+  const outside = temp()
+  await capture(() => run(['init', '--root', self]))
+  await capture(() => run(['link', 'add', '--project', project, '--self', self, '--lens', 'general', '--no-activate', '--yes']))
+
+  // 1. runtime -> outside dir symlink with outside/context-cache/file survives rebuild
+  const outsideCacheDir = join(outside, 'context-cache')
+  const outsideCacheFile = join(outsideCacheDir, 'survivor.json')
+  mkdirSync(outsideCacheDir, { recursive: true })
+  writeFileSync(outsideCacheFile, '{"keep":true}')
+
+  const runtimeLink = join(project, '.holoself', 'runtime')
+  symlinkSync(outside, runtimeLink, 'dir')
+
+  const res1 = await capture(() => run(['index', 'rebuild', '--project', project]))
+  const out1 = JSON.parse(res1.stdout)
+  assert.equal(existsSync(outsideCacheFile), true, 'outside/context-cache/file must survive when runtime is a symlink')
+  assert.ok(Array.isArray(out1.warnings) && out1.warnings.some(w => w.includes('.holoself/runtime/context-cache') && w.includes('refused symlink')))
+  assert.ok(out1.warnings.every(w => !w.includes(project) && !w.includes(outside) && !w.includes(self)), 'warnings must not leak absolute paths')
+
+  // 2. context-cache itself a symlink to an outside directory is not followed
+  rmSync(runtimeLink, { force: true })
+  mkdirSync(runtimeLink, { recursive: true })
+  const contextCacheLink = join(runtimeLink, 'context-cache')
+  symlinkSync(outsideCacheDir, contextCacheLink, 'dir')
+
+  // Also test a symlinked <64-hex>.json in .holoself/catalog/
+  const hexLinkName = 'c'.repeat(64) + '.json'
+  const hexLinkPath = join(project, '.holoself', 'catalog', hexLinkName)
+  symlinkSync(outsideCacheFile, hexLinkPath, 'file')
+
+  const res2 = await capture(() => run(['index', 'rebuild', '--project', project]))
+  const out2 = JSON.parse(res2.stdout)
+  assert.equal(existsSync(outsideCacheFile), true, 'outside target must survive when context-cache and hex file are symlinks')
+  assert.equal(lstatSync(contextCacheLink).isSymbolicLink(), true, 'context-cache symlink itself is not followed or removed')
+  assert.equal(lstatSync(hexLinkPath).isSymbolicLink(), true, 'catalog hex symlink itself is not followed or removed')
+  assert.ok(Array.isArray(out2.warnings) && out2.warnings.some(w => w.includes('.holoself/runtime/context-cache')))
+  assert.ok(out2.warnings.some(w => w.includes(`.holoself/catalog/${hexLinkName}`)))
+  assert.ok(out2.warnings.every(w => !w.includes(project) && !w.includes(outside) && !w.includes(self)))
+
+  // 3. Normal legacy cache dir and normal hex file are removed cleanly
+  rmSync(contextCacheLink, { force: true })
+  rmSync(hexLinkPath, { force: true })
+  mkdirSync(contextCacheLink, { recursive: true })
+  writeFileSync(join(contextCacheLink, 'd'.repeat(64) + '.json'), '{}')
+  const normalHexPath = join(project, '.holoself', 'catalog', 'e'.repeat(64) + '.json')
+  writeFileSync(normalHexPath, '{}')
+
+  const res3 = await capture(() => run(['index', 'rebuild', '--project', project]))
+  const out3 = JSON.parse(res3.stdout)
+  assert.equal(existsSync(contextCacheLink), false, 'normal legacy context-cache dir is removed')
+  assert.equal(existsSync(normalHexPath), false, 'normal legacy catalog hex file is removed')
+  assert.equal(out3.warnings, undefined)
 })
 
 test('ensureContribPartition caches on-disk at selfRoot/.holoself/catalog/contrib.json', async () => {
@@ -771,7 +619,7 @@ test('selection counts and audit counters maintain parity between cold and warm 
   const resWarm = await capture(() => run(['context', '--project', project, '--task', 'frontend architecture', '--json']))
   const warm = JSON.parse(resWarm.stdout)
   assert.equal(warm.context_receipt.cache.hit, true)
-  assert.equal(warm.context_receipt.cache.persistent, true)
+  assert.equal(warm.context_receipt.cache.persistent, false)
 
   // Verify S-1: counts and omission reasons parity
   assert.equal(warm.selection.selected_count, cold.selection.selected_count)
@@ -828,7 +676,7 @@ test('manifest mode with task and unselected candidates preserves cold/warm pari
   const resWarm = await capture(() => run(['context', '--project', project, '--manifest', '--task', 'architecture', '--json']))
   const warm = JSON.parse(resWarm.stdout)
   assert.equal(warm.context_receipt.cache.hit, true)
-  assert.equal(warm.context_receipt.cache.persistent, true)
+  assert.equal(warm.context_receipt.cache.persistent, false)
 
   // Critical B-3 check: cold and warm must have identical omitted_count (0) and empty restrictions
   assert.equal(warm.selection.selected_count, cold.selection.selected_count)
@@ -948,7 +796,7 @@ test('expired document does not poison persistent cache valid_until_epoch_ms (N-
   const resWarm = await capture(() => run(['context', '--project', project, '--json']))
   const warm = JSON.parse(resWarm.stdout)
   assert.equal(warm.context_receipt.cache.hit, true, 'cache must hit despite presence of expired document')
-  assert.equal(warm.context_receipt.cache.persistent, true)
+  assert.equal(warm.context_receipt.cache.persistent, false)
 })
 
 
