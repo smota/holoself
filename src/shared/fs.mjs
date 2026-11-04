@@ -94,3 +94,12 @@ export function assertContainedPath(root, target, label = 'path') {
   assertNoLinkBelow(located.base, resolve(target), link => new Error(`${label} traverses symlink: ${link}`))
   return located.parts.length ? join(rootReal, ...located.parts) : rootReal
 }
+
+// "invalid JSON at line N" without the input fragment that JSON.parse quotes in its message (it can be a secret).
+export function invalidJsonDetail(text, error) {
+  const message = String(error?.message || ''),
+    line = message.match(/\bline (\d+)/),
+    position = message.match(/\bposition (\d+)/)
+  const at = line ? Number(line[1]) : position ? String(text).slice(0, Number(position[1])).split('\n').length : null
+  return at ? `invalid JSON at line ${at}` : 'invalid JSON'
+}

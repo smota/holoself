@@ -15,7 +15,12 @@ import { detectMcpClients } from '../src/mcp-detect.mjs'
 import { mcpPlatformSupport } from '../src/mcp-verification.mjs'
 import { startWebServer } from '../src/web-server.mjs'
 
+// Session-start hook support is pinned to the Linux record (test-only, honoured under node --test) so the hook and
+// approvals share .claude/settings.local.json on every platform; Windows hook behaviour has its own test.
+process.env.HOLOSELF_TEST_PLATFORM = 'linux'
 const SETTINGS = '.claude/settings.local.json'
+// Windows resolves executables through PATHEXT, so fake binaries need an extension there.
+const EXE = process.platform === 'win32' ? '.exe' : ''
 const json = text => JSON.parse(text)
 const read = (project, rel) => readFileSync(join(project, rel), 'utf8')
 const sha = text => createHash('sha256').update(text).digest('hex')
@@ -52,18 +57,21 @@ function fakeBin(base, names) {
   const dir = join(base, 'bin')
   mkdirSync(dir, { recursive: true })
   for (const name of names) {
-    writeFileSync(join(dir, name), '#!/bin/sh\nexit 0\n')
-    chmodSync(join(dir, name), 0o755)
+    writeFileSync(join(dir, name + EXE), '#!/bin/sh\nexit 0\n')
+    chmodSync(join(dir, name + EXE), 0o755)
   }
-  return { PATH: dir }
+  return { PATH: dir, ...(process.platform === 'win32' ? { PATHEXT: '.EXE' } : {}) }
 }
 async function withPath(env, fn) {
-  const previous = process.env.PATH
+  const previous = { PATH: process.env.PATH, PATHEXT: process.env.PATHEXT }
   process.env.PATH = env.PATH
+  if (env.PATHEXT) process.env.PATHEXT = env.PATHEXT
   try {
     return await fn()
   } finally {
-    process.env.PATH = previous
+    process.env.PATH = previous.PATH
+    if (previous.PATHEXT === undefined) delete process.env.PATHEXT
+    else process.env.PATHEXT = previous.PATHEXT
   }
 }
 
@@ -73,7 +81,7 @@ test('MCP client detection uses PATH executables and project configuration only'
     const env = fakeBin(fx.base, ['codex']),
       found = Object.fromEntries(detectMcpClients(fx.project, { env }).map(item => [item.platform, item]))
     assert.deepEqual(found.codex.detected_by, ['path'])
-    assert.equal(found.codex.executable, join(env.PATH, 'codex'))
+    assert.equal(found.codex.executable, join(env.PATH, 'codex' + EXE))
     assert.deepEqual(found.claude.detected_by, ['project'])
     assert.deepEqual(found.claude.project_evidence, ['.claude'])
     assert.equal(found.agy.detected, false)
@@ -208,7 +216,7 @@ test('link activation configures MCP by default only for verified, activated hos
       runtime.mcpInstallations.map(item => [item.id, item.createdFile, item.approval]),
       [['claude', true, null]]
     )
-    assert.ok(!json(read(fx.project, SETTINGS)).permissions, 'read tools are never pre-approved by default')
+    assert.ok(!existsSync(join(fx.project, SETTINGS)) || !json(read(fx.project, SETTINGS)).permissions, 'read tools are never pre-approved by default')
     // --no-mcp removes the recorded entry and records the choice; repair keeps it.
     await capture(() => run(['link', 'activate', '--project', fx.project, '--platform', 'claude,pi', '--no-mcp', '--yes']))
     assert.equal(existsSync(join(fx.project, '.mcp.json')), false)
@@ -279,7 +287,7 @@ test('read-tool pre-approval is opt-in, excludes proposal_create, and deactivati
     await capture(() => run(['link', 'activate', '--project', fx.project, '--platform', 'claude,codex', '--approve-read-tools', '--yes']))
     const settings = json(read(fx.project, SETTINGS))
     assert.deepEqual(settings.permissions.allow, ['Bash(ls)', 'mcp__holoself__holoself_status', ...claudeReadToolRules().slice(1)])
-    assert.ok(settings.hooks.SessionStart.length, 'the session-start hook shares the file')
+    assert.ok(settings.hooks?.SessionStart?.length, 'the session-start hook shares the file')
     assert.doesNotMatch(read(fx.project, SETTINGS), /proposal_create/)
     const toml = read(fx.project, '.codex/config.toml')
     for (const tool of READ_ONLY_TOOLS) assert.match(toml, new RegExp(`\\[mcp_servers\\.holoself\\.tools\\.${tool}\\]\\napproval_mode = "approve"`))
@@ -321,6 +329,7 @@ test('files created for MCP and approvals are removed again, and scoped deactiva
     assert.deepEqual(readRuntime(fx.project).mcpInstallations.find(item => item.id === 'claude').createdContainers, ['mcpServers'])
     await capture(() => run(['link', 'deactivate', '--project', fx.project, '--adapters', 'codex', '--yes']))
     assert.equal(existsSync(join(fx.project, '.codex', 'config.toml')), false)
+    assert.ok(existsSync(join(fx.project, '.codex')), 'a directory that existed before is kept')
     assert.ok(existsSync(join(fx.project, '.mcp.json')))
     assert.deepEqual(
       readRuntime(fx.project).mcpInstallations.map(item => item.id),
@@ -395,6 +404,170 @@ test('Workbench reports per-client MCP state behind the session token', async ()
   } finally {
     process.env.PATH = previous
     if (app) await new Promise(resolve => app.server.close(resolve))
+    fx.cleanup()
+  }
+})
+
+test('Codex --force-replace with an existing managed block leaves exactly one well-formed block', async () => {
+  const fx = await linked(['.codex'])
+  try {
+    const path = join(fx.project, '.codex', 'config.toml')
+    applyMcpConfiguration(fx.project, { platforms: ['codex'] })
+    const managed = read(fx.project, '.codex/config.toml')
+    for (const [label, text] of [
+      ['after', `model = "m"\n\n${managed}\n[mcp_servers.holoself]\ncommand = "other"\n\n[profile]\nx = 1\n`],
+      ['before', `model = "m"\n\n[mcp_servers.holoself]\ncommand = "other"\n\n${managed}\n[profile]\nx = 1\n`]
+    ]) {
+      writeFileSync(path, text)
+      applyMcpConfiguration(fx.project, { platforms: ['codex'], forceReplace: true })
+      const result = read(fx.project, '.codex/config.toml')
+      assert.equal(result.split('# holoself-mcp-managed-start').length, 2, label)
+      assert.equal(result.split('# holoself-mcp-managed-end').length, 2, label)
+      assert.doesNotMatch(result, /command = "other"/, label)
+      assert.match(result, /\[profile\]\nx = 1/, label)
+      assert.match(result, /^model = "m"/, label)
+      // Later operations still work.
+      assert.equal(mcpConfigurationPlan(fx.project, { platforms: ['codex'] }).changes[0].action, 'unchanged', label)
+    }
+  } finally {
+    fx.cleanup()
+  }
+})
+
+test('Codex --force-replace refuses multi-line values instead of writing invalid TOML', async () => {
+  const fx = await linked(['.codex'])
+  try {
+    const path = join(fx.project, '.codex', 'config.toml')
+    for (const text of [
+      '[mcp_servers.holoself]\ncommand = "other"\nargs = [\n  "a",\n  ["nested"],\n]\n\n[profile]\nx = 1\n',
+      '[mcp_servers.holoself]\ncommand = """\nother\n"""\n'
+    ]) {
+      writeFileSync(path, text)
+      assert.throws(() => mcpConfigurationPlan(fx.project, { platforms: ['codex'], forceReplace: true }), /--force-replace refused/)
+      assert.equal(read(fx.project, '.codex/config.toml'), text)
+    }
+    // A multi-line array in another table is fine, and a `[`-line inside it is not mistaken for a header.
+    writeFileSync(path, '[profile]\nlist = [\n  [1],\n]\n\n[mcp_servers.holoself]\ncommand = "other"\n')
+    applyMcpConfiguration(fx.project, { platforms: ['codex'], forceReplace: true })
+    const result = read(fx.project, '.codex/config.toml')
+    assert.match(result, /list = \[\n {2}\[1\],\n\]/)
+    assert.doesNotMatch(result, /command = "other"/)
+  } finally {
+    fx.cleanup()
+  }
+})
+
+test('JSON parse errors report the line, never file content', async () => {
+  const fx = await linked(['.claude'])
+  try {
+    const secret = 'sk-SECRET-1234567890'
+    writeFileSync(join(fx.project, '.mcp.json'), `{\n  "mcpServers": {\n    "x": { "env": { "KEY": ${secret} } }\n  }\n}\n`)
+    let message = ''
+    try {
+      mcpConfigurationPlan(fx.project, { platforms: ['claude'] })
+    } catch (error) {
+      message = error.message
+    }
+    assert.match(message, /invalid JSON( at line 3)?$/)
+    assert.doesNotMatch(message, /SECRET|sk-/)
+    const status = mcpConfigurationStatus(fx.project, { env: { PATH: '' } }).platforms.find(item => item.platform === 'claude')
+    assert.equal(status.client_state, 'failing')
+    assert.doesNotMatch(JSON.stringify(status), /SECRET/)
+    await assert.rejects(capture(() => run(['link', 'activate', '--project', fx.project, '--platform', 'claude', '--yes'])), error => {
+      assert.doesNotMatch(error.message, /SECRET/)
+      return /invalid JSON/.test(error.message)
+    })
+    rmSync(join(fx.project, '.mcp.json'))
+    mkdirSync(join(fx.project, '.claude'), { recursive: true })
+    writeFileSync(join(fx.project, SETTINGS), `{ "permissions": ${secret} }\n`)
+    await assert.rejects(capture(() => run(['link', 'activate', '--project', fx.project, '--platform', 'claude', '--approve-read-tools', '--yes'])), error => {
+      assert.doesNotMatch(error.message, /SECRET/)
+      return /invalid JSON/.test(error.message)
+    })
+  } finally {
+    fx.cleanup()
+  }
+})
+
+test('the project path is escaped as a TOML basic string', async () => {
+  if (process.platform === 'win32') return // control characters are not valid in Windows file names
+  const fx = fixture()
+  try {
+    const odd = join(fx.base, 'pro"ject\tname\nwith\u0001ctl')
+    mkdirSync(odd, { recursive: true })
+    await capture(() => run(['init', '--root', fx.self]))
+    await capture(() => run(['link', 'add', '--project', odd, '--self', fx.self, '--no-activate', '--yes']))
+    const block = mcpConfigurationPlan(odd, { platforms: ['codex'] }).changes[0].managed_block,
+      line = block.split('\n').find(item => item.startsWith('args = '))
+    assert.ok(line.includes('pro\\"ject\\tname\\nwith\\u0001ctl"]'), line)
+    assert.doesNotMatch(line, /[\u0000-\u001f]/)
+  } finally {
+    fx.cleanup()
+  }
+})
+
+test('directories Holoself created are removed when rollback or removal leaves them empty', async () => {
+  const fx = await linked()
+  try {
+    let writes = 0
+    assert.throws(
+      () =>
+        applyMcpConfiguration(
+          fx.project,
+          { platforms: ['codex', 'agy'] },
+          {
+            write(path, content) {
+              mkdirSync(join(path, '..'), { recursive: true })
+              if (++writes === 2) throw new Error('injected second write failure')
+              writeFileSync(path, content)
+            }
+          }
+        ),
+      /injected second write failure/
+    )
+    assert.equal(existsSync(join(fx.project, '.codex')), false)
+    assert.equal(existsSync(join(fx.project, '.agents')), false)
+    // Activation rollback.
+    const { activateProject } = await import('../src/adapters.mjs'),
+      { readLink } = await import('../src/link/config.mjs')
+    assert.throws(
+      () =>
+        activateProject(fx.project, readLink(fx.project), {
+          platforms: ['codex'],
+          mcp: 'on',
+          installSkill: 'none',
+          afterMcp() {
+            throw new Error('injected after MCP')
+          }
+        }),
+      /injected after MCP/
+    )
+    assert.equal(existsSync(join(fx.project, '.codex')), false)
+    // Deactivation removes the recorded directory once it is empty, and keeps it otherwise.
+    await capture(() => run(['link', 'activate', '--project', fx.project, '--platform', 'codex', '--install-skill', 'none', '--yes']))
+    assert.deepEqual(readRuntime(fx.project).mcpInstallations[0].createdDirs, ['.codex'])
+    await capture(() => run(['link', 'deactivate', '--project', fx.project, '--yes']))
+    assert.equal(existsSync(join(fx.project, '.codex')), false)
+    await capture(() => run(['link', 'activate', '--project', fx.project, '--platform', 'codex', '--install-skill', 'none', '--yes']))
+    writeFileSync(join(fx.project, '.codex', 'notes.txt'), 'mine\n')
+    await capture(() => run(['link', 'deactivate', '--project', fx.project, '--yes']))
+    assert.equal(read(fx.project, '.codex/notes.txt'), 'mine\n')
+  } finally {
+    fx.cleanup()
+  }
+})
+
+test('Windows detection resolves executables through PATHEXT', () => {
+  const fx = fixture()
+  try {
+    const dir = join(fx.base, 'winbin')
+    mkdirSync(dir)
+    writeFileSync(join(dir, 'codex.exe'), '')
+    writeFileSync(join(dir, 'agy'), '')
+    const found = Object.fromEntries(detectMcpClients(fx.project, { env: { PATH: dir, PATHEXT: '.EXE;.CMD' }, platform: 'win32' }).map(item => [item.platform, item]))
+    assert.equal(found.codex.executable, join(dir, 'codex.exe'))
+    assert.equal(found.agy.detected, false, 'an extensionless file is not a Windows executable')
+  } finally {
     fx.cleanup()
   }
 })

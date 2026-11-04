@@ -32,6 +32,13 @@ export function mcpActivationEntries(adapterIds, policy, approveReadTools, suppo
 export function mcpFallbackAdapters(adapterIds) {
   return adapterIds.filter(id => id !== 'agents' && !MCP_PLATFORMS.includes(id)).map(adapter => ({ adapter, delivery: 'bootstrap-cli', reason: MCP_FALLBACK_REASON }))
 }
+function removalOptions(record) {
+  return {
+    createdFile: record.createdFile === true,
+    createdContainers: record.createdContainers ?? null,
+    createdDirs: Array.isArray(record.createdDirs) ? record.createdDirs.filter(dir => typeof dir === 'string') : []
+  }
+}
 export function recordedMcp(runtime, id) {
   return (runtime?.mcpInstallations || []).find(item => item?.id === id) || null
 }
@@ -45,7 +52,7 @@ export function mcpEntryChanges(project, entry, record, { claudeBase = null } = 
         createdContainers: record?.createdContainers ?? null
       })
     : record
-      ? mcpServerChange(project, entry.adapter, { install: false, createdFile: record.createdFile === true, createdContainers: record.createdContainers ?? null })
+      ? mcpServerChange(project, entry.adapter, { install: false, ...removalOptions(record) })
       : null
   let approval = null
   if (entry.adapter === 'claude') {
@@ -84,6 +91,7 @@ export function mcpInstallationRecord(entry, changes, previous) {
     status: 'configured',
     createdFile: previous ? previous.createdFile === true : !changes.server.existed,
     createdContainers: changes.server.createdContainers ?? null,
+    createdDirs: previous ? previous.createdDirs || [] : changes.server.createdDirs || [],
     approval,
     support: entry.support,
     tested_version: entry.tested_version,
@@ -98,11 +106,7 @@ export function mcpRemovalChanges(project, runtime, ids = null, { claudeBase = n
     .map(record => {
       const removal = { adapter: record.id, file: MCP_CONFIG_FILES[record.id], server: null, approval: null, messages: [] }
       try {
-        removal.server = mcpServerChange(project, record.id, {
-          install: false,
-          createdFile: record.createdFile === true,
-          createdContainers: record.createdContainers ?? null
-        })
+        removal.server = mcpServerChange(project, record.id, { install: false, ...removalOptions(record) })
       } catch (error) {
         removal.messages.push(`MCP server entry left in place: ${error.message}`)
       }

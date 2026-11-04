@@ -1,13 +1,13 @@
 // Project-local MCP client configuration: plan, apply (all-or-nothing with rollback), remove and inspect the one
 // Holoself-owned `holoself` server entry in each host's project file. A divergent existing `holoself` entry is
 // refused unless the caller passes forceReplace (the CLI requires --force-replace plus explicit confirmation).
-import { existsSync, lstatSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, readdirSync, rmdirSync, rmSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { holoselfMcpStatus } from './retrieval/mcp.mjs'
 import { mcpPlatformSupport } from './mcp-verification.mjs'
 import { detectMcpClients } from './mcp-detect.mjs'
 import { assertNoLinkBelow } from './path-guard.mjs'
-import { atomicWrite, fileModeOr, hash, slash } from './shared/fs.mjs'
+import { atomicWrite, fileModeOr, hash, invalidJsonDetail, slash } from './shared/fs.mjs'
 
 const PLATFORMS = ['codex', 'agy', 'claude']
 const MCP_START = '# holoself-mcp-managed-start'
@@ -41,14 +41,36 @@ function safeFile(path) {
   if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) throw new Error(`${path} is not a safe regular file`)
   return readFileSync(path, 'utf8')
 }
+// Parse errors never repeat file content: JSON.parse quotes a fragment of the input, which can be a secret.
 function parseJson(path, text) {
   if (!text.trim()) return {}
+  let value
   try {
-    const value = JSON.parse(text)
-    if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('root must be an object')
-    return value
+    value = JSON.parse(text)
   } catch (error) {
-    throw new Error(`${path} is invalid JSON: ${error.message}`)
+    throw new Error(`${path} is ${invalidJsonDetail(text, error)}`)
+  }
+  if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error(`${path} is invalid JSON: root must be an object`)
+  return value
+}
+// Project-relative directories above `rel` that do not exist yet (created by the write, removed again when empty).
+function missingDirs(project, rel) {
+  const parts = rel.split('/').slice(0, -1),
+    out = []
+  for (let index = 1; index <= parts.length; index++) {
+    const dir = parts.slice(0, index).join('/')
+    if (!existsSync(join(project, dir))) out.push(dir)
+  }
+  return out
+}
+// Removes the given project-relative directories, deepest first, only when each is a real, empty directory.
+export function removeEmptyMcpDirs(project, dirs = []) {
+  for (const dir of [...dirs].sort((a, b) => b.length - a.length)) {
+    try {
+      const path = safeConfigPath(project, join(project, dir)),
+        info = existsSync(path) ? lstatSync(path) : null
+      if (info?.isDirectory() && !info.isSymbolicLink() && !readdirSync(path).length) rmdirSync(path)
+    } catch {}
   }
 }
 function sameJson(a, b) {
@@ -68,7 +90,7 @@ function changeShape(base, after, action, extra = {}) {
 
 // Next content of .mcp.json / .agents/mcp_config.json. install=false removes the entry only when it is still exactly
 // Holoself's; `createdContainers`/`createdFile` (from the runtime record) let removal drop what Holoself added.
-function jsonChange(project, platform, { install = true, forceReplace = false, createdFile = false, createdContainers = null } = {}) {
+function jsonChange(project, platform, { install = true, forceReplace = false, createdFile = false, createdContainers = null, createdDirs = [] } = {}) {
   const rel = MCP_CONFIG_FILES[platform],
     path = safeConfigPath(project, join(project, rel)),
     existed = existsSync(path),
@@ -79,7 +101,18 @@ function jsonChange(project, platform, { install = true, forceReplace = false, c
   const desired = desiredJsonServer(project, platform),
     existing = servers?.holoself,
     state = existing === undefined ? 'missing' : sameJson(existing, desired) ? 'present' : 'divergent',
-    base = { platform, path, relative: slash(rel), existed, before, state, mode: fileModeOr(path, null), server: desired }
+    base = {
+      platform,
+      project,
+      path,
+      relative: slash(rel),
+      existed,
+      before,
+      state,
+      mode: fileModeOr(path, null),
+      createdDirs: install ? missingDirs(project, rel) : createdDirs,
+      server: desired
+    }
   if (install) {
     const created = createdContainers ?? (servers === undefined ? ['mcpServers'] : [])
     if (state === 'present') return changeShape(base, before, 'unchanged', { createdContainers: created })
@@ -110,26 +143,77 @@ const UNMANAGED_HOLOSELF = new RegExp(
   'm'
 )
 const HOLOSELF_TABLE = /^\s*\[\s*["']?mcp_servers["']?\s*\.\s*["']?holoself["']?(?:\s*\.[^\]]*)?\]\s*(?:#.*)?$/
-// Removes plain `[mcp_servers.holoself]` tables (and their sub-tables) for --force-replace; other spellings stay refused.
-function withoutHoloselfTables(text) {
-  let skipping = false
+// Net bracket/brace depth change of one TOML line, ignoring strings and comments. Multi-line strings are flagged
+// because a line scanner cannot place table boundaries inside them.
+function tomlLineDepth(line) {
+  let delta = 0,
+    index = 0
+  while (index < line.length) {
+    const char = line[index]
+    if (char === '#') break
+    if (line.startsWith('"""', index) || line.startsWith("'''", index)) return { delta, multiline: true }
+    if (char === '"' || char === "'") {
+      index++
+      while (index < line.length && line[index] !== char) index += char === '"' && line[index] === '\\' ? 2 : 1
+      index++
+      continue
+    }
+    if (char === '[' || char === '{') delta++
+    else if (char === ']' || char === '}') delta--
+    index++
+  }
+  return { delta, multiline: false }
+}
+function unsafeReplace(path, why) {
+  return new Error(`${path}: --force-replace refused: ${why}; remove the holoself MCP server by hand`)
+}
+// Brackets balance and no line closes more than it opened: the shape check run on a replaced file before writing.
+function tomlShapeBalanced(text) {
+  let depth = 0
+  for (const line of text.split('\n')) {
+    const scan = tomlLineDepth(line)
+    if (scan.multiline) return false
+    depth += scan.delta
+    if (depth < 0) return false
+  }
+  return depth === 0
+}
+// Removes plain `[mcp_servers.holoself]` tables (and their sub-tables) for --force-replace; other spellings stay
+// refused. A line starting with `[` is a table header only outside an open array or inline table. The unmanaged
+// table must hold single-line values only; anything the scanner cannot follow is refused rather than guessed.
+function withoutHoloselfTables(text, path) {
+  let skipping = false,
+    depth = 0
   const kept = []
   for (const line of text.split('\n')) {
-    if (/^\s*\[/.test(line)) skipping = HOLOSELF_TABLE.test(line)
+    if (depth === 0 && /^\s*\[/.test(line)) skipping = HOLOSELF_TABLE.test(line)
+    const scan = tomlLineDepth(line)
+    if (scan.multiline) throw unsafeReplace(path, 'the file contains multi-line strings')
+    depth += scan.delta
+    if (depth < 0) throw unsafeReplace(path, 'unbalanced brackets')
+    if (skipping && depth > 0) throw unsafeReplace(path, 'the unmanaged holoself table has a multi-line value')
     if (!skipping) kept.push(line)
   }
+  if (depth !== 0) throw unsafeReplace(path, 'unbalanced brackets')
   return kept.join('\n')
 }
+// TOML basic string: backslash, quote and every control character escaped.
+function tomlString(value) {
+  return `"${String(value).replace(/[\\"\u0000-\u001f\u007f]/g, char => {
+    const named = { '\\': '\\\\', '"': '\\"', '\n': '\\n', '\t': '\\t', '\r': '\\r', '\b': '\\b', '\f': '\\f' }[char]
+    return named || `\\u${char.charCodeAt(0).toString(16).padStart(4, '0').toUpperCase()}`
+  })}"`
+}
 function codexBlock(project, approveReadTools) {
-  const projectArg = slash(project).replaceAll('\\', '\\\\').replaceAll('"', '\\"'),
+  const projectArg = tomlString(slash(project)),
     toolList = TOOLS.map(tool => `"${tool}"`).join(', '),
     approvals = approveReadTools ? READ_ONLY_TOOLS.map(tool => `\n[mcp_servers.holoself.tools.${tool}]\napproval_mode = "approve"\n`).join('') : ''
   return (
-    `${MCP_START}\n[mcp_servers.holoself]\ncommand = "holoself"\nargs = ["mcp", "--project", "${projectArg}"]\n` +
+    `${MCP_START}\n[mcp_servers.holoself]\ncommand = "holoself"\nargs = ["mcp", "--project", ${projectArg}]\n` +
     `required = false\nenabled_tools = [${toolList}]\ndefault_tools_approval_mode = "writes"\n${approvals}${MCP_END}\n`
   )
 }
-function codexChange(project, { install = true, forceReplace = false, approveReadTools = false, createdFile = false } = {}) {
+function codexChange(project, { install = true, forceReplace = false, approveReadTools = false, createdFile = false, createdDirs = [] } = {}) {
   const rel = MCP_CONFIG_FILES.codex,
     path = safeConfigPath(project, join(project, rel)),
     existed = existsSync(path),
@@ -144,26 +228,33 @@ function codexChange(project, { install = true, forceReplace = false, approveRea
     state = collision ? 'divergent' : !starts ? 'missing' : current === block ? 'present' : 'drifted',
     base = {
       platform: 'codex',
+      project,
       path,
       relative: slash(rel),
       existed,
       before,
       state,
       mode: fileModeOr(path, null),
+      createdDirs: install ? missingDirs(project, rel) : createdDirs,
       server: { command: 'holoself', args: ['mcp', '--project', slash(project)], required: false, enabled_tools: TOOLS, default_tools_approval_mode: 'writes' },
       ...(approveReadTools ? { tool_approvals: Object.fromEntries(READ_ONLY_TOOLS.map(tool => [tool, 'approve'])) } : {}),
       managed_block: block
     }
   if (install) {
-    let source = before
     if (collision) {
       if (!forceReplace) throw divergentError(`${path} has an unmanaged holoself MCP server; refusing to overwrite`)
-      source = withoutHoloselfTables(before)
-      if (UNMANAGED_HOLOSELF.test(source.replace(BLOCK, '')))
+      // The managed block is taken out first (its own header must not be treated as the unmanaged table), the
+      // remainder is cleaned, and exactly one fresh block is appended.
+      const cleaned = withoutHoloselfTables(outside, path)
+      if (UNMANAGED_HOLOSELF.test(cleaned))
         throw new Error(`${path} defines the holoself MCP server in a form Holoself cannot replace safely; remove it by hand`)
+      const after = (cleaned.trimEnd() ? `${cleaned.trimEnd()}\n\n` : '') + block
+      if (!tomlShapeBalanced(after) || after.split(MCP_START).length !== 2 || after.split(MCP_END).length !== 2)
+        throw unsafeReplace(path, 'the replaced file would not be well-formed')
+      return changeShape(base, after, 'replace')
     }
-    const after = BLOCK.test(source) ? source.replace(BLOCK, block) : (source.trimEnd() ? `${source.trimEnd()}\n\n` : '') + block
-    return changeShape(base, after, after === before ? 'unchanged' : collision ? 'replace' : before ? 'update' : 'create')
+    const after = starts ? before.replace(BLOCK, block) : (before.trimEnd() ? `${before.trimEnd()}\n\n` : '') + block
+    return changeShape(base, after, after === before ? 'unchanged' : before ? 'update' : 'create')
   }
   if (!starts) return changeShape(base, before, 'unchanged')
   const rest = before.replace(BLOCK, ''),
@@ -180,7 +271,10 @@ export function mcpServerChange(project, platform, options = {}) {
 }
 export function writeMcpChange(change) {
   if (change.action === 'unchanged') return
-  if (change.after === null) return rmSync(change.path, { force: true })
+  if (change.after === null) {
+    rmSync(change.path, { force: true })
+    return removeEmptyMcpDirs(change.project, change.createdDirs)
+  }
   // Existing configuration keeps its permission bits (it can hold env secrets); new files follow the umask.
   atomicWrite(change.path, change.after, change.mode === null ? { mode: 0o666 } : { mode: change.mode, exactMode: true })
 }
@@ -197,7 +291,7 @@ export function recordedCodexReadApproval(project) {
     return false
   }
 }
-function publicChange({ before, after, mode, ...change }) {
+function publicChange({ before, after, mode, project, createdDirs, ...change }) {
   return change
 }
 export function mcpPlanHash(changes) {
@@ -260,6 +354,7 @@ export function applyMcpConfiguration(projectInput, options = {}, io = {}) {
       try {
         if (change.existed) atomicWrite(change.path, change.before, change.mode === null ? { mode: 0o666 } : { mode: change.mode, exactMode: true })
         else remove(change.path)
+        removeEmptyMcpDirs(change.project, change.createdDirs)
       } catch {}
     }
     throw error

@@ -40,6 +40,7 @@ import {
   recordedMcp
 } from './adapters/mcp-activation.mjs'
 import { CLAUDE_APPROVAL_FILE } from './adapters/mcp-approvals.mjs'
+import { removeEmptyMcpDirs } from './mcp-config.mjs'
 export { globalSkillStatus, installGlobalSkills } from './adapters/global-skills.mjs'
 export { injectMarker, managedMarkerState, removeMarker } from './adapters/markers.mjs'
 export { detectAdapters, safeProjectFile } from './adapters/registry.mjs'
@@ -327,7 +328,8 @@ export function activateProject(project, link, options = {}) {
     results = [],
     skillResults = [],
     hookResults = [],
-    mcpResults = []
+    mcpResults = [],
+    mcpCreatedDirs = []
   try {
     atomicWrite(safeProjectFile(project, '.holoself/BOOTSTRAP.md', 'bootstrap write'), bootstrapText(link), { mode: 0o666 })
     for (const adapter of plan.adapters) {
@@ -370,6 +372,7 @@ export function activateProject(project, link, options = {}) {
       }
       const previous = recordedMcp(previousRuntime, entry.adapter),
         changes = mcpEntryChanges(project, entry, previous)
+      if (changes.server?.action !== 'unchanged') mcpCreatedDirs.push(...(changes.server?.createdDirs || []))
       applyMcpEntryChanges(changes)
       mcpResults.push({
         ...entry,
@@ -427,6 +430,7 @@ export function activateProject(project, link, options = {}) {
     return { plan, results, skillResults, hookResults, mcpResults, runtime }
   } catch (error) {
     rollback(snapshots)
+    removeEmptyMcpDirs(project, mcpCreatedDirs)
     throw error
   }
 }

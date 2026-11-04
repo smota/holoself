@@ -3,7 +3,7 @@
 // Holoself entry changes, so a canonically formatted file round-trips byte-for-byte through install and removal.
 import { existsSync, lstatSync, readFileSync } from 'node:fs'
 import { loadVerificationMatrix } from '../mcp-verification.mjs'
-import { fileModeOr } from '../shared/fs.mjs'
+import { fileModeOr, invalidJsonDetail } from '../shared/fs.mjs'
 import { safeProjectFile } from './registry.mjs'
 
 export const HOOK_ID = 'holoself-session-start'
@@ -71,7 +71,7 @@ export function parseHookSettings(text, exists = true) {
   try {
     config = JSON.parse(text)
   } catch (error) {
-    return { exists, text, invalid: `invalid JSON: ${error.message}` }
+    return { exists, text, invalid: invalidJsonDetail(text, error) }
   }
   if (!config || Array.isArray(config) || typeof config !== 'object') return { exists, text, invalid: 'root must be an object' }
   return { exists, text, config }
