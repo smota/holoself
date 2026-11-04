@@ -167,8 +167,9 @@ async function confirm(o, message) {
     rl.close()
   }
 }
-export async function run(argv) {
+export async function run(argv, options = {}) {
   const o = parse(argv)
+  if (options?.afterConfigure) o.afterConfigure = options.afterConfigure
   validateFlags(o)
   if (o.version) {
     console.log(o.json ? JSON.stringify({ schemaVersion: 1, product: 'holoself', version: VERSION }) : `Holoself ${VERSION}`)
