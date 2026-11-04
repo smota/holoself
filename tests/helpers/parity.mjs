@@ -134,9 +134,6 @@ function runExtendedMatrix(fx, add, cases) {
   const p = ['--project', project]
   const r = ['--root', self]
   const lastJson = () => { try { return JSON.parse(cases.at(-1).stdout) } catch { return null } }
-  // Linked CLI JSON lists pending proposals with absolute project paths (source_project_path, _path),
-  // so once a proposal exists the linked packet sizes depend on the temporary path length too.
-  const sized = { pathDependentSize: true }
   // Caller resolution and context paths.
   const owner = { cwd: self, pathDependentSize: true }
   const u = ['--budget', 'unbounded']
@@ -146,16 +143,16 @@ function runExtendedMatrix(fx, add, cases) {
   add('owner context below self root', ['context', ...r, ...u, '--json'], { ...owner, cwd: join(self, 'context') })
   add('owner unknown lens', ['context', ...r, '--lens', 'no-such-lens', '--json'], owner)
   add('owner session-start unmatched sources', ['context', ...r, ...u, '--lens', 'startup', '--session-start', '--json'], owner)
-  add('linked context by cwd walk-up', ['context', '--budget', 'small', '--json'], { cwd: fx.nested, pathDependentSize: true })
+  add('linked context by cwd walk-up', ['context', '--budget', 'small', '--json'], { cwd: fx.nested })
   add('linked context unlinked project', ['context', '--project', fx.unlinked, '--json'])
   add('linked context self root as project', ['context', '--project', self, '--json'])
   add('linked context missing self root', ['context', '--project', fx.orphan, '--json'])
   add('linked context legacy mount', ['context', '--project', fx.legacy, '--json'])
-  add('context not-needed task', ['context', ...p, '--task', 'Format this JSON object: {"x":1}', '--json'], sized)
-  add('context contrib task', ['context', ...p, '--task', 'quarterly reflection on systems thinking', '--budget', 'deep', '--json'], sized)
-  add('context cache miss', ['context', ...p, '--task', 'cache probe', '--budget', 'small', '--json'], sized)
-  add('context cache hit', ['context', ...p, '--task', 'cache probe', '--budget', 'small', '--json'], sized)
-  add('context no-cache', ['context', ...p, '--task', 'cache probe', '--budget', 'small', '--no-cache', '--json'], sized)
+  add('context not-needed task', ['context', ...p, '--task', 'Format this JSON object: {"x":1}', '--json'])
+  add('context contrib task', ['context', ...p, '--task', 'quarterly reflection on systems thinking', '--budget', 'deep', '--json'])
+  add('context cache miss', ['context', ...p, '--task', 'cache probe', '--budget', 'small', '--json'])
+  add('context cache hit', ['context', ...p, '--task', 'cache probe', '--budget', 'small', '--json'])
+  add('context no-cache', ['context', ...p, '--task', 'cache probe', '--budget', 'small', '--no-cache', '--json'])
   add('context snapshot without yes', ['context', ...p, '--snapshot'])
   add('mcp unlinked project', ['mcp', '--project', fx.unlinked], { input: mcpInput() })
   add('mcp identity argument', ['mcp', ...p], { input: mcpIdentityInput() })
@@ -204,7 +201,7 @@ function runExtendedMatrix(fx, add, cases) {
     add('proposals reject non-pending', ['proposals', 'reject', ids[0], ...p, '--yes'])
     add('proposals audit', ['proposals', 'audit', ...p])
   } else cases.push({ name: 'proposals lifecycle', skipped: 'propose did not return ids' })
-  add('context after approval', ['context', ...p, '--task', 'reviewable refactors', '--json'], sized)
+  add('context after approval', ['context', ...p, '--task', 'reviewable refactors', '--json'])
   add('link deactivate', ['link', 'deactivate', ...p, '--yes'])
   add('link remove dry-run', ['link', 'remove', ...p, '--dry-run'])
   add('link remove dry-run confirmed', ['link', 'remove', ...p, '--dry-run', '--yes'])
@@ -250,10 +247,10 @@ export const VOLATILE_HEX_KEYS = new Set([
   'preview_hash', // proposal preview hash embeds the random proposal UUID
   'sig' // cursor HMAC
 ])
-// Owner-direct packets carry the absolute self path, and linked CLI JSON lists pending proposals
-// with absolute paths, so their byte and token totals depend on the temporary path length; cases
-// flagged pathDependentSize mask these keys. Owner cases use the unbounded budget so envelope
-// trimming cannot depend on the path; the path-independence test proves the rest is stable.
+// Owner-direct packets carry the absolute self and project paths, so their byte and token totals
+// depend on the temporary path length; cases flagged pathDependentSize mask these keys. Owner cases
+// use the unbounded budget so envelope trimming cannot depend on the path; the path-independence
+// test proves the rest is stable.
 const PATH_DEPENDENT_SIZE_KEYS = new Set(['total_bytes', 'estimated_tokens_total', 'estimated_tokens_total_heuristic'])
 const HEX_RUN = /(?<![0-9a-z])[0-9a-f]{16,}(?![0-9a-z])/gi
 // Volatility is scoped by command where one key name means different things: `lens list|show|validate`
