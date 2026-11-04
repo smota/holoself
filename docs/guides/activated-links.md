@@ -61,12 +61,12 @@ Instruction pointers and skills ask the agent to load context; nothing guarantee
 
 | Host | Hook file (project) | State |
 |---|---|---|
-| Claude Code | `.claude/settings.local.json`, `hooks.SessionStart` | Installed by default; verified on 2.1.318 |
-| Codex | `.codex/hooks.json` (host feature) | Not installed: each hook needs the user's trust hash in `~/.codex/config.toml` |
-| AGY | `.agents/hooks.json` (host feature) | Not installed: different output contract; not verified |
+| Claude Code | `.claude/settings.local.json`, `hooks.SessionStart` | Installed by default; verified on 2.1.318 (`--hook-format text`) |
+| Codex | `.codex/hooks.json`, `hooks.SessionStart` | Unverified (`not-installed` by default; `--hooks` installs); needs user trust in `~/.codex/config.toml` (`installed-untrusted` until trusted) |
+| AGY | `.agents/hooks.json`, `holoself-session-start.SessionStart` | Unverified (`not-installed` by default; `--hooks` installs with `--hook-format agy-json`); workspace hooks load only for trusted folders |
 | Other hosts | none | `unsupported` |
 
-Holoself adds one entry to the Claude Code settings file:
+Holoself adds one entry to the Claude Code (`.claude/settings.local.json`) or Codex (`.codex/hooks.json`) settings file:
 
 ```json
 {
@@ -81,14 +81,31 @@ Holoself adds one entry to the Claude Code settings file:
 }
 ```
 
-- **Why `settings.local.json`.** The command needs `holoself` on this machine's `PATH` and a link to your self root, which collaborators don't share, so it belongs in per-machine settings rather than the committed `.claude/settings.json`. Holoself doesn't edit `.gitignore`. Check `git check-ignore .claude/settings.local.json` before committing; on the verification machine the pattern `**/.claude/settings.local.json` was already in the user's global git ignore file.
-- **No shell syntax.** In hook mode the project comes from the `CLAUDE_PROJECT_DIR` environment variable that Claude Code sets for hooks, so the command contains no quoting or `$` expansion. It must be an absolute path; if it is missing or empty, the hook prints nothing. The hook has been verified on Linux (WSL2) only. On Windows, `link status` and `link doctor` report it as `unverified` and activation installs it only with `--hooks`.
-- **Ownership.** The `--hook holoself-session-start` text in the command marks the entry as Holoself's. Other keys and hooks, including other `SessionStart` hooks, are preserved; the file is reformatted as 2-space JSON when Holoself changes it, and left untouched otherwise. Empty `hooks` or `SessionStart` containers that existed before are kept on removal; without a runtime record, containers left empty by removing the Holoself entry are removed. A settings file that Holoself created is deleted again when nothing else is left in it.
+For AGY (`.agents/hooks.json`), Holoself writes a named hook entry with `--hook-format agy-json`:
+
+```json
+{
+  "holoself-session-start": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "holoself context --session-start --budget small --format packet --hook holoself-session-start --hook-format agy-json",
+        "timeout": 30
+      }
+    ]
+  }
+}
+```
+
+- **Why `settings.local.json`, `.codex/hooks.json`, and `.agents/hooks.json`.** The command needs `holoself` on this machine's `PATH` and a link to your self root, which collaborators don't share, so it belongs in per-machine settings rather than committed repository files. Holoself doesn't edit `.gitignore`. Check `git check-ignore .claude/settings.local.json .codex/hooks.json .agents/hooks.json` before committing; on the verification machine the pattern `**/.claude/settings.local.json` was already in the user's global git ignore file.
+- **No shell syntax and project resolution.** In hook mode the project comes from `--project`, else the `CLAUDE_PROJECT_DIR` environment variable that Claude Code sets for hooks, else the process working directory (`process.cwd()`, which Codex sets to the project root and AGY sets to `<workspace>/.agents` where `.agents/hooks.json` lives), so the command contains no quoting or `$` expansion. The resolved path must be absolute; if it is missing or relative, the hook fails closed. Only Claude Code on Linux (WSL2) has a recorded live verification in `docs/reference/platform-verification.json`. Codex, AGY, and Windows remain `unverified`, so default `auto` leaves them `not-installed` and activation installs them only when `--hooks` is passed.
+- **Codex user trust.** Codex 0.166.0 runs a project hook from `.codex/hooks.json` only after the user trusts that hook in `~/.codex/config.toml` (`hooks.state."<file>:session_start:<group>:<hook>".trusted_hash`). Holoself never writes `~/.codex/config.toml`. After installing the Codex hook, Holoself prints the trust instruction: run `codex` in the project and approve the startup `"Hooks need review"` prompt (or run `/hooks` in an interactive `codex` session). Until `~/.codex/config.toml` contains a matching `trusted_hash` (checked read-only when the file exists), `link status` and `link doctor` report the Codex hook state as `installed-untrusted`.
+- **Ownership.** The `--hook holoself-session-start` text in the command marks the entry as Holoself's. Other keys and hooks, including other `SessionStart` hooks and other named AGY hooks, are preserved; the file is reformatted as 2-space JSON when Holoself changes it, and left untouched otherwise. Empty `hooks`, `holoself-session-start`, or `SessionStart` containers that existed before are kept on removal; without a runtime record, containers left empty by removing the Holoself entry are removed. A hook file or parent directory (`.claude`, `.codex`, `.agents`) that Holoself created is deleted again when nothing else is left in it.
 - **File mode.** A settings file that already exists keeps its permission bits (it can hold `env` secrets); a file Holoself creates is mode 0600.
-- **Choice.** `--hooks` installs the hook even for a host without a recorded verification; `--no-hooks` skips it and removes an existing Holoself entry. The choice is recorded as `hookPolicy` in `.holoself/runtime.json`, and `link repair` restores the recorded `hookInstallations`. `link deactivate`, including `--adapters claude`, removes the entry.
-- **Safety.** A symlinked settings file or `.claude` folder, invalid JSON, and a group that holds the Holoself hook together with foreign hooks are refused before any write. The plan (`session_start_hooks`, with `install` and `action`) is printed before confirmation and by `--dry-run`. Hook writes roll back with the other managed files on failure. If the settings file becomes invalid or unsafe after installation, `link deactivate` and `link remove` report the hook as `unremovable`, leave the file alone, and carry on; remove the `holoself-session-start` entry by hand. `link remove` deactivates first, but always revokes the link and removes the lens binding even when deactivation is refused; it then prints a warning to finish with `link deactivate`.
-- **Hook mode.** `--hook holoself-session-start` makes `holoself context` exit 0 in every case, write nothing to stderr, and print only the packet. Any refusal (revoked link, missing lens binding, missing self root, unknown hook id, no project, `--restricted-host` or a non-packet format) prints nothing, so the session starts without context rather than with context Holoself didn't authorise. The packet is capped at 9,000 bytes, because Claude Code moves hook output above 10,000 characters to a file and shows the model only a preview; documents are dropped first and the receipt is kept. Set `HOLOSELF_HOOK_AUDIT_LOG=<absolute file>` to append one line per run with the outcome, error code, packet id and receipt; it records no content or paths and uses the same hardened writer as the MCP audit log (no symlinks or hard links, mode 0600, 10 MiB cap).
-- **Status.** `link status` lists `session_start_hooks` for each activated host as `installed`, `missing`, `drifted`, `untracked`, `disabled`, `not-installed`, or `unsupported`. `link doctor` summarises them in `checks.session_start_hook`; `missing` and `drifted` make the link degraded.
+- **Choice.** `--hooks` installs the hook even for a host without a recorded verification; `--no-hooks` skips it and removes an existing Holoself entry. The choice is recorded as `hookPolicy` in `.holoself/runtime.json`, and `link repair` restores the recorded `hookInstallations`. `link deactivate`, including `--adapters claude|codex|agy`, removes the entry.
+- **Safety.** A symlinked settings file or parent folder (`.claude`, `.codex`, `.agents`), invalid JSON, and a group that holds the Holoself hook together with foreign hooks are refused before any write. The plan (`session_start_hooks`, with `install` and `action`) is printed before confirmation and by `--dry-run`. Hook writes roll back with the other managed files on failure. If the settings file becomes invalid or unsafe after installation, `link deactivate` and `link remove` report the hook as `unremovable`, leave the file alone, and carry on; remove the `holoself-session-start` entry by hand. `link remove` deactivates first, but always revokes the link and removes the lens binding even when deactivation is refused; it then prints a warning to finish with `link deactivate`.
+- **Hook mode and output formats.** `--hook holoself-session-start` makes `holoself context` exit 0 in every case and write nothing to stderr. `--hook-format text` (the default, used by Claude Code and Codex) prints only the plain-text packet and prints nothing on any refusal. `--hook-format agy-json` (used by AGY) wraps the packet in `{"injectSteps":[{"systemMessage":{"systemMessage":"<packet>"}}]}` and on any refusal prints the empty envelope `{"injectSteps":[]}`, so AGY parses a valid empty response without injecting unauthorized context. The output (including the JSON envelope in `agy-json` mode) is capped at 9,000 bytes, because Claude Code moves hook output above 10,000 characters to a file and shows the model only a preview; documents are dropped first and the receipt is kept. Set `HOLOSELF_HOOK_AUDIT_LOG=<absolute file>` to append one line per run with the outcome, error code, packet id and receipt; it records no content or paths and uses the same hardened writer as the MCP audit log (no symlinks or hard links, mode 0600, 10 MiB cap).
+- **Status.** `link status` lists `session_start_hooks` for each activated host as `installed`, `installed-untrusted`, `missing`, `drifted`, `untracked`, `disabled`, `not-installed`, or `unsupported`. `link doctor` summarises them in `checks.session_start_hook`; `missing` and `drifted` make the link degraded, while `installed-untrusted` surfaces the pending Codex trust step without failing the link check.
 
 ## MCP servers
 

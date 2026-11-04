@@ -79,11 +79,17 @@ test('Claude Code SessionStart hook is verified in the matrix and uses no absolu
     { encoding: 'utf8', env: { ...productEnv, HOLOSELF_TEST_PLATFORM: process.platform === 'win32' ? 'linux' : 'win32' } }
   )
   assert.equal(product.stdout.trim(), hookSupport('claude', undefined, process.platform).support, 'override ignored outside node --test')
-  assert.equal(hookSupport('codex').support, 'unsupported')
-  assert.equal(hookSupport('agy').support, 'unsupported')
-  const command = HOOK_HOSTS.claude.command
-  assert.equal(command, 'holoself context --session-start --budget small --format packet --hook holoself-session-start')
-  assert.doesNotMatch(command, /[$"'%]/, 'no shell expansion or quoting')
+  assert.equal(hookSupport('codex').support, 'unverified')
+  assert.equal(hookSupport('agy').support, 'unverified')
+  assert.equal(hookSupport('cursor').support, 'unsupported')
+  for (const [id, expected] of [
+    ['claude', 'holoself context --session-start --budget small --format packet --hook holoself-session-start'],
+    ['codex', 'holoself context --session-start --budget small --format packet --hook holoself-session-start'],
+    ['agy', 'holoself context --session-start --budget small --format packet --hook holoself-session-start --hook-format agy-json']
+  ]) {
+    assert.equal(HOOK_HOSTS[id].command, expected)
+    assert.doesNotMatch(HOOK_HOSTS[id].command, /[$"'%]/, `${id}: no shell expansion or quoting`)
+  }
 })
 
 test('activate installs one owned hook, deactivate restores foreign settings byte-for-byte, repair restores it', async () => {
@@ -501,6 +507,318 @@ test('without a runtime record, removal drops containers left empty by the Holos
     const out = await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
     assert.match(out, /settings\.local\.json: hook-remove/)
     assert.equal(readFileSync(settings, 'utf8'), original)
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+const CODEX_HOOKS = '.codex/hooks.json'
+const AGY_HOOKS = '.agents/hooks.json'
+const FOREIGN_AGY =
+  JSON.stringify(
+    {
+      'foreign-workspace-hook': {
+        SessionStart: [{ type: 'command', command: 'echo foreign-agy-start' }],
+        PreToolUse: [{ matcher: 'run_command', type: 'command', command: 'echo foreign-agy-pre' }]
+      }
+    },
+    null,
+    2
+  ) + '\n'
+const agyOwned = file => (json(readFileSync(file, 'utf8'))['holoself-session-start']?.SessionStart || []).filter(h => h.command.includes('--hook holoself-session-start'))
+
+test('default auto policy skips unverified Codex and AGY hooks; --hooks forces installation', async () => {
+  const { base, project } = await fixture({ settings: null, claudeDir: false })
+  try {
+    mkdirSync(join(project, '.codex'))
+    writeFileSync(join(project, 'AGY.md'), '# AGY\n')
+    const autoOut = await capture(() => run(['link', 'activate', '--project', project, '--activate', 'codex,agy', '--no-mcp', '--yes']))
+    assert.match(autoOut, /"hook_policy": "auto"/)
+    assert.equal(existsSync(join(project, CODEX_HOOKS)), false)
+    assert.equal(existsSync(join(project, AGY_HOOKS)), false)
+    assert.deepEqual(readRuntime(project).hookInstallations, [])
+    let status = json(await capture(() => run(['link', 'status', '--project', project])))
+    assert.deepEqual(
+      status.session_start_hooks.map(x => [x.id, x.state, x.support]),
+      [
+        ['codex', 'not-installed', 'unverified'],
+        ['agy', 'not-installed', 'unverified']
+      ]
+    )
+
+    const forcedOut = await capture(() => run(['link', 'activate', '--project', project, '--activate', 'codex,agy', '--hooks', '--no-mcp', '--yes']))
+    assert.match(forcedOut, /codex: \.codex\/hooks\.json SessionStart hook \(create\)/)
+    assert.match(forcedOut, /trust step: Run codex in this project and approve the startup "Hooks need review" prompt/)
+    assert.match(forcedOut, /agy: \.agents\/hooks\.json SessionStart hook \(create\)/)
+    assert.equal(owned(join(project, CODEX_HOOKS)).length, 1)
+    assert.equal(agyOwned(join(project, AGY_HOOKS)).length, 1)
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('Codex and AGY hooks preserve foreign hooks, modes, and empty containers, and roll back or deactivate cleanly', async () => {
+  const { base, project } = await fixture({ settings: null, claudeDir: false })
+  const codexFile = join(project, CODEX_HOOKS),
+    agyFile = join(project, AGY_HOOKS)
+  try {
+    mkdirSync(join(project, '.codex'), { recursive: true })
+    mkdirSync(join(project, '.agents'), { recursive: true })
+    writeFileSync(codexFile, FOREIGN)
+    writeFileSync(agyFile, FOREIGN_AGY)
+    if (posix) {
+      chmodSync(codexFile, 0o640)
+      chmodSync(agyFile, 0o644)
+    }
+    await capture(() => run(['link', 'activate', '--project', project, '--activate', 'codex,agy', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']))
+    const codexInstalled = readFileSync(codexFile, 'utf8'),
+      agyInstalled = readFileSync(agyFile, 'utf8')
+    assert.equal(owned(codexFile).length, 1)
+    assert.equal(sessionStart(codexFile)[0].hooks[0].command, 'echo foreign-start')
+    assert.deepEqual(json(codexInstalled).hooks.PreToolUse, json(FOREIGN).hooks.PreToolUse)
+    assert.equal(agyOwned(agyFile).length, 1)
+    assert.deepEqual(json(agyInstalled)['foreign-workspace-hook'], json(FOREIGN_AGY)['foreign-workspace-hook'])
+    if (posix) {
+      assert.equal(mode(codexFile), 0o640)
+      assert.equal(mode(agyFile), 0o644)
+    }
+    // Idempotent second activation.
+    await capture(() => run(['link', 'activate', '--project', project, '--activate', 'codex,agy', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']))
+    assert.equal(readFileSync(codexFile, 'utf8'), codexInstalled)
+    assert.equal(readFileSync(agyFile, 'utf8'), agyInstalled)
+
+    // Deactivation restores foreign files byte-for-byte.
+    await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
+    assert.equal(readFileSync(codexFile, 'utf8'), FOREIGN)
+    assert.equal(readFileSync(agyFile, 'utf8'), FOREIGN_AGY)
+
+    // Pre-existing empty AGY containers survive install and removal byte-for-byte.
+    for (const emptyAgy of [
+      JSON.stringify({ 'holoself-session-start': { SessionStart: [] } }, null, 2) + '\n',
+      JSON.stringify({ 'holoself-session-start': {} }, null, 2) + '\n'
+    ]) {
+      writeFileSync(agyFile, emptyAgy)
+      await capture(() => run(['link', 'activate', '--project', project, '--activate', 'agy', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']))
+      assert.equal(agyOwned(agyFile).length, 1)
+      await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
+      assert.equal(readFileSync(agyFile, 'utf8'), emptyAgy)
+    }
+
+    // Files and directories created by Holoself are mode 0600 and deleted on deactivation or rollback.
+    rmSync(join(project, '.codex'), { recursive: true, force: true })
+    rmSync(join(project, '.agents'), { recursive: true, force: true })
+    assert.throws(
+      () =>
+        activateProject(project, readLink(project), {
+          activate: 'codex,agy',
+          hooks: 'on',
+          mcp: 'off',
+          installSkill: 'none',
+          afterHooks: () => {
+            assert.equal(owned(codexFile).length, 1)
+            assert.equal(agyOwned(agyFile).length, 1)
+            throw new Error('injected codex/agy rollback')
+          }
+        }),
+      /injected codex\/agy rollback/
+    )
+    assert.equal(existsSync(join(project, '.codex')), false)
+    assert.equal(existsSync(join(project, '.agents')), false)
+
+    await capture(() => run(['link', 'activate', '--project', project, '--activate', 'codex,agy', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']))
+    if (posix) {
+      assert.equal(mode(codexFile), 0o600)
+      assert.equal(mode(agyFile), 0o600)
+    }
+    // Repair restores deleted hook files.
+    rmSync(codexFile)
+    rmSync(agyFile)
+    await capture(() => run(['link', 'repair', '--project', project, '--yes']))
+    assert.equal(owned(codexFile).length, 1)
+    assert.equal(agyOwned(agyFile).length, 1)
+
+    await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
+    assert.equal(existsSync(codexFile), false)
+    assert.equal(existsSync(agyFile), false)
+    assert.equal(existsSync(join(project, '.codex')), false)
+    assert.equal(existsSync(join(project, '.agents')), false)
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('Codex and AGY refuse symlinks, invalid JSON, and mixed groups; broken files report unremovable on deactivate', async () => {
+  const { base, project } = await fixture({ settings: null, claudeDir: false })
+  const codexFile = join(project, CODEX_HOOKS),
+    agyFile = join(project, AGY_HOOKS),
+    outside = join(base, 'outside-hooks.json')
+  try {
+    mkdirSync(join(project, '.codex'), { recursive: true })
+    mkdirSync(join(project, '.agents'), { recursive: true })
+    writeFileSync(outside, '{}\n')
+    symlinkSync(outside, codexFile)
+    await assert.rejects(
+      run(['link', 'activate', '--project', project, '--activate', 'codex', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']),
+      /symlink/
+    )
+    rmSync(codexFile)
+    symlinkSync(outside, agyFile)
+    await assert.rejects(
+      run(['link', 'activate', '--project', project, '--activate', 'agy', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']),
+      /symlink/
+    )
+    rmSync(agyFile)
+
+    // Mixed AGY group (foreign handler inside holoself-session-start.SessionStart) is refused.
+    const mixedAgy = JSON.stringify(
+      {
+        'holoself-session-start': {
+          SessionStart: [
+            { type: 'command', command: 'echo foreign' },
+            { type: 'command', command: HOOK_HOSTS.agy.command, timeout: 30 }
+          ]
+        }
+      },
+      null,
+      2
+    )
+    writeFileSync(agyFile, mixedAgy)
+    await assert.rejects(
+      run(['link', 'activate', '--project', project, '--activate', 'agy', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']),
+      /shares a group with other hooks/
+    )
+    assert.equal(readFileSync(agyFile, 'utf8'), mixedAgy)
+    rmSync(agyFile)
+
+    // Broken hook files report unremovable on deactivate without blocking deactivation.
+    await capture(() => run(['link', 'activate', '--project', project, '--activate', 'codex,agy', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']))
+    writeFileSync(codexFile, '{ broken')
+    writeFileSync(agyFile, '{ broken')
+    const out = await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
+    assert.match(out, /\.codex\/hooks\.json: unremovable/)
+    assert.match(out, /\.agents\/hooks\.json: unremovable/)
+    assert.equal(existsSync(join(project, '.holoself', 'runtime.json')), false)
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('Codex trust state: installed-untrusted until ~/.codex/config.toml has the matching trusted_hash (read-only)', async () => {
+  const { base, project } = await fixture({ settings: null, claudeDir: false })
+  const codexFile = join(project, CODEX_HOOKS),
+    codexConfig = join(base, 'codex-config.toml'),
+    savedConfig = process.env.HOLOSELF_TEST_CODEX_CONFIG
+  try {
+    mkdirSync(join(project, '.codex'), { recursive: true })
+    writeFileSync(codexFile, FOREIGN)
+    process.env.HOLOSELF_TEST_CODEX_CONFIG = codexConfig
+    const out = await capture(() =>
+      run(['link', 'activate', '--project', project, '--activate', 'codex', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes'])
+    )
+    assert.match(out, /trust step: Run codex in this project and approve the startup "Hooks need review" prompt/)
+    assert.equal(existsSync(codexConfig), false, 'Holoself never creates or writes user Codex config.toml')
+
+    // Missing config.toml -> installed-untrusted in both link status and link doctor.
+    let status = json(await capture(() => run(['link', 'status', '--project', project])))
+    assert.equal(status.state, 'activated')
+    assert.equal(status.session_start_hooks[0].state, 'installed-untrusted')
+    assert.match(status.session_start_hooks[0].trust_step, /Hooks need review/)
+    let doctor = json(await capture(() => run(['link', 'doctor', '--project', project])))
+    assert.equal(doctor.state, 'activated')
+    assert.equal(doctor.checks.session_start_hook, 'installed-untrusted')
+    assert.equal(doctor.session_start_hooks[0].state, 'installed-untrusted')
+
+    // Wrong group index (0:0 when FOREIGN is group 0 and Holoself is group 1) stays installed-untrusted.
+    const escapedPath = codexFile.replaceAll('\\', '\\\\')
+    writeFileSync(
+      codexConfig,
+      `[hooks.state."${escapedPath}:session_start:0:0"]\ntrusted_hash = "sha256:${'a'.repeat(64)}"\n`
+    )
+    status = json(await capture(() => run(['link', 'status', '--project', project])))
+    assert.equal(status.session_start_hooks[0].state, 'installed-untrusted')
+
+    // Matching group index (1:0) in table form marks the hook installed.
+    const configContent = `[hooks.state."${escapedPath}:session_start:1:0"]\ntrusted_hash = "sha256:${'b'.repeat(64)}"\n`
+    writeFileSync(codexConfig, configContent)
+    status = json(await capture(() => run(['link', 'status', '--project', project])))
+    assert.equal(status.session_start_hooks[0].state, 'installed')
+    assert.equal(status.session_start_hooks[0].trust_step, undefined)
+    doctor = json(await capture(() => run(['link', 'doctor', '--project', project])))
+    assert.equal(doctor.checks.session_start_hook, 'installed')
+    assert.equal(readFileSync(codexConfig, 'utf8'), configContent, 'config.toml is strictly read-only')
+
+    // Dotted key form in config.toml is also recognised.
+    writeFileSync(
+      codexConfig,
+      `hooks.state."${escapedPath}:session_start:1:0".trusted_hash = "sha256:${'c'.repeat(64)}"\n`
+    )
+    status = json(await capture(() => run(['link', 'status', '--project', project])))
+    assert.equal(status.session_start_hooks[0].state, 'installed')
+  } finally {
+    if (savedConfig === undefined) delete process.env.HOLOSELF_TEST_CODEX_CONFIG
+    else process.env.HOLOSELF_TEST_CODEX_CONFIG = savedConfig
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('AGY hook-format agy-json wraps packet in injectSteps, respects the 9,000-byte cap, resolves cwd, and fails closed with empty envelope', async () => {
+  const { base, self, project } = await fixture({ settings: null, claudeDir: false })
+  const audit = join(base, 'audit-agy.log'),
+    env = { HOLOSELF_HOME: self, HOLOSELF_HOOK_AUDIT_LOG: audit, CLAUDE_PROJECT_DIR: undefined },
+    installedCmd = ['context', '--session-start', '--budget', 'small', '--format', 'packet', '--hook', 'holoself-session-start', '--hook-format', 'agy-json']
+  const runIn = (args, cwd, extraEnv = {}) => {
+    const merged = { ...process.env, HOLOSELF_ERROR_FORMAT: '', ...env, ...extraEnv }
+    if (merged.CLAUDE_PROJECT_DIR === undefined) delete merged.CLAUDE_PROJECT_DIR
+    return spawnSync(process.execPath, [BIN, ...args], { cwd, encoding: 'utf8', env: merged })
+  }
+  const emptyEnvelope = (result, label) => {
+    assert.equal(result.status, 0, label)
+    assert.equal(result.stderr, '', label)
+    assert.equal(result.stdout, '{"injectSteps":[]}\n', label)
+  }
+  try {
+    mkdirSync(join(project, '.agents'), { recursive: true })
+    // AGY executes workspace hooks with cwd set to <workspace>/.agents (the directory containing hooks.json).
+    for (const cwd of [project, join(project, '.agents')]) {
+      const ok = runIn(installedCmd, cwd)
+      assert.equal(ok.status, 0)
+      assert.equal(ok.stderr, '')
+      const parsed = json(ok.stdout)
+      assert.equal(parsed.injectSteps.length, 1)
+      const msg = parsed.injectSteps[0].systemMessage.systemMessage
+      assert.match(msg, /^# Holoself context packet\n\nPacket ID: [0-9a-f-]{36}\nContext receipt: [0-9a-f]{64}/)
+      assert.match(msg, /HOOK-SENTINEL-7/)
+    }
+
+    // Codex executes hooks with cwd set to the project root and --hook-format text (default).
+    const codexOk = runIn(installedCmd.slice(0, -2), project)
+    assert.equal(codexOk.status, 0)
+    assert.equal(codexOk.stderr, '')
+    assert.match(codexOk.stdout, /HOOK-SENTINEL-7/)
+
+    // Refusal paths with --hook-format agy-json emit a valid empty envelope and no stderr.
+    emptyEnvelope(runIn(installedCmd, project, { CLAUDE_PROJECT_DIR: '' }), 'empty CLAUDE_PROJECT_DIR')
+    emptyEnvelope(runIn(installedCmd, project, { CLAUDE_PROJECT_DIR: 'relative/path' }), 'relative CLAUDE_PROJECT_DIR')
+    emptyEnvelope(runIn(installedCmd, base), 'unlinked working directory')
+    emptyEnvelope(runIn(['context', '--project', 'relative', ...installedCmd.slice(1)], project), 'relative --project')
+    emptyEnvelope(runIn([...installedCmd, '--bogus-flag'], project), 'bad flag')
+    emptyEnvelope(runIn([...installedCmd, '--restricted-host'], project), 'restricted-host')
+
+    // Unsupported --hook-format value fails closed with empty stdout.
+    const badFormat = runIn([...installedCmd.slice(0, -1), 'bogus-format'], project)
+    assert.equal(badFormat.status, 0)
+    assert.equal(badFormat.stdout, '')
+    assert.equal(badFormat.stderr, '')
+
+    // Large profile: total serialized agy-json envelope stays <= 9,000 bytes and keeps the receipt.
+    const filler = Array.from({ length: 400 }, (_, i) => `- Synthetic preference line ${i} with enough words to take space.`).join('\n')
+    for (const file of ['identity.md', 'preferences.md', 'work-context.md'])
+      writeFileSync(join(self, 'profile', file), `---\nvisibility: linked-projects\n---\n# ${file}\n\n${filler}\n`)
+    const capped = runIn(installedCmd, join(project, '.agents'))
+    assert.equal(capped.status, 0)
+    assert.ok(Buffer.byteLength(capped.stdout) <= 9000, `agy-json bytes: ${Buffer.byteLength(capped.stdout)}`)
+    const cappedMsg = json(capped.stdout).injectSteps[0].systemMessage.systemMessage
+    assert.match(cappedMsg, /Context receipt: [0-9a-f]{64}/)
   } finally {
     rmSync(base, { recursive: true, force: true })
   }

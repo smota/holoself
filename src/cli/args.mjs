@@ -44,6 +44,7 @@ export const CONTEXT_FLAGS = [
   '--source',
   '--session-start',
   '--hook',
+  '--hook-format',
   '--temporal',
   '--include-history',
   '--manifest',
@@ -235,8 +236,11 @@ export function parse(args) {
       o.root = resolve(requiredValue(args, i++, a))
       o.rootExplicit = true
     } else if (a === '--target') o.target = resolve(requiredValue(args, i++, a))
-    else if (a === '--project') o.project = resolve(requiredValue(args, i++, a))
-    else if (a === '--self') o.self = resolve(requiredValue(args, i++, a))
+    else if (a === '--project') {
+      const raw = requiredValue(args, i++, a)
+      o.projectRaw = raw
+      o.project = resolve(raw)
+    } else if (a === '--self') o.self = resolve(requiredValue(args, i++, a))
     else if (a === '--from') o.from = resolve(requiredValue(args, i++, a))
     else if (a === '--lens') o.lens = requiredValue(args, i++, a)
     else if (a === '--lenses')
@@ -279,6 +283,7 @@ export function parse(args) {
     } else if (a === '--manifest') o.manifest = true
     else if (a === '--session-start') o.sessionStart = true
     else if (a === '--hook') o.hook = requiredValue(args, i++, a)
+    else if (a === '--hook-format') o.hookFormat = requiredValue(args, i++, a)
     else if (a === '--hooks' || a === '--no-hooks') {
       const value = a === '--hooks' ? 'on' : 'off'
       if (o.hooks && o.hooks !== value) throw new Error('--hooks and --no-hooks cannot be combined')

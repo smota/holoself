@@ -111,7 +111,16 @@ export async function activateLinkedProject(o, project, link, verb = 'Activate',
 export function hookPlanSummary(plan) {
   return {
     hook_policy: plan.hookPolicy,
-    session_start_hooks: plan.hooks.map(({ adapter, file, event, hook_id, support, install, action }) => ({ adapter, file, event, hook_id, support, install, action })),
+    session_start_hooks: plan.hooks.map(({ adapter, file, event, hook_id, support, install, action, trust_step }) => ({
+      adapter,
+      file,
+      event,
+      hook_id,
+      support,
+      install,
+      action,
+      ...(trust_step ? { trust_step } : {})
+    })),
     ...(plan.unsupportedHooks.length ? { unsupported_hooks: plan.unsupportedHooks } : {})
   }
 }
@@ -137,7 +146,10 @@ export function mcpPlanSummary(plan) {
   }
 }
 export function printHookResults(result) {
-  for (const item of result.hookResults || []) console.log(` - ${item.adapter}: ${item.file} ${item.event} hook (${item.result})`)
+  for (const item of result.hookResults || []) {
+    console.log(` - ${item.adapter}: ${item.file} ${item.event} hook (${item.result})`)
+    if (item.install && item.trust_step) console.log(`   trust step: ${item.trust_step}`)
+  }
   for (const item of result.mcpResults || [])
     console.log(
       ` - ${item.adapter}: ${item.file} MCP server (${item.result})${item.approval_action ? `; read-tool approvals (${item.approval_action})` : ''}` +

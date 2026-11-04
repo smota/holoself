@@ -55,8 +55,8 @@ Each platform entry in `platform-verification.json` can carry a `session_start_h
 | Platform | Host version | Date | Result | Notes |
 |---|---:|---|---|---|
 | Claude Code | 2.1.318 | 2026-11-04 | pass (Linux/WSL2; Windows unverified) | Hook in `.claude/settings.local.json` ran in `claude -p`; the reply contained the synthetic marker and the exact context receipt |
-| Codex | 0.166.0 | 2026-11-04 | host-supported-not-installed | `hooks` feature is stable; project `.codex/hooks.json` supports `SessionStart`, but each hook runs only after the user trusts it (`trusted_hash` in `~/.codex/config.toml`) |
-| AGY | 1.5.0 | 2026-11-04 | host-supported-not-installed | The bundled `hooks.json` reference lists `SessionStart` in `<workspace>/.agents/hooks.json` with a JSON `injectSteps` output; workspace hooks load only for trusted folders |
+| Codex | 0.166.0 | — | unverified | `hooks` feature is stable; project `.codex/hooks.json` supports `SessionStart` (`--hooks`), and each hook runs only after the user trusts it (`trusted_hash` in `~/.codex/config.toml`) |
+| AGY | 1.5.0 | — | unverified | The bundled `hooks.json` reference lists `SessionStart` in `<workspace>/.agents/hooks.json` (`--hooks`) with `--hook-format agy-json` (`injectSteps` output); workspace hooks load only for trusted folders |
 
 Claude Code run:
 
