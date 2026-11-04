@@ -19,6 +19,8 @@
 //     (the cursor secret is random per self root); undecodable cursors -> <CURSOR>
 //   - duration / elapsed-time keys (duration, elapsed, took, *_duration_ms) -> <DURATION>
 //   - file modification-time keys (mtime, mtime_ms, mtimeMs, *_mtime) -> <MTIME>
+//   - MCP JSON-RPC responses are ordered by numeric id before masking: the server runs tool calls
+//     concurrently (#62) and correlates responses by id, so their position on stdout is not a contract
 // Normalisation is applied to parsed JSON string leaves (JSON stdout and JSON-line MCP output) or
 // to raw text (packet formats, YAML, messages). Byte and token counts are kept verbatim: linked
 // output carries only root-relative paths, and the path-independence test runs one fixture under
@@ -371,8 +373,13 @@ function structured(stdout, text) {
   const whole = tryJson(trimmed)
   if (whole.ok) return { json: scrub(whole.value, '', text) }
   const each = trimmed.split('\n').map(tryJson)
-  if (each.every(x => x.ok)) return { jsonLines: each.map(x => scrub(x.value, '', text)) }
+  if (each.every(x => x.ok)) return { jsonLines: byRpcId(each.map(x => x.value)).map(value => scrub(value, '', text)) }
   return text(stdout)
+}
+
+function byRpcId(values) {
+  const rpc = values.every(value => value && value.jsonrpc === '2.0' && typeof value.id === 'number')
+  return rpc ? [...values].sort((a, b) => a.id - b.id) : values
 }
 
 function maskSizes(value, key = '') {

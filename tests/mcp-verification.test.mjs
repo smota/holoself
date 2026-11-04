@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { MCP_TOOLS } from '../src/mcp-server.mjs'
 import { loadVerificationMatrix, mcpPlatformSupport, MCP_VERIFICATION_TOOLS } from '../src/mcp-verification.mjs'
-import { judgeTools, mergeMatrix, SMOKE_TOOLS } from '../scripts/mcp-smoke.mjs'
+import { judgeTools, mergeMatrix, sanitizeReason, shellQuote, SMOKE_TOOLS, tomlString } from '../scripts/mcp-smoke.mjs'
 
 const pass = Object.fromEntries(MCP_VERIFICATION_TOOLS.map(tool => [tool, { result: 'pass', reason: 'server audit recorded 1 call(s), ok' }]))
 const entry = (platform, overrides = {}) => ({
@@ -117,4 +117,24 @@ test('a host-default run never replaces the scoped verification record', () => {
   matrix = mergeMatrix(matrix, { ...scoped, tools: { ...pass, holoself_search: { result: 'fail', reason: 'x' } } })
   assert.equal(mcpPlatformSupport(matrix)[1].support, 'configured')
   assert.ok(matrix.platforms[0].host_default, 'host-default evidence survives a new scoped record')
+})
+
+test('smoke wrapper quoting survives quotes and spaces, and TOML keys are escaped', { skip: process.platform === 'win32' }, () => {
+  for (const value of ["/tmp/it's here/audit.ndjson", 'plain', "a'b'' c\\d $HOME `x`"]) {
+    const result = spawnSync('/bin/sh', ['-c', `printf '%s' ${shellQuote(value)}`], { encoding: 'utf8' })
+    assert.equal(result.stdout, value)
+  }
+  assert.equal(tomlString('/tmp/a "b"\\c'), '"/tmp/a \\"b\\"\\\\c"')
+  assert.equal(tomlString('x\x7fy\n'), '"x\\u007Fy\\n"')
+})
+
+test('host-reported smoke reasons are stripped of absolute local paths', () => {
+  for (const path of ['/home/someone/project/.mcp.json', 'C:\\Users\\someone\\x', '\\\\server\\share\\x', '~/private/notes'])
+    assert.doesNotMatch(sanitizeReason(`denied: approval needed for ${path} (see log)`), /someone|server|private/)
+  assert.equal(sanitizeReason('approval required for mcp(holoself/holoself_status) and/or writes'), 'approval required for mcp(holoself/holoself_status) and/or writes')
+  const report = { results: [{ tool: 'holoself_status', ok: false, note: 'permission denied reading /home/someone/.config/host.json' }] }
+  const tools = judgeTools([], report, '')
+  assert.equal(tools.holoself_status.result, 'blocked')
+  assert.doesNotMatch(tools.holoself_status.reason, /someone/)
+  assert.match(tools.holoself_status.reason, /<local-path>/)
 })
