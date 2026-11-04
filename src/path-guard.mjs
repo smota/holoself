@@ -44,10 +44,15 @@ export function locateBelow(root, target) {
   const lexicalRoot = resolve(root), lexicalTarget = resolve(target)
   if (isWithin(lexicalRoot, lexicalTarget)) return { base: lexicalRoot, parts: split(relative(lexicalRoot, lexicalTarget)) }
   const canonicalRoot = canonicalPath(lexicalRoot)
-  for (let current = lexicalTarget;; current = dirname(current)) {
+  if (isWithin(canonicalRoot, lexicalTarget)) return { base: canonicalRoot, parts: split(relative(canonicalRoot, lexicalTarget)) }
+  // Mixed spelling: choose the HIGHEST ancestor that canonicalises to the root,
+  // so a loop link below it (root/sub/loop -> root) is still inspected.
+  const chain = []
+  for (let current = lexicalTarget;; current = dirname(current)) { chain.push(current); if (dirname(current) === current) break }
+  for (const current of chain.reverse()) {
     if (samePath(canonicalPath(current), canonicalRoot)) return { base: current, parts: split(relative(current, lexicalTarget)) }
-    if (dirname(current) === current) return null
   }
+  return null
 }
 const split = rel => rel ? rel.split(sep) : []
 

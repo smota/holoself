@@ -29,22 +29,29 @@ export function readBindings(root,{registry=loadLensRegistry(root)}={}){
  return {schema_version:1,bindings,hash:hash(raw||'')}
 }
 // A project reached through a symlinked ancestor (macOS /var -> /private/var)
-// has a lexical and a canonical spelling; both identify the same binding.
+// has a lexical and a canonical spelling; both identify the same binding. The
+// canonical fallback never follows a link AT the project path itself (a swapped
+// project directory fails closed), and ambiguous matches are rejected.
+const isLink=path=>{try{return lstatSync(resolve(path)).isSymbolicLink()}catch{return false}}
 function bindingKey(bindings,project){
- const key=normalizeProjectPath(project);if(Object.hasOwn(bindings,key))return key
- let canonical;try{canonical=normalizeProjectPath(canonicalPath(project))}catch{return key}
- if(Object.hasOwn(bindings,canonical))return canonical
- for(const stored of Object.keys(bindings)){try{if(normalizeProjectPath(canonicalPath(stored))===canonical)return stored}catch{}}
- return key
+ const key=normalizeProjectPath(project);if(Object.hasOwn(bindings,key))return {key,found:true}
+ if(!isAbsolute(project)||isLink(project))return {key,found:false}
+ let canonical;try{canonical=normalizeProjectPath(canonicalPath(project))}catch{return {key,found:false}}
+ const matches=Object.keys(bindings).filter(stored=>{if(stored===canonical)return true;if(!isAbsolute(stored)||isLink(stored))return false;try{return normalizeProjectPath(canonicalPath(stored))===canonical}catch{return false}})
+ if(matches.length>1)throw new Error(`conflicting normalized lens bindings: ${canonical}`)
+ if(matches.length)return {key:matches[0],found:true}
+ return {key,found:false}
 }
 export function resolveBinding(root,project,options={}){
- const bindings=readBindings(root,options).bindings,key=bindingKey(bindings,project),binding=bindings[key]
+ const bindings=readBindings(root,options).bindings,{key}=bindingKey(bindings,project),binding=bindings[key]
  if(!binding){const error=new Error(`No self-side lens binding for ${key}. Run holoself lens bind --root <self-root> --project <project> --lens <lens> --yes`);error.code='LENS_BINDING_REQUIRED';throw error}
  return binding
 }
 export function writeBinding(root,project,value,{expectedHash}={}){
- const store=readBindings(root),key=bindingKey(store.bindings,project);if(expectedHash!==undefined&&expectedHash!==store.hash)throw new Error('lens bindings changed on disk')
- if(value===null)delete store.bindings[key];else store.bindings[key]=validateBinding(value,loadLensRegistry(root))
+ const store=readBindings(root),match=bindingKey(store.bindings,project);if(expectedHash!==undefined&&expectedHash!==store.hash)throw new Error('lens bindings changed on disk')
+ // Keys keep the spelling callers index by (Workbench and catalog use normalizeProjectPath of the
+ // requested path); an existing alias found through the canonical fallback is updated in place.
+ if(value===null)delete store.bindings[match.key];else store.bindings[match.key]=validateBinding(value,loadLensRegistry(root))
  const path=bindingsPath(root);assertSafe(root,path);mkdirSync(dirname(path),{recursive:true});const temp=`${path}.tmp-${process.pid}`
  try{writeFileSync(temp,JSON.stringify({schema_version:1,bindings:store.bindings},null,2)+'\n',{flag:'wx'});renameSync(temp,path)}finally{if(existsSync(temp))rmSync(temp)}
  return readBindings(root)

@@ -1,11 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { run } from '../src/cli.mjs'
 import { loadLensRegistry } from '../src/lenses.mjs'
-import { readBindings } from '../src/bindings.mjs'
+import { normalizeProjectPath, readBindings, resolveBinding, writeBinding } from '../src/bindings.mjs'
 import { readDocument } from '../src/documents.mjs'
 import { buildTransformationPlan } from '../src/maintenance.mjs'
 import { canonicalPath, linkBelow } from '../src/path-guard.mjs'
@@ -68,4 +68,34 @@ test('symlinks at or below the trust boundary still fail closed under a symlinke
   // canonicalisation tolerates roots that do not exist yet
   assert.equal(canonicalPath(join(env.link,'missing','child')),join(realpathSync(env.real),'missing','child'))
   rmSync(env.base,{recursive:true,force:true});rmSync(outside,{recursive:true,force:true})
+})
+
+test('binding canonical fallback fails closed for a swapped project link and ambiguous aliases',async t=>{
+  const env=linkedParent();if(!env)return t.skip('symlinks unavailable')
+  const self=join(env.real,'self');await capture(()=>run(['init','--root',self]))
+  // Swap: bind projA, then replace projA with a link to evil.
+  const projA=join(env.real,'projA'),evil=join(env.real,'evil');mkdirSync(projA);mkdirSync(evil)
+  writeBinding(self,projA,{default_lens:'professional',secondary_lenses:[]})
+  renameSync(projA,join(env.real,'projA-saved'));symlinkSync(evil,projA,'junction')
+  assert.throws(()=>resolveBinding(self,evil),error=>error.code==='LENS_BINDING_REQUIRED')
+  // A requested project that is itself a link never borrows its target's binding.
+  writeBinding(self,evil,{default_lens:'general',secondary_lenses:[]});const alias=join(env.real,'evil-alias');symlinkSync(evil,alias,'junction')
+  assert.throws(()=>resolveBinding(self,alias),error=>error.code==='LENS_BINDING_REQUIRED')
+  // The symlinked-ancestor spelling of a real project still resolves.
+  assert.equal(resolveBinding(self,join(env.link,'evil')).default_lens,'general')
+  // Several stored spellings of one project are ambiguous for a third spelling.
+  const proj=join(env.real,'proj'),link2=join(env.base,'link2');mkdirSync(proj);symlinkSync(env.real,link2,'junction')
+  const file=join(self,'lenses','bindings.json'),store=JSON.parse(readFileSync(file,'utf8'))
+  store.bindings[normalizeProjectPath(proj)]={default_lens:'general',secondary_lenses:[]};store.bindings[normalizeProjectPath(join(env.link,'proj'))]={default_lens:'professional',secondary_lenses:[]}
+  writeFileSync(file,JSON.stringify(store))
+  assert.throws(()=>resolveBinding(self,join(link2,'proj')),/conflicting normalized lens bindings/)
+  rmSync(env.base,{recursive:true,force:true})
+})
+
+test('a loop link below the boundary is inspected under either spelling',t=>{
+  const env=linkedParent();if(!env)return t.skip('symlinks unavailable')
+  mkdirSync(join(env.real,'sub'));symlinkSync(env.real,join(env.real,'sub','loop'),'junction')
+  const real=realpathSync(env.real);assert.equal(linkBelow(env.link,join(real,'sub','loop','x')),join(real,'sub','loop'))
+  assert.equal(linkBelow(env.real,join(env.link,'sub','loop','x')),join(env.link,'sub','loop'))
+  rmSync(env.base,{recursive:true,force:true})
 })
