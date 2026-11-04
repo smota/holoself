@@ -165,12 +165,12 @@ export function body(req, limit = 2 * 1024 * 1024) {
     })
   })
 }
-export function cli(args, { stdin, allowFailure = false, timeoutMs = 60000, maxStdout = 2 * 1024 * 1024, maxStderr = 128 * 1024 } = {}) {
+export function cli(args, { stdin, allowFailure = false, timeoutMs = 60000, maxStdout = 2 * 1024 * 1024, maxStderr = 128 * 1024, env: extraEnv } = {}) {
   return new Promise((ok, no) => {
     const child = spawn(process.execPath, [BIN, ...args], {
       shell: false,
       windowsHide: true,
-      env: { ...process.env, HOLOSELF_ERROR_FORMAT: 'json' },
+      env: { ...process.env, HOLOSELF_ERROR_FORMAT: 'json', ...(extraEnv || {}) },
       stdio: ['pipe', 'pipe', 'pipe']
     })
     let out = '',

@@ -102,9 +102,31 @@ export function updateLinkBindingSaltInPlace(projectDir, salt) {
   }
   atomicWriteFile(filePath, lines.join('\n') + (raw.endsWith('\n') ? '' : '\n'))
 }
+export function ledgerConfigErrors(value, prefix = 'ledger') {
+  const errors = []
+  if (value === undefined) return errors
+  if (!value || Array.isArray(value) || typeof value !== 'object') return [`${prefix} must be a mapping`]
+  for (const key of Object.keys(value))
+    if (!['enabled', 'record_task_text'].includes(key)) errors.push(`unknown ${prefix} field: ${key}`)
+  if (value.enabled !== undefined && typeof value.enabled !== 'boolean') errors.push(`${prefix}.enabled must be a boolean`)
+  if (value.record_task_text !== undefined && typeof value.record_task_text !== 'boolean')
+    errors.push(`${prefix}.record_task_text must be a boolean`)
+  return errors
+}
 export function linkSchemaErrors(link, registry = null) {
   const errors = [],
-    allowedKeys = new Set(['path', 'access', 'proposals', 'index', 'default_lens', 'secondary_lenses', 'binding_salt', 'cache_limit_entries', 'cache_limit_bytes']),
+    allowedKeys = new Set([
+      'path',
+      'access',
+      'proposals',
+      'index',
+      'default_lens',
+      'secondary_lenses',
+      'binding_salt',
+      'cache_limit_entries',
+      'cache_limit_bytes',
+      'ledger'
+    ]),
     known = id => (registry ? registry.byId.has(id) : lensIdStructurallyValid(id))
   if (!link || Array.isArray(link) || typeof link !== 'object') return ['self_context must be a mapping']
   for (const key of Object.keys(link)) if (!allowedKeys.has(key)) errors.push(`unknown self_context field: ${key}`)
@@ -124,6 +146,7 @@ export function linkSchemaErrors(link, registry = null) {
   if (link.binding_salt !== undefined) {
     if (typeof link.binding_salt !== 'string' || !/^[0-9a-f]{32}$/.test(link.binding_salt)) errors.push('binding_salt must be a 32-character hex string')
   }
+  if (link.ledger !== undefined) errors.push(...ledgerConfigErrors(link.ledger, 'self_context.ledger'))
   return errors
 }
 export function projectContextErrors(value) {
@@ -155,9 +178,13 @@ export function readLink(project, { tolerant = false } = {}) {
   }
   if (!Object.hasOwn(parsed, 'self_context')) throw new Error(`malformed link configuration ${path}: self_context mapping missing`)
   for (const key of Object.keys(parsed))
-    if (!['self_context', 'project_context', 'cache_limit_entries', 'cache_limit_bytes'].includes(key))
+    if (!['self_context', 'project_context', 'ledger', 'cache_limit_entries', 'cache_limit_bytes'].includes(key))
       throw new Error(`malformed link configuration ${path}: unknown root field ${key}`)
-  const structuralErrors = [...linkSchemaErrors(parsed.self_context), ...projectContextErrors(parsed.project_context)]
+  const structuralErrors = [
+    ...linkSchemaErrors(parsed.self_context),
+    ...projectContextErrors(parsed.project_context),
+    ...ledgerConfigErrors(parsed.ledger, 'ledger')
+  ]
   if (structuralErrors.length && !tolerant) throw new Error(`invalid link configuration ${path}: ${structuralErrors.join('; ')}`)
   const selfPath = resolve(project, parsed.self_context.path)
   let registry = null
@@ -176,13 +203,21 @@ export function readLink(project, { tolerant = false } = {}) {
     if (!tolerant) throw error
     bindingError = error.message
   }
-  const { cache_limit_entries: _cle, cache_limit_bytes: _clb, ...selfContextFields } = parsed.self_context
+  const { cache_limit_entries: _cle, cache_limit_bytes: _clb, ledger: selfLedger, ...selfContextFields } = parsed.self_context
+  const rawLedger = parsed.ledger && typeof parsed.ledger === 'object' ? parsed.ledger : selfLedger && typeof selfLedger === 'object' ? selfLedger : null
+  const ledger = rawLedger
+    ? {
+        enabled: rawLedger.enabled !== false,
+        record_task_text: rawLedger.record_task_text === true
+      }
+    : undefined
   return {
     ...selfContextFields,
     ...(binding || {}),
     path: selfPath,
     secondary_lenses: [...(binding?.secondary_lenses || [])],
     binding_salt: parsed.self_context.binding_salt || null,
+    ...(ledger ? { ledger } : {}),
     project_context: {
       include: parsed.project_context?.include || [],
       exclude: [...DEFAULT_PROJECT_EXCLUDES, ...(parsed.project_context?.exclude || [])],

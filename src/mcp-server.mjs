@@ -13,6 +13,7 @@ import {
   VISIBILITIES
 } from './ecosystem.mjs'
 import { readLink } from './link/config.mjs'
+import { recordServedPacket } from './ledger.mjs'
 import { createToolPool } from './mcp-pool.mjs'
 import { AUDIT_LOG_MAX_BYTES, appendAuditLine } from './shared/audit-log.mjs'
 import { VERSION } from './version.mjs'
@@ -313,11 +314,22 @@ export function createMcpSession({
 } = {}) {
   const sessionLens = pool ? linkDefaultLens(project) : null
   let initialized = false,
-    protocolVersion = null
+    protocolVersion = null,
+    clientHost = null
   const log = entry => audit(auditLog, entry, auditLogMaxBytes),
     inFlight = new Map()
   let idle = []
   const idKey = id => JSON.stringify(id)
+  function recordMcpLedger(name, packetData) {
+    if (!CONTEXT_TOOLS.has(name) || !packetData) return
+    recordServedPacket({
+      data: packetData,
+      project,
+      surface: 'mcp',
+      clientInfoName: clientHost,
+      onFailure: err => log({ at: new Date().toISOString(), event: 'ledger/write', tool: name, ok: false, error_code: err.code })
+    })
+  }
   function settled(key) {
     inFlight.delete(key)
     if (inFlight.size) return
@@ -359,6 +371,11 @@ export function createMcpSession({
       }
       if (outcome.status === 'ok' && outcome.value.ok) {
         log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok: true, error_code: null })
+        if (CONTEXT_TOOLS.has(name)) {
+          try {
+            recordMcpLedger(name, JSON.parse(outcome.value.json)?.structuredContent?.data)
+          } catch {}
+        }
         // Same bytes as JSON.stringify(response(id, result)): the worker already serialised the result.
         return write(`{"jsonrpc":"2.0","id":${JSON.stringify(request.id)},"result":${outcome.value.json}}`)
       }
@@ -398,6 +415,7 @@ export function createMcpSession({
       if (request.method === 'initialize') {
         const requested = request.params?.protocolVersion
         protocolVersion = PROTOCOL_VERSIONS.includes(requested) ? requested : PROTOCOL_VERSIONS[0]
+        clientHost = typeof request.params?.clientInfo?.name === 'string' ? request.params.clientInfo.name : null
         initialized = true
         result = {
           protocolVersion,
@@ -422,6 +440,7 @@ export function createMcpSession({
           result = toolError(error)
         }
         auditToolCall(log, request.params?.name, result)
+        if (!result.isError) recordMcpLedger(request.params?.name, result.structuredContent?.data)
       } else throw Object.assign(new Error(`Method not found: ${request.method}`), { rpcCode: -32601 })
       write(JSON.stringify(response(request.id, result)))
     } catch (error) {

@@ -1,6 +1,8 @@
 // holoself context command (moved verbatim from runEcosystem).
 import { join } from 'node:path'
+import { recordServedPacket } from '../../ledger.mjs'
 import { packetFormat } from '../../render/packet.mjs'
+import { resolveCaller } from '../../retrieval/caller.mjs'
 import { contextData } from '../../retrieval/context.mjs'
 import { assertContainedPath, atomicWrite, slash } from '../../shared/fs.mjs'
 import { hookContext } from '../hook-mode.mjs'
@@ -38,5 +40,19 @@ export async function runContext(o, sub) {
       )
     )
   } else console.log(content.trimEnd())
+  try {
+    const caller = resolveCaller(o)
+    const isLinked = caller.identity?.kind === 'client:linked'
+    const surface = process.env.HOLOSELF_SURFACE === 'workbench' ? 'workbench' : 'cli'
+    recordServedPacket({
+      data,
+      project: isLinked ? caller.project : null,
+      self: caller.self,
+      link: isLinked ? caller.link : null,
+      surface,
+      host: process.env.HOLOSELF_HOST || null,
+      onFailure: err => console.error(`[warn] served-context ledger write failed (${err.code}): ${err.message}`)
+    })
+  } catch {}
   return true
 }

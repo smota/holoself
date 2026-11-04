@@ -10,6 +10,7 @@ import { loadLensRegistry, removeCustomLens, saveCustomLens, saveLensInstruction
 import { connectorLaunchPlan, launchConnector, loadConnectors, saveConnectorExtension, validateConnector } from './connectors.mjs'
 import { annotationSchema, validateAnnotationMetadata } from './annotations.mjs'
 import { applyCleanupPlan } from './cleanup.mjs'
+import { readLedgerEntries } from './ledger.mjs'
 import { mcpClientOverview } from './mcp-config.mjs'
 import { canonicalPath, samePath } from './path-guard.mjs'
 import {
@@ -429,19 +430,22 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
           id = b.id || randomUUID(),
           prior = b.id ? conversationEvents(project, id) : [],
           context = (
-            await cli([
-              'context',
-              '--project',
-              project,
-              '--lens',
-              b.lens || 'general',
-              '--task',
-              String(b.message).slice(0, 500),
-              '--format',
-              'packet',
-              '--adapter',
-              b.harness
-            ])
+            await cli(
+              [
+                'context',
+                '--project',
+                project,
+                '--lens',
+                b.lens || 'general',
+                '--task',
+                String(b.message).slice(0, 500),
+                '--format',
+                'packet',
+                '--adapter',
+                b.harness
+              ],
+              { env: { HOLOSELF_SURFACE: 'workbench', HOLOSELF_HOST: b.harness } }
+            )
           ).stdout
         const history = prior
             .slice(-12)
@@ -459,6 +463,79 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
           JSON.stringify({ at: new Date().toISOString(), harness: b.harness, lens: b.lens || 'general', message: b.message, response: result.stdout }) + '\n'
         )
         return send(res, 200, { ok: true, data: { id, response: result.stdout } })
+      }
+      if (url.pathname === '/api/ledger' && req.method === 'GET') {
+        const catalog = reconcileCatalog(root),
+          spaceParam = (url.searchParams.get('space') || '').trim(),
+          lensParam = url.searchParams.get('lens') || null,
+          surfaceParam = url.searchParams.get('surface') || null,
+          sinceParam = url.searchParams.get('since') || null,
+          limitRaw = url.searchParams.get('limit')
+        const limitNum = clientCheck(() => {
+          if (limitRaw === null || limitRaw === '') return 100
+          const parsed = Number(limitRaw)
+          if (!Number.isInteger(parsed) || parsed < 1 || parsed > 1000) throw new Error('limit must be an integer between 1 and 1000')
+          return parsed
+        }, 'INVALID_LEDGER_FILTER')
+        const targets = []
+        if (!spaceParam || spaceParam === 'all') {
+          for (const item of catalog.spaces) targets.push({ id: item.id, name: item.name, path: item.path })
+          targets.push({ id: 'self', name: 'Canonical root', path: root })
+        } else if (spaceParam === 'self' || spaceParam === 'root') {
+          targets.push({ id: 'self', name: 'Canonical root', path: root })
+        } else {
+          const matched = catalog.spaces.find(
+            item =>
+              item.id === spaceParam ||
+              item.name === spaceParam ||
+              (existsSync(spaceParam) && samePath(canonicalPath(item.path), canonicalPath(spaceParam)))
+          )
+          if (!matched) throw new HttpError(400, 'SPACE_NOT_FOUND', 'space not found')
+          targets.push({ id: matched.id, name: matched.name, path: matched.path })
+        }
+        const collected = clientCheck(() => {
+          const list = []
+          for (const target of targets) {
+            if (!existsSync(target.path)) continue
+            const items = readLedgerEntries(target.path, {
+              since: sinceParam,
+              lens: lensParam,
+              surface: surfaceParam
+            })
+            for (const entry of items) {
+              list.push({
+                schema_version: entry.schema_version,
+                served_at: entry.served_at,
+                surface: entry.surface,
+                host: entry.host ?? null,
+                lens: entry.lens ?? null,
+                budget: entry.budget ?? 'standard',
+                need: entry.need ?? 'complete',
+                task_sha256: entry.task_sha256 ?? null,
+                context_hash: entry.context_hash ?? null,
+                packet_id: entry.packet_id ?? null,
+                source_ids: Array.isArray(entry.source_ids) ? entry.source_ids.filter(id => /^hs-[A-Za-z0-9_-]+$/.test(String(id))) : [],
+                counts: {
+                  documents_delivered: entry.counts?.documents_delivered ?? 0,
+                  restricted: entry.counts?.restricted ?? 0,
+                  envelope_dropped: entry.counts?.envelope_dropped ?? 0
+                },
+                total_bytes: entry.total_bytes ?? 0,
+                space_id: target.id,
+                space_name: target.name
+              })
+            }
+          }
+          list.sort((a, b) => String(a.served_at).localeCompare(String(b.served_at)))
+          return list.length > limitNum ? list.slice(-limitNum) : list
+        }, 'INVALID_LEDGER_FILTER')
+        return send(res, 200, {
+          ok: true,
+          data: {
+            entries: collected,
+            spaces: catalog.spaces.map(item => ({ id: item.id, name: item.name, lens: item.lens }))
+          }
+        })
       }
       if (url.pathname.startsWith('/api/')) return send(res, 404, { ok: false, error: { code: 'not_found', message: 'Unknown API route' } })
       let rel

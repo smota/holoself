@@ -14,6 +14,8 @@ Legacy `link --target` creates filesystem symlink/junction to complete data root
 
 Exports, snapshots, packets, indexes, reports, and project `.holoself/` content are private by default. Review before committing or sharing. Indexing skips recognized secret-like filenames/content and redacts policy metadata, but pattern detection cannot guarantee finding every secret.
 
+The served-context ledger (`<project>/.holoself/ledger.ndjson` or `<self>/.holoself/ledger.ndjson`) is strictly local and never transmitted. It records only packet metadata, hashed task digests (`task_sha256` by default), `context_hash`, `packet_id`, and delivered `hs-...` source handle IDs—never document bodies, snippets, file paths, or restricted-source identifiers. It can be disabled per project in `.holoself/link.yaml` (`ledger.enabled: false`).
+
 ## Mutations
 
 Migration copies only after confirmation and never deletes source. Proposal approval shows evidence, target, affected files, and diff, then requires confirmation. Root setup edits only bounded Holoself markers in instruction files. `--dry-run` previews supported operations; automation uses explicit `--yes`.

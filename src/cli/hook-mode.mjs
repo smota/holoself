@@ -4,6 +4,7 @@
 // (revoked link, missing binding, missing self root, missing project, bad arguments) produces no output at all.
 import { isAbsolute } from 'node:path'
 import { HOOK_ID } from '../adapters/hooks.mjs'
+import { recordServedPacket } from '../ledger.mjs'
 import { packetFormat } from '../render/packet.mjs'
 import { contextData } from '../retrieval/context.mjs'
 import { appendAuditLine } from '../shared/audit-log.mjs'
@@ -37,6 +38,20 @@ export function hookContext(o, env = process.env) {
     data = contextData(options),
     content = packetFormat(data, o.adapter || 'packet').trimEnd() + '\n'
   if (Buffer.byteLength(content) > HOOK_PACKET_MAX_BYTES) throw refuse('HOOK_PACKET_TOO_LARGE', 'session-start packet exceeds the hook output cap')
+  recordServedPacket({
+    data,
+    project,
+    surface: 'hook',
+    env,
+    onFailure: err =>
+      appendAuditLine(env.HOLOSELF_HOOK_AUDIT_LOG, {
+        event: 'ledger/write',
+        hook_id: HOOK_ID,
+        at: new Date().toISOString(),
+        ok: false,
+        error_code: err.code
+      })
+  })
   return { data, content }
 }
 
