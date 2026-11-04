@@ -283,9 +283,15 @@ export function rankCandidates(records, options = {}) {
       continue
     }
     const id = sourceId(record),
-      score = relevanceScore(record, options.task) + (options.task ? options.lexicalScores?.get(id) || 0 : 0)
+      score = relevanceScore(record, options.task)
     if (requested.size && !requested.has(id) && !requested.has(record.path)) continue
     candidates.push({ ...record, task_relevance: score, source_id: id, knowledge_status: temporal.status, temporal_scope: temporal.scope })
+  }
+  // Optional lexical signal (FTS5 BM25): scored only over candidates that passed the temporal and source filters above,
+  // so excluded documents never shape document counts, term statistics or scaling.
+  if (options.task && options.lexicalScorer && candidates.length) {
+    const bonuses = options.lexicalScorer(candidates)
+    if (bonuses) for (const candidate of candidates) candidate.task_relevance += bonuses.get(candidate.source_id) || 0
   }
   const byId = (a, b) => (a.source_id < b.source_id ? -1 : a.source_id > b.source_id ? 1 : 0) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
   candidates.sort((a, b) => (requested.size ? byId(a, b) : b.task_relevance - a.task_relevance || byId(a, b)))

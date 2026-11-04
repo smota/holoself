@@ -76,7 +76,7 @@ export async function runIndex(o, sub) {
     return true
   }
   const rebuild = sub === 'rebuild'
-  const index = buildIndex(project, o.changed && !rebuild)
+  const index = buildIndex(project, o.changed && !rebuild, { ensureFts: true })
   const warnings = (index.warnings || []).map(w => redactRootPaths(w, [link.path, project]))
   console.log(
     JSON.stringify(

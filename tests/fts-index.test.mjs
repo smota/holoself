@@ -12,9 +12,10 @@ import { fileURLToPath } from 'node:url'
 import { run } from '../src/cli.mjs'
 import { contextData } from '../src/ecosystem.mjs'
 import { ensureCatalog } from '../src/catalog/partitions.mjs'
-import { ENGINE_FTS5, FTS_FILE, STALE_TMP_MS, ftsIndexPath, ftsSupport, indexEngine, lexicalScores, normalizeText, openFtsIndex, removeStaleTempFiles, requestedEngine } from '../src/catalog/fts.mjs'
+import { ENGINE_FTS5, FTS_FILE, STALE_TMP_MS, ftsIndexPath, ftsSupport, indexEngine, lexicalBonuses, lexicalScores, normalizeText, openFtsIndex, removeStaleTempFiles, requestedEngine } from '../src/catalog/fts.mjs'
 import { loadLensRegistry } from '../src/lenses.mjs'
 import { buildIndex, searchIndex } from '../src/catalog/index.mjs'
+import { rankCandidates } from '../src/context-selection.mjs'
 
 const BIN = fileURLToPath(new URL('../bin/holoself.mjs', import.meta.url))
 const skip = ftsSupport() ? false : 'node:sqlite with FTS5 is unavailable on this Node build'
@@ -369,5 +370,51 @@ test('FTS5 on publication adapters scores only adapter-filtered claim and field 
   } finally {
     rmSync(withHidden.base, { recursive: true, force: true })
     rmSync(without.base, { recursive: true, force: true })
+  }
+})
+
+test('FTS5 context bonus is computed only over temporally included candidates: superseded documents do not shift scores', { skip }, () => {
+  const record = (path, heading, text, metadata = {}) => ({
+    kind: 'self',
+    path,
+    source_id: `hs-${path.replace(/\W/g, '')}`,
+    metadata,
+    search_text: `${path} ${heading} ${text}`,
+    sections: [{ section_id: 'a', heading, snippet: text }]
+  })
+  const x = record('context/x.md', 'Orchard', 'orchard ledger notes for the harvest')
+  const y = record('context/y.md', 'Ledger', 'ledger ledger guarantees and orchard planning')
+  const old = record('context/old.md', 'Old orchard', 'orchard orchard orchard ledger ledger ledger history', { knowledge_status: 'superseded' })
+  const seen = []
+  const scorer = eligible => {
+    seen.push(eligible.map(r => r.path))
+    const docs = eligible.map(r => ({ id: r.source_id, sections: r.sections.map(s => ({ source_id: r.source_id, section_id: s.section_id, heading: s.heading, text: s.snippet })) }))
+    return lexicalBonuses(lexicalScores(docs, 'orchard ledger'))
+  }
+  const rank = records => rankCandidates(records, { task: 'orchard ledger', lexicalScorer: scorer }).candidates.map(c => [c.path, c.task_relevance])
+  const without = rank([x, y])
+  const withOld = rank([x, y, old])
+  assert.deepEqual(withOld, without)
+  assert.ok(seen.every(paths => !paths.includes('context/old.md')), 'the superseded document never reaches the scorer')
+  // Under an explicit history request it is a candidate and is scored with the others.
+  const history = rankCandidates([x, y, old], { task: 'orchard ledger', temporal: 'all', includeHistory: true, lexicalScorer: scorer }).candidates
+  assert.ok(history.some(c => c.path === 'context/old.md'))
+  assert.ok(seen.at(-1).includes('context/old.md'))
+})
+
+test('FTS5 context packets are identical with and without a superseded document under the default temporal selector', { skip }, async () => {
+  const fx = await fixture('holoself-fts-superseded-')
+  try {
+    await withEngine(undefined, async () => {
+      const task = 'orchard ledger guarantees'
+      const withOld = context(fx, task)
+      rmSync(join(fx.root, 'context', 'old.md'))
+      const withoutOld = context(fx, task)
+      assert.equal(withOld.context_receipt.engine, 'fts5')
+      assert.deepEqual(withoutOld.selection.selected_sources, withOld.selection.selected_sources)
+      assert.equal(withoutOld.context_receipt.context_hash, withOld.context_receipt.context_hash)
+    })
+  } finally {
+    rmSync(fx.base, { recursive: true, force: true })
   }
 })

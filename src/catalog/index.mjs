@@ -12,7 +12,7 @@ import { hash, slash } from '../shared/fs.mjs'
 import { ensureFtsIndex, indexEngine, lexicalScores } from './fts.mjs'
 import { ensureCatalog } from './partitions.mjs'
 
-export function buildIndex(project, changed = false) {
+export function buildIndex(project, changed = false, options = {}) {
   const link = readLink(project),
     registry = loadLensRegistry(link.path)
   const result = ensureCatalog(link.path, project, link, registry, { rebuild: !changed })
@@ -27,8 +27,9 @@ export function buildIndex(project, changed = false) {
   const entries = [...selfEntries, ...projectEntries]
   entries.sort((a, b) => canonicalSort(`${a.source_kind}:${a.file}`, `${b.source_kind}:${b.file}`))
   const engine = indexEngine()
-  // The FTS5 file is a derived cache of the self catalog; `index rebuild` deletes and rebuilds it too.
-  if (engine === 'fts5') ensureFtsIndex(link.path, result.self, { rebuild: !changed })
+  // The FTS5 file is a derived cache of the self catalog: the `index` command refreshes it (`index rebuild` deletes and
+  // rebuilds it); search opens it lazily, so readIndex does not open it twice.
+  if (engine === 'fts5' && options.ensureFts) ensureFtsIndex(link.path, result.self, { rebuild: !changed })
   const input_state_hash = hash(
     canonicalJson({
       self: result.self.sources.map(s => [s.file, s.source_text_hash]),

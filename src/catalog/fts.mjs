@@ -17,7 +17,7 @@ import { join } from 'node:path'
 import { CATALOG_SCHEMA_VERSION, canonicalJson } from '../catalog.mjs'
 import { tokenize } from '../markdown/text.mjs'
 import { linkBelow, lstat } from '../path-guard.mjs'
-import { ensureDir, hash } from '../shared/fs.mjs'
+import { ensureDir, hash, sleepSync } from '../shared/fs.mjs'
 import { catalogRoot } from './source.mjs'
 
 export const ENGINE_FTS5 = 'fts5'
@@ -187,7 +187,7 @@ function buildDatabase(path, rows, fingerprint, sup) {
       db.close()
     }
     if (process.platform !== 'win32') chmodSync(tmp, 0o600)
-    renameSync(tmp, path)
+    replaceCacheFile(tmp, path)
   } catch (error) {
     rmSync(tmp, { force: true })
     throw error
@@ -222,6 +222,25 @@ export function removeStaleTempFiles(selfRoot, now = Date.now()) {
     } catch {}
   }
   return removed
+}
+
+// Windows refuses to replace a file another process holds open: retry briefly, then report the cache as busy
+// (the caller tokenizes in memory for this call, with identical scores).
+function replaceCacheFile(from, to) {
+  const backoffs = [20, 50, 100]
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return renameSync(from, to)
+    } catch (error) {
+      if (!['EPERM', 'EBUSY', 'EACCES'].includes(error.code)) throw error
+      if (attempt >= backoffs.length) {
+        const busy = new Error('FTS cache busy')
+        busy.code = 'FTS_CACHE_BUSY'
+        throw busy
+      }
+      sleepSync(backoffs[attempt])
+    }
+  }
 }
 
 function openReadOnly(path, sup) {
@@ -272,8 +291,8 @@ export function openFtsIndex(selfRoot, partition, options = {}) {
     removeStaleTempFiles(selfRoot)
     buildDatabase(path, partitionRows(partition), fingerprint, sup)
     return { db: openReadOnly(path, sup), status: 'rebuilt' }
-  } catch {
-    return { db: null, status: 'unwritable' }
+  } catch (error) {
+    return { db: null, status: error?.code === 'FTS_CACHE_BUSY' ? 'busy' : 'unwritable' }
   }
 }
 

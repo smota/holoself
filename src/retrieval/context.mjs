@@ -78,32 +78,36 @@ function gatherCandidates(o, { project, link, self, identity, registry, lens, re
 
   const rawCandidates = [...selfData.records, ...local.records, ...contribCandidates]
   const candidates = deduplicateCandidates(rawCandidates, subject.space_id)
-  const lexical = rankingSignal(o, self, catResult, candidates)
+  const lexical = rankingSignal(o, self, catResult)
 
   return { adapter, catResult, selfData, local, candidates, ...lexical }
 }
 
-// Optional FTS5 BM25 signal over the candidates that already passed the privacy gate (issue #69).
-// Section text is the caller's claim- and field-filtered snippet; hidden documents are never scored.
-function rankingSignal(o, self, catResult, candidates) {
+// Optional FTS5 BM25 signal (issue #69). The scorer runs inside rankCandidates on the candidates that already passed
+// the privacy gate and the temporal filter, using each section's claim- and field-filtered snippet.
+function rankingSignal(o, self, catResult) {
   const engine = indexEngine()
-  if (engine === 'deterministic-json' || !o.task || !candidates.length) return { engine, lexicalScores: null }
-  const docs = candidates.map(record => ({
-    id: record.source_id,
-    sections: (record.sections || []).map(section => ({
-      source_id: record.source_id,
-      section_id: section.section_id,
-      heading: section.heading,
-      text: section.snippet
+  if (engine === 'deterministic-json' || !o.task) return { engine, lexicalScorer: null, lexicalState: null }
+  const lexicalState = { failed: false }
+  const lexicalScorer = eligible => {
+    const docs = eligible.map(record => ({
+      id: record.source_id,
+      sections: (record.sections || []).map(section => ({
+        source_id: record.source_id,
+        section_id: section.section_id,
+        heading: section.heading,
+        text: section.snippet
+      }))
     }))
-  }))
-  const scores = lexicalScores(docs, o.task, { selfRoot: self, partition: catResult.self })
-  if (!scores) return { engine: 'deterministic-json', lexicalScores: null }
-  return { engine, lexicalScores: lexicalBonuses(scores) }
+    const scores = lexicalScores(docs, o.task, { selfRoot: self, partition: catResult.self })
+    if (!scores) lexicalState.failed = true
+    return lexicalBonuses(scores)
+  }
+  return { engine, lexicalScorer, lexicalState }
 }
 
 // Selection over the candidates, delivering each selected record through policy.
-function selectRecords(o, { project, self, identity, registry, lens, resolution, subject, adapter, catResult, candidates, engine, lexicalScores }) {
+function selectRecords(o, { project, self, identity, registry, lens, resolution, subject, adapter, catResult, candidates, engine, lexicalScorer, lexicalState }) {
   const cursorSecret = getOrCreateCursorSecret(self)
   const identityId = getIdentityId(identity, cursorSecret)
   const selfId = hash(slash(safeRealpath(self))).slice(0, 16)
@@ -134,14 +138,16 @@ function selectRecords(o, { project, self, identity, registry, lens, resolution,
     sessionStartSources: resolution.session_start_sources || null,
     now: o.now,
     engine,
-    lexicalScores
+    lexicalScorer
   }
 
   const selected = cachedSelection(candidates, selectionOptions)
   selected.selection.reconcile_reads = delivery.reconcileReads
   selected.selection.catalog_reads = catResult.catalog_reads || 0
 
-  return { cursorSecret, identityId, selfId, budgetName, selected, deliveryRestrictions }
+  // A failed FTS5 call ranks with the JSON engine and is reported as such.
+  const rankedEngine = lexicalState?.failed ? 'deterministic-json' : engine
+  return { cursorSecret, identityId, selfId, budgetName, selected, deliveryRestrictions, engine: rankedEngine }
 }
 
 // The packet before envelope fitting: documents, provenance index, restrictions, warnings, receipt and proposals.
