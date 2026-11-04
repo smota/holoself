@@ -236,9 +236,11 @@ export function findProposal(project, id) {
   return matches[0]
 }
 export function proposalProjectErrors(p, project) {
-  const errors = []
-  if (p.source_project !== basename(project)) errors.push('proposal source_project does not match linked project')
-  if (p.source_project_path && !samePath(canonicalPath(p.source_project_path), canonicalPath(project)))
+  const errors = [],
+    canonProject = canonicalPath(project)
+  if (!samePath(p.source_project, basename(project)) && !samePath(p.source_project, basename(canonProject)))
+    errors.push('proposal source_project does not match linked project')
+  if (p.source_project_path && !samePath(canonicalPath(p.source_project_path), canonProject))
     errors.push('proposal source_project_path does not match linked project')
   for (const source of p.source_files || []) {
     try {
@@ -405,17 +407,18 @@ export function emptyTarget(self) {
 // With an MCP `view`, claim lookups and duplicate checks see only what the link's lenses deliver; approval always
 // re-plans without a view, so the full checks still run before anything is written.
 export function planProposalChanges(p, self, view = null) {
-  const grouped = new Map(),
+  const root = canonicalPath(self),
+    grouped = new Map(),
     previews = [],
     steps = [],
     time = commitTimeToken(p),
     shown = text => (text === null ? null : text.replaceAll(time, '<commit-time>'))
   for (const change of proposalChanges(p)) {
-    const target = safeTarget(self, change.target),
-      rel = slash(relative(self, target)),
+    const target = safeTarget(root, change.target),
+      rel = slash(relative(root, target)),
       state = grouped.get(target),
       existed = state?.existed ?? existsSync(target),
-      before = state?.before ?? (existed ? readFileSync(target, 'utf8') : emptyTarget(self)),
+      before = state?.before ?? (existed ? readFileSync(target, 'utf8') : emptyTarget(root)),
       current = state?.after ?? before
     if (!state && before.includes(time)) throw claimError(`target already contains this proposal's reserved placeholder: ${rel}`, 'INVALID_TARGET')
     const applied = applyClaimChange(current, rel, { ...change, operation: change.operation || 'append_claim' }, p, view)
@@ -482,7 +485,7 @@ export function stateProposal(project, p, state, details = {}) {
   }
 }
 export function safeTarget(self, target) {
-  const root = resolve(self),
+  const root = canonicalPath(self),
     path = assertContainedPath(root, resolve(root, target), 'proposal target'),
     rel = slash(relative(root, path)),
     top = rel.split('/')[0]

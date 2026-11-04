@@ -1,7 +1,7 @@
 // Workbench review inbox: cross-space pending inbox, deterministic duplicate grouping, conflict hints and atomic batch actions (issue #71).
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, rmSync, symlinkSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { request } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
@@ -10,6 +10,7 @@ import { performance } from 'node:perf_hooks'
 import { run } from '../src/cli.mjs'
 import { ecosystemValidationErrors } from '../src/ecosystem.mjs'
 import { legacyClaimId } from '../src/markdown/claim-blocks.mjs'
+import { canonicalPath, samePath } from '../src/path-guard.mjs'
 import { similarity } from '../src/proposals/analysis.mjs'
 import {
   DEFAULT_INBOX_LIMIT,
@@ -19,7 +20,9 @@ import {
   MAX_INBOX_BATCH_SIZE,
   applyInboxBatch,
   buildReviewInbox,
-  computeDuplicateGroups
+  computeConflictHints,
+  computeDuplicateGroups,
+  resolveInboxSpaces
 } from '../src/proposals/inbox.mjs'
 import { createProposal, proposalPreviewData, proposalText } from '../src/proposals/store.mjs'
 import { slash } from '../src/shared/fs.mjs'
@@ -69,8 +72,8 @@ async function setupFixture() {
     await capture(() => run(['link', 'add', '--project', proj, '--self', self, '--lens', 'professional', '--no-activate', '--yes']))
   }
   const catalog = reconcileCatalog(self),
-    spaceEntryA = catalog.spaces.find(s => basename(s.path) === basename(projectA)),
-    spaceEntryB = catalog.spaces.find(s => basename(s.path) === basename(projectB)),
+    spaceEntryA = catalog.spaces.find(s => samePath(canonicalPath(s.path), canonicalPath(projectA))),
+    spaceEntryB = catalog.spaces.find(s => samePath(canonicalPath(s.path), canonicalPath(projectB))),
     app = await startServer({ root: self, port: 0 }),
     origin = new URL(app.url).origin,
     call = async (path, { method = 'GET', body, token = app.token, customOrigin = origin, headers = {} } = {}) => {
@@ -95,8 +98,8 @@ async function setupFixture() {
     self,
     projectA,
     projectB,
-    spaceA: basename(projectA),
-    spaceB: basename(projectB),
+    spaceA: spaceEntryA.name,
+    spaceB: spaceEntryB.name,
     spaceIdA: spaceEntryA.id,
     spaceIdB: spaceEntryB.id,
     claimsPath: join(self, 'context', 'claims.md'),
@@ -113,7 +116,14 @@ async function setupFixture() {
 }
 
 function assertNoAbsolutePaths(text, forbiddenPaths = []) {
-  for (const p of [...forbiddenPaths, tmpdir(), homedir()]) {
+  const expanded = forbiddenPaths.filter(Boolean).flatMap(p => {
+    try {
+      return [p, canonicalPath(p)]
+    } catch {
+      return [p]
+    }
+  })
+  for (const p of [...expanded, tmpdir(), homedir()]) {
     if (!p) continue
     assert.equal(text.includes(p), false, `response leaked path ${p}: ${text}`)
     assert.equal(text.includes(p.replaceAll('\\', '/')), false, `response leaked normalized path ${p}: ${text}`)
@@ -1014,4 +1024,93 @@ test('Inbox API enforces token auth, loopback Host allowlist, and Origin verific
   } finally {
     await f.close()
   }
+})
+
+test('symlinked ancestor roots (macOS /var -> /private/var), normalized space paths, and conflict-hint tie-breaks behave deterministically', async () => {
+  const base = await temp(),
+    realParent = join(base, 'private-var-folders'),
+    linkParent = join(base, 'var-folders')
+  await mkdir(realParent, { recursive: true })
+  let symlinkSupported = true
+  try {
+    symlinkSync(realParent, linkParent, 'dir')
+  } catch {
+    symlinkSupported = false
+  }
+  const activeParent = symlinkSupported ? linkParent : realParent,
+    selfViaLink = join(activeParent, 'self-Root-Mixed'),
+    projViaLink = join(activeParent, 'Project-MixedCase-A')
+  await mkdir(selfViaLink, { recursive: true })
+  await mkdir(join(projViaLink, 'Context'), { recursive: true })
+  await capture(() => run(['init', '--root', selfViaLink]))
+  await writeFile(
+    join(selfViaLink, 'context', 'claims.md'),
+    `${FRONT}# Claims\n\n${legacyBlock('professional', 'one', CLAIM_METRIC)}\n${legacyBlock('professional', 'two', CLAIM_MENTOR)}`
+  )
+  await writeFile(join(projViaLink, 'Context', 'evidence.md'), '# Evidence\n\nSynthetic evidence under symlinked parent.\n')
+  await capture(() => run(['link', 'add', '--project', projViaLink, '--self', selfViaLink, '--lens', 'professional', '--no-activate', '--yes']))
+
+  // Simulate catalog entry written with realpath while bindings or caller uses symlinked/normalized spelling.
+  const catalog = reconcileCatalog(selfViaLink),
+    matchedSpace = catalog.spaces.find(s => samePath(canonicalPath(s.path), canonicalPath(projViaLink)))
+  assert.ok(matchedSpace && matchedSpace.id, 'catalog space matched via samePath(canonicalPath(...))')
+
+  const resolvedSpaces = resolveInboxSpaces(selfViaLink)
+  assert.equal(resolvedSpaces.length, 1)
+  assert.equal(resolvedSpaces[0].id, matchedSpace.id)
+
+  const contra = createProposal(projViaLink, {
+      source_files: ['Context/evidence.md'],
+      claim: 'Leads a team of 14 platform reliability engineers across regulated systems.',
+      visibility: 'professional'
+    }),
+    prevContra = proposalPreviewData(projViaLink, contra.proposal_id)
+
+  const inbox = buildReviewInbox(selfViaLink, { spaces: catalog.spaces }),
+    item = inbox.items.find(x => x.id === contra.proposal_id)
+  assert.ok(item)
+  assert.deepEqual(item.targets, ['context/claims.md'])
+  assert.ok(
+    item.conflict_hints.some(h => h.kind === 'contradicts_current_claim' && /5.*14|14.*5/.test(h.evidence)),
+    `expected contradicts_current_claim under symlinked ancestor root, got ${JSON.stringify(item.conflict_hints)}`
+  )
+
+  // Deterministic conflict-hint ranking across reversed item/change orderings.
+  const rawForward = [
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        space: 'alpha',
+        space_id: 's1',
+        targets: ['context/claims.md'],
+        _rawChanges: [{ change_id: 'c1', target: 'context/claims.md', operation: 'replace_claim', claim_id: legacyClaimId('context/claims.md', CLAIM_METRIC), claim: 'Leads a team of 14 platform reliability engineers across regulated systems.' }]
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        space: 'beta',
+        space_id: 's2',
+        targets: ['context/claims.md'],
+        _rawChanges: [{ change_id: 'c1', target: 'context/claims.md', operation: 'retire_claim', claim_id: legacyClaimId('context/claims.md', CLAIM_METRIC), reason: 'Retired' }]
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000003',
+        space: 'gamma',
+        space_id: 's3',
+        targets: ['context/claims.md'],
+        _rawChanges: [{ change_id: 'c1', target: 'context/claims.md', operation: 'supersede_claim', claim_id: legacyClaimId('context/claims.md', CLAIM_METRIC), claim: 'Leads a team of 9 platform reliability engineers across regulated systems.' }]
+      }
+    ],
+    hintsForward = computeConflictHints(canonicalPath(selfViaLink), rawForward, { allItems: rawForward }),
+    hintsReverse = computeConflictHints(canonicalPath(selfViaLink), [...rawForward].reverse(), { allItems: [...rawForward].reverse() })
+  for (const entry of rawForward) {
+    assert.deepEqual(hintsForward.get(entry.id), hintsReverse.get(entry.id))
+  }
+
+  // Batch approve through symlinked selfViaLink root succeeds and passes validation.
+  const batchRes = await applyInboxBatch(selfViaLink, {
+    action: 'approve',
+    items: [{ id: contra.proposal_id, space: matchedSpace.id, preview_hash: prevContra.preview_hash }],
+    spaces: catalog.spaces
+  })
+  assert.equal(batchRes.count, 1)
+  assert.deepEqual(ecosystemValidationErrors(selfViaLink, projViaLink), [])
 })

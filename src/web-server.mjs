@@ -158,8 +158,9 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
         if (typeof b.path !== 'string' || !b.path.trim()) throw new HttpError(400, 'INVALID_INPUT', 'project path required')
         const path = resolve(b.path)
         await serializeSpaceMutation(() => cli(['link', 'add', '--project', path, '--self', root, '--lens', b.lens || 'general', '--yes']))
-        const c = reconcileCatalog(root)
-        return send(res, 201, { ok: true, data: c.spaces.find(x => normalizeProjectPath(x.path) === normalizeProjectPath(path)) })
+        const c = reconcileCatalog(root),
+          canonPath = canonicalPath(path)
+        return send(res, 201, { ok: true, data: c.spaces.find(x => samePath(canonicalPath(x.path), canonPath)) })
       }
       const spaceRoute = url.pathname.match(/^\/api\/spaces\/([^/]+)$/)
       if (spaceRoute && req.method === 'DELETE') {

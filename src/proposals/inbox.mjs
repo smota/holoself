@@ -71,18 +71,21 @@ function shouldFailBatchItem(index) {
 export function resolveInboxSpaces(root, { space = 'all', spaces = null } = {}) {
   if (space !== undefined && space !== null && typeof space !== 'string')
     throw inboxError('space filter must be a string', 'INVALID_INPUT')
-  let catalogByPath = new Map()
+  let catalogEntries = []
   if (!Array.isArray(spaces)) {
     try {
       const cat = readCatalog(root)
       if (Array.isArray(cat?.spaces)) {
-        catalogByPath = new Map(cat.spaces.filter(s => s?.path && s?.id).map(s => [normalizeProjectPath(s.path), s.id]))
+        catalogEntries = cat.spaces
+          .filter(s => typeof s?.path === 'string' && s.path.trim() && typeof s?.id === 'string' && s.id.trim())
+          .map(s => ({ id: s.id, name: s.name, canonPath: canonicalPath(s.path) }))
       }
     } catch {}
   }
   const catalogSpaces = Array.isArray(spaces)
       ? spaces.map(item => {
-          const normPath = normalizeProjectPath(item.path)
+          const canonPath = canonicalPath(item.path),
+            normPath = normalizeProjectPath(canonPath)
           return {
             id: item.id || `space-${hash(normPath).slice(0, 12)}`,
             name: item.name || basename(item.path),
@@ -91,19 +94,24 @@ export function resolveInboxSpaces(root, { space = 'all', spaces = null } = {}) 
           }
         })
       : Object.entries(readBindings(root).bindings).map(([project, binding]) => {
-          const normPath = normalizeProjectPath(project)
+          const canonPath = canonicalPath(project),
+            normPath = normalizeProjectPath(canonPath),
+            matchedCat = catalogEntries.find(s => samePath(s.canonPath, canonPath))
           return {
-            id: catalogByPath.get(normPath) || `space-${hash(normPath).slice(0, 12)}`,
-            name: basename(project),
+            id: matchedCat?.id || `space-${hash(normPath).slice(0, 12)}`,
+            name: matchedCat?.name || basename(project),
             path: resolve(project),
             lens: binding.default_lens
           }
         }),
     filter = (space ?? 'all').trim()
   if (filter && filter !== 'all') {
-    if (isAbsolute(filter)) throw inboxError('space not found', 'SPACE_NOT_FOUND')
+    if (isAbsolute(filter) || /^[a-z]:[\\/]/i.test(filter) || filter.startsWith('\\\\'))
+      throw inboxError('space not found', 'SPACE_NOT_FOUND')
     const byId = catalogSpaces.filter(item => item.id === filter),
-      matched = byId.length ? byId : catalogSpaces.filter(item => item.name === filter)
+      byExactName = byId.length ? [] : catalogSpaces.filter(item => item.name === filter),
+      byFoldedName = byId.length || byExactName.length ? [] : catalogSpaces.filter(item => samePath(item.name, filter)),
+      matched = byId.length ? byId : byExactName.length ? byExactName : byFoldedName
     if (!matched.length) throw inboxError('space not found', 'SPACE_NOT_FOUND')
     return [...matched].sort((a, b) => canonicalSort(a.name, b.name) || canonicalSort(a.id, b.id))
   }
@@ -452,6 +460,13 @@ export function computeConflictHints(root, items, { allItems = items, targetCach
         canonicalSort(a.kind, b.kind) ||
         canonicalSort(a.target || '', b.target || '') ||
         canonicalSort(a.claim_id || '', b.claim_id || '') ||
+        canonicalSort(a.code || '', b.code || '') ||
+        canonicalSort(a.conflicting_proposal_id || '', b.conflicting_proposal_id || '') ||
+        canonicalSort(a.conflicting_space_id || '', b.conflicting_space_id || '') ||
+        canonicalSort(a.conflicting_operation || '', b.conflicting_operation || '') ||
+        canonicalSort(a.existing_claim || '', b.existing_claim || '') ||
+        canonicalSort(a.evidence || '', b.evidence || '') ||
+        canonicalSort(a.contradiction_digest || '', b.contradiction_digest || '') ||
         canonicalSort(a.detail || '', b.detail || '')
     )
     hintsByItem.set(item.id, candidates.slice(0, MAX_CONFLICT_HINTS_PER_ITEM))
@@ -500,7 +515,7 @@ export function buildReviewInbox(root, { space = 'all', spaces = null, limit = D
         code: diag.code,
         severity: diag.severity,
         suggested_action: diag.suggested_action,
-        ...(diag.detail ? { detail: scrubMessage(diag.detail, [resolvedRoot, s.path]) } : {})
+        ...(diag.detail ? { detail: scrubMessage(diag.detail, [resolvedRoot, canonicalRoot, s.path, canonicalPath(s.path)]) } : {})
       })
     }
     for (const p of scan.managed) {
@@ -511,7 +526,7 @@ export function buildReviewInbox(root, { space = 'all', spaces = null, limit = D
           ...new Set(
             changes.map(c => {
               try {
-                return slash(relative(resolvedRoot, safeTarget(resolvedRoot, c.target || 'context/claims.md')))
+                return slash(relative(canonicalRoot, safeTarget(canonicalRoot, c.target || 'context/claims.md')))
               } catch {
                 return slash(c.target || 'context/claims.md')
               }
@@ -524,7 +539,7 @@ export function buildReviewInbox(root, { space = 'all', spaces = null, limit = D
         const op = c.operation || 'append_claim'
         if ((op === 'replace_claim' || op === 'supersede_claim') && c.claim_id && c.visibility) {
           const relTarget = slash(c.target || 'context/claims.md'),
-            targetData = loadTargetAnalysis(resolvedRoot, targetCache, relTarget),
+            targetData = loadTargetAnalysis(canonicalRoot, targetCache, relTarget),
             found = targetData.allById.get(c.claim_id) || []
           if (found.length === 1 && found[0].visibility && found[0].visibility !== c.visibility) {
             visibilityChanges.push({ from: found[0].visibility, to: c.visibility })
@@ -540,7 +555,7 @@ export function buildReviewInbox(root, { space = 'all', spaces = null, limit = D
           240
         ),
         evidenceText = shortExcerpt(
-          [...new Set(changes.map(c => scrubMessage(c.evidence || '', [resolvedRoot, s.path])).filter(Boolean))].join('; '),
+          [...new Set(changes.map(c => scrubMessage(c.evidence || '', [resolvedRoot, canonicalRoot, s.path, canonicalPath(s.path)])).filter(Boolean))].join('; '),
           240
         ),
         normClaim = proposalNormalizedClaim(p)
@@ -581,7 +596,7 @@ export function buildReviewInbox(root, { space = 'all', spaces = null, limit = D
     truncated = offsetNum + pagedRawItems.length < total,
     nextOffset = truncated ? offsetNum + pagedRawItems.length : null,
     duplicateMap = computeDuplicateGroups(rawItems, INBOX_DUPLICATE_THRESHOLD),
-    conflictMap = computeConflictHints(resolvedRoot, pagedRawItems, { allItems: rawItems, targetCache })
+    conflictMap = computeConflictHints(canonicalRoot, pagedRawItems, { allItems: rawItems, targetCache })
 
   const items = pagedRawItems.map(({ _normClaim, _tokens, _rawChanges, _previewError, ...item }) => {
     const dup = duplicateMap.get(item.id)
@@ -644,14 +659,17 @@ export function buildReviewInbox(root, { space = 'all', spaces = null, limit = D
 function resolveBatchItemSpace(canonicalRoot, resolvedRoot, item, catalogSpaces, { allowAbsoluteSpace = false } = {}) {
   if (typeof item?.space !== 'string' || !item.space.trim())
     throw inboxError('batch item space must be a non-empty string', 'INVALID_INPUT')
-  const ref = item.space.trim()
-  if (isAbsolute(ref) && !allowAbsoluteSpace) {
-    throw inboxError(`space not found: ${scrubMessage(ref, [resolvedRoot])}`, 'SPACE_NOT_FOUND')
+  const ref = item.space.trim(),
+    isAbsRef = isAbsolute(ref) || /^[a-z]:[\\/]/i.test(ref) || ref.startsWith('\\\\')
+  if (isAbsRef && !allowAbsoluteSpace) {
+    throw inboxError(`space not found: ${scrubMessage(ref, [resolvedRoot, canonicalRoot])}`, 'SPACE_NOT_FOUND')
   }
   const byId = catalogSpaces.filter(s => s.id === ref),
-    byName = byId.length ? [] : catalogSpaces.filter(s => s.name === ref),
+    byExactName = byId.length ? [] : catalogSpaces.filter(s => s.name === ref),
+    byFoldedName = byId.length || byExactName.length ? [] : catalogSpaces.filter(s => samePath(s.name, ref)),
+    byName = byExactName.length ? byExactName : byFoldedName,
     byPath =
-      !byId.length && !byName.length && allowAbsoluteSpace && isAbsolute(ref) && existsSync(ref)
+      !byId.length && !byName.length && allowAbsoluteSpace && isAbsRef && existsSync(ref)
         ? catalogSpaces.filter(s => samePath(canonicalPath(s.path), canonicalPath(ref)))
         : [],
     matched = byId.length ? byId : byName.length ? byName : byPath
@@ -676,9 +694,9 @@ function resolveBatchItemSpace(canonicalRoot, resolvedRoot, item, catalogSpaces,
         }
       })
     if (withProposal.length === 1) chosen = withProposal[0]
-    else throw inboxError(`ambiguous space for proposal: ${scrubMessage(ref, [resolvedRoot])}`, 'AMBIGUOUS_SPACE')
+    else throw inboxError(`ambiguous space for proposal: ${scrubMessage(ref, [resolvedRoot, canonicalRoot])}`, 'AMBIGUOUS_SPACE')
   } else {
-    throw inboxError(`space not found: ${scrubMessage(ref, [resolvedRoot])}`, 'SPACE_NOT_FOUND')
+    throw inboxError(`space not found: ${scrubMessage(ref, [resolvedRoot, canonicalRoot])}`, 'SPACE_NOT_FOUND')
   }
 
   if (!existsSync(chosen.path) || !existsSync(join(chosen.path, '.holoself', 'link.yaml')))
@@ -813,11 +831,13 @@ export async function applyInboxBatch(
           throw inboxError('proposal preview is stale', 'STALE_PREVIEW')
       }
       entry.proposalBefore = readFileSync(fresh._path)
-      entry.archive = join(resolvedRoot, 'proposals', state, `${fresh.proposal_id}.yaml`)
-      entry.receipt = join(resolvedRoot, 'proposals', 'receipts', `${fresh.proposal_id}-${state}.json`)
+      entry.archive = join(canonicalRoot, 'proposals', state, `${fresh.proposal_id}.yaml`)
+      entry.receipt = join(canonicalRoot, 'proposals', 'receipts', `${fresh.proposal_id}-${state}.json`)
       entry.archiveExistedBefore = existsSync(entry.archive)
       entry.receiptExistedBefore = existsSync(entry.receipt)
     }
+
+    const scrubRoots = [resolvedRoot, canonicalRoot, ...uniqueProjects, ...uniqueProjects.map(p => canonicalPath(p))]
 
     if (action !== 'approve') {
       try {
@@ -830,11 +850,11 @@ export async function applyInboxBatch(
         }
       } catch (error) {
         const rollbackFailures = []
-        rollbackProposalEntries(resolvedRoot, resolvedItems, state, rollbackFailures)
+        rollbackProposalEntries(canonicalRoot, resolvedItems, state, rollbackFailures)
         if (rollbackFailures.length) {
           const affected = [...new Set(rollbackFailures)]
           throw inboxError(
-            `batch rollback incomplete for: ${affected.join(', ')} (after error: ${scrubMessage(error.message, [resolvedRoot, ...uniqueProjects])})`,
+            `batch rollback incomplete for: ${affected.join(', ')} (after error: ${scrubMessage(error.message, scrubRoots)})`,
             'ROLLBACK_INCOMPLETE',
             { affected_paths: affected }
           )
@@ -856,7 +876,7 @@ export async function applyInboxBatch(
     }
 
     for (const proj of uniqueProjects) {
-      const preErrors = ecosystemValidationErrors(resolvedRoot, proj)
+      const preErrors = ecosystemValidationErrors(canonicalRoot, proj)
       if (preErrors.length)
         throw inboxError(`pre-approval validation failed: ${preErrors.join('; ')}`, 'VALIDATION_FAILED')
     }
@@ -881,8 +901,8 @@ export async function applyInboxBatch(
 
         for (const change of proposalChanges(p)) {
           const op = change.operation || 'append_claim',
-            target = safeTarget(resolvedRoot, change.target),
-            rel = slash(relative(resolvedRoot, target))
+            target = safeTarget(canonicalRoot, change.target),
+            rel = slash(relative(canonicalRoot, target))
           if (change.claim_id) {
             const claimKey = `${rel}\0${change.claim_id}`
             if (touchedClaims.has(claimKey))
@@ -892,8 +912,8 @@ export async function applyInboxBatch(
           let snap = targetSnapshots.get(target)
           if (!snap) {
             const existed = existsSync(target),
-              createdDirs = existed ? [] : missingTargetDirs(resolvedRoot, target),
-              before = existed ? readFileSync(target, 'utf8') : emptyTarget(resolvedRoot)
+              createdDirs = existed ? [] : missingTargetDirs(canonicalRoot, target),
+              before = existed ? readFileSync(target, 'utf8') : emptyTarget(canonicalRoot)
             if (before.includes(timeToken))
               throw inboxError(`target already contains this proposal's reserved placeholder: ${rel}`, 'INVALID_TARGET')
             snap = { target, rel, existed, createdDirs, before, current: before, written: false }
@@ -947,7 +967,7 @@ export async function applyInboxBatch(
       }
 
       for (const proj of uniqueProjects) {
-        const postErrors = ecosystemValidationErrors(resolvedRoot, proj)
+        const postErrors = ecosystemValidationErrors(canonicalRoot, proj)
         if (postErrors.length)
           throw inboxError(`post-approval validation failed: ${postErrors.join('; ')}`, 'VALIDATION_FAILED')
       }
@@ -970,11 +990,11 @@ export async function applyInboxBatch(
           rollbackFailures.push(snap.rel)
         }
       }
-      rollbackProposalEntries(resolvedRoot, resolvedItems, state, rollbackFailures)
+      rollbackProposalEntries(canonicalRoot, resolvedItems, state, rollbackFailures)
       if (rollbackFailures.length) {
         const affected = [...new Set(rollbackFailures)]
         throw inboxError(
-          `batch rollback incomplete for: ${affected.join(', ')} (after error: ${scrubMessage(error.message, [resolvedRoot, ...uniqueProjects])})`,
+          `batch rollback incomplete for: ${affected.join(', ')} (after error: ${scrubMessage(error.message, scrubRoots)})`,
           'ROLLBACK_INCOMPLETE',
           { affected_paths: affected }
         )
