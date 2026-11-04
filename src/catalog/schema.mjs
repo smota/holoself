@@ -1,7 +1,7 @@
 // Catalog schema validation: the allowed shape of catalog.json partitions and their source records.
 import { DISCLOSURES, VISIBILITIES } from '../annotations.mjs'
 
-export const CATALOG_SCHEMA_VERSION = 2
+export const CATALOG_SCHEMA_VERSION = 3
 export const HASH_RE = /^[0-9a-f]{64}$/
 export const SOURCE_ID_RE = /^hs-[0-9a-f]{20}$/
 export const NUM_RE = /^[0-9]+$/

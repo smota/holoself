@@ -455,3 +455,47 @@ test('intersectVisibility is never visible where either input is hidden', () => 
           if (visibleUnderBehavior(intersectVisibility(a, b), lens, adapter))
             assert.ok(visibleUnderBehavior(a, lens, adapter) && visibleUnderBehavior(b, lens, adapter), `${a} x ${b} on ${lens}/${adapter}`)
 })
+
+test('a catalog written with the previous schema version is rebuilt on first use, dropping stale unfiltered annotations', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'holoself-fields-stale-')),
+    project = await mkdtemp(join(tmpdir(), 'holoself-fields-stale-project-'))
+  await quiet(() => run(['init', '--root', root]))
+  await quiet(() => run(['link', 'add', '--self', root, '--project', project, '--lens', 'general', '--yes', '--no-activate']))
+  await writeFile(
+    join(root, 'context', 'stale.md'),
+    '---\naccess_lenses: [general, private]\ndisclosure: publish-approved\nsensitivity: personal\ndocument_role: content\nfield_visibility:\n  salary: private\n---\n# Stale\n\nOPEN_STALE overview sentence long enough to be a claim.\n- salary: STALE_SALARY figure #stalesecrettag [s](https://stale-secret.example)\n'
+  )
+  const contextJson = (adapter, manifest) => {
+    const cwd = process.cwd()
+    process.chdir(root)
+    try {
+      return JSON.stringify(contextData({ lens: 'general', adapter, task: 'overview', budget: 'unbounded', ...(manifest ? { manifest: true } : {}), json: true, root, rootExplicit: true }))
+    } finally {
+      process.chdir(cwd)
+    }
+  }
+  contextJson('generic', false)
+  const catalogPath = join(root, '.holoself', 'catalog', 'catalog.json')
+  const current = JSON.parse(await readFile(catalogPath, 'utf8'))
+  assert.equal(current.schema_version, 3)
+  // Simulate a catalog left behind by the previous release: schema 2 with annotations built from the raw field line.
+  const source = current.sources.find(s => s.file === 'context/stale.md')
+  // Current builds keep the field line's annotations but mark them with the field rule (private).
+  const governed = src => [...src.tags, ...src.links, ...src.claims].filter(x => /stalesecrettag|stale-secret|STALE_SALARY/.test(x.value || x.text))
+  assert.ok(governed(source).length > 0 && governed(source).every(x => x.visibility === 'private'))
+  source.tags.push({ value: 'stalesecrettag', visibility: 'public-safe' })
+  source.links.push({ value: 'https://stale-secret.example', visibility: 'public-safe' })
+  source.claims.push({ text: 'salary: STALE_SALARY figure #stalesecrettag', visibility: 'public-safe' })
+  for (const section of source.sections) section.visibility = 'public-safe'
+  await writeFile(catalogPath, JSON.stringify({ ...current, schema_version: 2 }, null, 2) + '\n')
+  for (const adapter of ['generic', ...PUBLICATION_ADAPTERS]) {
+    const outputs = [contextJson(adapter, false), contextJson(adapter, true), JSON.stringify(searchIndex(buildIndex(project), 'STALE_SALARY', 'general', null, null, 'current', { adapter }))]
+    for (const token of ['STALE_SALARY', 'stalesecrettag', 'stale-secret.example']) assert.ok(!outputs.join('\n').includes(token), `${adapter}: ${token}`)
+    assert.match(outputs[0], /OPEN_STALE/)
+  }
+  const rebuilt = await readFile(catalogPath, 'utf8')
+  assert.equal(JSON.parse(rebuilt).schema_version, 3)
+  const rebuiltSource = JSON.parse(rebuilt).sources.find(s => s.file === 'context/stale.md')
+  assert.ok(governed(rebuiltSource).every(x => x.visibility === 'private'), 'the stale public-safe annotations are gone')
+  assert.equal(governed(rebuiltSource).length, governed(source).length - 3)
+})
