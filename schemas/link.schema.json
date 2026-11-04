@@ -49,8 +49,14 @@
           "minimum": 1,
           "deprecated": true,
           "description": "Deprecated and ignored; the on-disk decision cache has been removed."
+        },
+        "ledger": {
+          "$ref": "#/$defs/ledger"
         }
       }
+    },
+    "ledger": {
+      "$ref": "#/$defs/ledger"
     },
     "cache_limit_entries": {
       "type": "integer",
@@ -96,6 +102,22 @@
             "type": "string",
             "minLength": 1
           }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "ledger": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "record_task_text": {
+          "type": "boolean",
+          "default": false
         }
       }
     }

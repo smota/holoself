@@ -62,7 +62,7 @@ Document, claim and field access rules apply to every lens. Documents tagged wit
 | `public-voice` | all five |
 | `private` | all five plus `restricted` |
 
-`public-voice` has no extra publication filter: a document that grants `public-voice` access is returned even if it holds compensation details or unapproved evidence. Narrow it by editing the lens's `sensitivity_access` or the document's visibility. `disclosure` is descriptive on standard adapters; public and restricted-host adapters additionally require `disclosure: publish-approved` and a non-confidential sensitivity. Reading context never authorizes external actions.
+`public-voice` has no extra publication filter: a document that grants `public-voice` access is returned even if it holds compensation details or unapproved evidence. Narrow it by editing the lens's `sensitivity_access` or the document's visibility. `disclosure` is descriptive on standard adapters; public and restricted-host adapters additionally require `disclosure: publish-approved` and a non-confidential sensitivity. On those adapters claims and `field_visibility` fields are delivered only when marked `public-safe`. Reading context never authorizes external actions.
 
 Legacy `visibility`, `public_safe`, `exclude_lenses`, and `field_visibility` remain readable. Canonical documents need modern controls or valid legacy visibility. `knowledge migrate-lenses` previews exact conversion from `career` to `professional` and `publishing` to `public-voice`, including claim markers. Ordinary prose and proposal archives remain intact. See [CLI](../reference/cli.md) and [migration](../guides/migration.md).
 

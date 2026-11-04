@@ -539,6 +539,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "small",
             "budget_chars": 8000,
             "manifest_only": false,
@@ -573,9 +574,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 48,
             "envelope_cap_bytes": 16384,
-            "total_bytes": 16283,
-            "estimated_tokens_total": 4071,
-            "estimated_tokens_total_heuristic": 4071,
+            "total_bytes": 16366,
+            "estimated_tokens_total": 4092,
+            "estimated_tokens_total_heuristic": 4092,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-7a75ce03419faa082bb6",
@@ -600,6 +601,8 @@
             "lens": "general",
             "budget": "small",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-27c16fd0b4a8ae63a0ff",
               "hs-bc1c9a180b028951279e",
@@ -1809,6 +1812,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "standard",
             "budget_chars": 24000,
             "manifest_only": false,
@@ -1858,9 +1862,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 49152,
-            "total_bytes": 48223,
-            "estimated_tokens_total": 12056,
-            "estimated_tokens_total_heuristic": 12056,
+            "total_bytes": 48306,
+            "estimated_tokens_total": 12077,
+            "estimated_tokens_total_heuristic": 12077,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-fc336fe8bb197b2be558",
@@ -1887,6 +1891,8 @@
             "lens": "general",
             "budget": "standard",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-27c16fd0b4a8ae63a0ff",
               "hs-bc1c9a180b028951279e",
@@ -4008,6 +4014,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "deep",
             "budget_chars": 64000,
             "manifest_only": false,
@@ -4072,9 +4079,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 131072,
-            "total_bytes": 79075,
-            "estimated_tokens_total": 19769,
-            "estimated_tokens_total_heuristic": 19769
+            "total_bytes": 79158,
+            "estimated_tokens_total": 19790,
+            "estimated_tokens_total_heuristic": 19790
           },
           "context_receipt": {
             "schema_version": 1,
@@ -4083,6 +4090,8 @@
             "lens": "general",
             "budget": "deep",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-27c16fd0b4a8ae63a0ff",
               "hs-bc1c9a180b028951279e",
@@ -5251,6 +5260,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "required",
+            "need_reason": "matched:personal:career",
             "budget": "standard",
             "budget_chars": 24000,
             "manifest_only": false,
@@ -5296,9 +5306,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 49152,
-            "total_bytes": 43445,
-            "estimated_tokens_total": 10862,
-            "estimated_tokens_total_heuristic": 10862
+            "total_bytes": 43561,
+            "estimated_tokens_total": 10891,
+            "estimated_tokens_total_heuristic": 10891
           },
           "context_receipt": {
             "schema_version": 1,
@@ -5307,6 +5317,8 @@
             "lens": "leadership",
             "budget": "standard",
             "temporal": "current",
+            "need": "required",
+            "need_reason": "matched:personal:career",
             "source_ids": [
               "hs-27c16fd0b4a8ae63a0ff",
               "hs-332c212316cf2c1496d6",
@@ -6703,6 +6715,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "standard",
             "budget_chars": 24000,
             "manifest_only": false,
@@ -6753,9 +6766,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 49152,
-            "total_bytes": 48127,
-            "estimated_tokens_total": 12032,
-            "estimated_tokens_total_heuristic": 12032,
+            "total_bytes": 48210,
+            "estimated_tokens_total": 12053,
+            "estimated_tokens_total_heuristic": 12053,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-fc336fe8bb197b2be558",
@@ -6776,6 +6789,8 @@
             "lens": "general",
             "budget": "standard",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-332c212316cf2c1496d6",
               "hs-612ca88404709f2b1f18",
@@ -7441,6 +7456,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "standard",
             "budget_chars": 24000,
             "manifest_only": false,
@@ -7476,9 +7492,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 49152,
-            "total_bytes": 19627,
-            "estimated_tokens_total": 4907,
-            "estimated_tokens_total_heuristic": 4907
+            "total_bytes": 19710,
+            "estimated_tokens_total": 4928,
+            "estimated_tokens_total_heuristic": 4928
           },
           "context_receipt": {
             "schema_version": 1,
@@ -7487,6 +7503,8 @@
             "lens": "general",
             "budget": "standard",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-ac00c86a1e240a4bb2ce",
               "hs-81e8de61dd564c7c7053",
@@ -7893,6 +7911,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "small",
             "budget_chars": 8000,
             "manifest_only": true,
@@ -7938,9 +7957,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 16384,
-            "total_bytes": 13339,
-            "estimated_tokens_total": 3335,
-            "estimated_tokens_total_heuristic": 3335,
+            "total_bytes": 13422,
+            "estimated_tokens_total": 3356,
+            "estimated_tokens_total_heuristic": 3356,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-3f2a088a316d3ca6a197",
@@ -7959,6 +7978,8 @@
             "lens": "general",
             "budget": "small",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-332c212316cf2c1496d6",
               "hs-612ca88404709f2b1f18",
@@ -8379,6 +8400,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "small",
             "budget_chars": 8000,
             "manifest_only": true,
@@ -8424,9 +8446,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 16384,
-            "total_bytes": 13568,
-            "estimated_tokens_total": 3392,
-            "estimated_tokens_total_heuristic": 3392,
+            "total_bytes": 13651,
+            "estimated_tokens_total": 3413,
+            "estimated_tokens_total_heuristic": 3413,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-6bdf5a62f4667d73ce33",
@@ -8445,6 +8467,8 @@
             "lens": "general",
             "budget": "small",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-81e8de61dd564c7c7053",
               "hs-e24f52d4067dff5ce871",
@@ -8486,7 +8510,7 @@
         "generic"
       ],
       "status": 0,
-      "stdout": "# Holoself context packet\n\nPacket ID: <UUID:1>\nContext receipt: c2bde16662908d4b6df115a9a2f66d29c5e85f0ccb7c82ddba5439a3acc2cdae (fresh resolution)\nContext gate: helpful; budget: standard; estimated tokens: 2607; selected sources: 33; packet bytes: 21986\nGenerated: <TIME>\nExpires: not applicable (live local resolution)\nHost mode: live-local\nLens: general\nTask: plan refactoring work\nPrivacy: access-filtered. Reading context does not authorize external action. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n- self:context/career-plan.md c7568d7bf2f2a181061745b6b13a8b7725f1af70879202cd39a9abaa17f1b368 (<TIME>)\n- self:profile/work-context.md 520e814952458c23a428e174fc9d5f7f9a619a9753c2a580fe3799b1dfc039aa (<TIME>)\n- self:profile/preferences.md b0374dfcdf2a2a7e01d4f0d955e8f66ec40107e58acbc1647f9471c71da08071 (<TIME>)\n- contrib:contribs/default/ifs.md 1da5ed01c10d27602124afea5eb096ba66c3fcdb4055b31427847a6bedfeea9e (<TIME>)\n- self:profile/thinking.md 007224040597ceca597865520995515ee0a8cdfba137d47f278183456f7c31b5 (<TIME>)\n- self:profile/voice.md 5f86ec9fb65262139fdbd64649667c7f82a9dff1f543cf85a026d19e0ca8bdb8 (<TIME>)\n- self:profile/identity.md e75c4c5210a01e53589fdb8107faf9f87f87d557884dfecd2263e043bd08a72c (<TIME>)\n- contrib:contribs/default/quarterly-reflection.md 89427edc9237b73fd109f8104781711382265c1b5c1d1c633ab677fda2a120cd (<TIME>)\n- self:profile/change.md 5307cc0c2283f7baae7b8b0fac76a749da1f7aa2112742c1def85bc2549db737 (<TIME>)\n- self:context/note-05.md daf13bd0ba6508153b107205b1471f457221d43bf94dbafe953b467afc54f598 (<TIME>)\n- self:context/note-01.md dcfde89b5ab9afea6a01bc79a7c1006fcd00558ee2e1abe828166b381f908f01 (<TIME>)\n- self:context/note-03.md 630ecbe1d435cc0e93a1146059f25d10cc3da9c2b2b6d511c47664d99af6b0b7 (<TIME>)\n- self:context/publishing.md 4db84da5cb07021e5477e2ee1a5da4d1df26bccf347b89470109c60142f71399 (<TIME>)\n- self:context/note-00.md ba0cc59067312591e4783a990c2b208e83107e3a3bd35553dba7f848f2fdc46c (<TIME>)\n- self:context/note-10.md 1b6a61f2670b6ce47df98328ff605e8bf522756877ef038861e3b7a4df94c1bf (<TIME>)\n- self:context/note-02.md fed8c377e49bc066f62dbb3ac6e96db42d97cf07b71b2cb77a95492de8886fb4 (<TIME>)\n- self:context/note-08.md 8b7ca1a4cbf3f8fb433080ccf12a4367c7796747cf45753b8799ef77e393345e (<TIME>)\n- self:context/note-07.md 3daa5b547b6624b0cc6f890e6a3a2a8d04f83a67b001e12495797e2ef98b7406 (<TIME>)\n- self:context/note-04.md 887d8d97a714f212951b8949917320bcbbdf2ef7749e18fd1869b04f52d3a0cd (<TIME>)\n- self:context/note-11.md 9ea0433286e2d6237bb73e46b2907d1d72a67cba6292a9b6d00f18509658377d (<TIME>)\n- self:context/note-13.md f37b9905554250fd23812cf371d8440e43cfa8154ed02f4ebbcacf2e2320ed25 (<TIME>)\n- self:context/note-12.md 331cbf87851c9ff06ab86aee948487d6b0fe636dba876278bd5aa80e6a6fbe92 (<TIME>)\n- self:context/note-09.md 7660b95c07f124afb4537d7af7dd6569cc64a8b18845d147fb39b3156bd3a2bb (<TIME>)\n- self:context/note-06.md db8d463917517cedae9c00581dc25184473fb6d8a0e68e84ac0c58cdeaec84c8 (<TIME>)\n- self:context/leadership.md 1089058342129607cf1986cca739d41fcd4438c7f954048d44c7a9e9055a49f5 (<TIME>)\n- self:context/projects.md e8fdccda72f1baf1d70a7c47271aad43c5b642cbc19522de63e75f4e24acc4f1 (<TIME>)\n- self:context/people.md 02bffea3074eff77f49260e22a87763cd6784c4c6a884676d205b24851c057f3 (<TIME>)\n- self:context/career.md 6bed6db8b85c00d9e7aed7edc44c62d63af359961dfba7a39b1897399de804fb (<TIME>)\n- self:context/technical.md b1fd31e8040393097d057befbeb3ad962434b6c6dd1932b269043652e187cae8 (<TIME>)\n- self:context/story-bank.md 7248e41a8cc82b827000cf68e3a00c46ba0d3a4f6fe53f55ef2c8f2ea7cc2b36 (<TIME>)\n- self:context/admin.md faee99ef2b025233faf99c90d5f95244969b5ff9d02a9360b8e4004a900e62ba (<TIME>)\n- self:context/collaboration.md 14c0b6ce8659d8197159c663eb22b289f5a7cf24c7f7c90cd409387cbe3c80e3 (<TIME>)\n- self:context/decisions.md 36a872636f0ac08eef0e76234a0e7effa15a88daa639e0a63b1152049b4d9e8f (<TIME>)\n\n## self: context/career-plan.md\n\nAccess lenses: general, leadership\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Career plan\n\nPARITY_CAREER Move toward staff engineering through architecture work.\n\n## Evidence\n\nLed the module split of a large file without behaviour change.\n\n## self: profile/work-context.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Work context\n\nDescribe current work and priorities.\n\n## self: profile/preferences.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Preferences\n\nDescribe how you prefer to work with AI tools.\n\n## self: profile/thinking.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Thinking\n\nDescribe how you reason and make decisions.\n\n## self: profile/voice.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Voice\n\nDescribe your writing voice.\n\n## self: profile/identity.md\n\nAccess lenses: general, professional, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Identity\n\nPARITY_IDENTITY I am a synthetic engineer who values careful refactoring.\n\n## Priorities\n\n- Ship small, reviewable changes. #craft\n- Keep behaviour stable during refactors.\n\n## self: profile/change.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Change compass\n\nDescribe current goals and patterns only if useful.\n\n## self: context/note-05.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 05\n\nPARITY_NOTE_05 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-01.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 01\n\nPARITY_NOTE_01 refactoring planning detail with steady wording with steady wording with steady wording\n\n## self: context/note-03.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 03\n\nPARITY_NOTE_03 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/publishing.md\n\nAccess lenses: general, public-voice, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Publishing\n\nKeep publishing goals, audiences, and format preferences.\n\n## self: context/note-00.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 00\n\nPARITY_NOTE_00 refactoring planning detail with steady wording with steady wording\n\n## self: context/note-10.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 10\n\nPARITY_NOTE_10 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-02.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 02\n\nPARITY_NOTE_02 refactoring planning detail with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-08.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 08\n\nPARITY_NOTE_08 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-07.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 07\n\nPARITY_NOTE_07 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-04.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 04\n\nPARITY_NOTE_04 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-11.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 11\n\nPARITY_NOTE_11 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-13.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 13\n\nPARITY_NOTE_13 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-12.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 12\n\nPARITY_NOTE_12 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-09.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 09\n\nPARITY_NOTE_09 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-06.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 06\n\nPARITY_NOTE_06 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/leadership.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Leadership\n\nKeep leadership and reflection context.\n\n## self: context/projects.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Projects\n\nList active projects and their context.\n\n## self: context/people.md\n\nAccess lenses: general, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# People\n\nRecord useful relationship context with care.\n\n## self: context/career.md\n\nAccess lenses: general, professional, public-voice, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Career\n\nKeep career context and evidence.\n\n## self: context/technical.md\n\nAccess lenses: general, professional, public-voice, technical, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Technical\n\nKeep technical context, constraints, and preferences.\n\n## self: context/story-bank.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Story bank\n\nKeep evidence-backed stories and examples.\n\n## self: context/admin.md\n\nAccess lenses: general, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Admin\n\nKeep relevant logistics and recurring details.\n\n## self: context/collaboration.md\n\nAccess lenses: general, professional\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Collaboration preferences\n\nPARITY_COLLAB Prefer written design notes before large changes.\nSee [identity](../profile/identity.md).\n\n## self: context/decisions.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Decisions\n\nRecord decisions, rationale, and date.\n\n## method: contribs/default/ifs.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Internal Family Systems (IFS) — Parts Work\n\nModel developed by Richard Schwartz. Apply when a behavioral pattern persists despite the user\nnaming and committing to change it — the pattern is being run by a *part*, not a failure of will.\n\n---\n\n## The Core Model\n\nThe mind contains multiple sub-personalities (parts), each with a role and a positive intent.\nThe job is not to eliminate parts — it is to unburden them so they can step back.\n\n**Self** is not a part. It is the calm, compassionate, curious center. When coaching from Self,\nthe person is curious about their parts rather than fused with them. Self shows up as the\n4 Cs: Calm, Curious, Compassionate, Clear.\n\n---\n\n## Three Part Types\n\n### Managers\nProtectors that control before anything bad can happen.\n\n- Show up as: perfectionism, over-preparation, people-pleasing, harsh self-criticism, workaholism\n- Positive intent: protect from shame, rejection, or failure\n- Coaching signal: \"I should...\" / \"I have to...\" / \"I can't let that happen\" / excessive justification\n\n### Firefighters\nReactive protectors — they respond after Exiles get activated. Fast suppression.\n\n- Show up as: procrastination, scrolling, impulsive decisions, overeating, overworking\n- Positive intent: stop pain immediately, before it lands\n- Coaching signal: sudden avoidance of something recently fine; behavior that happens \"before I realized it\"\n\n### Exiles\nThe wounded parts that carry pain, shame, or fear — often from earlier in life.\nManagers and Firefighters exist to keep Exiles locked away.\n\n- Coaching signal: outsized emotional reaction; disproportionate shame; \"I just feel worthless when this happens\"\n\n---\n\n## Coaching Application\n\nIFS in coaching is not therapy. Use it to name structure, not excavate the wound.\n\n**When you see a persistent pattern (3+ sessions, same loop):**\n\n1. Name that a part seems to be involved — don't diagnose: \"It sounds like part of you wants X, and another part keeps stopping you.\"\n2. Get curious about the part's intent: \"What is that part trying to protect you from?\"\n3. Acknowledge the positive intent: \"That part has been doing this job for a long time. Makes sense.\"\n4. Ask what it needs: \"What would need to be true for that part to step back a little?\"\n\n**Recognizing Manager behavior:**\n- Justifications for why action isn't possible yet\n- Self-criticism after misses that exceeds what the situation warrants\n- Need for more preparation before starting\n\n**Recognizing Firefighter behavior:**\n- Topic-jumping mid-session\n- Sudden fatigue or disengagement\n- \"I know I should but I just... don't\"\n\n**The key reframe for the user:**\nNot \"why can't you just do it\" → \"what part of you is making this feel unsafe, and what does it need?\"\n\n---\n\n## When to Apply\n\n- Same pattern has persisted after naming and committing (3+ sessions)\n- Shame appears disproportionate to the situation\n- User is in genuine inner conflict (\"I want to do X but I also don't\")\n- User self-attacks after misses beyond what is situationally warranted\n\nDo not push IFS when the user is in practical problem-solving mode. It is a tool for when\nthe emotional structure is the obstacle, not the tactical path.\n\n## method: contribs/default/quarterly-reflection.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Quarterly Reflection — Session Structure\n\nA 90-day retrospective and forward-look. Heavier than a standard coaching session.\nPlan 60–90 minutes. Run at the close of each quarter or at the end of a major arc.\n\n---\n\n## When to Use\n\n- End of March, June, September, December\n- After a major project, campaign, or job search closes\n- When the user says \"I feel like I've been running but don't know where\"\n- When patterns.md shows the same pattern for 6+ weeks — a quarterly reflection often surfaces the root\n\n---\n\n## Structure\n\n### 1. The Honest Audit (15 min)\nAsk: \"What did you actually build or finish in the last 90 days?\"\n\nForce specificity. Shipped products. Relationships formed. Skills acquired. Revenue moved.\nNo abstractions. Not \"I worked on X\" — did you complete it? Ship it? Change something with it?\n\nThen: \"What did you avoid?\" Same specificity. Not \"I procrastinated\" — on what, exactly?\n\nLet silence exist. The things left unsaid here are often the most important part of the audit.\n\n---\n\n### 2. What Surprised You (10 min)\nAsk: \"What happened that you didn't expect — good or bad?\"\n\nSurprises reveal where your model of reality was wrong. They are the most valuable data\nin the retrospective, because they are the places where your assumptions failed.\n\nThen: \"What does that tell you about how you think about [work / relationships / yourself]?\"\n\n---\n\n### 3. The Theory (10 min)\nAsk: \"Why did the quarter go the way it did?\"\n\nThis will contain rationalizations. Let the first answer land, then press:\n- \"Is that actually the reason, or is it the comfortable story?\"\n- \"What would have to be different for that outcome not to repeat?\"\n\nThe goal is a theory they actually believe, not a polished retrospective summary.\n\n---\n\n### 4. The Letter to Past You (10 min)\nAsk: \"What would you tell yourself 90 days ago that you didn't know then?\"\n\nThis surfaces the real learning — not what happened, but what they now understand that\nthey did not understand before. The shift in understanding, not the events, is the point.\n\nSay it out loud or write it. Do not skip this step. The act of articulating the letter\nis the work.\n\n---\n\n### 5. The 90-Day Anchor (15 min)\nAsk: \"What does success look like 90 days from now — in one sentence?\"\n\nThen test it:\n- \"Is that under your control?\"\n- \"Is that what you actually want, or what you think you should want?\"\n- \"What would you have to stop doing to make room for it?\"\n\nClose with one specific commitment for the first week. Quarters start with one action,\nnot a plan.\n\n---\n\n## Post-Session\n\nArchive the full notes in `topics/<name>/sessions/YYYY-MM-DD.md or context/leadership.md`.\n\nUpdate `context/leadership.md` with a one-line quarterly summary under Historical.\n\nDistill any pattern shifts or major insights to `context/insights/from-executive.md` —\nthis is the most likely session to produce cross-skill insight worth sharing.\n\n## Restrictions\n\n- context/restricted.md: access_lenses exclude general lens\n- contribs/default/enneagram.md: contrib selection limit reached\n- contribs/default/grow-model.md: contrib selection limit reached\n- contribs/default/feynman-clarity.md: contrib selection limit reached\n- contribs/default/weekly-review.md: contrib selection limit reached\n- contribs/default/nvc.md: contrib selection limit reached\n- contribs/default/immunity-to-change.md: contrib selection limit reached\n- contribs/default/socratic-inquiry.md: contrib selection limit reached\n- contribs/default/abt-framework.md: contrib selection limit reached\n- contribs/default/systems-thinking-overlay.md: contrib selection limit reached\n- contribs/default/minto-pyramid.md: contrib selection limit reached\n- contribs/default/communication.md: contrib selection limit reached\n- contribs/default/minto-scqa.md: contrib selection limit reached\n- contribs/default/stoic-frame.md: contrib selection limit reached\n- contribs/default/framework-orchestration.md: contrib selection limit reached\n",
+      "stdout": "# Holoself context packet\n\nPacket ID: <UUID:1>\nContext receipt: c2bde16662908d4b6df115a9a2f66d29c5e85f0ccb7c82ddba5439a3acc2cdae (fresh resolution)\nContext gate: helpful (default); budget: standard; estimated tokens: 2607; selected sources: 33; packet bytes: 21996\nGenerated: <TIME>\nExpires: not applicable (live local resolution)\nHost mode: live-local\nLens: general\nTask: plan refactoring work\nPrivacy: access-filtered. Reading context does not authorize external action. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n- self:context/career-plan.md c7568d7bf2f2a181061745b6b13a8b7725f1af70879202cd39a9abaa17f1b368 (<TIME>)\n- self:profile/work-context.md 520e814952458c23a428e174fc9d5f7f9a619a9753c2a580fe3799b1dfc039aa (<TIME>)\n- self:profile/preferences.md b0374dfcdf2a2a7e01d4f0d955e8f66ec40107e58acbc1647f9471c71da08071 (<TIME>)\n- contrib:contribs/default/ifs.md 1da5ed01c10d27602124afea5eb096ba66c3fcdb4055b31427847a6bedfeea9e (<TIME>)\n- self:profile/thinking.md 007224040597ceca597865520995515ee0a8cdfba137d47f278183456f7c31b5 (<TIME>)\n- self:profile/voice.md 5f86ec9fb65262139fdbd64649667c7f82a9dff1f543cf85a026d19e0ca8bdb8 (<TIME>)\n- self:profile/identity.md e75c4c5210a01e53589fdb8107faf9f87f87d557884dfecd2263e043bd08a72c (<TIME>)\n- contrib:contribs/default/quarterly-reflection.md 89427edc9237b73fd109f8104781711382265c1b5c1d1c633ab677fda2a120cd (<TIME>)\n- self:profile/change.md 5307cc0c2283f7baae7b8b0fac76a749da1f7aa2112742c1def85bc2549db737 (<TIME>)\n- self:context/note-05.md daf13bd0ba6508153b107205b1471f457221d43bf94dbafe953b467afc54f598 (<TIME>)\n- self:context/note-01.md dcfde89b5ab9afea6a01bc79a7c1006fcd00558ee2e1abe828166b381f908f01 (<TIME>)\n- self:context/note-03.md 630ecbe1d435cc0e93a1146059f25d10cc3da9c2b2b6d511c47664d99af6b0b7 (<TIME>)\n- self:context/publishing.md 4db84da5cb07021e5477e2ee1a5da4d1df26bccf347b89470109c60142f71399 (<TIME>)\n- self:context/note-00.md ba0cc59067312591e4783a990c2b208e83107e3a3bd35553dba7f848f2fdc46c (<TIME>)\n- self:context/note-10.md 1b6a61f2670b6ce47df98328ff605e8bf522756877ef038861e3b7a4df94c1bf (<TIME>)\n- self:context/note-02.md fed8c377e49bc066f62dbb3ac6e96db42d97cf07b71b2cb77a95492de8886fb4 (<TIME>)\n- self:context/note-08.md 8b7ca1a4cbf3f8fb433080ccf12a4367c7796747cf45753b8799ef77e393345e (<TIME>)\n- self:context/note-07.md 3daa5b547b6624b0cc6f890e6a3a2a8d04f83a67b001e12495797e2ef98b7406 (<TIME>)\n- self:context/note-04.md 887d8d97a714f212951b8949917320bcbbdf2ef7749e18fd1869b04f52d3a0cd (<TIME>)\n- self:context/note-11.md 9ea0433286e2d6237bb73e46b2907d1d72a67cba6292a9b6d00f18509658377d (<TIME>)\n- self:context/note-13.md f37b9905554250fd23812cf371d8440e43cfa8154ed02f4ebbcacf2e2320ed25 (<TIME>)\n- self:context/note-12.md 331cbf87851c9ff06ab86aee948487d6b0fe636dba876278bd5aa80e6a6fbe92 (<TIME>)\n- self:context/note-09.md 7660b95c07f124afb4537d7af7dd6569cc64a8b18845d147fb39b3156bd3a2bb (<TIME>)\n- self:context/note-06.md db8d463917517cedae9c00581dc25184473fb6d8a0e68e84ac0c58cdeaec84c8 (<TIME>)\n- self:context/leadership.md 1089058342129607cf1986cca739d41fcd4438c7f954048d44c7a9e9055a49f5 (<TIME>)\n- self:context/projects.md e8fdccda72f1baf1d70a7c47271aad43c5b642cbc19522de63e75f4e24acc4f1 (<TIME>)\n- self:context/people.md 02bffea3074eff77f49260e22a87763cd6784c4c6a884676d205b24851c057f3 (<TIME>)\n- self:context/career.md 6bed6db8b85c00d9e7aed7edc44c62d63af359961dfba7a39b1897399de804fb (<TIME>)\n- self:context/technical.md b1fd31e8040393097d057befbeb3ad962434b6c6dd1932b269043652e187cae8 (<TIME>)\n- self:context/story-bank.md 7248e41a8cc82b827000cf68e3a00c46ba0d3a4f6fe53f55ef2c8f2ea7cc2b36 (<TIME>)\n- self:context/admin.md faee99ef2b025233faf99c90d5f95244969b5ff9d02a9360b8e4004a900e62ba (<TIME>)\n- self:context/collaboration.md 14c0b6ce8659d8197159c663eb22b289f5a7cf24c7f7c90cd409387cbe3c80e3 (<TIME>)\n- self:context/decisions.md 36a872636f0ac08eef0e76234a0e7effa15a88daa639e0a63b1152049b4d9e8f (<TIME>)\n\n## self: context/career-plan.md\n\nAccess lenses: general, leadership\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Career plan\n\nPARITY_CAREER Move toward staff engineering through architecture work.\n\n## Evidence\n\nLed the module split of a large file without behaviour change.\n\n## self: profile/work-context.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Work context\n\nDescribe current work and priorities.\n\n## self: profile/preferences.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Preferences\n\nDescribe how you prefer to work with AI tools.\n\n## self: profile/thinking.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Thinking\n\nDescribe how you reason and make decisions.\n\n## self: profile/voice.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Voice\n\nDescribe your writing voice.\n\n## self: profile/identity.md\n\nAccess lenses: general, professional, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Identity\n\nPARITY_IDENTITY I am a synthetic engineer who values careful refactoring.\n\n## Priorities\n\n- Ship small, reviewable changes. #craft\n- Keep behaviour stable during refactors.\n\n## self: profile/change.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Change compass\n\nDescribe current goals and patterns only if useful.\n\n## self: context/note-05.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 05\n\nPARITY_NOTE_05 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-01.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 01\n\nPARITY_NOTE_01 refactoring planning detail with steady wording with steady wording with steady wording\n\n## self: context/note-03.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 03\n\nPARITY_NOTE_03 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/publishing.md\n\nAccess lenses: general, public-voice, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Publishing\n\nKeep publishing goals, audiences, and format preferences.\n\n## self: context/note-00.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 00\n\nPARITY_NOTE_00 refactoring planning detail with steady wording with steady wording\n\n## self: context/note-10.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 10\n\nPARITY_NOTE_10 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-02.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 02\n\nPARITY_NOTE_02 refactoring planning detail with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-08.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 08\n\nPARITY_NOTE_08 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-07.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 07\n\nPARITY_NOTE_07 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-04.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 04\n\nPARITY_NOTE_04 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-11.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 11\n\nPARITY_NOTE_11 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-13.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 13\n\nPARITY_NOTE_13 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-12.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 12\n\nPARITY_NOTE_12 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-09.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 09\n\nPARITY_NOTE_09 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-06.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 06\n\nPARITY_NOTE_06 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/leadership.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Leadership\n\nKeep leadership and reflection context.\n\n## self: context/projects.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Projects\n\nList active projects and their context.\n\n## self: context/people.md\n\nAccess lenses: general, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# People\n\nRecord useful relationship context with care.\n\n## self: context/career.md\n\nAccess lenses: general, professional, public-voice, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Career\n\nKeep career context and evidence.\n\n## self: context/technical.md\n\nAccess lenses: general, professional, public-voice, technical, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Technical\n\nKeep technical context, constraints, and preferences.\n\n## self: context/story-bank.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Story bank\n\nKeep evidence-backed stories and examples.\n\n## self: context/admin.md\n\nAccess lenses: general, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Admin\n\nKeep relevant logistics and recurring details.\n\n## self: context/collaboration.md\n\nAccess lenses: general, professional\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Collaboration preferences\n\nPARITY_COLLAB Prefer written design notes before large changes.\nSee [identity](../profile/identity.md).\n\n## self: context/decisions.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Decisions\n\nRecord decisions, rationale, and date.\n\n## method: contribs/default/ifs.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Internal Family Systems (IFS) — Parts Work\n\nModel developed by Richard Schwartz. Apply when a behavioral pattern persists despite the user\nnaming and committing to change it — the pattern is being run by a *part*, not a failure of will.\n\n---\n\n## The Core Model\n\nThe mind contains multiple sub-personalities (parts), each with a role and a positive intent.\nThe job is not to eliminate parts — it is to unburden them so they can step back.\n\n**Self** is not a part. It is the calm, compassionate, curious center. When coaching from Self,\nthe person is curious about their parts rather than fused with them. Self shows up as the\n4 Cs: Calm, Curious, Compassionate, Clear.\n\n---\n\n## Three Part Types\n\n### Managers\nProtectors that control before anything bad can happen.\n\n- Show up as: perfectionism, over-preparation, people-pleasing, harsh self-criticism, workaholism\n- Positive intent: protect from shame, rejection, or failure\n- Coaching signal: \"I should...\" / \"I have to...\" / \"I can't let that happen\" / excessive justification\n\n### Firefighters\nReactive protectors — they respond after Exiles get activated. Fast suppression.\n\n- Show up as: procrastination, scrolling, impulsive decisions, overeating, overworking\n- Positive intent: stop pain immediately, before it lands\n- Coaching signal: sudden avoidance of something recently fine; behavior that happens \"before I realized it\"\n\n### Exiles\nThe wounded parts that carry pain, shame, or fear — often from earlier in life.\nManagers and Firefighters exist to keep Exiles locked away.\n\n- Coaching signal: outsized emotional reaction; disproportionate shame; \"I just feel worthless when this happens\"\n\n---\n\n## Coaching Application\n\nIFS in coaching is not therapy. Use it to name structure, not excavate the wound.\n\n**When you see a persistent pattern (3+ sessions, same loop):**\n\n1. Name that a part seems to be involved — don't diagnose: \"It sounds like part of you wants X, and another part keeps stopping you.\"\n2. Get curious about the part's intent: \"What is that part trying to protect you from?\"\n3. Acknowledge the positive intent: \"That part has been doing this job for a long time. Makes sense.\"\n4. Ask what it needs: \"What would need to be true for that part to step back a little?\"\n\n**Recognizing Manager behavior:**\n- Justifications for why action isn't possible yet\n- Self-criticism after misses that exceeds what the situation warrants\n- Need for more preparation before starting\n\n**Recognizing Firefighter behavior:**\n- Topic-jumping mid-session\n- Sudden fatigue or disengagement\n- \"I know I should but I just... don't\"\n\n**The key reframe for the user:**\nNot \"why can't you just do it\" → \"what part of you is making this feel unsafe, and what does it need?\"\n\n---\n\n## When to Apply\n\n- Same pattern has persisted after naming and committing (3+ sessions)\n- Shame appears disproportionate to the situation\n- User is in genuine inner conflict (\"I want to do X but I also don't\")\n- User self-attacks after misses beyond what is situationally warranted\n\nDo not push IFS when the user is in practical problem-solving mode. It is a tool for when\nthe emotional structure is the obstacle, not the tactical path.\n\n## method: contribs/default/quarterly-reflection.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Quarterly Reflection — Session Structure\n\nA 90-day retrospective and forward-look. Heavier than a standard coaching session.\nPlan 60–90 minutes. Run at the close of each quarter or at the end of a major arc.\n\n---\n\n## When to Use\n\n- End of March, June, September, December\n- After a major project, campaign, or job search closes\n- When the user says \"I feel like I've been running but don't know where\"\n- When patterns.md shows the same pattern for 6+ weeks — a quarterly reflection often surfaces the root\n\n---\n\n## Structure\n\n### 1. The Honest Audit (15 min)\nAsk: \"What did you actually build or finish in the last 90 days?\"\n\nForce specificity. Shipped products. Relationships formed. Skills acquired. Revenue moved.\nNo abstractions. Not \"I worked on X\" — did you complete it? Ship it? Change something with it?\n\nThen: \"What did you avoid?\" Same specificity. Not \"I procrastinated\" — on what, exactly?\n\nLet silence exist. The things left unsaid here are often the most important part of the audit.\n\n---\n\n### 2. What Surprised You (10 min)\nAsk: \"What happened that you didn't expect — good or bad?\"\n\nSurprises reveal where your model of reality was wrong. They are the most valuable data\nin the retrospective, because they are the places where your assumptions failed.\n\nThen: \"What does that tell you about how you think about [work / relationships / yourself]?\"\n\n---\n\n### 3. The Theory (10 min)\nAsk: \"Why did the quarter go the way it did?\"\n\nThis will contain rationalizations. Let the first answer land, then press:\n- \"Is that actually the reason, or is it the comfortable story?\"\n- \"What would have to be different for that outcome not to repeat?\"\n\nThe goal is a theory they actually believe, not a polished retrospective summary.\n\n---\n\n### 4. The Letter to Past You (10 min)\nAsk: \"What would you tell yourself 90 days ago that you didn't know then?\"\n\nThis surfaces the real learning — not what happened, but what they now understand that\nthey did not understand before. The shift in understanding, not the events, is the point.\n\nSay it out loud or write it. Do not skip this step. The act of articulating the letter\nis the work.\n\n---\n\n### 5. The 90-Day Anchor (15 min)\nAsk: \"What does success look like 90 days from now — in one sentence?\"\n\nThen test it:\n- \"Is that under your control?\"\n- \"Is that what you actually want, or what you think you should want?\"\n- \"What would you have to stop doing to make room for it?\"\n\nClose with one specific commitment for the first week. Quarters start with one action,\nnot a plan.\n\n---\n\n## Post-Session\n\nArchive the full notes in `topics/<name>/sessions/YYYY-MM-DD.md or context/leadership.md`.\n\nUpdate `context/leadership.md` with a one-line quarterly summary under Historical.\n\nDistill any pattern shifts or major insights to `context/insights/from-executive.md` —\nthis is the most likely session to produce cross-skill insight worth sharing.\n\n## Restrictions\n\n- context/restricted.md: access_lenses exclude general lens\n- contribs/default/enneagram.md: contrib selection limit reached\n- contribs/default/grow-model.md: contrib selection limit reached\n- contribs/default/feynman-clarity.md: contrib selection limit reached\n- contribs/default/weekly-review.md: contrib selection limit reached\n- contribs/default/nvc.md: contrib selection limit reached\n- contribs/default/immunity-to-change.md: contrib selection limit reached\n- contribs/default/socratic-inquiry.md: contrib selection limit reached\n- contribs/default/abt-framework.md: contrib selection limit reached\n- contribs/default/systems-thinking-overlay.md: contrib selection limit reached\n- contribs/default/minto-pyramid.md: contrib selection limit reached\n- contribs/default/communication.md: contrib selection limit reached\n- contribs/default/minto-scqa.md: contrib selection limit reached\n- contribs/default/stoic-frame.md: contrib selection limit reached\n- contribs/default/framework-orchestration.md: contrib selection limit reached\n",
       "stderr": ""
     },
     {
@@ -8503,7 +8527,7 @@
         "claude"
       ],
       "status": 0,
-      "stdout": "# Claude Code context packet\n\nPacket ID: <UUID:1>\nContext receipt: c2bde16662908d4b6df115a9a2f66d29c5e85f0ccb7c82ddba5439a3acc2cdae (fresh resolution)\nContext gate: helpful; budget: standard; estimated tokens: 2607; selected sources: 33; packet bytes: 21989\nGenerated: <TIME>\nExpires: not applicable (live local resolution)\nHost mode: live-local\nLens: general\nTask: plan refactoring work\nPrivacy: access-filtered. Reading context does not authorize external action. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n- self:context/career-plan.md c7568d7bf2f2a181061745b6b13a8b7725f1af70879202cd39a9abaa17f1b368 (<TIME>)\n- self:profile/work-context.md 520e814952458c23a428e174fc9d5f7f9a619a9753c2a580fe3799b1dfc039aa (<TIME>)\n- self:profile/preferences.md b0374dfcdf2a2a7e01d4f0d955e8f66ec40107e58acbc1647f9471c71da08071 (<TIME>)\n- contrib:contribs/default/ifs.md 1da5ed01c10d27602124afea5eb096ba66c3fcdb4055b31427847a6bedfeea9e (<TIME>)\n- self:profile/thinking.md 007224040597ceca597865520995515ee0a8cdfba137d47f278183456f7c31b5 (<TIME>)\n- self:profile/voice.md 5f86ec9fb65262139fdbd64649667c7f82a9dff1f543cf85a026d19e0ca8bdb8 (<TIME>)\n- self:profile/identity.md e75c4c5210a01e53589fdb8107faf9f87f87d557884dfecd2263e043bd08a72c (<TIME>)\n- contrib:contribs/default/quarterly-reflection.md 89427edc9237b73fd109f8104781711382265c1b5c1d1c633ab677fda2a120cd (<TIME>)\n- self:profile/change.md 5307cc0c2283f7baae7b8b0fac76a749da1f7aa2112742c1def85bc2549db737 (<TIME>)\n- self:context/note-05.md daf13bd0ba6508153b107205b1471f457221d43bf94dbafe953b467afc54f598 (<TIME>)\n- self:context/note-01.md dcfde89b5ab9afea6a01bc79a7c1006fcd00558ee2e1abe828166b381f908f01 (<TIME>)\n- self:context/note-03.md 630ecbe1d435cc0e93a1146059f25d10cc3da9c2b2b6d511c47664d99af6b0b7 (<TIME>)\n- self:context/publishing.md 4db84da5cb07021e5477e2ee1a5da4d1df26bccf347b89470109c60142f71399 (<TIME>)\n- self:context/note-00.md ba0cc59067312591e4783a990c2b208e83107e3a3bd35553dba7f848f2fdc46c (<TIME>)\n- self:context/note-10.md 1b6a61f2670b6ce47df98328ff605e8bf522756877ef038861e3b7a4df94c1bf (<TIME>)\n- self:context/note-02.md fed8c377e49bc066f62dbb3ac6e96db42d97cf07b71b2cb77a95492de8886fb4 (<TIME>)\n- self:context/note-08.md 8b7ca1a4cbf3f8fb433080ccf12a4367c7796747cf45753b8799ef77e393345e (<TIME>)\n- self:context/note-07.md 3daa5b547b6624b0cc6f890e6a3a2a8d04f83a67b001e12495797e2ef98b7406 (<TIME>)\n- self:context/note-04.md 887d8d97a714f212951b8949917320bcbbdf2ef7749e18fd1869b04f52d3a0cd (<TIME>)\n- self:context/note-11.md 9ea0433286e2d6237bb73e46b2907d1d72a67cba6292a9b6d00f18509658377d (<TIME>)\n- self:context/note-13.md f37b9905554250fd23812cf371d8440e43cfa8154ed02f4ebbcacf2e2320ed25 (<TIME>)\n- self:context/note-12.md 331cbf87851c9ff06ab86aee948487d6b0fe636dba876278bd5aa80e6a6fbe92 (<TIME>)\n- self:context/note-09.md 7660b95c07f124afb4537d7af7dd6569cc64a8b18845d147fb39b3156bd3a2bb (<TIME>)\n- self:context/note-06.md db8d463917517cedae9c00581dc25184473fb6d8a0e68e84ac0c58cdeaec84c8 (<TIME>)\n- self:context/leadership.md 1089058342129607cf1986cca739d41fcd4438c7f954048d44c7a9e9055a49f5 (<TIME>)\n- self:context/projects.md e8fdccda72f1baf1d70a7c47271aad43c5b642cbc19522de63e75f4e24acc4f1 (<TIME>)\n- self:context/people.md 02bffea3074eff77f49260e22a87763cd6784c4c6a884676d205b24851c057f3 (<TIME>)\n- self:context/career.md 6bed6db8b85c00d9e7aed7edc44c62d63af359961dfba7a39b1897399de804fb (<TIME>)\n- self:context/technical.md b1fd31e8040393097d057befbeb3ad962434b6c6dd1932b269043652e187cae8 (<TIME>)\n- self:context/story-bank.md 7248e41a8cc82b827000cf68e3a00c46ba0d3a4f6fe53f55ef2c8f2ea7cc2b36 (<TIME>)\n- self:context/admin.md faee99ef2b025233faf99c90d5f95244969b5ff9d02a9360b8e4004a900e62ba (<TIME>)\n- self:context/collaboration.md 14c0b6ce8659d8197159c663eb22b289f5a7cf24c7f7c90cd409387cbe3c80e3 (<TIME>)\n- self:context/decisions.md 36a872636f0ac08eef0e76234a0e7effa15a88daa639e0a63b1152049b4d9e8f (<TIME>)\n\n## self: context/career-plan.md\n\nAccess lenses: general, leadership\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Career plan\n\nPARITY_CAREER Move toward staff engineering through architecture work.\n\n## Evidence\n\nLed the module split of a large file without behaviour change.\n\n## self: profile/work-context.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Work context\n\nDescribe current work and priorities.\n\n## self: profile/preferences.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Preferences\n\nDescribe how you prefer to work with AI tools.\n\n## self: profile/thinking.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Thinking\n\nDescribe how you reason and make decisions.\n\n## self: profile/voice.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Voice\n\nDescribe your writing voice.\n\n## self: profile/identity.md\n\nAccess lenses: general, professional, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Identity\n\nPARITY_IDENTITY I am a synthetic engineer who values careful refactoring.\n\n## Priorities\n\n- Ship small, reviewable changes. #craft\n- Keep behaviour stable during refactors.\n\n## self: profile/change.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Change compass\n\nDescribe current goals and patterns only if useful.\n\n## self: context/note-05.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 05\n\nPARITY_NOTE_05 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-01.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 01\n\nPARITY_NOTE_01 refactoring planning detail with steady wording with steady wording with steady wording\n\n## self: context/note-03.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 03\n\nPARITY_NOTE_03 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/publishing.md\n\nAccess lenses: general, public-voice, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Publishing\n\nKeep publishing goals, audiences, and format preferences.\n\n## self: context/note-00.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 00\n\nPARITY_NOTE_00 refactoring planning detail with steady wording with steady wording\n\n## self: context/note-10.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 10\n\nPARITY_NOTE_10 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-02.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 02\n\nPARITY_NOTE_02 refactoring planning detail with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-08.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 08\n\nPARITY_NOTE_08 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-07.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 07\n\nPARITY_NOTE_07 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-04.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 04\n\nPARITY_NOTE_04 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-11.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 11\n\nPARITY_NOTE_11 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-13.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 13\n\nPARITY_NOTE_13 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-12.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 12\n\nPARITY_NOTE_12 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-09.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 09\n\nPARITY_NOTE_09 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-06.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 06\n\nPARITY_NOTE_06 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/leadership.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Leadership\n\nKeep leadership and reflection context.\n\n## self: context/projects.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Projects\n\nList active projects and their context.\n\n## self: context/people.md\n\nAccess lenses: general, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# People\n\nRecord useful relationship context with care.\n\n## self: context/career.md\n\nAccess lenses: general, professional, public-voice, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Career\n\nKeep career context and evidence.\n\n## self: context/technical.md\n\nAccess lenses: general, professional, public-voice, technical, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Technical\n\nKeep technical context, constraints, and preferences.\n\n## self: context/story-bank.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Story bank\n\nKeep evidence-backed stories and examples.\n\n## self: context/admin.md\n\nAccess lenses: general, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Admin\n\nKeep relevant logistics and recurring details.\n\n## self: context/collaboration.md\n\nAccess lenses: general, professional\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Collaboration preferences\n\nPARITY_COLLAB Prefer written design notes before large changes.\nSee [identity](../profile/identity.md).\n\n## self: context/decisions.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Decisions\n\nRecord decisions, rationale, and date.\n\n## method: contribs/default/ifs.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Internal Family Systems (IFS) — Parts Work\n\nModel developed by Richard Schwartz. Apply when a behavioral pattern persists despite the user\nnaming and committing to change it — the pattern is being run by a *part*, not a failure of will.\n\n---\n\n## The Core Model\n\nThe mind contains multiple sub-personalities (parts), each with a role and a positive intent.\nThe job is not to eliminate parts — it is to unburden them so they can step back.\n\n**Self** is not a part. It is the calm, compassionate, curious center. When coaching from Self,\nthe person is curious about their parts rather than fused with them. Self shows up as the\n4 Cs: Calm, Curious, Compassionate, Clear.\n\n---\n\n## Three Part Types\n\n### Managers\nProtectors that control before anything bad can happen.\n\n- Show up as: perfectionism, over-preparation, people-pleasing, harsh self-criticism, workaholism\n- Positive intent: protect from shame, rejection, or failure\n- Coaching signal: \"I should...\" / \"I have to...\" / \"I can't let that happen\" / excessive justification\n\n### Firefighters\nReactive protectors — they respond after Exiles get activated. Fast suppression.\n\n- Show up as: procrastination, scrolling, impulsive decisions, overeating, overworking\n- Positive intent: stop pain immediately, before it lands\n- Coaching signal: sudden avoidance of something recently fine; behavior that happens \"before I realized it\"\n\n### Exiles\nThe wounded parts that carry pain, shame, or fear — often from earlier in life.\nManagers and Firefighters exist to keep Exiles locked away.\n\n- Coaching signal: outsized emotional reaction; disproportionate shame; \"I just feel worthless when this happens\"\n\n---\n\n## Coaching Application\n\nIFS in coaching is not therapy. Use it to name structure, not excavate the wound.\n\n**When you see a persistent pattern (3+ sessions, same loop):**\n\n1. Name that a part seems to be involved — don't diagnose: \"It sounds like part of you wants X, and another part keeps stopping you.\"\n2. Get curious about the part's intent: \"What is that part trying to protect you from?\"\n3. Acknowledge the positive intent: \"That part has been doing this job for a long time. Makes sense.\"\n4. Ask what it needs: \"What would need to be true for that part to step back a little?\"\n\n**Recognizing Manager behavior:**\n- Justifications for why action isn't possible yet\n- Self-criticism after misses that exceeds what the situation warrants\n- Need for more preparation before starting\n\n**Recognizing Firefighter behavior:**\n- Topic-jumping mid-session\n- Sudden fatigue or disengagement\n- \"I know I should but I just... don't\"\n\n**The key reframe for the user:**\nNot \"why can't you just do it\" → \"what part of you is making this feel unsafe, and what does it need?\"\n\n---\n\n## When to Apply\n\n- Same pattern has persisted after naming and committing (3+ sessions)\n- Shame appears disproportionate to the situation\n- User is in genuine inner conflict (\"I want to do X but I also don't\")\n- User self-attacks after misses beyond what is situationally warranted\n\nDo not push IFS when the user is in practical problem-solving mode. It is a tool for when\nthe emotional structure is the obstacle, not the tactical path.\n\n## method: contribs/default/quarterly-reflection.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Quarterly Reflection — Session Structure\n\nA 90-day retrospective and forward-look. Heavier than a standard coaching session.\nPlan 60–90 minutes. Run at the close of each quarter or at the end of a major arc.\n\n---\n\n## When to Use\n\n- End of March, June, September, December\n- After a major project, campaign, or job search closes\n- When the user says \"I feel like I've been running but don't know where\"\n- When patterns.md shows the same pattern for 6+ weeks — a quarterly reflection often surfaces the root\n\n---\n\n## Structure\n\n### 1. The Honest Audit (15 min)\nAsk: \"What did you actually build or finish in the last 90 days?\"\n\nForce specificity. Shipped products. Relationships formed. Skills acquired. Revenue moved.\nNo abstractions. Not \"I worked on X\" — did you complete it? Ship it? Change something with it?\n\nThen: \"What did you avoid?\" Same specificity. Not \"I procrastinated\" — on what, exactly?\n\nLet silence exist. The things left unsaid here are often the most important part of the audit.\n\n---\n\n### 2. What Surprised You (10 min)\nAsk: \"What happened that you didn't expect — good or bad?\"\n\nSurprises reveal where your model of reality was wrong. They are the most valuable data\nin the retrospective, because they are the places where your assumptions failed.\n\nThen: \"What does that tell you about how you think about [work / relationships / yourself]?\"\n\n---\n\n### 3. The Theory (10 min)\nAsk: \"Why did the quarter go the way it did?\"\n\nThis will contain rationalizations. Let the first answer land, then press:\n- \"Is that actually the reason, or is it the comfortable story?\"\n- \"What would have to be different for that outcome not to repeat?\"\n\nThe goal is a theory they actually believe, not a polished retrospective summary.\n\n---\n\n### 4. The Letter to Past You (10 min)\nAsk: \"What would you tell yourself 90 days ago that you didn't know then?\"\n\nThis surfaces the real learning — not what happened, but what they now understand that\nthey did not understand before. The shift in understanding, not the events, is the point.\n\nSay it out loud or write it. Do not skip this step. The act of articulating the letter\nis the work.\n\n---\n\n### 5. The 90-Day Anchor (15 min)\nAsk: \"What does success look like 90 days from now — in one sentence?\"\n\nThen test it:\n- \"Is that under your control?\"\n- \"Is that what you actually want, or what you think you should want?\"\n- \"What would you have to stop doing to make room for it?\"\n\nClose with one specific commitment for the first week. Quarters start with one action,\nnot a plan.\n\n---\n\n## Post-Session\n\nArchive the full notes in `topics/<name>/sessions/YYYY-MM-DD.md or context/leadership.md`.\n\nUpdate `context/leadership.md` with a one-line quarterly summary under Historical.\n\nDistill any pattern shifts or major insights to `context/insights/from-executive.md` —\nthis is the most likely session to produce cross-skill insight worth sharing.\n\n## Restrictions\n\n- context/restricted.md: access_lenses exclude general lens\n- contribs/default/enneagram.md: contrib selection limit reached\n- contribs/default/grow-model.md: contrib selection limit reached\n- contribs/default/feynman-clarity.md: contrib selection limit reached\n- contribs/default/weekly-review.md: contrib selection limit reached\n- contribs/default/nvc.md: contrib selection limit reached\n- contribs/default/immunity-to-change.md: contrib selection limit reached\n- contribs/default/socratic-inquiry.md: contrib selection limit reached\n- contribs/default/abt-framework.md: contrib selection limit reached\n- contribs/default/systems-thinking-overlay.md: contrib selection limit reached\n- contribs/default/minto-pyramid.md: contrib selection limit reached\n- contribs/default/communication.md: contrib selection limit reached\n- contribs/default/minto-scqa.md: contrib selection limit reached\n- contribs/default/stoic-frame.md: contrib selection limit reached\n- contribs/default/framework-orchestration.md: contrib selection limit reached\n",
+      "stdout": "# Claude Code context packet\n\nPacket ID: <UUID:1>\nContext receipt: c2bde16662908d4b6df115a9a2f66d29c5e85f0ccb7c82ddba5439a3acc2cdae (fresh resolution)\nContext gate: helpful (default); budget: standard; estimated tokens: 2607; selected sources: 33; packet bytes: 21999\nGenerated: <TIME>\nExpires: not applicable (live local resolution)\nHost mode: live-local\nLens: general\nTask: plan refactoring work\nPrivacy: access-filtered. Reading context does not authorize external action. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n- self:context/career-plan.md c7568d7bf2f2a181061745b6b13a8b7725f1af70879202cd39a9abaa17f1b368 (<TIME>)\n- self:profile/work-context.md 520e814952458c23a428e174fc9d5f7f9a619a9753c2a580fe3799b1dfc039aa (<TIME>)\n- self:profile/preferences.md b0374dfcdf2a2a7e01d4f0d955e8f66ec40107e58acbc1647f9471c71da08071 (<TIME>)\n- contrib:contribs/default/ifs.md 1da5ed01c10d27602124afea5eb096ba66c3fcdb4055b31427847a6bedfeea9e (<TIME>)\n- self:profile/thinking.md 007224040597ceca597865520995515ee0a8cdfba137d47f278183456f7c31b5 (<TIME>)\n- self:profile/voice.md 5f86ec9fb65262139fdbd64649667c7f82a9dff1f543cf85a026d19e0ca8bdb8 (<TIME>)\n- self:profile/identity.md e75c4c5210a01e53589fdb8107faf9f87f87d557884dfecd2263e043bd08a72c (<TIME>)\n- contrib:contribs/default/quarterly-reflection.md 89427edc9237b73fd109f8104781711382265c1b5c1d1c633ab677fda2a120cd (<TIME>)\n- self:profile/change.md 5307cc0c2283f7baae7b8b0fac76a749da1f7aa2112742c1def85bc2549db737 (<TIME>)\n- self:context/note-05.md daf13bd0ba6508153b107205b1471f457221d43bf94dbafe953b467afc54f598 (<TIME>)\n- self:context/note-01.md dcfde89b5ab9afea6a01bc79a7c1006fcd00558ee2e1abe828166b381f908f01 (<TIME>)\n- self:context/note-03.md 630ecbe1d435cc0e93a1146059f25d10cc3da9c2b2b6d511c47664d99af6b0b7 (<TIME>)\n- self:context/publishing.md 4db84da5cb07021e5477e2ee1a5da4d1df26bccf347b89470109c60142f71399 (<TIME>)\n- self:context/note-00.md ba0cc59067312591e4783a990c2b208e83107e3a3bd35553dba7f848f2fdc46c (<TIME>)\n- self:context/note-10.md 1b6a61f2670b6ce47df98328ff605e8bf522756877ef038861e3b7a4df94c1bf (<TIME>)\n- self:context/note-02.md fed8c377e49bc066f62dbb3ac6e96db42d97cf07b71b2cb77a95492de8886fb4 (<TIME>)\n- self:context/note-08.md 8b7ca1a4cbf3f8fb433080ccf12a4367c7796747cf45753b8799ef77e393345e (<TIME>)\n- self:context/note-07.md 3daa5b547b6624b0cc6f890e6a3a2a8d04f83a67b001e12495797e2ef98b7406 (<TIME>)\n- self:context/note-04.md 887d8d97a714f212951b8949917320bcbbdf2ef7749e18fd1869b04f52d3a0cd (<TIME>)\n- self:context/note-11.md 9ea0433286e2d6237bb73e46b2907d1d72a67cba6292a9b6d00f18509658377d (<TIME>)\n- self:context/note-13.md f37b9905554250fd23812cf371d8440e43cfa8154ed02f4ebbcacf2e2320ed25 (<TIME>)\n- self:context/note-12.md 331cbf87851c9ff06ab86aee948487d6b0fe636dba876278bd5aa80e6a6fbe92 (<TIME>)\n- self:context/note-09.md 7660b95c07f124afb4537d7af7dd6569cc64a8b18845d147fb39b3156bd3a2bb (<TIME>)\n- self:context/note-06.md db8d463917517cedae9c00581dc25184473fb6d8a0e68e84ac0c58cdeaec84c8 (<TIME>)\n- self:context/leadership.md 1089058342129607cf1986cca739d41fcd4438c7f954048d44c7a9e9055a49f5 (<TIME>)\n- self:context/projects.md e8fdccda72f1baf1d70a7c47271aad43c5b642cbc19522de63e75f4e24acc4f1 (<TIME>)\n- self:context/people.md 02bffea3074eff77f49260e22a87763cd6784c4c6a884676d205b24851c057f3 (<TIME>)\n- self:context/career.md 6bed6db8b85c00d9e7aed7edc44c62d63af359961dfba7a39b1897399de804fb (<TIME>)\n- self:context/technical.md b1fd31e8040393097d057befbeb3ad962434b6c6dd1932b269043652e187cae8 (<TIME>)\n- self:context/story-bank.md 7248e41a8cc82b827000cf68e3a00c46ba0d3a4f6fe53f55ef2c8f2ea7cc2b36 (<TIME>)\n- self:context/admin.md faee99ef2b025233faf99c90d5f95244969b5ff9d02a9360b8e4004a900e62ba (<TIME>)\n- self:context/collaboration.md 14c0b6ce8659d8197159c663eb22b289f5a7cf24c7f7c90cd409387cbe3c80e3 (<TIME>)\n- self:context/decisions.md 36a872636f0ac08eef0e76234a0e7effa15a88daa639e0a63b1152049b4d9e8f (<TIME>)\n\n## self: context/career-plan.md\n\nAccess lenses: general, leadership\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Career plan\n\nPARITY_CAREER Move toward staff engineering through architecture work.\n\n## Evidence\n\nLed the module split of a large file without behaviour change.\n\n## self: profile/work-context.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Work context\n\nDescribe current work and priorities.\n\n## self: profile/preferences.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Preferences\n\nDescribe how you prefer to work with AI tools.\n\n## self: profile/thinking.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Thinking\n\nDescribe how you reason and make decisions.\n\n## self: profile/voice.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Voice\n\nDescribe your writing voice.\n\n## self: profile/identity.md\n\nAccess lenses: general, professional, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Identity\n\nPARITY_IDENTITY I am a synthetic engineer who values careful refactoring.\n\n## Priorities\n\n- Ship small, reviewable changes. #craft\n- Keep behaviour stable during refactors.\n\n## self: profile/change.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Change compass\n\nDescribe current goals and patterns only if useful.\n\n## self: context/note-05.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 05\n\nPARITY_NOTE_05 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-01.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 01\n\nPARITY_NOTE_01 refactoring planning detail with steady wording with steady wording with steady wording\n\n## self: context/note-03.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 03\n\nPARITY_NOTE_03 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/publishing.md\n\nAccess lenses: general, public-voice, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Publishing\n\nKeep publishing goals, audiences, and format preferences.\n\n## self: context/note-00.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 00\n\nPARITY_NOTE_00 refactoring planning detail with steady wording with steady wording\n\n## self: context/note-10.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 10\n\nPARITY_NOTE_10 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-02.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 02\n\nPARITY_NOTE_02 refactoring planning detail with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-08.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 08\n\nPARITY_NOTE_08 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-07.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 07\n\nPARITY_NOTE_07 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-04.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 04\n\nPARITY_NOTE_04 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-11.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 11\n\nPARITY_NOTE_11 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-13.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 13\n\nPARITY_NOTE_13 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-12.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 12\n\nPARITY_NOTE_12 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-09.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 09\n\nPARITY_NOTE_09 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-06.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 06\n\nPARITY_NOTE_06 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/leadership.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Leadership\n\nKeep leadership and reflection context.\n\n## self: context/projects.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Projects\n\nList active projects and their context.\n\n## self: context/people.md\n\nAccess lenses: general, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# People\n\nRecord useful relationship context with care.\n\n## self: context/career.md\n\nAccess lenses: general, professional, public-voice, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Career\n\nKeep career context and evidence.\n\n## self: context/technical.md\n\nAccess lenses: general, professional, public-voice, technical, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Technical\n\nKeep technical context, constraints, and preferences.\n\n## self: context/story-bank.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Story bank\n\nKeep evidence-backed stories and examples.\n\n## self: context/admin.md\n\nAccess lenses: general, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Admin\n\nKeep relevant logistics and recurring details.\n\n## self: context/collaboration.md\n\nAccess lenses: general, professional\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Collaboration preferences\n\nPARITY_COLLAB Prefer written design notes before large changes.\nSee [identity](../profile/identity.md).\n\n## self: context/decisions.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Decisions\n\nRecord decisions, rationale, and date.\n\n## method: contribs/default/ifs.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Internal Family Systems (IFS) — Parts Work\n\nModel developed by Richard Schwartz. Apply when a behavioral pattern persists despite the user\nnaming and committing to change it — the pattern is being run by a *part*, not a failure of will.\n\n---\n\n## The Core Model\n\nThe mind contains multiple sub-personalities (parts), each with a role and a positive intent.\nThe job is not to eliminate parts — it is to unburden them so they can step back.\n\n**Self** is not a part. It is the calm, compassionate, curious center. When coaching from Self,\nthe person is curious about their parts rather than fused with them. Self shows up as the\n4 Cs: Calm, Curious, Compassionate, Clear.\n\n---\n\n## Three Part Types\n\n### Managers\nProtectors that control before anything bad can happen.\n\n- Show up as: perfectionism, over-preparation, people-pleasing, harsh self-criticism, workaholism\n- Positive intent: protect from shame, rejection, or failure\n- Coaching signal: \"I should...\" / \"I have to...\" / \"I can't let that happen\" / excessive justification\n\n### Firefighters\nReactive protectors — they respond after Exiles get activated. Fast suppression.\n\n- Show up as: procrastination, scrolling, impulsive decisions, overeating, overworking\n- Positive intent: stop pain immediately, before it lands\n- Coaching signal: sudden avoidance of something recently fine; behavior that happens \"before I realized it\"\n\n### Exiles\nThe wounded parts that carry pain, shame, or fear — often from earlier in life.\nManagers and Firefighters exist to keep Exiles locked away.\n\n- Coaching signal: outsized emotional reaction; disproportionate shame; \"I just feel worthless when this happens\"\n\n---\n\n## Coaching Application\n\nIFS in coaching is not therapy. Use it to name structure, not excavate the wound.\n\n**When you see a persistent pattern (3+ sessions, same loop):**\n\n1. Name that a part seems to be involved — don't diagnose: \"It sounds like part of you wants X, and another part keeps stopping you.\"\n2. Get curious about the part's intent: \"What is that part trying to protect you from?\"\n3. Acknowledge the positive intent: \"That part has been doing this job for a long time. Makes sense.\"\n4. Ask what it needs: \"What would need to be true for that part to step back a little?\"\n\n**Recognizing Manager behavior:**\n- Justifications for why action isn't possible yet\n- Self-criticism after misses that exceeds what the situation warrants\n- Need for more preparation before starting\n\n**Recognizing Firefighter behavior:**\n- Topic-jumping mid-session\n- Sudden fatigue or disengagement\n- \"I know I should but I just... don't\"\n\n**The key reframe for the user:**\nNot \"why can't you just do it\" → \"what part of you is making this feel unsafe, and what does it need?\"\n\n---\n\n## When to Apply\n\n- Same pattern has persisted after naming and committing (3+ sessions)\n- Shame appears disproportionate to the situation\n- User is in genuine inner conflict (\"I want to do X but I also don't\")\n- User self-attacks after misses beyond what is situationally warranted\n\nDo not push IFS when the user is in practical problem-solving mode. It is a tool for when\nthe emotional structure is the obstacle, not the tactical path.\n\n## method: contribs/default/quarterly-reflection.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Quarterly Reflection — Session Structure\n\nA 90-day retrospective and forward-look. Heavier than a standard coaching session.\nPlan 60–90 minutes. Run at the close of each quarter or at the end of a major arc.\n\n---\n\n## When to Use\n\n- End of March, June, September, December\n- After a major project, campaign, or job search closes\n- When the user says \"I feel like I've been running but don't know where\"\n- When patterns.md shows the same pattern for 6+ weeks — a quarterly reflection often surfaces the root\n\n---\n\n## Structure\n\n### 1. The Honest Audit (15 min)\nAsk: \"What did you actually build or finish in the last 90 days?\"\n\nForce specificity. Shipped products. Relationships formed. Skills acquired. Revenue moved.\nNo abstractions. Not \"I worked on X\" — did you complete it? Ship it? Change something with it?\n\nThen: \"What did you avoid?\" Same specificity. Not \"I procrastinated\" — on what, exactly?\n\nLet silence exist. The things left unsaid here are often the most important part of the audit.\n\n---\n\n### 2. What Surprised You (10 min)\nAsk: \"What happened that you didn't expect — good or bad?\"\n\nSurprises reveal where your model of reality was wrong. They are the most valuable data\nin the retrospective, because they are the places where your assumptions failed.\n\nThen: \"What does that tell you about how you think about [work / relationships / yourself]?\"\n\n---\n\n### 3. The Theory (10 min)\nAsk: \"Why did the quarter go the way it did?\"\n\nThis will contain rationalizations. Let the first answer land, then press:\n- \"Is that actually the reason, or is it the comfortable story?\"\n- \"What would have to be different for that outcome not to repeat?\"\n\nThe goal is a theory they actually believe, not a polished retrospective summary.\n\n---\n\n### 4. The Letter to Past You (10 min)\nAsk: \"What would you tell yourself 90 days ago that you didn't know then?\"\n\nThis surfaces the real learning — not what happened, but what they now understand that\nthey did not understand before. The shift in understanding, not the events, is the point.\n\nSay it out loud or write it. Do not skip this step. The act of articulating the letter\nis the work.\n\n---\n\n### 5. The 90-Day Anchor (15 min)\nAsk: \"What does success look like 90 days from now — in one sentence?\"\n\nThen test it:\n- \"Is that under your control?\"\n- \"Is that what you actually want, or what you think you should want?\"\n- \"What would you have to stop doing to make room for it?\"\n\nClose with one specific commitment for the first week. Quarters start with one action,\nnot a plan.\n\n---\n\n## Post-Session\n\nArchive the full notes in `topics/<name>/sessions/YYYY-MM-DD.md or context/leadership.md`.\n\nUpdate `context/leadership.md` with a one-line quarterly summary under Historical.\n\nDistill any pattern shifts or major insights to `context/insights/from-executive.md` —\nthis is the most likely session to produce cross-skill insight worth sharing.\n\n## Restrictions\n\n- context/restricted.md: access_lenses exclude general lens\n- contribs/default/enneagram.md: contrib selection limit reached\n- contribs/default/grow-model.md: contrib selection limit reached\n- contribs/default/feynman-clarity.md: contrib selection limit reached\n- contribs/default/weekly-review.md: contrib selection limit reached\n- contribs/default/nvc.md: contrib selection limit reached\n- contribs/default/immunity-to-change.md: contrib selection limit reached\n- contribs/default/socratic-inquiry.md: contrib selection limit reached\n- contribs/default/abt-framework.md: contrib selection limit reached\n- contribs/default/systems-thinking-overlay.md: contrib selection limit reached\n- contribs/default/minto-pyramid.md: contrib selection limit reached\n- contribs/default/communication.md: contrib selection limit reached\n- contribs/default/minto-scqa.md: contrib selection limit reached\n- contribs/default/stoic-frame.md: contrib selection limit reached\n- contribs/default/framework-orchestration.md: contrib selection limit reached\n",
       "stderr": ""
     },
     {
@@ -8520,7 +8544,7 @@
         "codex"
       ],
       "status": 0,
-      "stdout": "# Codex context packet\n\nPacket ID: <UUID:1>\nContext receipt: c2bde16662908d4b6df115a9a2f66d29c5e85f0ccb7c82ddba5439a3acc2cdae (fresh resolution)\nContext gate: helpful; budget: standard; estimated tokens: 2607; selected sources: 33; packet bytes: 21983\nGenerated: <TIME>\nExpires: not applicable (live local resolution)\nHost mode: live-local\nLens: general\nTask: plan refactoring work\nPrivacy: access-filtered. Reading context does not authorize external action. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n- self:context/career-plan.md c7568d7bf2f2a181061745b6b13a8b7725f1af70879202cd39a9abaa17f1b368 (<TIME>)\n- self:profile/work-context.md 520e814952458c23a428e174fc9d5f7f9a619a9753c2a580fe3799b1dfc039aa (<TIME>)\n- self:profile/preferences.md b0374dfcdf2a2a7e01d4f0d955e8f66ec40107e58acbc1647f9471c71da08071 (<TIME>)\n- contrib:contribs/default/ifs.md 1da5ed01c10d27602124afea5eb096ba66c3fcdb4055b31427847a6bedfeea9e (<TIME>)\n- self:profile/thinking.md 007224040597ceca597865520995515ee0a8cdfba137d47f278183456f7c31b5 (<TIME>)\n- self:profile/voice.md 5f86ec9fb65262139fdbd64649667c7f82a9dff1f543cf85a026d19e0ca8bdb8 (<TIME>)\n- self:profile/identity.md e75c4c5210a01e53589fdb8107faf9f87f87d557884dfecd2263e043bd08a72c (<TIME>)\n- contrib:contribs/default/quarterly-reflection.md 89427edc9237b73fd109f8104781711382265c1b5c1d1c633ab677fda2a120cd (<TIME>)\n- self:profile/change.md 5307cc0c2283f7baae7b8b0fac76a749da1f7aa2112742c1def85bc2549db737 (<TIME>)\n- self:context/note-05.md daf13bd0ba6508153b107205b1471f457221d43bf94dbafe953b467afc54f598 (<TIME>)\n- self:context/note-01.md dcfde89b5ab9afea6a01bc79a7c1006fcd00558ee2e1abe828166b381f908f01 (<TIME>)\n- self:context/note-03.md 630ecbe1d435cc0e93a1146059f25d10cc3da9c2b2b6d511c47664d99af6b0b7 (<TIME>)\n- self:context/publishing.md 4db84da5cb07021e5477e2ee1a5da4d1df26bccf347b89470109c60142f71399 (<TIME>)\n- self:context/note-00.md ba0cc59067312591e4783a990c2b208e83107e3a3bd35553dba7f848f2fdc46c (<TIME>)\n- self:context/note-10.md 1b6a61f2670b6ce47df98328ff605e8bf522756877ef038861e3b7a4df94c1bf (<TIME>)\n- self:context/note-02.md fed8c377e49bc066f62dbb3ac6e96db42d97cf07b71b2cb77a95492de8886fb4 (<TIME>)\n- self:context/note-08.md 8b7ca1a4cbf3f8fb433080ccf12a4367c7796747cf45753b8799ef77e393345e (<TIME>)\n- self:context/note-07.md 3daa5b547b6624b0cc6f890e6a3a2a8d04f83a67b001e12495797e2ef98b7406 (<TIME>)\n- self:context/note-04.md 887d8d97a714f212951b8949917320bcbbdf2ef7749e18fd1869b04f52d3a0cd (<TIME>)\n- self:context/note-11.md 9ea0433286e2d6237bb73e46b2907d1d72a67cba6292a9b6d00f18509658377d (<TIME>)\n- self:context/note-13.md f37b9905554250fd23812cf371d8440e43cfa8154ed02f4ebbcacf2e2320ed25 (<TIME>)\n- self:context/note-12.md 331cbf87851c9ff06ab86aee948487d6b0fe636dba876278bd5aa80e6a6fbe92 (<TIME>)\n- self:context/note-09.md 7660b95c07f124afb4537d7af7dd6569cc64a8b18845d147fb39b3156bd3a2bb (<TIME>)\n- self:context/note-06.md db8d463917517cedae9c00581dc25184473fb6d8a0e68e84ac0c58cdeaec84c8 (<TIME>)\n- self:context/leadership.md 1089058342129607cf1986cca739d41fcd4438c7f954048d44c7a9e9055a49f5 (<TIME>)\n- self:context/projects.md e8fdccda72f1baf1d70a7c47271aad43c5b642cbc19522de63e75f4e24acc4f1 (<TIME>)\n- self:context/people.md 02bffea3074eff77f49260e22a87763cd6784c4c6a884676d205b24851c057f3 (<TIME>)\n- self:context/career.md 6bed6db8b85c00d9e7aed7edc44c62d63af359961dfba7a39b1897399de804fb (<TIME>)\n- self:context/technical.md b1fd31e8040393097d057befbeb3ad962434b6c6dd1932b269043652e187cae8 (<TIME>)\n- self:context/story-bank.md 7248e41a8cc82b827000cf68e3a00c46ba0d3a4f6fe53f55ef2c8f2ea7cc2b36 (<TIME>)\n- self:context/admin.md faee99ef2b025233faf99c90d5f95244969b5ff9d02a9360b8e4004a900e62ba (<TIME>)\n- self:context/collaboration.md 14c0b6ce8659d8197159c663eb22b289f5a7cf24c7f7c90cd409387cbe3c80e3 (<TIME>)\n- self:context/decisions.md 36a872636f0ac08eef0e76234a0e7effa15a88daa639e0a63b1152049b4d9e8f (<TIME>)\n\n## self: context/career-plan.md\n\nAccess lenses: general, leadership\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Career plan\n\nPARITY_CAREER Move toward staff engineering through architecture work.\n\n## Evidence\n\nLed the module split of a large file without behaviour change.\n\n## self: profile/work-context.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Work context\n\nDescribe current work and priorities.\n\n## self: profile/preferences.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Preferences\n\nDescribe how you prefer to work with AI tools.\n\n## self: profile/thinking.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Thinking\n\nDescribe how you reason and make decisions.\n\n## self: profile/voice.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Voice\n\nDescribe your writing voice.\n\n## self: profile/identity.md\n\nAccess lenses: general, professional, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Identity\n\nPARITY_IDENTITY I am a synthetic engineer who values careful refactoring.\n\n## Priorities\n\n- Ship small, reviewable changes. #craft\n- Keep behaviour stable during refactors.\n\n## self: profile/change.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Change compass\n\nDescribe current goals and patterns only if useful.\n\n## self: context/note-05.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 05\n\nPARITY_NOTE_05 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-01.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 01\n\nPARITY_NOTE_01 refactoring planning detail with steady wording with steady wording with steady wording\n\n## self: context/note-03.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 03\n\nPARITY_NOTE_03 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/publishing.md\n\nAccess lenses: general, public-voice, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Publishing\n\nKeep publishing goals, audiences, and format preferences.\n\n## self: context/note-00.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 00\n\nPARITY_NOTE_00 refactoring planning detail with steady wording with steady wording\n\n## self: context/note-10.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 10\n\nPARITY_NOTE_10 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-02.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 02\n\nPARITY_NOTE_02 refactoring planning detail with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-08.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 08\n\nPARITY_NOTE_08 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-07.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 07\n\nPARITY_NOTE_07 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-04.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 04\n\nPARITY_NOTE_04 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-11.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 11\n\nPARITY_NOTE_11 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-13.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 13\n\nPARITY_NOTE_13 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-12.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 12\n\nPARITY_NOTE_12 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-09.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 09\n\nPARITY_NOTE_09 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-06.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 06\n\nPARITY_NOTE_06 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/leadership.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Leadership\n\nKeep leadership and reflection context.\n\n## self: context/projects.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Projects\n\nList active projects and their context.\n\n## self: context/people.md\n\nAccess lenses: general, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# People\n\nRecord useful relationship context with care.\n\n## self: context/career.md\n\nAccess lenses: general, professional, public-voice, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Career\n\nKeep career context and evidence.\n\n## self: context/technical.md\n\nAccess lenses: general, professional, public-voice, technical, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Technical\n\nKeep technical context, constraints, and preferences.\n\n## self: context/story-bank.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Story bank\n\nKeep evidence-backed stories and examples.\n\n## self: context/admin.md\n\nAccess lenses: general, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Admin\n\nKeep relevant logistics and recurring details.\n\n## self: context/collaboration.md\n\nAccess lenses: general, professional\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Collaboration preferences\n\nPARITY_COLLAB Prefer written design notes before large changes.\nSee [identity](../profile/identity.md).\n\n## self: context/decisions.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Decisions\n\nRecord decisions, rationale, and date.\n\n## method: contribs/default/ifs.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Internal Family Systems (IFS) — Parts Work\n\nModel developed by Richard Schwartz. Apply when a behavioral pattern persists despite the user\nnaming and committing to change it — the pattern is being run by a *part*, not a failure of will.\n\n---\n\n## The Core Model\n\nThe mind contains multiple sub-personalities (parts), each with a role and a positive intent.\nThe job is not to eliminate parts — it is to unburden them so they can step back.\n\n**Self** is not a part. It is the calm, compassionate, curious center. When coaching from Self,\nthe person is curious about their parts rather than fused with them. Self shows up as the\n4 Cs: Calm, Curious, Compassionate, Clear.\n\n---\n\n## Three Part Types\n\n### Managers\nProtectors that control before anything bad can happen.\n\n- Show up as: perfectionism, over-preparation, people-pleasing, harsh self-criticism, workaholism\n- Positive intent: protect from shame, rejection, or failure\n- Coaching signal: \"I should...\" / \"I have to...\" / \"I can't let that happen\" / excessive justification\n\n### Firefighters\nReactive protectors — they respond after Exiles get activated. Fast suppression.\n\n- Show up as: procrastination, scrolling, impulsive decisions, overeating, overworking\n- Positive intent: stop pain immediately, before it lands\n- Coaching signal: sudden avoidance of something recently fine; behavior that happens \"before I realized it\"\n\n### Exiles\nThe wounded parts that carry pain, shame, or fear — often from earlier in life.\nManagers and Firefighters exist to keep Exiles locked away.\n\n- Coaching signal: outsized emotional reaction; disproportionate shame; \"I just feel worthless when this happens\"\n\n---\n\n## Coaching Application\n\nIFS in coaching is not therapy. Use it to name structure, not excavate the wound.\n\n**When you see a persistent pattern (3+ sessions, same loop):**\n\n1. Name that a part seems to be involved — don't diagnose: \"It sounds like part of you wants X, and another part keeps stopping you.\"\n2. Get curious about the part's intent: \"What is that part trying to protect you from?\"\n3. Acknowledge the positive intent: \"That part has been doing this job for a long time. Makes sense.\"\n4. Ask what it needs: \"What would need to be true for that part to step back a little?\"\n\n**Recognizing Manager behavior:**\n- Justifications for why action isn't possible yet\n- Self-criticism after misses that exceeds what the situation warrants\n- Need for more preparation before starting\n\n**Recognizing Firefighter behavior:**\n- Topic-jumping mid-session\n- Sudden fatigue or disengagement\n- \"I know I should but I just... don't\"\n\n**The key reframe for the user:**\nNot \"why can't you just do it\" → \"what part of you is making this feel unsafe, and what does it need?\"\n\n---\n\n## When to Apply\n\n- Same pattern has persisted after naming and committing (3+ sessions)\n- Shame appears disproportionate to the situation\n- User is in genuine inner conflict (\"I want to do X but I also don't\")\n- User self-attacks after misses beyond what is situationally warranted\n\nDo not push IFS when the user is in practical problem-solving mode. It is a tool for when\nthe emotional structure is the obstacle, not the tactical path.\n\n## method: contribs/default/quarterly-reflection.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Quarterly Reflection — Session Structure\n\nA 90-day retrospective and forward-look. Heavier than a standard coaching session.\nPlan 60–90 minutes. Run at the close of each quarter or at the end of a major arc.\n\n---\n\n## When to Use\n\n- End of March, June, September, December\n- After a major project, campaign, or job search closes\n- When the user says \"I feel like I've been running but don't know where\"\n- When patterns.md shows the same pattern for 6+ weeks — a quarterly reflection often surfaces the root\n\n---\n\n## Structure\n\n### 1. The Honest Audit (15 min)\nAsk: \"What did you actually build or finish in the last 90 days?\"\n\nForce specificity. Shipped products. Relationships formed. Skills acquired. Revenue moved.\nNo abstractions. Not \"I worked on X\" — did you complete it? Ship it? Change something with it?\n\nThen: \"What did you avoid?\" Same specificity. Not \"I procrastinated\" — on what, exactly?\n\nLet silence exist. The things left unsaid here are often the most important part of the audit.\n\n---\n\n### 2. What Surprised You (10 min)\nAsk: \"What happened that you didn't expect — good or bad?\"\n\nSurprises reveal where your model of reality was wrong. They are the most valuable data\nin the retrospective, because they are the places where your assumptions failed.\n\nThen: \"What does that tell you about how you think about [work / relationships / yourself]?\"\n\n---\n\n### 3. The Theory (10 min)\nAsk: \"Why did the quarter go the way it did?\"\n\nThis will contain rationalizations. Let the first answer land, then press:\n- \"Is that actually the reason, or is it the comfortable story?\"\n- \"What would have to be different for that outcome not to repeat?\"\n\nThe goal is a theory they actually believe, not a polished retrospective summary.\n\n---\n\n### 4. The Letter to Past You (10 min)\nAsk: \"What would you tell yourself 90 days ago that you didn't know then?\"\n\nThis surfaces the real learning — not what happened, but what they now understand that\nthey did not understand before. The shift in understanding, not the events, is the point.\n\nSay it out loud or write it. Do not skip this step. The act of articulating the letter\nis the work.\n\n---\n\n### 5. The 90-Day Anchor (15 min)\nAsk: \"What does success look like 90 days from now — in one sentence?\"\n\nThen test it:\n- \"Is that under your control?\"\n- \"Is that what you actually want, or what you think you should want?\"\n- \"What would you have to stop doing to make room for it?\"\n\nClose with one specific commitment for the first week. Quarters start with one action,\nnot a plan.\n\n---\n\n## Post-Session\n\nArchive the full notes in `topics/<name>/sessions/YYYY-MM-DD.md or context/leadership.md`.\n\nUpdate `context/leadership.md` with a one-line quarterly summary under Historical.\n\nDistill any pattern shifts or major insights to `context/insights/from-executive.md` —\nthis is the most likely session to produce cross-skill insight worth sharing.\n\n## Restrictions\n\n- context/restricted.md: access_lenses exclude general lens\n- contribs/default/enneagram.md: contrib selection limit reached\n- contribs/default/grow-model.md: contrib selection limit reached\n- contribs/default/feynman-clarity.md: contrib selection limit reached\n- contribs/default/weekly-review.md: contrib selection limit reached\n- contribs/default/nvc.md: contrib selection limit reached\n- contribs/default/immunity-to-change.md: contrib selection limit reached\n- contribs/default/socratic-inquiry.md: contrib selection limit reached\n- contribs/default/abt-framework.md: contrib selection limit reached\n- contribs/default/systems-thinking-overlay.md: contrib selection limit reached\n- contribs/default/minto-pyramid.md: contrib selection limit reached\n- contribs/default/communication.md: contrib selection limit reached\n- contribs/default/minto-scqa.md: contrib selection limit reached\n- contribs/default/stoic-frame.md: contrib selection limit reached\n- contribs/default/framework-orchestration.md: contrib selection limit reached\n",
+      "stdout": "# Codex context packet\n\nPacket ID: <UUID:1>\nContext receipt: c2bde16662908d4b6df115a9a2f66d29c5e85f0ccb7c82ddba5439a3acc2cdae (fresh resolution)\nContext gate: helpful (default); budget: standard; estimated tokens: 2607; selected sources: 33; packet bytes: 21993\nGenerated: <TIME>\nExpires: not applicable (live local resolution)\nHost mode: live-local\nLens: general\nTask: plan refactoring work\nPrivacy: access-filtered. Reading context does not authorize external action. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n- self:context/career-plan.md c7568d7bf2f2a181061745b6b13a8b7725f1af70879202cd39a9abaa17f1b368 (<TIME>)\n- self:profile/work-context.md 520e814952458c23a428e174fc9d5f7f9a619a9753c2a580fe3799b1dfc039aa (<TIME>)\n- self:profile/preferences.md b0374dfcdf2a2a7e01d4f0d955e8f66ec40107e58acbc1647f9471c71da08071 (<TIME>)\n- contrib:contribs/default/ifs.md 1da5ed01c10d27602124afea5eb096ba66c3fcdb4055b31427847a6bedfeea9e (<TIME>)\n- self:profile/thinking.md 007224040597ceca597865520995515ee0a8cdfba137d47f278183456f7c31b5 (<TIME>)\n- self:profile/voice.md 5f86ec9fb65262139fdbd64649667c7f82a9dff1f543cf85a026d19e0ca8bdb8 (<TIME>)\n- self:profile/identity.md e75c4c5210a01e53589fdb8107faf9f87f87d557884dfecd2263e043bd08a72c (<TIME>)\n- contrib:contribs/default/quarterly-reflection.md 89427edc9237b73fd109f8104781711382265c1b5c1d1c633ab677fda2a120cd (<TIME>)\n- self:profile/change.md 5307cc0c2283f7baae7b8b0fac76a749da1f7aa2112742c1def85bc2549db737 (<TIME>)\n- self:context/note-05.md daf13bd0ba6508153b107205b1471f457221d43bf94dbafe953b467afc54f598 (<TIME>)\n- self:context/note-01.md dcfde89b5ab9afea6a01bc79a7c1006fcd00558ee2e1abe828166b381f908f01 (<TIME>)\n- self:context/note-03.md 630ecbe1d435cc0e93a1146059f25d10cc3da9c2b2b6d511c47664d99af6b0b7 (<TIME>)\n- self:context/publishing.md 4db84da5cb07021e5477e2ee1a5da4d1df26bccf347b89470109c60142f71399 (<TIME>)\n- self:context/note-00.md ba0cc59067312591e4783a990c2b208e83107e3a3bd35553dba7f848f2fdc46c (<TIME>)\n- self:context/note-10.md 1b6a61f2670b6ce47df98328ff605e8bf522756877ef038861e3b7a4df94c1bf (<TIME>)\n- self:context/note-02.md fed8c377e49bc066f62dbb3ac6e96db42d97cf07b71b2cb77a95492de8886fb4 (<TIME>)\n- self:context/note-08.md 8b7ca1a4cbf3f8fb433080ccf12a4367c7796747cf45753b8799ef77e393345e (<TIME>)\n- self:context/note-07.md 3daa5b547b6624b0cc6f890e6a3a2a8d04f83a67b001e12495797e2ef98b7406 (<TIME>)\n- self:context/note-04.md 887d8d97a714f212951b8949917320bcbbdf2ef7749e18fd1869b04f52d3a0cd (<TIME>)\n- self:context/note-11.md 9ea0433286e2d6237bb73e46b2907d1d72a67cba6292a9b6d00f18509658377d (<TIME>)\n- self:context/note-13.md f37b9905554250fd23812cf371d8440e43cfa8154ed02f4ebbcacf2e2320ed25 (<TIME>)\n- self:context/note-12.md 331cbf87851c9ff06ab86aee948487d6b0fe636dba876278bd5aa80e6a6fbe92 (<TIME>)\n- self:context/note-09.md 7660b95c07f124afb4537d7af7dd6569cc64a8b18845d147fb39b3156bd3a2bb (<TIME>)\n- self:context/note-06.md db8d463917517cedae9c00581dc25184473fb6d8a0e68e84ac0c58cdeaec84c8 (<TIME>)\n- self:context/leadership.md 1089058342129607cf1986cca739d41fcd4438c7f954048d44c7a9e9055a49f5 (<TIME>)\n- self:context/projects.md e8fdccda72f1baf1d70a7c47271aad43c5b642cbc19522de63e75f4e24acc4f1 (<TIME>)\n- self:context/people.md 02bffea3074eff77f49260e22a87763cd6784c4c6a884676d205b24851c057f3 (<TIME>)\n- self:context/career.md 6bed6db8b85c00d9e7aed7edc44c62d63af359961dfba7a39b1897399de804fb (<TIME>)\n- self:context/technical.md b1fd31e8040393097d057befbeb3ad962434b6c6dd1932b269043652e187cae8 (<TIME>)\n- self:context/story-bank.md 7248e41a8cc82b827000cf68e3a00c46ba0d3a4f6fe53f55ef2c8f2ea7cc2b36 (<TIME>)\n- self:context/admin.md faee99ef2b025233faf99c90d5f95244969b5ff9d02a9360b8e4004a900e62ba (<TIME>)\n- self:context/collaboration.md 14c0b6ce8659d8197159c663eb22b289f5a7cf24c7f7c90cd409387cbe3c80e3 (<TIME>)\n- self:context/decisions.md 36a872636f0ac08eef0e76234a0e7effa15a88daa639e0a63b1152049b4d9e8f (<TIME>)\n\n## self: context/career-plan.md\n\nAccess lenses: general, leadership\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Career plan\n\nPARITY_CAREER Move toward staff engineering through architecture work.\n\n## Evidence\n\nLed the module split of a large file without behaviour change.\n\n## self: profile/work-context.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Work context\n\nDescribe current work and priorities.\n\n## self: profile/preferences.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Preferences\n\nDescribe how you prefer to work with AI tools.\n\n## self: profile/thinking.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Thinking\n\nDescribe how you reason and make decisions.\n\n## self: profile/voice.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Voice\n\nDescribe your writing voice.\n\n## self: profile/identity.md\n\nAccess lenses: general, professional, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Identity\n\nPARITY_IDENTITY I am a synthetic engineer who values careful refactoring.\n\n## Priorities\n\n- Ship small, reviewable changes. #craft\n- Keep behaviour stable during refactors.\n\n## self: profile/change.md\n\nAccess lenses: general, professional, public-voice, technical, leadership, interview, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Change compass\n\nDescribe current goals and patterns only if useful.\n\n## self: context/note-05.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 05\n\nPARITY_NOTE_05 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-01.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 01\n\nPARITY_NOTE_01 refactoring planning detail with steady wording with steady wording with steady wording\n\n## self: context/note-03.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 03\n\nPARITY_NOTE_03 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/publishing.md\n\nAccess lenses: general, public-voice, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: policy\nPublication allowed: no\n\n# Publishing\n\nKeep publishing goals, audiences, and format preferences.\n\n## self: context/note-00.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 00\n\nPARITY_NOTE_00 refactoring planning detail with steady wording with steady wording\n\n## self: context/note-10.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 10\n\nPARITY_NOTE_10 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-02.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 02\n\nPARITY_NOTE_02 refactoring planning detail with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-08.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 08\n\nPARITY_NOTE_08 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-07.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 07\n\nPARITY_NOTE_07 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-04.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 04\n\nPARITY_NOTE_04 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-11.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 11\n\nPARITY_NOTE_11 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-13.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 13\n\nPARITY_NOTE_13 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-12.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 12\n\nPARITY_NOTE_12 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-09.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 09\n\nPARITY_NOTE_09 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/note-06.md\n\nAccess lenses: general\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Note 06\n\nPARITY_NOTE_06 refactoring planning detail with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording with steady wording\n\n## self: context/leadership.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Leadership\n\nKeep leadership and reflection context.\n\n## self: context/projects.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Projects\n\nList active projects and their context.\n\n## self: context/people.md\n\nAccess lenses: general, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# People\n\nRecord useful relationship context with care.\n\n## self: context/career.md\n\nAccess lenses: general, professional, public-voice, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Career\n\nKeep career context and evidence.\n\n## self: context/technical.md\n\nAccess lenses: general, professional, public-voice, technical, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Technical\n\nKeep technical context, constraints, and preferences.\n\n## self: context/story-bank.md\n\nAccess lenses: general, professional, public-voice, leadership, interview, private\nDisclosure: review-required\nSensitivity: personal\nDocument role: evidence\nPublication allowed: no\n\n# Story bank\n\nKeep evidence-backed stories and examples.\n\n## self: context/admin.md\n\nAccess lenses: general, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Admin\n\nKeep relevant logistics and recurring details.\n\n## self: context/collaboration.md\n\nAccess lenses: general, professional\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Collaboration preferences\n\nPARITY_COLLAB Prefer written design notes before large changes.\nSee [identity](../profile/identity.md).\n\n## self: context/decisions.md\n\nAccess lenses: general, professional, technical, leadership, private\nDisclosure: internal-only\nSensitivity: personal\nDocument role: content\nPublication allowed: no\n\n# Decisions\n\nRecord decisions, rationale, and date.\n\n## method: contribs/default/ifs.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Internal Family Systems (IFS) — Parts Work\n\nModel developed by Richard Schwartz. Apply when a behavioral pattern persists despite the user\nnaming and committing to change it — the pattern is being run by a *part*, not a failure of will.\n\n---\n\n## The Core Model\n\nThe mind contains multiple sub-personalities (parts), each with a role and a positive intent.\nThe job is not to eliminate parts — it is to unburden them so they can step back.\n\n**Self** is not a part. It is the calm, compassionate, curious center. When coaching from Self,\nthe person is curious about their parts rather than fused with them. Self shows up as the\n4 Cs: Calm, Curious, Compassionate, Clear.\n\n---\n\n## Three Part Types\n\n### Managers\nProtectors that control before anything bad can happen.\n\n- Show up as: perfectionism, over-preparation, people-pleasing, harsh self-criticism, workaholism\n- Positive intent: protect from shame, rejection, or failure\n- Coaching signal: \"I should...\" / \"I have to...\" / \"I can't let that happen\" / excessive justification\n\n### Firefighters\nReactive protectors — they respond after Exiles get activated. Fast suppression.\n\n- Show up as: procrastination, scrolling, impulsive decisions, overeating, overworking\n- Positive intent: stop pain immediately, before it lands\n- Coaching signal: sudden avoidance of something recently fine; behavior that happens \"before I realized it\"\n\n### Exiles\nThe wounded parts that carry pain, shame, or fear — often from earlier in life.\nManagers and Firefighters exist to keep Exiles locked away.\n\n- Coaching signal: outsized emotional reaction; disproportionate shame; \"I just feel worthless when this happens\"\n\n---\n\n## Coaching Application\n\nIFS in coaching is not therapy. Use it to name structure, not excavate the wound.\n\n**When you see a persistent pattern (3+ sessions, same loop):**\n\n1. Name that a part seems to be involved — don't diagnose: \"It sounds like part of you wants X, and another part keeps stopping you.\"\n2. Get curious about the part's intent: \"What is that part trying to protect you from?\"\n3. Acknowledge the positive intent: \"That part has been doing this job for a long time. Makes sense.\"\n4. Ask what it needs: \"What would need to be true for that part to step back a little?\"\n\n**Recognizing Manager behavior:**\n- Justifications for why action isn't possible yet\n- Self-criticism after misses that exceeds what the situation warrants\n- Need for more preparation before starting\n\n**Recognizing Firefighter behavior:**\n- Topic-jumping mid-session\n- Sudden fatigue or disengagement\n- \"I know I should but I just... don't\"\n\n**The key reframe for the user:**\nNot \"why can't you just do it\" → \"what part of you is making this feel unsafe, and what does it need?\"\n\n---\n\n## When to Apply\n\n- Same pattern has persisted after naming and committing (3+ sessions)\n- Shame appears disproportionate to the situation\n- User is in genuine inner conflict (\"I want to do X but I also don't\")\n- User self-attacks after misses beyond what is situationally warranted\n\nDo not push IFS when the user is in practical problem-solving mode. It is a tool for when\nthe emotional structure is the obstacle, not the tactical path.\n\n## method: contribs/default/quarterly-reflection.md\n\nAccess lenses: general, professional, technical, leadership, public-voice, interview, private\nDisclosure: internal-only\nSensitivity: none\nDocument role: policy\nPublication allowed: no\n\n# Quarterly Reflection — Session Structure\n\nA 90-day retrospective and forward-look. Heavier than a standard coaching session.\nPlan 60–90 minutes. Run at the close of each quarter or at the end of a major arc.\n\n---\n\n## When to Use\n\n- End of March, June, September, December\n- After a major project, campaign, or job search closes\n- When the user says \"I feel like I've been running but don't know where\"\n- When patterns.md shows the same pattern for 6+ weeks — a quarterly reflection often surfaces the root\n\n---\n\n## Structure\n\n### 1. The Honest Audit (15 min)\nAsk: \"What did you actually build or finish in the last 90 days?\"\n\nForce specificity. Shipped products. Relationships formed. Skills acquired. Revenue moved.\nNo abstractions. Not \"I worked on X\" — did you complete it? Ship it? Change something with it?\n\nThen: \"What did you avoid?\" Same specificity. Not \"I procrastinated\" — on what, exactly?\n\nLet silence exist. The things left unsaid here are often the most important part of the audit.\n\n---\n\n### 2. What Surprised You (10 min)\nAsk: \"What happened that you didn't expect — good or bad?\"\n\nSurprises reveal where your model of reality was wrong. They are the most valuable data\nin the retrospective, because they are the places where your assumptions failed.\n\nThen: \"What does that tell you about how you think about [work / relationships / yourself]?\"\n\n---\n\n### 3. The Theory (10 min)\nAsk: \"Why did the quarter go the way it did?\"\n\nThis will contain rationalizations. Let the first answer land, then press:\n- \"Is that actually the reason, or is it the comfortable story?\"\n- \"What would have to be different for that outcome not to repeat?\"\n\nThe goal is a theory they actually believe, not a polished retrospective summary.\n\n---\n\n### 4. The Letter to Past You (10 min)\nAsk: \"What would you tell yourself 90 days ago that you didn't know then?\"\n\nThis surfaces the real learning — not what happened, but what they now understand that\nthey did not understand before. The shift in understanding, not the events, is the point.\n\nSay it out loud or write it. Do not skip this step. The act of articulating the letter\nis the work.\n\n---\n\n### 5. The 90-Day Anchor (15 min)\nAsk: \"What does success look like 90 days from now — in one sentence?\"\n\nThen test it:\n- \"Is that under your control?\"\n- \"Is that what you actually want, or what you think you should want?\"\n- \"What would you have to stop doing to make room for it?\"\n\nClose with one specific commitment for the first week. Quarters start with one action,\nnot a plan.\n\n---\n\n## Post-Session\n\nArchive the full notes in `topics/<name>/sessions/YYYY-MM-DD.md or context/leadership.md`.\n\nUpdate `context/leadership.md` with a one-line quarterly summary under Historical.\n\nDistill any pattern shifts or major insights to `context/insights/from-executive.md` —\nthis is the most likely session to produce cross-skill insight worth sharing.\n\n## Restrictions\n\n- context/restricted.md: access_lenses exclude general lens\n- contribs/default/enneagram.md: contrib selection limit reached\n- contribs/default/grow-model.md: contrib selection limit reached\n- contribs/default/feynman-clarity.md: contrib selection limit reached\n- contribs/default/weekly-review.md: contrib selection limit reached\n- contribs/default/nvc.md: contrib selection limit reached\n- contribs/default/immunity-to-change.md: contrib selection limit reached\n- contribs/default/socratic-inquiry.md: contrib selection limit reached\n- contribs/default/abt-framework.md: contrib selection limit reached\n- contribs/default/systems-thinking-overlay.md: contrib selection limit reached\n- contribs/default/minto-pyramid.md: contrib selection limit reached\n- contribs/default/communication.md: contrib selection limit reached\n- contribs/default/minto-scqa.md: contrib selection limit reached\n- contribs/default/stoic-frame.md: contrib selection limit reached\n- contribs/default/framework-orchestration.md: contrib selection limit reached\n",
       "stderr": ""
     },
     {
@@ -8537,7 +8561,7 @@
         "restricted-host"
       ],
       "status": 0,
-      "stdout": "# Restricted-host Holoself context packet\n\nPacket ID: <UUID:1>\nContext receipt: df40422a96e85e454a8e085dd8fefba29a2568531e31cf0d2f714bea9db011aa (fresh resolution)\nContext gate: helpful; budget: standard; estimated tokens: 0; selected sources: 0; packet bytes: 2851\nGenerated: <TIME>\nExpires: <TIME>\nHost mode: restricted-host-snapshot\nLens: general\nTask: plan refactoring work\nPrivacy: access-filtered. Reading context does not authorize external action. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n- None\n\n\n\n## Restrictions\n\n- context/admin.md: not approved for publication on public adapter\n- context/career-plan.md: not approved for publication on public adapter\n- context/career.md: not approved for publication on public adapter\n- context/collaboration.md: not approved for publication on public adapter\n- context/decisions.md: not approved for publication on public adapter\n- context/leadership.md: not approved for publication on public adapter\n- context/note-00.md: not approved for publication on public adapter\n- context/note-01.md: not approved for publication on public adapter\n- context/note-02.md: not approved for publication on public adapter\n- context/note-03.md: not approved for publication on public adapter\n- context/note-04.md: not approved for publication on public adapter\n- context/note-05.md: not approved for publication on public adapter\n- context/note-06.md: not approved for publication on public adapter\n- context/note-07.md: not approved for publication on public adapter\n- context/note-08.md: not approved for publication on public adapter\n- context/note-09.md: not approved for publication on public adapter\n- context/note-10.md: not approved for publication on public adapter\n- context/note-11.md: not approved for publication on public adapter\n- context/note-12.md: not approved for publication on public adapter\n- context/note-13.md: not approved for publication on public adapter\n- context/people.md: not approved for publication on public adapter\n- context/projects.md: not approved for publication on public adapter\n- context/publishing.md: not approved for publication on public adapter\n- context/restricted.md: access_lenses exclude general lens\n- context/story-bank.md: not approved for publication on public adapter\n- context/technical.md: not approved for publication on public adapter\n- profile/change.md: not approved for publication on public adapter\n- profile/identity.md: not approved for publication on public adapter\n- profile/preferences.md: not approved for publication on public adapter\n- profile/thinking.md: not approved for publication on public adapter\n- profile/voice.md: not approved for publication on public adapter\n- profile/work-context.md: not approved for publication on public adapter\n",
+      "stdout": "# Restricted-host Holoself context packet\n\nPacket ID: <UUID:1>\nContext receipt: df40422a96e85e454a8e085dd8fefba29a2568531e31cf0d2f714bea9db011aa (fresh resolution)\nContext gate: helpful (default); budget: standard; estimated tokens: 0; selected sources: 0; packet bytes: 2861\nGenerated: <TIME>\nExpires: <TIME>\nHost mode: restricted-host-snapshot\nLens: general\nTask: plan refactoring work\nPrivacy: access-filtered. Reading context does not authorize external action. Preserve provenance; never silently write self.\n\n## Source hashes (SHA-256)\n\n- None\n\n\n\n## Restrictions\n\n- context/admin.md: not approved for publication on public adapter\n- context/career-plan.md: not approved for publication on public adapter\n- context/career.md: not approved for publication on public adapter\n- context/collaboration.md: not approved for publication on public adapter\n- context/decisions.md: not approved for publication on public adapter\n- context/leadership.md: not approved for publication on public adapter\n- context/note-00.md: not approved for publication on public adapter\n- context/note-01.md: not approved for publication on public adapter\n- context/note-02.md: not approved for publication on public adapter\n- context/note-03.md: not approved for publication on public adapter\n- context/note-04.md: not approved for publication on public adapter\n- context/note-05.md: not approved for publication on public adapter\n- context/note-06.md: not approved for publication on public adapter\n- context/note-07.md: not approved for publication on public adapter\n- context/note-08.md: not approved for publication on public adapter\n- context/note-09.md: not approved for publication on public adapter\n- context/note-10.md: not approved for publication on public adapter\n- context/note-11.md: not approved for publication on public adapter\n- context/note-12.md: not approved for publication on public adapter\n- context/note-13.md: not approved for publication on public adapter\n- context/people.md: not approved for publication on public adapter\n- context/projects.md: not approved for publication on public adapter\n- context/publishing.md: not approved for publication on public adapter\n- context/restricted.md: access_lenses exclude general lens\n- context/story-bank.md: not approved for publication on public adapter\n- context/technical.md: not approved for publication on public adapter\n- profile/change.md: not approved for publication on public adapter\n- profile/identity.md: not approved for publication on public adapter\n- profile/preferences.md: not approved for publication on public adapter\n- profile/thinking.md: not approved for publication on public adapter\n- profile/voice.md: not approved for publication on public adapter\n- profile/work-context.md: not approved for publication on public adapter\n",
       "stderr": ""
     },
     {
@@ -9061,6 +9085,15 @@
                         "default": false,
                         "description": "Recurring session-start load: without a task, return only the lens session_start_sources (default identity, preferences, work-context)."
                       },
+                      "need": {
+                        "type": "string",
+                        "enum": [
+                          "required",
+                          "helpful",
+                          "not-needed"
+                        ],
+                        "description": "Explicit context-need override; overrides task keyword classification."
+                      },
                       "source_ids": {
                         "type": "array",
                         "minItems": 1,
@@ -9149,6 +9182,15 @@
                         "type": "boolean",
                         "default": false,
                         "description": "Recurring session-start load: without a task, return only the lens session_start_sources (default identity, preferences, work-context)."
+                      },
+                      "need": {
+                        "type": "string",
+                        "enum": [
+                          "required",
+                          "helpful",
+                          "not-needed"
+                        ],
+                        "description": "Explicit context-need override; overrides task keyword classification."
                       }
                     },
                     "required": [],
@@ -9337,14 +9379,38 @@
                 {
                   "name": "holoself_proposal_create",
                   "title": "Create Holoself proposal",
-                  "description": "Create a project-local pending proposal backed by contained project evidence. It never writes canonical self.",
+                  "description": "Create a project-local pending proposal backed by contained project evidence. It never writes canonical self. operation append_claim (default) adds a claim; replace_claim, supersede_claim and retire_claim target an existing claim by the claim_id shown in delivered context and require evidence.",
                   "inputSchema": {
                     "type": "object",
                     "properties": {
+                      "operation": {
+                        "type": "string",
+                        "enum": [
+                          "append_claim",
+                          "replace_claim",
+                          "supersede_claim",
+                          "retire_claim"
+                        ],
+                        "default": "append_claim",
+                        "description": "append_claim and the claim operations replace_claim, supersede_claim (keeps the old claim as history) and retire_claim (marks it historical)."
+                      },
                       "claim": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 4000
+                        "maxLength": 4000,
+                        "description": "Claim wording; required except for retire_claim."
+                      },
+                      "claim_id": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                        "description": "Id of the existing claim (the id= attribute of a holoself-claim block in delivered context); required for replace_claim, supersede_claim and retire_claim."
+                      },
+                      "reason": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^[^\\r\\n]+$",
+                        "description": "Single-line retirement reason; required for retire_claim."
                       },
                       "evidence": {
                         "type": "string",
@@ -9380,8 +9446,7 @@
                           "new_decision",
                           "privacy_warning",
                           "conflict_resolution"
-                        ],
-                        "default": "new_fact"
+                        ]
                       },
                       "confidence": {
                         "type": "string",
@@ -9397,12 +9462,10 @@
                           "professional",
                           "public-voice",
                           "public-safe"
-                        ],
-                        "default": "private"
+                        ]
                       }
                     },
                     "required": [
-                      "claim",
                       "source_files"
                     ],
                     "additionalProperties": false
@@ -9482,7 +9545,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "Holoself context (general, complete): 6 document(s) in structuredContent.data; 15918 bytes; receipt 20d9fcf5452c62bcd0bc348a951689f39d645e074001bb028965e7bf522c21ec.\n- context/career-plan.md [hs-27c16fd0b4a8ae63a0ff]\n- profile/work-context.md [hs-bc1c9a180b028951279e]\n- profile/preferences.md [hs-81e8de61dd564c7c7053]\n- profile/thinking.md [hs-332c212316cf2c1496d6]\n- profile/voice.md [hs-7f4a72353633d9d4e7d3]\n- contribs/default/ifs.md [hs-99a98b2d32ce97a1cab1]"
+                  "text": "Holoself context (general, complete): 6 document(s) in structuredContent.data; 15983 bytes; receipt 20d9fcf5452c62bcd0bc348a951689f39d645e074001bb028965e7bf522c21ec.\n- context/career-plan.md [hs-27c16fd0b4a8ae63a0ff]\n- profile/work-context.md [hs-bc1c9a180b028951279e]\n- profile/preferences.md [hs-81e8de61dd564c7c7053]\n- profile/thinking.md [hs-332c212316cf2c1496d6]\n- profile/voice.md [hs-7f4a72353633d9d4e7d3]\n- contribs/default/ifs.md [hs-99a98b2d32ce97a1cab1]"
                 }
               ],
               "structuredContent": {
@@ -9961,6 +10024,7 @@
                   "selection": {
                     "schema_version": 1,
                     "context_need": "helpful",
+                    "need_reason": "default",
                     "budget": "small",
                     "budget_chars": 8000,
                     "manifest_only": false,
@@ -9997,9 +10061,9 @@
                     "reconcile_reads": 0,
                     "catalog_reads": 0,
                     "envelope_cap_bytes": 16384,
-                    "total_bytes": 15918,
-                    "estimated_tokens_total": 3980,
-                    "estimated_tokens_total_heuristic": 3980,
+                    "total_bytes": 15983,
+                    "estimated_tokens_total": 3996,
+                    "estimated_tokens_total_heuristic": 3996,
                     "restrictions_grouped": true,
                     "envelope_dropped": [
                       "hs-7a75ce03419faa082bb6",
@@ -10022,6 +10086,8 @@
                     "lens": "general",
                     "budget": "small",
                     "temporal": "current",
+                    "need": "helpful",
+                    "need_reason": "default",
                     "source_ids": [
                       "hs-27c16fd0b4a8ae63a0ff",
                       "hs-bc1c9a180b028951279e",
@@ -10067,7 +10133,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "Holoself context (leadership, complete): 14 document(s) in structuredContent.data; 33256 bytes; receipt f864640dbf07be977064741fc302a94e0c42dabcc00187c6ed0bfdf30cc01ae4.\n- context/career-plan.md [hs-27c16fd0b4a8ae63a0ff]\n- profile/thinking.md [hs-332c212316cf2c1496d6]\n- profile/voice.md [hs-7f4a72353633d9d4e7d3]\n- profile/preferences.md [hs-81e8de61dd564c7c7053]\n- profile/change.md [hs-e24f52d4067dff5ce871]\n- profile/identity.md [hs-ac00c86a1e240a4bb2ce]\n- profile/work-context.md [hs-bc1c9a180b028951279e]\n- context/leadership.md [hs-091cfbf3243c02f5012e]\n- context/projects.md [hs-28fc211f76116fc79a15]\n- context/people.md [hs-6bdf5a62f4667d73ce33]\n- context/story-bank.md [hs-e5056f367e89ba95fef3]\n- context/decisions.md [hs-fc336fe8bb197b2be558]\n- contribs/default/socratic-inquiry.md [hs-5b7af43fcdf99b7c1932]\n- contribs/default/ifs.md [hs-99a98b2d32ce97a1cab1]"
+                  "text": "Holoself context (leadership, complete): 14 document(s) in structuredContent.data; 33354 bytes; receipt f864640dbf07be977064741fc302a94e0c42dabcc00187c6ed0bfdf30cc01ae4.\n- context/career-plan.md [hs-27c16fd0b4a8ae63a0ff]\n- profile/thinking.md [hs-332c212316cf2c1496d6]\n- profile/voice.md [hs-7f4a72353633d9d4e7d3]\n- profile/preferences.md [hs-81e8de61dd564c7c7053]\n- profile/change.md [hs-e24f52d4067dff5ce871]\n- profile/identity.md [hs-ac00c86a1e240a4bb2ce]\n- profile/work-context.md [hs-bc1c9a180b028951279e]\n- context/leadership.md [hs-091cfbf3243c02f5012e]\n- context/projects.md [hs-28fc211f76116fc79a15]\n- context/people.md [hs-6bdf5a62f4667d73ce33]\n- context/story-bank.md [hs-e5056f367e89ba95fef3]\n- context/decisions.md [hs-fc336fe8bb197b2be558]\n- contribs/default/socratic-inquiry.md [hs-5b7af43fcdf99b7c1932]\n- contribs/default/ifs.md [hs-99a98b2d32ce97a1cab1]"
                 }
               ],
               "structuredContent": {
@@ -11141,6 +11207,7 @@
                   "selection": {
                     "schema_version": 1,
                     "context_need": "required",
+                    "need_reason": "matched:personal:career",
                     "budget": "standard",
                     "budget_chars": 24000,
                     "manifest_only": false,
@@ -11186,9 +11253,9 @@
                     "reconcile_reads": 0,
                     "catalog_reads": 0,
                     "envelope_cap_bytes": 49152,
-                    "total_bytes": 33256,
-                    "estimated_tokens_total": 8314,
-                    "estimated_tokens_total_heuristic": 8314
+                    "total_bytes": 33354,
+                    "estimated_tokens_total": 8339,
+                    "estimated_tokens_total_heuristic": 8339
                   },
                   "context_receipt": {
                     "schema_version": 1,
@@ -11197,6 +11264,8 @@
                     "lens": "leadership",
                     "budget": "standard",
                     "temporal": "current",
+                    "need": "required",
+                    "need_reason": "matched:personal:career",
                     "source_ids": [
                       "hs-27c16fd0b4a8ae63a0ff",
                       "hs-332c212316cf2c1496d6",
@@ -13369,6 +13438,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "unbounded",
             "budget_chars": null,
             "manifest_only": false,
@@ -13444,6 +13514,8 @@
             "lens": "general",
             "budget": "unbounded",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-27c16fd0b4a8ae63a0ff",
               "hs-bc1c9a180b028951279e",
@@ -14837,6 +14909,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "unbounded",
             "budget_chars": null,
             "manifest_only": false,
@@ -14902,6 +14975,8 @@
             "lens": "private",
             "budget": "unbounded",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-45d81fbf715523f2c502",
               "hs-332c212316cf2c1496d6",
@@ -16817,6 +16892,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "unbounded",
             "budget_chars": null,
             "manifest_only": false,
@@ -16887,6 +16963,8 @@
             "lens": "general",
             "budget": "unbounded",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-332c212316cf2c1496d6",
               "hs-612ca88404709f2b1f18",
@@ -17177,6 +17255,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "unbounded",
             "budget_chars": null,
             "manifest_only": false,
@@ -17219,6 +17298,8 @@
             "lens": "startup",
             "budget": "unbounded",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [],
             "source_hashes": [],
             "status": "complete",
@@ -17678,6 +17759,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "small",
             "budget_chars": 8000,
             "manifest_only": false,
@@ -17712,9 +17794,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 16384,
-            "total_bytes": 16262,
-            "estimated_tokens_total": 4066,
-            "estimated_tokens_total_heuristic": 4066,
+            "total_bytes": 16345,
+            "estimated_tokens_total": 4087,
+            "estimated_tokens_total_heuristic": 4087,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-fc336fe8bb197b2be558",
@@ -17751,6 +17833,8 @@
             "lens": "general",
             "budget": "small",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-332c212316cf2c1496d6",
               "hs-612ca88404709f2b1f18",
@@ -17852,7 +17936,260 @@
         "json": {
           "status": "not-needed",
           "self": {
-            "documents": []
+            "documents": [
+              {
+                "path": "profile/identity.md",
+                "content": "# Identity\n\nPARITY_IDENTITY I am a synthetic engineer who values careful refactoring.\n\n## Priorities\n\n- Ship small, reviewable changes. #craft\n- Keep behaviour stable during refactors.",
+                "metadata": {
+                  "access_lenses": [
+                    "general",
+                    "professional",
+                    "leadership",
+                    "private"
+                  ],
+                  "disclosure": "internal-only",
+                  "sensitivity": "personal",
+                  "document_role": "content",
+                  "publication_allowed": false,
+                  "task_include": [],
+                  "task_exclude": [],
+                  "visibility": "linked-projects",
+                  "read_scope": "shared",
+                  "public_safe": null,
+                  "confidence": null,
+                  "exclude_lenses": [],
+                  "field_visibility": {},
+                  "knowledge_status": "current",
+                  "temporal_scope": "current",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "valid_until_epoch_ms": null,
+                  "review_after": null,
+                  "supersedes": [],
+                  "superseded_by": null
+                },
+                "source_id": "hs-ac00c86a1e240a4bb2ce",
+                "truncated": false
+              },
+              {
+                "path": "profile/preferences.md",
+                "content": "# Preferences\n\nDescribe how you prefer to work with AI tools.",
+                "metadata": {
+                  "access_lenses": [
+                    "general",
+                    "professional",
+                    "public-voice",
+                    "technical",
+                    "leadership",
+                    "interview",
+                    "private"
+                  ],
+                  "disclosure": "internal-only",
+                  "sensitivity": "personal",
+                  "document_role": "policy",
+                  "publication_allowed": false,
+                  "task_include": [],
+                  "task_exclude": [],
+                  "visibility": "linked-projects",
+                  "read_scope": "shared",
+                  "public_safe": null,
+                  "confidence": null,
+                  "exclude_lenses": [],
+                  "field_visibility": {},
+                  "knowledge_status": "current",
+                  "temporal_scope": "current",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "valid_until_epoch_ms": null,
+                  "review_after": null,
+                  "supersedes": [],
+                  "superseded_by": null
+                },
+                "source_id": "hs-81e8de61dd564c7c7053",
+                "truncated": false
+              },
+              {
+                "path": "profile/work-context.md",
+                "content": "# Work context\n\nDescribe current work and priorities.",
+                "metadata": {
+                  "access_lenses": [
+                    "general",
+                    "professional",
+                    "public-voice",
+                    "technical",
+                    "leadership",
+                    "interview",
+                    "private"
+                  ],
+                  "disclosure": "internal-only",
+                  "sensitivity": "personal",
+                  "document_role": "content",
+                  "publication_allowed": false,
+                  "task_include": [],
+                  "task_exclude": [],
+                  "visibility": "linked-projects",
+                  "read_scope": "shared",
+                  "public_safe": null,
+                  "confidence": null,
+                  "exclude_lenses": [],
+                  "field_visibility": {},
+                  "knowledge_status": "current",
+                  "temporal_scope": "current",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "valid_until_epoch_ms": null,
+                  "review_after": null,
+                  "supersedes": [],
+                  "superseded_by": null
+                },
+                "source_id": "hs-bc1c9a180b028951279e",
+                "truncated": false
+              },
+              {
+                "path": "profile/thinking.md",
+                "content": "# Thinking\n\nDescribe how you reason and make decisions.",
+                "metadata": {
+                  "access_lenses": [
+                    "general",
+                    "professional",
+                    "public-voice",
+                    "technical",
+                    "leadership",
+                    "interview",
+                    "private"
+                  ],
+                  "disclosure": "internal-only",
+                  "sensitivity": "personal",
+                  "document_role": "policy",
+                  "publication_allowed": false,
+                  "task_include": [],
+                  "task_exclude": [],
+                  "visibility": "linked-projects",
+                  "read_scope": "shared",
+                  "public_safe": null,
+                  "confidence": null,
+                  "exclude_lenses": [],
+                  "field_visibility": {},
+                  "knowledge_status": "current",
+                  "temporal_scope": "current",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "valid_until_epoch_ms": null,
+                  "review_after": null,
+                  "supersedes": [],
+                  "superseded_by": null
+                },
+                "source_id": "hs-332c212316cf2c1496d6",
+                "truncated": false
+              },
+              {
+                "path": "context/publishing.md",
+                "content": "# Publishing\n\nKeep publishing goals, audiences, and format preferences.",
+                "metadata": {
+                  "access_lenses": [
+                    "general",
+                    "public-voice",
+                    "private"
+                  ],
+                  "disclosure": "internal-only",
+                  "sensitivity": "personal",
+                  "document_role": "policy",
+                  "publication_allowed": false,
+                  "task_include": [],
+                  "task_exclude": [],
+                  "visibility": "linked-projects",
+                  "read_scope": "shared",
+                  "public_safe": null,
+                  "confidence": null,
+                  "exclude_lenses": [],
+                  "field_visibility": {},
+                  "knowledge_status": "current",
+                  "temporal_scope": "current",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "valid_until_epoch_ms": null,
+                  "review_after": null,
+                  "supersedes": [],
+                  "superseded_by": null
+                },
+                "source_id": "hs-612ca88404709f2b1f18",
+                "truncated": false
+              },
+              {
+                "path": "profile/voice.md",
+                "content": "# Voice\n\nDescribe your writing voice.",
+                "metadata": {
+                  "access_lenses": [
+                    "general",
+                    "professional",
+                    "public-voice",
+                    "technical",
+                    "leadership",
+                    "interview",
+                    "private"
+                  ],
+                  "disclosure": "internal-only",
+                  "sensitivity": "personal",
+                  "document_role": "policy",
+                  "publication_allowed": false,
+                  "task_include": [],
+                  "task_exclude": [],
+                  "visibility": "linked-projects",
+                  "read_scope": "shared",
+                  "public_safe": null,
+                  "confidence": null,
+                  "exclude_lenses": [],
+                  "field_visibility": {},
+                  "knowledge_status": "current",
+                  "temporal_scope": "current",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "valid_until_epoch_ms": null,
+                  "review_after": null,
+                  "supersedes": [],
+                  "superseded_by": null
+                },
+                "source_id": "hs-7f4a72353633d9d4e7d3",
+                "truncated": false
+              },
+              {
+                "path": "profile/change.md",
+                "content": "# Change compass\n\nDescribe current goals and patterns only if useful.",
+                "metadata": {
+                  "access_lenses": [
+                    "general",
+                    "professional",
+                    "public-voice",
+                    "technical",
+                    "leadership",
+                    "interview",
+                    "private"
+                  ],
+                  "disclosure": "internal-only",
+                  "sensitivity": "personal",
+                  "document_role": "policy",
+                  "publication_allowed": false,
+                  "task_include": [],
+                  "task_exclude": [],
+                  "visibility": "linked-projects",
+                  "read_scope": "shared",
+                  "public_safe": null,
+                  "confidence": null,
+                  "exclude_lenses": [],
+                  "field_visibility": {},
+                  "knowledge_status": "current",
+                  "temporal_scope": "current",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "valid_until_epoch_ms": null,
+                  "review_after": null,
+                  "supersedes": [],
+                  "superseded_by": null
+                },
+                "source_id": "hs-e24f52d4067dff5ce871",
+                "truncated": false
+              }
+            ]
           },
           "lens": "general",
           "lens_resolution": {
@@ -17966,6 +18303,48 @@
             "source_hash_algorithm": "sha256",
             "source_hashes": [
               {
+                "kind": "self",
+                "path": "profile/identity.md",
+                "sha256": "e75c4c5210a01e53589fdb8107faf9f87f87d557884dfecd2263e043bd08a72c",
+                "freshness": "<TIME>"
+              },
+              {
+                "kind": "self",
+                "path": "profile/preferences.md",
+                "sha256": "b0374dfcdf2a2a7e01d4f0d955e8f66ec40107e58acbc1647f9471c71da08071",
+                "freshness": "<TIME>"
+              },
+              {
+                "kind": "self",
+                "path": "profile/work-context.md",
+                "sha256": "520e814952458c23a428e174fc9d5f7f9a619a9753c2a580fe3799b1dfc039aa",
+                "freshness": "<TIME>"
+              },
+              {
+                "kind": "self",
+                "path": "profile/thinking.md",
+                "sha256": "007224040597ceca597865520995515ee0a8cdfba137d47f278183456f7c31b5",
+                "freshness": "<TIME>"
+              },
+              {
+                "kind": "self",
+                "path": "context/publishing.md",
+                "sha256": "4db84da5cb07021e5477e2ee1a5da4d1df26bccf347b89470109c60142f71399",
+                "freshness": "<TIME>"
+              },
+              {
+                "kind": "self",
+                "path": "profile/voice.md",
+                "sha256": "5f86ec9fb65262139fdbd64649667c7f82a9dff1f543cf85a026d19e0ca8bdb8",
+                "freshness": "<TIME>"
+              },
+              {
+                "kind": "self",
+                "path": "profile/change.md",
+                "sha256": "5307cc0c2283f7baae7b8b0fac76a749da1f7aa2112742c1def85bc2549db737",
+                "freshness": "<TIME>"
+              },
+              {
                 "kind": "contrib",
                 "path": "contribs/default/grow-model.md",
                 "sha256": "42829063a5e3320f127d03a392b4d6bb8ca763711b884bc19863e90d6e75c488",
@@ -17980,6 +18359,138 @@
             ]
           },
           "sources": [
+            {
+              "kind": "self",
+              "path": "profile/identity.md",
+              "space_id": "self",
+              "document_role": "content",
+              "freshness": "<TIME>",
+              "source_hash": "e75c4c5210a01e53589fdb8107faf9f87f87d557884dfecd2263e043bd08a72c",
+              "source_id": "hs-ac00c86a1e240a4bb2ce",
+              "tags": [
+                {
+                  "value": "craft",
+                  "visibility": "linked-projects"
+                }
+              ],
+              "estimated_tokens": 81,
+              "knowledge_status": "current",
+              "temporal_scope": "current",
+              "task_relevance": 2,
+              "truncated": false,
+              "headings": [
+                "Identity",
+                "Priorities"
+              ]
+            },
+            {
+              "kind": "self",
+              "path": "profile/preferences.md",
+              "space_id": "self",
+              "document_role": "policy",
+              "freshness": "<TIME>",
+              "source_hash": "b0374dfcdf2a2a7e01d4f0d955e8f66ec40107e58acbc1647f9471c71da08071",
+              "source_id": "hs-81e8de61dd564c7c7053",
+              "tags": [],
+              "estimated_tokens": 59,
+              "knowledge_status": "current",
+              "temporal_scope": "current",
+              "task_relevance": 4,
+              "truncated": false,
+              "headings": [
+                "Preferences"
+              ]
+            },
+            {
+              "kind": "self",
+              "path": "profile/work-context.md",
+              "space_id": "self",
+              "document_role": "content",
+              "freshness": "<TIME>",
+              "source_hash": "520e814952458c23a428e174fc9d5f7f9a619a9753c2a580fe3799b1dfc039aa",
+              "source_id": "hs-bc1c9a180b028951279e",
+              "tags": [],
+              "estimated_tokens": 58,
+              "knowledge_status": "current",
+              "temporal_scope": "current",
+              "task_relevance": 2,
+              "truncated": false,
+              "headings": [
+                "Work context"
+              ]
+            },
+            {
+              "kind": "self",
+              "path": "profile/thinking.md",
+              "space_id": "self",
+              "document_role": "policy",
+              "freshness": "<TIME>",
+              "source_hash": "007224040597ceca597865520995515ee0a8cdfba137d47f278183456f7c31b5",
+              "source_id": "hs-332c212316cf2c1496d6",
+              "tags": [],
+              "estimated_tokens": 58,
+              "knowledge_status": "current",
+              "temporal_scope": "current",
+              "task_relevance": 4,
+              "truncated": false,
+              "headings": [
+                "Thinking"
+              ]
+            },
+            {
+              "kind": "self",
+              "path": "context/publishing.md",
+              "space_id": "self",
+              "document_role": "policy",
+              "freshness": "<TIME>",
+              "source_hash": "4db84da5cb07021e5477e2ee1a5da4d1df26bccf347b89470109c60142f71399",
+              "source_id": "hs-612ca88404709f2b1f18",
+              "tags": [],
+              "estimated_tokens": 50,
+              "knowledge_status": "current",
+              "temporal_scope": "current",
+              "task_relevance": 4,
+              "truncated": false,
+              "headings": [
+                "Publishing"
+              ]
+            },
+            {
+              "kind": "self",
+              "path": "profile/voice.md",
+              "space_id": "self",
+              "document_role": "policy",
+              "freshness": "<TIME>",
+              "source_hash": "5f86ec9fb65262139fdbd64649667c7f82a9dff1f543cf85a026d19e0ca8bdb8",
+              "source_id": "hs-7f4a72353633d9d4e7d3",
+              "tags": [],
+              "estimated_tokens": 53,
+              "knowledge_status": "current",
+              "temporal_scope": "current",
+              "task_relevance": 4,
+              "truncated": false,
+              "headings": [
+                "Voice"
+              ]
+            },
+            {
+              "kind": "self",
+              "path": "profile/change.md",
+              "space_id": "self",
+              "document_role": "policy",
+              "freshness": "<TIME>",
+              "source_hash": "5307cc0c2283f7baae7b8b0fac76a749da1f7aa2112742c1def85bc2549db737",
+              "source_id": "hs-e24f52d4067dff5ce871",
+              "tags": [],
+              "estimated_tokens": 61,
+              "knowledge_status": "current",
+              "temporal_scope": "current",
+              "task_relevance": 4,
+              "truncated": false,
+              "headings": [
+                "Change compass"
+              ]
+            },
             {
               "kind": "contrib",
               "path": "contribs/default/grow-model.md",
@@ -18047,34 +18558,6 @@
               "reason": "access_lenses exclude general lens"
             },
             {
-              "source": "profile/thinking.md",
-              "reason": "personal context not needed for this task"
-            },
-            {
-              "source": "context/publishing.md",
-              "reason": "personal context not needed for this task"
-            },
-            {
-              "source": "profile/voice.md",
-              "reason": "personal context not needed for this task"
-            },
-            {
-              "source": "profile/preferences.md",
-              "reason": "personal context not needed for this task"
-            },
-            {
-              "source": "profile/change.md",
-              "reason": "personal context not needed for this task"
-            },
-            {
-              "source": "profile/identity.md",
-              "reason": "personal context not needed for this task"
-            },
-            {
-              "source": "profile/work-context.md",
-              "reason": "personal context not needed for this task"
-            },
-            {
               "source": "context/leadership.md",
               "reason": "personal context not needed for this task"
             },
@@ -18083,28 +18566,12 @@
               "reason": "personal context not needed for this task"
             },
             {
-              "source": "contribs/default/enneagram.md",
-              "reason": "contrib selection limit reached"
-            },
-            {
-              "source": "contribs/default/nvc.md",
-              "reason": "contrib selection limit reached"
-            },
-            {
               "source": "context/career-plan.md",
               "reason": "personal context not needed for this task"
             },
             {
-              "source": "contribs/default/immunity-to-change.md",
-              "reason": "contrib selection limit reached"
-            },
-            {
               "source": "context/projects.md",
               "reason": "personal context not needed for this task"
-            },
-            {
-              "source": "contribs/default/feynman-clarity.md",
-              "reason": "contrib selection limit reached"
             },
             {
               "source": "context/note-01.md",
@@ -18113,10 +18580,6 @@
             {
               "source": "context/note-03.md",
               "reason": "personal context not needed for this task"
-            },
-            {
-              "source": "contribs/default/socratic-inquiry.md",
-              "reason": "contrib selection limit reached"
             },
             {
               "source": "context/note-00.md",
@@ -18129,10 +18592,6 @@
             {
               "source": "context/note-10.md",
               "reason": "personal context not needed for this task"
-            },
-            {
-              "source": "contribs/default/abt-framework.md",
-              "reason": "contrib selection limit reached"
             },
             {
               "source": "context/note-02.md",
@@ -18151,10 +18610,6 @@
               "reason": "personal context not needed for this task"
             },
             {
-              "source": "contribs/default/ifs.md",
-              "reason": "contrib selection limit reached"
-            },
-            {
               "source": "context/note-04.md",
               "reason": "personal context not needed for this task"
             },
@@ -18163,16 +18618,8 @@
               "reason": "personal context not needed for this task"
             },
             {
-              "source": "contribs/default/systems-thinking-overlay.md",
-              "reason": "contrib selection limit reached"
-            },
-            {
               "source": "context/note-13.md",
               "reason": "personal context not needed for this task"
-            },
-            {
-              "source": "contribs/default/minto-pyramid.md",
-              "reason": "contrib selection limit reached"
             },
             {
               "source": "context/note-12.md",
@@ -18181,22 +18628,6 @@
             {
               "source": "context/technical.md",
               "reason": "personal context not needed for this task"
-            },
-            {
-              "source": "contribs/default/communication.md",
-              "reason": "contrib selection limit reached"
-            },
-            {
-              "source": "contribs/default/minto-scqa.md",
-              "reason": "contrib selection limit reached"
-            },
-            {
-              "source": "contribs/default/quarterly-reflection.md",
-              "reason": "contrib selection limit reached"
-            },
-            {
-              "source": "contribs/default/stoic-frame.md",
-              "reason": "contrib selection limit reached"
             },
             {
               "source": "context/note-09.md",
@@ -18219,12 +18650,64 @@
               "reason": "personal context not needed for this task"
             },
             {
-              "source": "contribs/default/framework-orchestration.md",
+              "source": "context/decisions.md",
+              "reason": "personal context not needed for this task"
+            },
+            {
+              "source": "contribs/default/enneagram.md",
               "reason": "contrib selection limit reached"
             },
             {
-              "source": "context/decisions.md",
-              "reason": "personal context not needed for this task"
+              "source": "contribs/default/nvc.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/immunity-to-change.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/feynman-clarity.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/socratic-inquiry.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/abt-framework.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/ifs.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/systems-thinking-overlay.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/minto-pyramid.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/communication.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/minto-scqa.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/quarterly-reflection.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/stoic-frame.md",
+              "reason": "contrib selection limit reached"
+            },
+            {
+              "source": "contribs/default/framework-orchestration.md",
+              "reason": "contrib selection limit reached"
             }
           ],
           "warnings": [],
@@ -18235,11 +18718,12 @@
               "secret-pattern-scan",
               "project-include-exclude-reapplied"
             ],
-            "selected_sources": 2
+            "selected_sources": 9
           },
           "selection": {
             "schema_version": 1,
             "context_need": "not-needed",
+            "need_reason": "matched:mechanical:format",
             "budget": "standard",
             "budget_chars": 24000,
             "manifest_only": false,
@@ -18247,13 +18731,20 @@
             "session_start": false,
             "candidate_count": 47,
             "eligible_count": 47,
-            "selected_count": 2,
-            "omitted_count": 45,
-            "content_chars": 4556,
-            "estimated_tokens": 1139,
+            "selected_count": 9,
+            "omitted_count": 38,
+            "content_chars": 5086,
+            "estimated_tokens": 1272,
             "truncated": false,
             "truncated_sources": [],
             "selected_sources": [
+              "hs-ac00c86a1e240a4bb2ce",
+              "hs-81e8de61dd564c7c7053",
+              "hs-bc1c9a180b028951279e",
+              "hs-332c212316cf2c1496d6",
+              "hs-612ca88404709f2b1f18",
+              "hs-7f4a72353633d9d4e7d3",
+              "hs-e24f52d4067dff5ce871",
               "hs-28d205858dc087f18491",
               "hs-d144331345a5955d95a7"
             ],
@@ -18264,7 +18755,7 @@
             ],
             "contradiction_digest": {
               "schema_version": 1,
-              "digest": "08a6b56467047d37978419b5d9a95c83b1332416723cbd0e5ef062745f57faef",
+              "digest": "ef366433ed042b9a77d3b0092f3d14de3efd11e44b76db73fa8b1147354752d2",
               "supersession_edges": 0,
               "potential_conflicts": 0,
               "source_pairs": []
@@ -18273,22 +18764,38 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 49152,
-            "total_bytes": 18614,
-            "estimated_tokens_total": 4654,
-            "estimated_tokens_total_heuristic": 4654
+            "total_bytes": 32361,
+            "estimated_tokens_total": 8091,
+            "estimated_tokens_total_heuristic": 8091
           },
           "context_receipt": {
             "schema_version": 1,
-            "context_hash": "bc59d6d6831ddea1b5d3797d61b01771902863f462cc4edc202db12d97d92491",
+            "context_hash": "4ab79246af21991005ddb41a6c2322c6fbf21ffc4eb3323ea5b9852f1b1f5429",
             "task_hash": "31613383bdee13ca6b1042b442aba12bc30199832987b7716e837931882c8d53",
             "lens": "general",
             "budget": "standard",
             "temporal": "current",
+            "need": "not-needed",
+            "need_reason": "matched:mechanical:format",
             "source_ids": [
+              "hs-ac00c86a1e240a4bb2ce",
+              "hs-81e8de61dd564c7c7053",
+              "hs-bc1c9a180b028951279e",
+              "hs-332c212316cf2c1496d6",
+              "hs-612ca88404709f2b1f18",
+              "hs-7f4a72353633d9d4e7d3",
+              "hs-e24f52d4067dff5ce871",
               "hs-28d205858dc087f18491",
               "hs-d144331345a5955d95a7"
             ],
             "source_hashes": [
+              "e75c4c5210a01e53589fdb8107faf9f87f87d557884dfecd2263e043bd08a72c",
+              "b0374dfcdf2a2a7e01d4f0d955e8f66ec40107e58acbc1647f9471c71da08071",
+              "520e814952458c23a428e174fc9d5f7f9a619a9753c2a580fe3799b1dfc039aa",
+              "007224040597ceca597865520995515ee0a8cdfba137d47f278183456f7c31b5",
+              "4db84da5cb07021e5477e2ee1a5da4d1df26bccf347b89470109c60142f71399",
+              "5f86ec9fb65262139fdbd64649667c7f82a9dff1f543cf85a026d19e0ca8bdb8",
+              "5307cc0c2283f7baae7b8b0fac76a749da1f7aa2112742c1def85bc2549db737",
               "42829063a5e3320f127d03a392b4d6bb8ca763711b884bc19863e90d6e75c488",
               "c60f63053d5eba55bbb7fcb612b5bc0521e4d484d282ddcc5a455e4d1d5fd35e"
             ],
@@ -20396,6 +20903,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "deep",
             "budget_chars": 64000,
             "manifest_only": false,
@@ -20460,9 +20968,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 131072,
-            "total_bytes": 78950,
-            "estimated_tokens_total": 19738,
-            "estimated_tokens_total_heuristic": 19738
+            "total_bytes": 79033,
+            "estimated_tokens_total": 19759,
+            "estimated_tokens_total_heuristic": 19759
           },
           "context_receipt": {
             "schema_version": 1,
@@ -20471,6 +20979,8 @@
             "lens": "general",
             "budget": "deep",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-ddb8d190409e09d53120",
               "hs-b5a1b6cbbe071b427f52",
@@ -20993,6 +21503,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "small",
             "budget_chars": 8000,
             "manifest_only": false,
@@ -21026,9 +21537,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 16384,
-            "total_bytes": 14361,
-            "estimated_tokens_total": 3591,
-            "estimated_tokens_total_heuristic": 3591,
+            "total_bytes": 14444,
+            "estimated_tokens_total": 3611,
+            "estimated_tokens_total_heuristic": 3611,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-27c16fd0b4a8ae63a0ff",
@@ -21047,6 +21558,8 @@
             "lens": "general",
             "budget": "small",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-332c212316cf2c1496d6",
               "hs-7f4a72353633d9d4e7d3",
@@ -21491,6 +22004,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "small",
             "budget_chars": 8000,
             "manifest_only": false,
@@ -21524,9 +22038,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 16384,
-            "total_bytes": 14361,
-            "estimated_tokens_total": 3591,
-            "estimated_tokens_total_heuristic": 3591,
+            "total_bytes": 14444,
+            "estimated_tokens_total": 3611,
+            "estimated_tokens_total_heuristic": 3611,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-27c16fd0b4a8ae63a0ff",
@@ -21545,6 +22059,8 @@
             "lens": "general",
             "budget": "small",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-332c212316cf2c1496d6",
               "hs-7f4a72353633d9d4e7d3",
@@ -21990,6 +22506,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "small",
             "budget_chars": 8000,
             "manifest_only": false,
@@ -22023,9 +22540,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 16384,
-            "total_bytes": 14361,
-            "estimated_tokens_total": 3591,
-            "estimated_tokens_total_heuristic": 3591,
+            "total_bytes": 14444,
+            "estimated_tokens_total": 3611,
+            "estimated_tokens_total_heuristic": 3611,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-27c16fd0b4a8ae63a0ff",
@@ -22044,6 +22561,8 @@
             "lens": "general",
             "budget": "small",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-332c212316cf2c1496d6",
               "hs-7f4a72353633d9d4e7d3",
@@ -23974,7 +24493,7 @@
         "<ROOT>/project"
       ],
       "status": 1,
-      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim visibility=private -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n",
+      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim visibility=private id=<UUID:2> -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n",
       "stderr": "[!!] Approve proposal and apply grouped canonical self changes? Re-run with --yes to confirm.\n"
     },
     {
@@ -23988,7 +24507,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim visibility=private -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n[ok] approved <UUID:1>; 1 change(s), validation passed\n",
+      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim visibility=private id=<UUID:2> -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n[ok] approved <UUID:1>; 1 change(s), validation passed\n",
       "stderr": ""
     },
     {
@@ -25299,6 +25818,7 @@
           "selection": {
             "schema_version": 1,
             "context_need": "helpful",
+            "need_reason": "default",
             "budget": "standard",
             "budget_chars": 24000,
             "manifest_only": false,
@@ -25352,9 +25872,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 1,
             "envelope_cap_bytes": 49152,
-            "total_bytes": 47457,
-            "estimated_tokens_total": 11865,
-            "estimated_tokens_total_heuristic": 11865,
+            "total_bytes": 47540,
+            "estimated_tokens_total": 11885,
+            "estimated_tokens_total_heuristic": 11885,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-fc336fe8bb197b2be558",
@@ -25382,6 +25902,8 @@
             "lens": "general",
             "budget": "standard",
             "temporal": "current",
+            "need": "helpful",
+            "need_reason": "default",
             "source_ids": [
               "hs-ac00c86a1e240a4bb2ce",
               "hs-332c212316cf2c1496d6",

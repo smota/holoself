@@ -3,7 +3,16 @@ import { VISIBILITIES } from '../annotations.mjs'
 import { readSourceWithStat } from '../catalog.mjs'
 import { buildCatalogSections, extractSectionAnnotations, privacySections } from '../catalog/source.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
-import { allowed, filterClaimVisibility, filterFieldVisibility, privacyMetadata, visibleUnderBehavior } from '../policy/access.mjs'
+import { withClaimIds } from '../markdown/claim-blocks.mjs'
+import {
+  allowed,
+  claimStatusIncluded,
+  filterClaimStatus,
+  filterClaimVisibility,
+  filterFieldVisibility,
+  privacyMetadata,
+  visibleUnderBehavior
+} from '../policy/access.mjs'
 import { frontmatter } from '../policy/privacy-fields.mjs'
 import { hash } from '../shared/fs.mjs'
 
@@ -52,16 +61,25 @@ export function createRecordDelivery(o, { project, identity, registry, lens, res
       cand.delivery_reason = 'restricted by policy'
       return null
     }
-    const behaviorLens = lens
-
+    const behaviorLens = lens,
+      temporal = o.temporal || 'current'
+    // Hidden and out-of-scope claim blocks are removed before ids are added, so only visible claims carry ids.
+    const visibleClaims = filterClaimStatus(
+      filterClaimVisibility(body, lens, cand.path, deliveryRestrictions, resolution, identity.kind, adapter),
+      temporal,
+      cand.path,
+      deliveryRestrictions,
+      identity.kind
+    )
     const filteredBody = filterFieldVisibility(
-      filterClaimVisibility(body, lens, cand.path, deliveryRestrictions, resolution, identity.kind),
+      cand.kind === 'self' ? withClaimIds(visibleClaims, cand.path) : visibleClaims,
       metadata,
       lens,
       cand.path,
       deliveryRestrictions,
       resolution,
-      identity.kind
+      identity.kind,
+      adapter
     )
     const content = filteredBody.trim()
 
@@ -81,22 +99,23 @@ export function createRecordDelivery(o, { project, identity, registry, lens, res
       sectionsList = catSecs
         .filter(sec => {
           const secVis = VISIBILITIES.includes(sec.visibility) ? sec.visibility : 'private'
-          return visibleUnderBehavior(secVis, behaviorLens, adapter)
+          return visibleUnderBehavior(secVis, behaviorLens, adapter) && claimStatusIncluded(sec.claim_status, temporal)
         })
         .map(sec => {
           const filtered = filterFieldVisibility(
-            filterClaimVisibility(sec.snippet || '', lens, cand.path, deliveryRestrictions, resolution, identity.kind),
+            filterClaimVisibility(sec.snippet || '', lens, cand.path, deliveryRestrictions, resolution, identity.kind, adapter),
             metadata,
             lens,
             cand.path,
             deliveryRestrictions,
             resolution,
-            identity.kind
+            identity.kind,
+            adapter
           )
           return { ...sec, snippet: filtered }
         })
       const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSecs)
-      claimsList = annotatedClaims.filter(c => visibleUnderBehavior(c.visibility, behaviorLens, adapter))
+      claimsList = annotatedClaims.filter(c => visibleUnderBehavior(c.visibility, behaviorLens, adapter) && claimStatusIncluded(c.claim_status, temporal))
       tagsList = annotatedTags.filter(t => visibleUnderBehavior(t.visibility, behaviorLens, adapter))
       linksList = annotatedLinks.filter(l => visibleUnderBehavior(l.visibility, behaviorLens, adapter))
       searchText = [cand.path, ...sectionsList.map(sec => `${sec.heading} ${sec.snippet}`), ...claimsList.map(c => c.text), ...tagsList.map(t => t.value)].join(
