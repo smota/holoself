@@ -6,7 +6,9 @@ export function mcpContextSummary(data) {
   return (
     `Holoself context (${data.lens}, ${data.status}): ${docs.length} document(s) in structuredContent.data; ` +
     `${data.selection?.total_bytes ?? '?'} bytes; receipt ${data.context_receipt?.context_hash}.\n` +
-    `${docs.map(doc => `- ${doc.path}${doc.truncated ? ' (excerpt)' : ''}`).join('\n')}`
+    // Source handles are listed in the text block too: some hosts pass only text content to the model, and
+    // holoself_context_get needs the exact handle.
+    `${docs.map(doc => `- ${doc.path}${doc.source_id ? ` [${doc.source_id}]` : ''}${doc.truncated ? ' (excerpt)' : ''}`).join('\n')}`
   )
 }
 export function mcpToolEnvelope(data) {

@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "description": "Native MCP host verification matrix. Written by `npm run smoke:mcp -- --write-matrix` from synthetic-data runs; consumed by `holoself capabilities --json` (mcp.platforms) and `holoself mcp status`. A platform is reported verified only when every tool passes with server-side audit evidence.",
+  "platforms": [
+    {
+      "platform": "agy",
+      "host_version": "1.5.0",
+      "verified_at": "2026-11-04",
+      "discovery": "verified",
+      "no_canonical_write": true,
+      "pending_proposal_created": true,
+      "approval_setting": "permissions.allow = [\"mcp(holoself/holoself_status)\",\"mcp(holoself/holoself_context)\",\"mcp(holoself/holoself_context_manifest)\",\"mcp(holoself/holoself_context_get)\",\"mcp(holoself/holoself_search)\",\"mcp(holoself/holoself_proposal_create)\",\"mcp(holoself/holoself_proposal_preview)\"]",
+      "tools": {
+        "holoself_status": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_context": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_context_manifest": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_context_get": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_search": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_proposal_create": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_proposal_preview": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        }
+      },
+      "host_default": {
+        "host_version": "1.5.0",
+        "verified_at": "2026-11-04",
+        "discovery": "verified",
+        "tools": {
+          "holoself_status": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: denied_actions mcp:CallMcpTool"
+          },
+          "holoself_context": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: denied_actions mcp:CallMcpTool"
+          },
+          "holoself_context_manifest": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: denied_actions mcp:CallMcpTool"
+          },
+          "holoself_context_get": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: denied_actions mcp:CallMcpTool"
+          },
+          "holoself_search": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: denied_actions mcp:CallMcpTool"
+          },
+          "holoself_proposal_create": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: denied_actions mcp:CallMcpTool"
+          },
+          "holoself_proposal_preview": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: denied_actions mcp:CallMcpTool"
+          }
+        }
+      }
+    },
+    {
+      "platform": "claude",
+      "host_version": "2.1.318",
+      "verified_at": "2026-11-04",
+      "discovery": "verified",
+      "no_canonical_write": true,
+      "pending_proposal_created": true,
+      "approval_setting": "--allowedTools mcp__holoself__holoself_status,mcp__holoself__holoself_context,mcp__holoself__holoself_context_manifest,mcp__holoself__holoself_context_get,mcp__holoself__holoself_search,mcp__holoself__holoself_proposal_create,mcp__holoself__holoself_proposal_preview",
+      "tools": {
+        "holoself_status": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_context": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_context_manifest": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_context_get": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_search": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_proposal_create": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_proposal_preview": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        }
+      },
+      "host_default": {
+        "host_version": "2.1.318",
+        "verified_at": "2026-11-04",
+        "discovery": "verified",
+        "tools": {
+          "holoself_status": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: permission denied (don't ask mode)"
+          },
+          "holoself_context": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: permission denied (don't ask mode)"
+          },
+          "holoself_context_manifest": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: permission denied (don't ask mode)"
+          },
+          "holoself_context_get": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: skipped: no source_id because manifest was denied"
+          },
+          "holoself_search": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: permission denied (don't ask mode)"
+          },
+          "holoself_proposal_create": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: permission denied (don't ask mode)"
+          },
+          "holoself_proposal_preview": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: skipped: no proposal_id because create was denied"
+          }
+        }
+      }
+    },
+    {
+      "platform": "codex",
+      "host_version": "0.166.0",
+      "verified_at": "2026-11-04",
+      "discovery": "verified",
+      "no_canonical_write": true,
+      "pending_proposal_created": true,
+      "approval_setting": "mcp_servers.holoself.default_tools_approval_mode = \"approve\" (generated default is \"writes\")",
+      "tools": {
+        "holoself_status": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_context": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_context_manifest": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_context_get": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_search": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_proposal_create": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        },
+        "holoself_proposal_preview": {
+          "result": "pass",
+          "reason": "server audit recorded 1 call(s), ok"
+        }
+      },
+      "host_default": {
+        "host_version": "0.166.0",
+        "verified_at": "2026-11-04",
+        "discovery": "verified",
+        "tools": {
+          "holoself_status": {
+            "result": "pass",
+            "reason": "server audit recorded 1 call(s), ok"
+          },
+          "holoself_context": {
+            "result": "pass",
+            "reason": "server audit recorded 1 call(s), ok"
+          },
+          "holoself_context_manifest": {
+            "result": "pass",
+            "reason": "server audit recorded 1 call(s), ok"
+          },
+          "holoself_context_get": {
+            "result": "pass",
+            "reason": "server audit recorded 1 call(s), ok"
+          },
+          "holoself_search": {
+            "result": "pass",
+            "reason": "server audit recorded 1 call(s), ok"
+          },
+          "holoself_proposal_create": {
+            "result": "blocked",
+            "reason": "host did not invoke the server; host reported: Approval required but approval policy is never."
+          },
+          "holoself_proposal_preview": {
+            "result": "blocked",
+            "reason": "requires output of holoself_proposal_create (blocked); server returned error INVALID_ARGUMENT"
+          }
+        }
+      }
+    }
+  ]
+}

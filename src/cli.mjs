@@ -6,6 +6,7 @@ import { stdin as input, stdout as output } from 'node:process'
 import { catalogBuildWarnings, ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
 import { seedLensDefinitions } from './lenses.mjs'
 import { VERSION } from './version.mjs'
+import { mcpPlatformSupport } from './mcp-verification.mjs'
 import { buildLensMigrationPlan, buildTransformationPlan, applyTransformationPlan } from './maintenance.mjs'
 import { applyCleanupPlan, buildCleanupPlan } from './cleanup.mjs'
 import { parse, validateFlags } from './cli/args.mjs'
@@ -201,7 +202,8 @@ export async function run(argv) {
               'holoself_search',
               'holoself_proposal_create',
               'holoself_proposal_preview'
-            ]
+            ],
+            platforms: mcpPlatformSupport()
           },
           globalSkillSupported: true
         },

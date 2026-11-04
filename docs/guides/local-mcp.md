@@ -51,4 +51,5 @@ If MCP is unavailable, use `.holoself/BOOTSTRAP.md`, the installed public skill,
 - `PROJECT_BINDING_AMBIGUOUS`: remove conflicting startup roots; do not guess.
 - `missing-or-drifted`: rerun configuration preview and review the diff.
 - Client shows pending approval: approve the project-scoped server in that client. This is client trust, not Holoself canonical-write approval.
+- Headless or non-interactive runs refuse tool calls: allow the Holoself tools by name in that client. The exact per-client settings and the recorded results are in [platform verification](../reference/platform-verification.md#required-approval-settings).
 - Tool call returns a bounded error: repair the link/index/metadata through the CLI; MCP deliberately exposes no repair tool.
