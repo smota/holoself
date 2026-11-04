@@ -83,10 +83,8 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `link backfill` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--all`, `--lenses` |
 | `link prune` | `--root`, `--data-root`, `--data-dir`, `--self` |
 | `link skill migrate-global` | `--project`, `--target`, `--platform`, `--instructions`, `--skill-home`, `--force`, `--dry-run`, `--yes`, `--confirm` |
-| `migrate policy` | `--root`, `--data-root`, `--data-dir`, `--self`, `--apply`, `--revert`, `--confirm-narrowing`, `--allow-partial`, `--include-linked`, `--dry-run`, `--json` |
-| `context` | `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--need`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--hook-format`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--output`, `--snapshot`, `--yes`, `--confirm` |
 | `migrate policy` | `--root`, `--data-root`, `--data-dir`, `--self`, `--apply`, `--revert`, `--confirm-narrowing`, `--confirm-activation`, `--allow-partial`, `--include-linked`, `--dry-run`, `--json` |
-| `context` | `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--need`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--output`, `--snapshot`, `--yes`, `--confirm` |
+| `context` | `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--need`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--hook-format`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--output`, `--snapshot`, `--yes`, `--confirm` |
 | `analyze overlap` | `--project`, `--target`, `--json` |
 | `analyze conflicts` | `--project`, `--target`, `--json` |
 | `analyze stale` | `--project`, `--target`, `--json` |
