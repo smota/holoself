@@ -1,7 +1,8 @@
 // holoself proposals command (moved verbatim from runEcosystem).
-import { existsSync, readFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import { ecosystemValidationErrors } from '../../catalog/validation.mjs'
+import { applyInboxBatch } from '../../proposals/inbox.mjs'
 import {
   findProposal,
   listProposalData,
@@ -11,8 +12,7 @@ import {
   scanProposalStore,
   stateProposal
 } from '../../proposals/store.mjs'
-import { withRegistryLock } from '../../link/registry.mjs'
-import { atomicWrite, hash } from '../../shared/fs.mjs'
+import { hash } from '../../shared/fs.mjs'
 import { askConfirm, projectPath } from '../link-helpers.mjs'
 
 // One readable line per change for `proposals show`, emitted as YAML comments above the record.
@@ -22,6 +22,21 @@ function changeSummary(change) {
   if (change.operation === 'supersede_claim') return `supersede claim ${change.claim_id} in ${change.target} with new claim "${one(change.claim)}"`
   if (change.operation === 'retire_claim') return `retire claim ${change.claim_id} in ${change.target} as historical: ${one(change.reason)}`
   return `append claim to ${change.target}: "${one(change.claim)}"`
+}
+function formatPreviewText(prepared) {
+  const { grouped, changes: previews, preview_hash: previewHash } = prepared
+  return (
+    `Affected files: ${[...grouped.keys()].join(', ')}\nPreview hash: ${previewHash}\n--- proposed diff ---\n` +
+    `${previews
+      .map(x =>
+        x.operation === 'append_claim'
+          ? `--- ${x.change_id}: ${x.target} ---\n+${x.preview.replaceAll('\n', '\n+')}`
+          : `--- ${x.change_id}: ${x.operation} ${x.claim_id} in ${x.target} ---\n` +
+            (x.visibility_change ? `! visibility: ${x.visibility_change.from} → ${x.visibility_change.to}\n` : '') +
+            x.preview
+      )
+      .join('\n')}`
+  )
 }
 export async function runProposals(o, sub) {
   const project = projectPath(o),
@@ -42,11 +57,12 @@ export async function runProposals(o, sub) {
     if (scan.diagnostics.some(x => x.severity === 'error')) process.exitCode = 1
     return true
   }
-  const id = o.args[1]
-  if (!id) throw new Error(`proposals ${action} requires <id>`)
-  const p = findProposal(project, id)
+  const ids = o.args.slice(1)
+  if (!ids.length) throw new Error(`proposals ${action} requires <id>`)
   if (action === 'show') {
-    const changes = proposalChanges(p),
+    if (ids.length > 1) throw new Error('proposals show accepts a single <id>')
+    const p = findProposal(project, ids[0]),
+      changes = proposalChanges(p),
       summary = changes.some(x => (x.operation || 'append_claim') !== 'append_claim')
         ? changes.map(x => `# ${x.change_id}: ${changeSummary(x)}`).join('\n') + '\n'
         : ''
@@ -55,97 +71,96 @@ export async function runProposals(o, sub) {
   }
   if (!['approve', 'reject', 'defer', 'supersede'].includes(action))
     throw new Error('proposals requires list, audit, show, approve, reject, defer, or supersede')
-  if (p.status !== 'pending') throw new Error(`proposal is ${p.status}, expected pending`)
+  const proposals = ids.map(id => findProposal(project, id))
+  for (const p of proposals) if (p.status !== 'pending') throw new Error(`proposal is ${p.status}, expected pending`)
   if (action === 'approve') {
-    const prepared = proposalPreviewData(project, p.proposal_id),
-      { link, grouped } = prepared,
-      changes = proposalChanges(p),
-      archive = join(link.path, 'proposals', 'approved', `${p.proposal_id}.yaml`)
-    if (existsSync(archive)) throw new Error(`proposal archive collision: ${archive}`)
+    const preparedList = proposals.map(p => proposalPreviewData(project, p.proposal_id)),
+      { link } = preparedList[0]
+    for (const prepared of preparedList) {
+      const archive = join(link.path, 'proposals', 'approved', `${prepared.proposal.proposal_id}.yaml`)
+      if (existsSync(archive)) throw new Error(`proposal archive collision: ${archive}`)
+    }
     const preErrors = ecosystemValidationErrors(link.path, project)
     if (preErrors.length) throw new Error(`pre-approval validation failed: ${preErrors.join('; ')}`)
-    const previews = prepared.changes,
-      previewHash = prepared.preview_hash
-    console.log(
-      o.json
-        ? JSON.stringify({ proposal_id: p.proposal_id, changes: previews, preview_hash: previewHash }, null, 2)
-        : `Affected files: ${[...grouped.keys()].join(', ')}\nPreview hash: ${previewHash}\n--- proposed diff ---\n` +
-            `${previews
-              .map(x =>
-                x.operation === 'append_claim'
-                  ? `--- ${x.change_id}: ${x.target} ---\n+${x.preview.replaceAll('\n', '\n+')}`
-                  : `--- ${x.change_id}: ${x.operation} ${x.claim_id} in ${x.target} ---\n` +
-                    (x.visibility_change ? `! visibility: ${x.visibility_change.from} → ${x.visibility_change.to}\n` : '') +
-                    x.preview
-              )
-              .join('\n')}`
-    )
-    if (o.digest && o.digest !== previewHash) {
-      const error = new Error('proposal preview is stale')
-      error.code = 'STALE_PREVIEW'
-      throw error
+    if (preparedList.length === 1) {
+      const prepared = preparedList[0]
+      console.log(
+        o.json
+          ? JSON.stringify({ proposal_id: prepared.proposal.proposal_id, changes: prepared.changes, preview_hash: prepared.preview_hash }, null, 2)
+          : formatPreviewText(prepared)
+      )
+      if (o.digest && o.digest !== prepared.preview_hash) {
+        const error = new Error('proposal preview is stale')
+        error.code = 'STALE_PREVIEW'
+        throw error
+      }
+    } else {
+      const batchHash = hash(preparedList.map(x => x.preview_hash).join('\n'))
+      console.log(
+        o.json
+          ? JSON.stringify(
+              {
+                proposals: preparedList.map(x => ({
+                  proposal_id: x.proposal.proposal_id,
+                  changes: x.changes,
+                  preview_hash: x.preview_hash
+                })),
+                preview_hash: batchHash
+              },
+              null,
+              2
+            )
+          : preparedList.map(formatPreviewText).join('\n\n')
+      )
+      if (o.digest) {
+        const parts = o.digest.split(',').map(x => x.trim()).filter(Boolean)
+        if (o.digest !== batchHash && (parts.length !== preparedList.length || parts.some((h, idx) => h !== preparedList[idx].preview_hash))) {
+          const error = new Error('proposal preview is stale')
+          error.code = 'STALE_PREVIEW'
+          throw error
+        }
+      }
     }
     if (!(await askConfirm(o, 'Approve proposal and apply grouped canonical self changes?'))) {
       console.log('Cancelled.')
       return true
     }
-    const proposalBefore = readFileSync(p._path),
-      receipt = join(link.path, 'proposals', 'receipts', `${p.proposal_id}-approved.json`),
-      commitTime = new Date().toISOString(),
-      token = prepared.commit_time_token,
-      stamp = text => text.replaceAll(token, commitTime),
-      appliedChanges = previews.map((item, i) => ({
-        ...item,
-        before_sha256: hash(stamp(prepared.steps[i].before)),
-        after_sha256: hash(stamp(prepared.steps[i].after))
-      }))
-    // The stale check, writes, archive and validation run under the self root's registry lock, so two approvals
-    // (or an approval and a Workbench registry change) cannot interleave between the check and the write.
-    await withRegistryLock(link.path, async () => {
-      // A target edited after the preview was computed (for example while confirmation was pending) is stale.
-      for (const item of grouped.values()) {
-        const current = existsSync(item.target) ? readFileSync(item.target, 'utf8') : null
-        if (item.existed ? current !== item.before : current !== null) {
-          const error = new Error(`proposal preview is stale: ${item.target} changed after preview`)
-          error.code = 'STALE_PREVIEW'
-          throw error
-        }
-      }
-      try {
-        for (const item of grouped.values()) atomicWrite(item.target, stamp(item.after))
-        stateProposal(project, p, 'approved', {
-          preview_sha256: previewHash,
-          applied_changes: appliedChanges.map(({ change_id, operation, target, claim_id, before_sha256, after_sha256 }) => ({
-            change_id,
-            operation,
-            target,
-            claim_id,
-            before_sha256,
-            after_sha256
-          }))
-        })
-        const errors = ecosystemValidationErrors(link.path, project)
-        if (errors.length) throw new Error(`post-approval validation failed: ${errors.join('; ')}`)
-      } catch (error) {
-        for (const item of grouped.values()) {
-          if (item.existed) atomicWrite(item.target, item.before)
-          else if (existsSync(item.target)) rmSync(item.target)
-        }
-        atomicWrite(p._path, proposalBefore)
-        if (existsSync(archive)) rmSync(archive, { force: true })
-        if (existsSync(receipt)) rmSync(receipt, { force: true })
-        throw error
-      }
+    await applyInboxBatch(link.path, {
+      action: 'approve',
+      items: preparedList.map(x => ({
+        id: x.proposal.proposal_id,
+        space: project,
+        preview_hash: x.preview_hash
+      })),
+      spaces: [{ id: 'cli', name: basename(project), path: project }]
     })
-    console.log(`[ok] approved ${p.proposal_id}; ${changes.length} change(s), validation passed`)
+    for (const p of proposals) {
+      console.log(`[ok] approved ${p.proposal_id}; ${proposalChanges(p).length} change(s), validation passed`)
+    }
     return true
   }
-  if (!(await askConfirm(o, `${action === 'reject' ? 'Reject' : action === 'supersede' ? 'Supersede' : 'Defer'} proposal ${p.proposal_id}?`))) {
+  if (action === 'supersede') {
+    if (proposals.length > 1) throw new Error('proposals supersede accepts a single <id>')
+    const p = proposals[0]
+    if (!(await askConfirm(o, `Supersede proposal ${p.proposal_id}?`))) {
+      console.log('Cancelled.')
+      return true
+    }
+    stateProposal(project, p, 'superseded')
+    console.log(`[ok] superseded ${p.proposal_id}`)
+    return true
+  }
+  const label = proposals.map(p => p.proposal_id).join(', ')
+  if (!(await askConfirm(o, `${action === 'reject' ? 'Reject' : 'Defer'} proposal ${label}?`))) {
     console.log('Cancelled.')
     return true
   }
-  const state = action === 'reject' ? 'rejected' : action === 'supersede' ? 'superseded' : 'deferred'
-  stateProposal(project, p, state)
-  console.log(`[ok] ${state} ${p.proposal_id}`)
+  const state = action === 'reject' ? 'rejected' : 'deferred'
+  await applyInboxBatch( null, {
+    action,
+    items: proposals.map(p => ({ id: p.proposal_id, space: project })),
+    spaces: [{ id: 'cli', name: basename(project), path: project }]
+  })
+  for (const p of proposals) console.log(`[ok] ${state} ${p.proposal_id}`)
   return true
 }

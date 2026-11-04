@@ -4,7 +4,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, lstatSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -125,7 +125,7 @@ test('CLI context under FTS5 reports the engine, keeps stderr free of the SQLite
     assert.doesNotMatch(res.stderr, /ExperimentalWarning|SQLite is an experimental/)
     assert.equal(JSON.parse(res.stdout).context_receipt.engine, 'fts5')
     const path = ftsIndexPath(fx.root)
-    assert.equal(path, join(fx.root, '.holoself', 'catalog', FTS_FILE), 'native separators below the self root, including spaces and non-ASCII')
+    assert.equal(realpathSync(path), realpathSync(join(fx.root, '.holoself', 'catalog', FTS_FILE)), 'native separators below the self root, including spaces and non-ASCII')
     assert.ok(lstatSync(path).isFile())
     if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600)
     assert.match(readFileSync(join(fx.root, '.holoself', '.gitignore'), 'utf8'), /^catalog\/$/m)
