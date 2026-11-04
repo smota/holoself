@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { VERSION } from './version.mjs'
+import { assertNoLinkBelow } from './path-guard.mjs'
 import { LINK_START, LINK_END, auditInstructions, bootstrapText, canonicalSection, instructionEvidence, instructionHash, instructionHashMatches, overlaySection } from './instructions.mjs'
 
 export { LINK_START, LINK_END, auditInstructions, bootstrapText }
@@ -76,7 +77,8 @@ export function safeProjectFile(project,rel,label='managed path'){
   const lexicalRoot=resolve(project),target=resolve(lexicalRoot,rel);if(!contained(lexicalRoot,target))throw new Error(`${label} escapes project: ${rel}`)
   const rootReal=realpathSync(lexicalRoot);let current=target
   const chain=[];while(current!==lexicalRoot){chain.push(current);current=dirname(current)}
-  for(const item of chain.reverse()){if(!pathExists(item))continue;const stat=lstatSync(item);if(stat.isSymbolicLink())throw new Error(`${label} traverses symlink: ${item}`);const actual=realpathSync(item);if(!contained(rootReal,actual))throw new Error(`${label} escapes real project root: ${item}`)}
+  assertNoLinkBelow(lexicalRoot,target,link=>new Error(`${label} traverses symlink: ${link}`))
+  for(const item of chain.reverse()){if(!pathExists(item))continue;const actual=realpathSync(item);if(!contained(rootReal,actual))throw new Error(`${label} escapes real project root: ${item}`)}
   return target
 }
 function evidence(project,adapter){return adapter.files.some(f=>existsSync(safeProjectFile(project,f,'adapter evidence')))||adapter.dirs.some(d=>existsSync(safeProjectFile(project,d,'adapter evidence')))}
@@ -87,8 +89,7 @@ function skillHome(options={}){return resolve(options.skillHome||process.env.HOL
 function safeUserSkillFile(home,rel,label='user skill path'){
   if(typeof rel!=='string'||!rel.trim()||isAbsolute(rel))throw new Error(`${label} must be relative to the user skill home: ${rel}`)
   const root=resolve(home),target=resolve(root,rel);if(!contained(root,target))throw new Error(`${label} escapes user skill home: ${rel}`)
-  let current=target;const chain=[];while(current!==root){chain.push(current);current=dirname(current)}
-  for(const item of chain.reverse()){if(!pathExists(item))continue;const stat=lstatSync(item);if(stat.isSymbolicLink())throw new Error(`${label} traverses symlink: ${item}`)}
+  assertNoLinkBelow(root,target,link=>new Error(`${label} traverses symlink: ${link}`))
   return target
 }
 function userSkillTargets(ids,options={}){

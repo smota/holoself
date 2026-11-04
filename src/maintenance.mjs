@@ -3,6 +3,7 @@ import { existsSync, lstatSync, mkdirSync, openSync, closeSync, rmdirSync, readF
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { DEFAULT_LENSES, loadLensRegistry } from './lenses.mjs'
 import { normalizeProjectPath, readBindings } from './bindings.mjs'
+import { assertNoLinkBelow, linkBelow } from './path-guard.mjs'
 
 const sha=value=>createHash('sha256').update(value).digest('hex')
 const slash=value=>value.replaceAll('\\','/')
@@ -10,9 +11,9 @@ export const renamedLens=id=>({career:'professional',publishing:'public-voice'}[
 function pathExists(path){try{lstatSync(path);return true}catch(error){if(['ENOENT','ENOTDIR'].includes(error.code))return false;throw error}}
 function safePath(root,rel){
  if(typeof rel!=='string'||!rel||isAbsolute(rel)||rel.includes('\\')||rel.split('/').some(part=>['','..','.'].includes(part)))throw new Error(`invalid maintenance path: ${rel}`)
- let rootAncestor=root;while(true){if(pathExists(rootAncestor)&&lstatSync(rootAncestor).isSymbolicLink())throw new Error('unsafe maintenance root ancestor');const parent=dirname(rootAncestor);if(parent===rootAncestor)break;rootAncestor=parent}
+ if(linkBelow(root,root,{includeRoot:true})!==null)throw new Error('unsafe maintenance root ancestor')
  const path=resolve(root,rel),local=relative(root,path);if(local==='..'||local.startsWith(`..${sep}`)||isAbsolute(local))throw new Error('maintenance path escapes root')
- let current=path;while(true){if(pathExists(current)&&lstatSync(current).isSymbolicLink())throw new Error(`unsafe maintenance path: ${rel}`);if(current===root)break;const parent=dirname(current);if(parent===current)throw new Error('maintenance root mismatch');current=parent}
+ assertNoLinkBelow(root,path,()=>new Error(`unsafe maintenance path: ${rel}`))
  if(pathExists(path)&&!lstatSync(path).isFile())throw new Error(`maintenance target is not a file: ${rel}`)
  return path
 }

@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { access, mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { run } from '../src/cli.mjs'
@@ -30,7 +31,7 @@ test('linked configuration is project-local metadata and never copies self',asyn
   for(const dir of ['catalog','proposals','reports'])assert.equal((await stat(join(project,'.holoself',dir))).isDirectory(),true)
   await assert.rejects(access(join(project,'.holoself','profile')))
   const status=JSON.parse(await capture(()=>run(['link','status','--project',project])))
-  assert.equal(status.self_context.path.replaceAll('\\','/'),self.replaceAll('\\','/'));assert.equal(status.self_exists,true)
+  assert.equal(realpathSync(status.self_context.path),realpathSync(self));assert.equal(status.self_exists,true)
 })
 
 test('context resolves lens, task, provenance, privacy, and adapters',async()=>{

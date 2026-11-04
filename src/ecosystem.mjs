@@ -11,6 +11,7 @@ import { stdin as input, stdout as output } from 'node:process'
 import { activateProject, activationPlan, activationStatus, auditInstructions, bootstrapText, deactivateProject, globalSkillStatus, installGlobalSkills, migrateProjectSkillsToGlobal, preflightActivation, readRuntime, recordedActivation } from './adapters.mjs'
 import { readBindings, resolveBinding, writeBinding, bindingsPath } from './bindings.mjs'
 import { DEFAULT_LENS_IDS, lensIdStructurallyValid, loadLensRegistry, resolveLens } from './lenses.mjs'
+import { assertNoLinkBelow, canonicalPath, isWithin, locateBelow } from './path-guard.mjs'
 import { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES } from './annotations.mjs'
 import {
   buildCursor,
@@ -89,19 +90,17 @@ function slash(path){ return path.replaceAll('\\','/') }
 function hash(text){ return createHash('sha256').update(text).digest('hex') }
 function projectPath(o){ return resolve(o.project || o.target || process.cwd()) }
 function assertContainedPath(root,target,label='path'){
-  const rootReal=safeRealpath(root),targetReal=safeRealpath(target)
-  const normRoot=slash(rootReal).replace(/\/+$/,''),normTarget=slash(targetReal)
-  const cmpRoot=process.platform==='win32'?normRoot.toLowerCase():normRoot
-  const cmpTarget=process.platform==='win32'?normTarget.toLowerCase():normTarget
-  if(cmpTarget!==cmpRoot&&!cmpTarget.startsWith(cmpRoot+'/'))throw new Error(`${label} escapes root`)
-  let current=targetReal
-  while(current!==rootReal){
-    if(pathExists(current)&&lstatSync(current).isSymbolicLink())throw new Error(`${label} traverses symlink: ${current}`)
-    const parent=dirname(current)
-    if(parent===current)break
-    current=parent
+  // Boundary is the canonical root; symlinks above it are the user's environment.
+  const rootReal=canonicalPath(root)
+  if(pathExists(target)&&existsSync(target)){
+    const targetReal=realpathSync(target)
+    if(!isWithin(rootReal,targetReal))throw new Error(`${label} escapes root`)
+    return targetReal
   }
-  return targetReal
+  const located=locateBelow(root,target)
+  if(!located)throw new Error(`${label} escapes root`)
+  assertNoLinkBelow(located.base,resolve(target),link=>new Error(`${label} traverses symlink: ${link}`))
+  return located.parts.length?join(rootReal,...located.parts):rootReal
 }
 function isCanonicalSelf(path){
   if(!pathExists(path))return false

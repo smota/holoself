@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile, mkdir, symlink, lstat, access, readdir, stat, rm } from 'node:fs/promises'
+import { realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { run, COMMAND_FLAGS, parseArguments } from '../src/cli.mjs'
@@ -237,7 +238,7 @@ test('nested canonical root resolves owner-direct',async()=>{
   try{for(const location of [root,nested]){
     process.chdir(location)
     const packet=JSON.parse(await capture(()=>run(['context','--root',location===root?'.':root,'--task','x','--lens','private','--json'])))
-    assert.equal(packet.self.path,resolve(root).replaceAll('\\','/'));assert.equal(packet.lens,'private');assert.deepEqual(packet.project.documents,[])
+    assert.equal(realpathSync(packet.self.path),realpathSync(root));assert.equal(packet.lens,'private');assert.deepEqual(packet.project.documents,[])
   }}finally{process.chdir(cwd)}
 })
 test('explicit project and linked cwd preserve linked authority',async()=>{
