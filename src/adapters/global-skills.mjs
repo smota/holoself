@@ -77,7 +77,7 @@ export function snapshotAbsolute(paths) {
 export function rollbackAbsolute(snapshots) {
   for (const item of snapshots.reverse()) {
     try {
-      if (item.exists && item.content !== null) atomicWrite(item.path, item.content)
+      if (item.exists && item.content !== null) atomicWrite(item.path, item.content, { mode: 0o666 })
       else if (!item.exists && existsSync(item.path)) rmSync(item.path, { force: true })
     } catch {}
   }
@@ -118,7 +118,7 @@ export function installGlobalSkills(options = {}) {
   const writes = plan.installations.filter(x => x.action === 'write'),
     snapshots = snapshotAbsolute(writes.map(x => safeUserSkillFile(skillHome(options), x.file, 'global skill write')))
   try {
-    for (const item of writes) atomicWrite(safeUserSkillFile(skillHome(options), item.file, 'global skill write'), PUBLIC_SKILL_RAW)
+    for (const item of writes) atomicWrite(safeUserSkillFile(skillHome(options), item.file, 'global skill write'), PUBLIC_SKILL_RAW, { mode: 0o666 })
     return { ...plan, installations: plan.installations.map(x => ({ ...x, result: x.action === 'write' ? 'installed' : 'unchanged' })) }
   } catch (error) {
     rollbackAbsolute(snapshots)

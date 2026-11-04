@@ -17,8 +17,8 @@ export function normalize(text) {
     .trim()
 }
 export function similarity(a, b) {
-  const aa = new Set(tokenize(a)),
-    bb = new Set(tokenize(b))
+  const aa = new Set(tokenize(a, { stopwords: false })),
+    bb = new Set(tokenize(b, { stopwords: false }))
   if (!aa.size && !bb.size) return 1
   let both = 0
   for (const x of aa) if (bb.has(x)) both++

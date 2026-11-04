@@ -11,7 +11,7 @@ export function nextTempCounter() {
   return tempCounter++
 }
 export function json(p, v) {
-  atomicWrite(p, JSON.stringify(v, null, 2) + '\n')
+  atomicWrite(p, JSON.stringify(v, null, 2) + '\n', { mode: 0o666 })
 }
 export function copyTree(source, dest, force = false) {
   const stat = lstatSync(source)
@@ -25,7 +25,7 @@ export function copyTree(source, dest, force = false) {
   if (!stat.isFile()) return
   if (existsSync(dest) && lstatSync(dest).isSymbolicLink()) throw new Error(`refusing symlink destination: ${dest}`)
   if (force || !existsSync(dest) || (lstatSync(dest).isFile() && Object.values({ ...PROFILE_FILES, ...CONTEXT_FILES }).includes(readFileSync(dest, 'utf8'))))
-    atomicWrite(dest, readFileSync(source))
+    atomicWrite(dest, readFileSync(source), { mode: 0o666 })
 }
 export function copyMarkdownTree(source, dest) {
   const stat = lstatSync(source)
@@ -38,7 +38,7 @@ export function copyMarkdownTree(source, dest) {
   }
   if (stat.isFile() && source.endsWith('.md')) {
     if (existsSync(dest) && lstatSync(dest).isSymbolicLink()) throw new Error(`refusing symlink destination: ${dest}`)
-    atomicWrite(dest, readFileSync(source))
+    atomicWrite(dest, readFileSync(source), { mode: 0o666 })
   }
 }
 export function isEcosystemMetadata(out) {

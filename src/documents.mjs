@@ -169,11 +169,11 @@ export async function saveDocument(root, name, content, expectedHash, { validate
     throw e
   }
   try {
-    atomicWrite(item.path, content)
+    atomicWrite(item.path, content, { mode: 0o666 })
     if (validate) await validate()
   } catch (error) {
     if (existed) {
-      atomicWrite(item.path, before)
+      atomicWrite(item.path, before, { mode: 0o666 })
     } else rmSync(item.path, { force: true })
     const wrapped = new Error(`document validation failed; original content restored: ${error.message}`)
     wrapped.code = 'DOCUMENT_INVALID'

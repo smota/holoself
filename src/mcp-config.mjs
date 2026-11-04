@@ -129,7 +129,7 @@ export function mcpConfigurationPlan(projectInput, { platforms = PLATFORMS } = {
 export function applyMcpConfiguration(projectInput, options = {}, io = {}) {
   const plan = mcpConfigurationPlan(projectInput, options),
     written = []
-  const write = io.write || atomicWrite,
+  const write = io.write || ((path, content) => atomicWrite(path, content, { mode: 0o666 })),
     remove = io.remove || (path => rmSync(path, { force: true }))
   try {
     for (const change of plan._changes)
@@ -139,7 +139,7 @@ export function applyMcpConfiguration(projectInput, options = {}, io = {}) {
       }
   } catch (error) {
     for (const change of written.reverse()) {
-      if (change.existed) atomicWrite(change.path, change.before)
+      if (change.existed) atomicWrite(change.path, change.before, { mode: 0o666 })
       else remove(change.path)
     }
     throw error

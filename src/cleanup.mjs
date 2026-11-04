@@ -15,6 +15,7 @@ function cleanupMarkdownFiles(root) {
       ...markdownFiles(base, {
         includeHoloself: true,
         skipDirs: new Set(),
+        caseInsensitiveExt: false,
         onSymlink: path => {
           throw new Error(`unsafe cleanup entry: ${path}`)
         }

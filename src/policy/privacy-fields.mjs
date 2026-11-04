@@ -179,7 +179,7 @@ export function salvagePrivacyFrontmatter(raw, { forcePrivate = false, registry 
 export function frontmatter(text, { tolerant = false, registry = null, validatePrivacy = true } = {}) {
   if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) return { metadata: {}, body: text, raw: '', hasFrontmatter: false, warnings: [] }
   const openLen = text.startsWith('---\r\n') ? 5 : 4
-  const end = text.indexOf('\n---', 3)
+  const end = text.indexOf('\n---', 4)
   if (end < 0) {
     if (!tolerant) throw new Error('unclosed frontmatter')
     if (!validatePrivacy) return { metadata: {}, body: text, raw: '', hasFrontmatter: false, warnings: [] }

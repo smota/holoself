@@ -113,7 +113,7 @@ function inject(target, file, dryRun, section, start = EXPORT_START, end = EXPOR
   const re = new RegExp(`${start}[\\s\\S]*?${end}\\n?`)
   const found = starts === 1
   const next = found ? old.replace(re, section) : (old.trimEnd() ? old.trimEnd() + '\\n\\n' : '') + section
-  if (!dryRun && next !== old) atomicWrite(p, next)
+  if (!dryRun && next !== old) atomicWrite(p, next, { mode: 0o666 })
   return next === old ? 'unchanged' : found ? 'updated' : existed ? 'appended' : 'created'
 }
 function isHoloselfLink(p, root) {
@@ -317,7 +317,7 @@ export async function run(argv) {
         action === 'migrate-lenses'
           ? buildLensMigrationPlan(root)
           : buildTransformationPlan(root, JSON.parse(readFileSync(resolve(o.replacements), 'utf8')), { kind: o.planKind || 'section-replacement' })
-      if (o.output) atomicWrite(o.output, JSON.stringify(plan, null, 2) + '\n')
+      if (o.output) atomicWrite(o.output, JSON.stringify(plan, null, 2) + '\n', { mode: 0o666 })
       console.log(JSON.stringify(plan, null, 2))
       return
     }
@@ -331,7 +331,7 @@ export async function run(argv) {
     }
     const plan = buildCleanupPlan(root)
     if (o.output) {
-      atomicWrite(o.output, JSON.stringify(plan, null, 2) + '\n')
+      atomicWrite(o.output, JSON.stringify(plan, null, 2) + '\n', { mode: 0o666 })
       console.log(
         JSON.stringify({ status: 'planned', plan_path: o.output, digest: plan.digest, operations: plan.operations, review_only: plan.review_only }, null, 2)
       )
@@ -352,21 +352,22 @@ export async function run(argv) {
       try {
         writeFileSync(cursorKeyPath, randomBytes(32), { mode: 0o600 })
       } catch {}
-    if (!existsSync(join(root, 'topics', '.current'))) atomicWrite(join(root, 'topics', '.current'), '')
+    if (!existsSync(join(root, 'topics', '.current'))) atomicWrite(join(root, 'topics', '.current'), '', { mode: 0o666 })
     if (!existsSync(join(root, 'reference', 'README.md')))
       atomicWrite(
         join(root, 'reference', 'README.md'),
-        '# Private reference\n\nKeep private reference material here. It is never published as a public contrib.\n'
+        '# Private reference\n\nKeep private reference material here. It is never published as a public contrib.\n',
+        { mode: 0o666 }
       )
     if (!existsSync(join(root, 'me', 'contribs.md')))
-      atomicWrite(join(root, 'me', 'contribs.md'), '# Local self-model extensions\n\nList private contrib paths here when needed.\n')
+      atomicWrite(join(root, 'me', 'contribs.md'), '# Local self-model extensions\n\nList private contrib paths here when needed.\n', { mode: 0o666 })
     for (const [name, body] of Object.entries(PROFILE_FILES)) {
       const p = join(root, 'profile', name)
-      if (!existsSync(p)) atomicWrite(p, body)
+      if (!existsSync(p)) atomicWrite(p, body, { mode: 0o666 })
     }
     for (const [name, body] of Object.entries(CONTEXT_FILES)) {
       const p = join(root, 'context', name)
-      if (!existsSync(p)) atomicWrite(p, body)
+      if (!existsSync(p)) atomicWrite(p, body, { mode: 0o666 })
     }
     // Keep data-root guidance beside private data. Bounded injection preserves user text.
     inject(root, 'AGENTS.md', false, rootSection(), ROOT_START, ROOT_END)
@@ -437,7 +438,7 @@ export async function run(argv) {
       if (source !== o.from && existsSync(join(o.from, 'topics'))) ensureDir(join(root, 'topics'))
       const c = readConfig(root)
       if (c) json(configPath(root), c)
-      atomicWrite(manifestPath, JSON.stringify(migrationManifest(report), null, 2) + '\n')
+      atomicWrite(manifestPath, JSON.stringify(migrationManifest(report), null, 2) + '\n', { mode: 0o666 })
     }
     printMigrationReport(report, o.dryRun ? null : manifestPath)
     return
@@ -455,8 +456,10 @@ export async function run(argv) {
         ensureDir(stage)
         copyMarkdownTree(join(root, 'profile'), join(stage, 'profile'))
         copyMarkdownTree(join(root, 'context'), join(stage, 'context'))
-        atomicWrite(join(stage, 'context-packet.md'), packet(root, o.packetOnly))
-        atomicWrite(join(stage, 'README.md'), '# Holoself project context\n\nThis folder is generated locally. Do not commit it unless reviewed.\n')
+        atomicWrite(join(stage, 'context-packet.md'), packet(root, o.packetOnly), { mode: 0o666 })
+        atomicWrite(join(stage, 'README.md'), '# Holoself project context\n\nThis folder is generated locally. Do not commit it unless reviewed.\n', {
+          mode: 0o666
+        })
         backup = backupExport(out, o.target)
         renameSync(stage, out)
       } finally {

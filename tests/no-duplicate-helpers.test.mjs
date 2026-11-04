@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import test from 'node:test'
+import { installGlobalSkills } from '../src/adapters.mjs'
+import { buildCleanupPlan } from '../src/cleanup.mjs'
+import { run } from '../src/cli.mjs'
+import { readDocument, saveDocument } from '../src/documents.mjs'
+import { searchIndex } from '../src/ecosystem.mjs'
+import { applyMcpConfiguration } from '../src/mcp-config.mjs'
+import { frontmatter } from '../src/policy/privacy-fields.mjs'
 import { PACKAGE_ROOT } from '../src/shared/package-root.mjs'
 
 // Explicit allowlist of top-level helper/declaration names permitted in more than one module under src/.
@@ -297,4 +305,106 @@ test('no top-level or exported function/helper name in src/ is defined in more t
   }
 
   assert.deepEqual(duplicates, [], `Duplicate top-level definitions found across src/:\n${duplicates.join('\n')}`)
+})
+
+test(
+  'POSIX file modes are preserved (0o666 masked by umask, not 0o600) for AGENTS.md, .mcp.json, global SKILL.md and Workbench saves',
+  { skip: process.platform === 'win32' },
+  async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'holoself-modes-'))
+    try {
+      const selfRoot = join(tmp, 'self')
+      const project = join(tmp, 'project')
+      const skillHome = join(tmp, 'skills')
+      mkdirSync(selfRoot, { recursive: true })
+      mkdirSync(project, { recursive: true })
+      mkdirSync(skillHome, { recursive: true })
+
+      await run(['init', '--root', selfRoot])
+      installGlobalSkills({ skillHome, platforms: ['claude'] })
+      await run(['link', 'setup', '--project', project, '--self', selfRoot, '--skill-home', skillHome, '--yes'])
+      applyMcpConfiguration(project, { platforms: ['claude'] })
+
+      const doc = readDocument(selfRoot, 'profile/identity.md')
+      await saveDocument(selfRoot, 'profile/identity.md', doc.content + '\nUpdated\n', doc.hash)
+
+      const currentUmask = process.umask()
+      const expectedMode = 0o666 & ~currentUmask
+      for (const filePath of [
+        join(project, 'AGENTS.md'),
+        join(project, '.mcp.json'),
+        join(skillHome, '.claude', 'skills', 'holoself', 'SKILL.md'),
+        join(selfRoot, 'profile', 'identity.md')
+      ]) {
+        const actualMode = statSync(filePath).mode & 0o777
+        assert.equal(actualMode, expectedMode, `Expected mode ${expectedMode.toString(8)} for ${filePath}, got ${actualMode.toString(8)}`)
+      }
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  }
+)
+
+test('empty frontmatter ---\\n---\\n throws in strict mode and restricts to private in tolerant mode', () => {
+  assert.throws(() => frontmatter('---\n---\n# Title\n'), /unclosed frontmatter/)
+  const res = frontmatter('---\n---\n# Title\n', { tolerant: true })
+  assert.deepEqual(res.metadata.access_lenses, ['private'])
+  assert.equal(res.metadata.sensitivity, 'restricted')
+  assert.equal(res.metadata.visibility, 'private')
+  assert.equal(res.metadata.read_scope, 'restricted')
+  assert.match(res.warnings.join(' '), /unclosed project frontmatter restricted to private/)
+})
+
+test('searchIndex matches queries containing stopword terms such as current', () => {
+  const index = {
+    entries: [
+      {
+        file: 'profile/work-context.md',
+        source_kind: 'canonical',
+        space_id: 'self',
+        modified_ms: Date.now(),
+        frontmatter: {
+          access_lenses: ['general', 'private'],
+          disclosure: 'internal-only',
+          sensitivity: 'personal',
+          document_role: 'content',
+          visibility: 'linked-projects'
+        },
+        sections: [
+          {
+            section_id: 'focus',
+            heading: 'Focus',
+            visibility: 'linked-projects',
+            disclosure: 'internal-only',
+            snippet: 'The current priority is helper consolidation.'
+          }
+        ]
+      }
+    ]
+  }
+  const hits = searchIndex(index, 'current', 'general')
+  assert.equal(hits.length, 1)
+  assert.equal(hits[0].source_file, 'profile/work-context.md')
+})
+
+test('buildCleanupPlan matches only lowercase .md files', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'holoself-cleanup-case-'))
+  try {
+    mkdirSync(join(tmp, 'profile'), { recursive: true })
+    writeFileSync(
+      join(tmp, 'profile', 'lower.md'),
+      '---\nschema_version: 1\naccess_lenses: [private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\nknowledge_status: historical\n---\n# Lower\n'
+    )
+    writeFileSync(
+      join(tmp, 'profile', 'UPPER.MD'),
+      '---\nschema_version: 1\naccess_lenses: [private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\nknowledge_status: historical\n---\n# Upper\n'
+    )
+    const plan = buildCleanupPlan(tmp)
+    assert.deepEqual(
+      plan.operations.map(op => op.path),
+      ['profile/lower.md']
+    )
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
 })
