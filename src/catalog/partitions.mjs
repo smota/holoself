@@ -16,6 +16,7 @@ import { canonicalSpaceId } from '../link/registry.mjs'
 import { ensureHoloselfGitignore } from '../link/config.mjs'
 import { canonicalFiles, globRegex, matchesAny } from '../markdown/files.mjs'
 import { sections } from '../markdown/text.mjs'
+import { discoverPolicyFiles } from '../policy/policy-defaults.mjs'
 import { SECRET_RE } from '../policy/secrets.mjs'
 import { canonicalPath, linkBelow, locateBelow, lstat, samePath } from '../path-guard.mjs'
 import { ensureDir, hash, slash } from '../shared/fs.mjs'
@@ -29,6 +30,23 @@ export function isPartitionFresh(catalog, rootDir, files, registry, expectedCont
   if (catalog.lens_registry_hash !== registry.registry_hash) return false
   if (spaceId === 'self') {
     if (catalog.project_context_hash !== null) return false
+    const currentPolicies = discoverPolicyFiles(rootDir, registry)
+    const recordedPolicies = catalog.policy_files || []
+    if (currentPolicies.length !== recordedPolicies.length) return false
+    const recordedMap = new Map(recordedPolicies.map(p => [p.file, p]))
+    for (const p of currentPolicies) {
+      if (!p.valid || p.mtime_ns === '0') return false
+      const expected = recordedMap.get(p.file)
+      if (!expected) return false
+      if (
+        expected.size !== p.size ||
+        expected.mtime_ns !== p.mtime_ns ||
+        expected.ino !== p.ino ||
+        expected.dev !== p.dev ||
+        expected.sha256 !== p.sha256
+      )
+        return false
+    }
   } else {
     if (catalog.project_context_hash !== expectedContextHash) return false
   }
@@ -88,10 +106,50 @@ export function ensureCatalogPartition(spaceId, rootDir, files, registry, option
   const sourceKind = spaceId === 'self' ? 'canonical' : 'project'
   const isProject = spaceId !== 'self'
 
+  const policyFiles = spaceId === 'self' ? discoverPolicyFiles(rootDir, registry) : []
+  const changedPolicyDirs = new Set()
+  if (spaceId === 'self') {
+    const oldPolicyByFile = new Map((existingCatalog?.policy_files || []).map(p => [p.file, p]))
+    const currentPolicySet = new Set()
+    for (const p of policyFiles) {
+      currentPolicySet.add(p.file)
+      if (!p.valid && p.error) warnings.push(redactRootPaths(p.error, [rootDir]))
+      const oldP = oldPolicyByFile.get(p.file)
+      const dirRel = p.file.includes('/') ? p.file.slice(0, p.file.lastIndexOf('/')) : ''
+      if (
+        !oldP ||
+        !p.valid ||
+        oldP.mtime_ns === '0' ||
+        oldP.size !== p.size ||
+        oldP.mtime_ns !== p.mtime_ns ||
+        oldP.ino !== p.ino ||
+        oldP.dev !== p.dev ||
+        oldP.sha256 !== p.sha256
+      ) {
+        changedPolicyDirs.add(dirRel)
+      }
+    }
+    for (const oldFile of oldPolicyByFile.keys()) {
+      if (!currentPolicySet.has(oldFile)) {
+        const dirRel = oldFile.includes('/') ? oldFile.slice(0, oldFile.lastIndexOf('/')) : ''
+        changedPolicyDirs.add(dirRel)
+      }
+    }
+  }
+  const isAffectedByPolicyChange = rel => {
+    if (changedPolicyDirs.size === 0) return false
+    if (changedPolicyDirs.has('')) return true
+    for (const dirRel of changedPolicyDirs) {
+      if (rel.startsWith(`${dirRel}/`)) return true
+    }
+    return false
+  }
+
   for (const file of files) {
     const rel = slash(relative(rootDir, file))
+    const policyChanged = isAffectedByPolicyChange(rel)
     const sOld = existingByFile.get(rel)
-    if (!options.rebuild && sOld) {
+    if (!options.rebuild && !policyChanged && sOld) {
       let st = null
       try {
         st = getStatTuple(file)
@@ -102,7 +160,7 @@ export function ensureCatalogPartition(spaceId, rootDir, files, registry, option
       }
     }
     const sIgnoredOld = existingIgnoredByFile.get(rel)
-    if (!options.rebuild && sIgnoredOld) {
+    if (!options.rebuild && !policyChanged && sIgnoredOld) {
       let st = null
       try {
         st = getStatTuple(file)
@@ -209,7 +267,20 @@ export function ensureCatalogPartition(spaceId, rootDir, files, registry, option
     project_context_hash: spaceId === 'self' ? null : options.expectedProjectContextHash || null,
     generated_at: new Date().toISOString(),
     sources,
-    ignored_sources
+    ignored_sources,
+    ...(spaceId === 'self' && policyFiles.length > 0
+      ? {
+          policy_files: policyFiles.map(p => ({
+            file: p.file,
+            size: p.size,
+            modified_ms: p.modified_ms,
+            mtime_ns: p.mtime_ns,
+            ino: p.ino,
+            dev: p.dev,
+            sha256: p.sha256
+          }))
+        }
+      : {})
   }
 
   const val = validateCatalogSchema(catalog)
@@ -220,7 +291,7 @@ export function ensureCatalogPartition(spaceId, rootDir, files, registry, option
   } catch {}
   ensureDir(catalogRoot(rootDir))
   atomicWriteFile(catPath, JSON.stringify(catalog, null, 2) + '\n')
-  return { catalog, fresh: false, skippedSecrets, warnings, catalog_reads: catalogReads }
+  return { catalog, fresh: false, skippedSecrets, warnings: [...new Set(warnings)], catalog_reads: catalogReads }
 }
 let CONTRIB_CATALOG_CACHE = null
 export function ensureContribPartition(packageRoot, registry, selfRoot = null) {
