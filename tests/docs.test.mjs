@@ -1,4 +1,5 @@
 import { parseArguments } from '../src/cli.mjs'
+import { buildExpectedReferenceFiles, replaceGeneratedBlock } from '../scripts/generate-reference.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -62,7 +63,7 @@ test('public docs use supported npm install and current ecosystem terms',async()
   const files=[join(root,'README.md'),...await markdownFiles(join(root,'docs'))]
   const text=(await Promise.all(files.map(file=>readFile(file,'utf8')))).join('\n')
   assert.match(text,/npm install --global holoself-ai/)
-  assert.doesNotMatch(text,/npm (?:registry )?package (?:is |remains )?(?:not |un)published|not published yet/i)
+  assert.doesNotMatch(text,/npm (?:registry )?package (?:is |remains )?(?:not |un)published|not published yet|registry installation is not currently available/i)
   assert.doesNotMatch(text,/no secrets in index/i)
   assert.match(text,/link add --project/)
   assert.match(text,/proposal review/i)
@@ -127,7 +128,6 @@ test('agent instructions consolidate resolution in the public skill and bounded 
   assert.doesNotMatch(template,/Loading order:/)
 })
 
-
 test('documented invocations parse under strict flag validation',async()=>{
   const files=[...await documentationFiles(),...await markdownFiles(join(root,'skills'))],failures=[]
   let count=0
@@ -140,7 +140,7 @@ test('documented invocations parse under strict flag validation',async()=>{
       const command=match[1].split(/\s+\|\s+/)[0].replace(/<[^>]+>/g,'example').replace(/\[([^\]]+)\]/g,'$1').replace(/\s+#.*$/,'').trim()
       const tokens=command.match(/"[^"]*"|'[^']*'|[^\s]+/g).map(x=>x.replace(/^["']|["']$/g,''))
       // Slash-separated switch synopses are prose, not executable invocations.
-      if(tokens.some(x=>x==='/'||x==='|'||x==='…'))continue
+      if(tokens.some(x=>x==='/'||x==='|'||x==='\u2026'))continue
       let variants=[[]]
       for(const token of tokens)variants=variants.flatMap(prefix=>token.split('|').map(value=>[...prefix,value==='...'?'example':value]))
       for(const variant of variants){try{parseArguments(variant.slice(1));count++}catch(error){failures.push(`${file.slice(root.length+1)}: ${match[1]}: ${error.message}`)}}
@@ -175,4 +175,72 @@ test('tracked documentation contains no user-home or machine-specific paths',asy
     }
   }
   assert.deepEqual(hits,[])
+})
+
+test('generated CLI and MCP reference sections match live output without drift',()=>{
+  const {capabilities,tools,cliCurrent,mcpCurrent,cliExpected,mcpExpected}=buildExpectedReferenceFiles()
+  assert.equal(tools.length,7,'expected 7 MCP tools from live tools/list')
+  assert.deepEqual(tools.map(t=>t.name),capabilities.mcp.tools)
+  assert.equal(
+    cliCurrent,
+    cliExpected,
+    'docs/reference/cli.md generated section drifted from live capabilities/flag contract; run `npm run docs:reference`'
+  )
+  assert.equal(
+    mcpCurrent,
+    mcpExpected,
+    'docs/reference/mcp-tools.md generated section drifted from live MCP tools/list; run `npm run docs:reference`'
+  )
+  const drifted=replaceGeneratedBlock(mcpCurrent,'<!-- generated:start -->\nstale\n<!-- generated:end -->','docs/reference/mcp-tools.md')
+  assert.notEqual(drifted,mcpExpected,'drift check must detect stale generated content')
+})
+
+test('current version strings, superseded evidence ADRs, lens vocabulary, and branch prefixes match source of truth',async()=>{
+  const pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8'))
+  const workflowConfig=JSON.parse(await readFile(join(root,'agent-workflow.config.json'),'utf8'))
+  const files=await documentationFiles()
+  let versionChecks=0
+  for(const file of files){
+    const text=await readFile(file,'utf8')
+    for(const match of text.matchAll(/Current version:\s*([0-9]+\.[0-9]+\.[0-9]+)/gi)){
+      assert.equal(match[1],pkg.version,`${file.slice(root.length+1)} claims current version ${match[1]} instead of package.json ${pkg.version}`)
+      versionChecks++
+    }
+  }
+  assert.ok(versionChecks>=1,'expected at least one Current version assertion')
+
+  const [statusRoadmap,runtimeAdapters,platformVerification,mcpDecision,ownership,docsMap,agentsMd,contributingMd,workbenchLenses,lensesPrivacy]=await Promise.all([
+    readFile(join(root,'docs','contributing','status-and-roadmap.md'),'utf8'),
+    readFile(join(root,'docs','guides','runtime-adapters.md'),'utf8'),
+    readFile(join(root,'docs','reference','platform-verification.md'),'utf8'),
+    readFile(join(root,'docs','decisions','local-mcp-architecture.md'),'utf8'),
+    readFile(join(root,'docs','concepts','ownership.md'),'utf8'),
+    readFile(join(root,'docs','README.md'),'utf8'),
+    readFile(join(root,'AGENTS.md'),'utf8'),
+    readFile(join(root,'CONTRIBUTING.md'),'utf8'),
+    readFile(join(root,'docs','workbench','lenses.md'),'utf8'),
+    readFile(join(root,'docs','concepts','lenses-and-privacy.md'),'utf8')
+  ])
+
+  assert.match(statusRoadmap,/seven bounded tools/)
+  assert.match(runtimeAdapters,/seven typed tools/)
+  assert.match(platformVerification,/seven-tool discovery/)
+  assert.match(mcpDecision,/holoself_proposal_preview/)
+
+  for(const adr of ['evidence-01-ownership.md','evidence-02-identity-fidelity.md','evidence-03-authorization.md','evidence-04-extraction.md','evidence-05-proposals.md','evidence-06-coaching.md']){
+    const text=await readFile(join(root,'docs','decisions',adr),'utf8')
+    assert.match(text,/Superseded by docs\/specifications\/external-sources-and-coaching-plan\.md \(2026-09-30\)/,adr)
+  }
+
+  assert.doesNotMatch(ownership,/\b(?:career|publishing)\b/i)
+  assert.match(docsMap,/Synthetic professional and public-voice example/)
+  assert.match(workbenchLenses,/SENSITIVITY_LENSES/)
+  assert.match(lensesPrivacy,/SENSITIVITY_LENSES/)
+
+  for(const prefix of workflowConfig.branching.workBranchPrefixes){
+    assert.ok(agentsMd.includes(prefix),`AGENTS.md missing branch prefix ${prefix}`)
+    assert.ok(contributingMd.includes(prefix),`CONTRIBUTING.md missing branch prefix ${prefix}`)
+  }
+  assert.doesNotMatch(agentsMd,/`feat\/<|`docs\/</)
+  assert.doesNotMatch(contributingMd,/`feat\/|`docs\//)
 })

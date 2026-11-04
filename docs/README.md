@@ -37,7 +37,7 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 - [Local coaching sessions](guides/coaching.md)
 - [Activated project links](guides/activated-links.md)
 - [Link or export?](guides/link-or-export.md)
-- [Synthetic career and publishing example](guides/synthetic-linked-projects.md)
+- [Synthetic professional and public-voice example](guides/synthetic-linked-projects.md)
 - [Indexing and search](guides/indexing-and-search.md)
 - [Runtime adapters](guides/runtime-adapters.md)
 - [Local MCP integration](guides/local-mcp.md)

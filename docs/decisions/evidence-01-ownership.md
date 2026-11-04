@@ -1,6 +1,6 @@
 # ADR E01: Evidence ownership, storage and retention
 
-Status: D00 contract accepted against commit `54a29a4`; D02 implementation remains candidate work. Issue: #9; date: 2026-09-28.
+Status: Superseded by docs/specifications/external-sources-and-coaching-plan.md (2026-09-30) ([plan](../specifications/external-sources-and-coaching-plan.md)). Historical D00 contract accepted against commit `54a29a4`; D02 implementation was retired before delivery. Issue: #9; date: 2026-09-28.
 
 ## Decision
 

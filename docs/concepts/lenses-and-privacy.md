@@ -51,6 +51,17 @@ document_role: evidence
 ---
 ```
 
-Explicit document, claim and field access apply to every lens. Definitions control sensitivity categories. `disclosure` and `publication_allowed` remain descriptive metadata. `public-voice` applies no special publication eligibility or compensation filter. Reading context does not authorize external actions. Public and restricted-host adapters retain their explicit snapshot handling contract.
+Document, claim and field access rules apply to every lens. Documents tagged with a sensitive category (`compensation-confidential`, `third-party-personal`, `recruiter-confidential`, `employer-confidential`, `application-private`) are returned only when the active lens lists that category in its `sensitivity_access`; `restricted` is always limited to the owner's `private` lens. The seeded lenses grant:
+
+| Lens | Sensitive categories granted |
+|---|---|
+| `general` | none |
+| `professional`, `interview` | compensation, recruiter, employer, application |
+| `technical` | employer |
+| `leadership` | third-party, employer |
+| `public-voice` | all five |
+| `private` | all five plus `restricted` |
+
+`public-voice` has no extra publication filter: a document that grants `public-voice` access is returned even if it holds compensation details or unapproved evidence. Narrow it by editing the lens's `sensitivity_access` or the document's visibility. `disclosure` is descriptive on standard adapters; public and restricted-host adapters additionally require `disclosure: publish-approved` and a non-confidential sensitivity. Reading context never authorizes external actions.
 
 Legacy `visibility`, `public_safe`, `exclude_lenses`, and `field_visibility` remain readable. Canonical documents need modern controls or valid legacy visibility. `knowledge migrate-lenses` previews exact conversion from `career` to `professional` and `publishing` to `public-voice`, including claim markers. Ordinary prose and proposal archives remain intact. See [CLI](../reference/cli.md) and [migration](../guides/migration.md).

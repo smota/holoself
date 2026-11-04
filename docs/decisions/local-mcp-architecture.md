@@ -44,3 +44,7 @@ Post-implementation review on 2026-08-31:
 - Claude Code AI architect: approved after cross-platform path redaction and fail-closed diagnostics were regression-tested.
 - Claude Code harness specialist: approved after direct subprocess purity, required `CLAUDE_PROJECT_DIR`, no-write reads, symlink/collision handling, and both rollback branches were tested.
 - AGY architect and harness design sign-offs remain approved with the same conditions. AGY 1.1.22 discovered all six tools from a registered isolated synthetic project; its headless status call then stopped at the normal MCP approval boundary. No dangerous bypass was used, and native invocation promotion remains pending an interactive approval or separately reviewed tool-scoped allow rule.
+
+## Subsequent updates
+
+- 2026-11-04: `holoself mcp` now exposes seven tools via `tools/list` (`holoself_status`, `holoself_context`, `holoself_context_manifest`, `holoself_context_get`, `holoself_search`, `holoself_proposal_create`, and `holoself_proposal_preview`). The 2026-08-31 sign-off above records the six tools present at the time of initial MCP validation.

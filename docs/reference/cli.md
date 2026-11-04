@@ -21,6 +21,84 @@ holoself <command> [options]
 | `--version` | Print the human-readable version |
 | `--version --json` | Print machine-readable product and version information |
 
+<!-- generated:start -->
+Generated from `holoself capabilities --json` (product `holoself`, version `0.10.1`, context schema `v1`, index schema `v5`, proposal schemas `v1, v2`) and the CLI flag contract:
+
+- Capability command groups (11): `doctor`, `context`, `search`, `propose`, `proposals`, `instructions`, `knowledge`, `link`, `skill`, `mcp`, `coaching`
+- Coaching subcommands (7): `coaching start`, `coaching note`, `coaching action`, `coaching choose`, `coaching review`, `coaching material`, `coaching resume`
+- Context features: `need-gate`, `budgets`, `manifest`, `source-handles`, `lifecycle`, `receipts`, `task-contrib-routing`
+- MCP tools (7): `holoself_status`, `holoself_context`, `holoself_context_manifest`, `holoself_context_get`, `holoself_search`, `holoself_proposal_create`, `holoself_proposal_preview`
+
+| Command | Accepted flags |
+|---|---|
+| `capabilities` | `--json` |
+| `data-root` | `--root`, `--data-root`, `--data-dir` |
+| `init` | `--root`, `--data-root`, `--data-dir`, `--contribs`, `--exclude-contrib` |
+| `doctor` | `--root`, `--data-root`, `--data-dir` |
+| `validate` | `--root`, `--data-root`, `--data-dir`, `--project` |
+| `migrate` | `--root`, `--data-root`, `--data-dir`, `--from`, `--force`, `--dry-run`, `--yes`, `--confirm` |
+| `export` | `--root`, `--data-root`, `--data-dir`, `--target`, `--packet-only`, `--root-setup`, `--dry-run`, `--yes`, `--confirm` |
+| `link` | `--root`, `--data-root`, `--data-dir`, `--target`, `--root-setup`, `--force`, `--dry-run`, `--yes`, `--confirm` |
+| `unlink` | `--root`, `--data-root`, `--data-dir`, `--target`, `--dry-run`, `--yes`, `--confirm` |
+| `upgrade` | `--root`, `--data-root`, `--data-dir`, `--contribs`, `--exclude-contrib`, `--dry-run` |
+| `web` | `--root`, `--data-root`, `--data-dir`, `--project`, `--port`, `--no-open` |
+| `mcp` | `--project`, `--claude-project-dir` |
+| `mcp status` | `--project`, `--platform`, `--json` |
+| `mcp configure` | `--project`, `--platform`, `--dry-run`, `--yes`, `--confirm`, `--json` |
+| `coaching` | _(none)_ |
+| `coaching start` | `--root`, `--data-root`, `--data-dir`, `--question`, `--json` |
+| `coaching note` | `--root`, `--data-root`, `--data-dir`, `--expected-revision`, `--kind`, `--text`, `--json` |
+| `coaching action` | `--root`, `--data-root`, `--data-dir`, `--expected-revision`, `--text`, `--json` |
+| `coaching choose` | `--root`, `--data-root`, `--data-dir`, `--expected-revision`, `--action-sequence`, `--json` |
+| `coaching review` | `--root`, `--data-root`, `--data-dir`, `--expected-revision`, `--outcome`, `--text`, `--json` |
+| `coaching material` | `--root`, `--data-root`, `--data-dir`, `--expected-revision`, `--material-text`, `--material-status`, `--source-label`, `--producer`, `--limitations`, `--json` |
+| `coaching resume` | `--root`, `--data-root`, `--data-dir`, `--json` |
+| `knowledge transform` | `--root`, `--data-root`, `--data-dir`, `--replacements`, `--plan-kind`, `--output`, `--dry-run`, `--apply`, `--digest`, `--preview-hash`, `--yes`, `--confirm`, `--json` |
+| `knowledge migrate-lenses` | `--root`, `--data-root`, `--data-dir`, `--output`, `--dry-run`, `--apply`, `--digest`, `--preview-hash`, `--yes`, `--confirm`, `--json` |
+| `knowledge cleanup` | `--root`, `--data-root`, `--data-dir`, `--output`, `--dry-run`, `--apply`, `--digest`, `--preview-hash`, `--yes`, `--confirm`, `--json` |
+| `instructions` | `--project`, `--target`, `--json` |
+| `instructions audit` | `--project`, `--target`, `--json` |
+| `instructions render` | `--project`, `--target`, `--adapter`, `--json` |
+| `skill status` | `--scope`, `--platform`, `--skill-home`, `--json` |
+| `skill install` | `--scope`, `--platform`, `--skill-home`, `--force`, `--dry-run`, `--yes`, `--confirm`, `--json` |
+| `lens list` | `--root`, `--data-root`, `--data-dir`, `--json` |
+| `lens show` | `--root`, `--data-root`, `--data-dir`, `--json` |
+| `lens validate` | `--root`, `--data-root`, `--data-dir`, `--json` |
+| `lens bindings` | `--root`, `--data-root`, `--data-dir`, `--json` |
+| `lens bind` | `--root`, `--data-root`, `--data-dir`, `--project`, `--lens`, `--secondary-lenses`, `--binding-hash`, `--dry-run`, `--yes`, `--confirm`, `--json` |
+| `lens unbind` | `--root`, `--data-root`, `--data-dir`, `--project`, `--binding-hash`, `--dry-run`, `--yes`, `--confirm`, `--json` |
+| `link add` | `--project`, `--target`, `--self`, `--lens`, `--secondary-lenses`, `--project-include`, `--project-exclude`, `--project-assert-include`, `--project-assert-exclude`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--force`, `--dry-run`, `--yes`, `--confirm` |
+| `link setup` | `--project`, `--target`, `--self`, `--lens`, `--secondary-lenses`, `--project-include`, `--project-exclude`, `--project-assert-include`, `--project-assert-exclude`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--force`, `--dry-run`, `--yes`, `--confirm` |
+| `link activate` | `--project`, `--target`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--force`, `--dry-run`, `--yes`, `--confirm` |
+| `link repair` | `--project`, `--target`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--force`, `--dry-run`, `--yes`, `--confirm`, `--lens`, `--secondary-lenses` |
+| `link deactivate` | `--project`, `--target`, `--adapters`, `--dry-run`, `--yes`, `--confirm` |
+| `link status` | `--project`, `--target`, `--skill-home`, `--json` |
+| `link doctor` | `--project`, `--target`, `--skill-home`, `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--self-only`, `--budget`, `--source`, `--session-start`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--snapshot` |
+| `link remove` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--force`, `--dry-run`, `--yes`, `--confirm` |
+| `link approve` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--revoke`, `--lenses` |
+| `link backfill` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--all`, `--lenses` |
+| `link prune` | `--root`, `--data-root`, `--data-dir`, `--self` |
+| `link skill migrate-global` | `--project`, `--target`, `--platform`, `--instructions`, `--skill-home`, `--force`, `--dry-run`, `--yes`, `--confirm` |
+| `migrate policy` | `--root`, `--data-root`, `--data-dir`, `--self`, `--apply`, `--revert`, `--confirm-narrowing`, `--allow-partial`, `--include-linked`, `--dry-run`, `--json` |
+| `context` | `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--self-only`, `--budget`, `--source`, `--session-start`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--output`, `--snapshot`, `--yes`, `--confirm` |
+| `analyze overlap` | `--project`, `--target`, `--json` |
+| `analyze conflicts` | `--project`, `--target`, `--json` |
+| `analyze stale` | `--project`, `--target`, `--json` |
+| `analyze all` | `--project`, `--target`, `--json` |
+| `propose` | `--project`, `--target`, `--claim`, `--source-file`, `--target-file`, `--proposal-type`, `--type`, `--evidence`, `--confidence`, `--visibility`, `--json` |
+| `proposals list` | `--project`, `--target`, `--json` |
+| `proposals audit` | `--project`, `--target`, `--json` |
+| `proposals show` | `--project`, `--target` |
+| `proposals approve` | `--project`, `--target`, `--json`, `--digest`, `--preview-hash`, `--yes`, `--confirm` |
+| `proposals reject` | `--project`, `--target`, `--yes`, `--confirm` |
+| `proposals defer` | `--project`, `--target`, `--yes`, `--confirm` |
+| `proposals supersede` | `--project`, `--target`, `--yes`, `--confirm` |
+| `index` | `--project`, `--target`, `--changed`, `--json` |
+| `index status` | `--project`, `--target`, `--json` |
+| `index rebuild` | `--project`, `--target`, `--json` |
+| `search` | `--project`, `--target`, `--lens`, `--temporal`, `--federated`, `--spaces`, `--json` |
+<!-- generated:end -->
+
 ## Core
 
 | Command | Purpose |

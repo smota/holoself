@@ -1,10 +1,10 @@
 # ADR E04: Local extraction boundary and D01 decision gate
 
-Status: D00 boundary accepted; D01 parser and supervisor feasibility decision independently tested and reviewed at spike scope. See the [D01 validation receipt](../reports/evidence-extraction-d01-validation.md). Production implementation remains unverified. A human decision is required if the accepted contract changes materially. Issues: #9 and #10; date: 2026-09-28.
+Status: Superseded by docs/specifications/external-sources-and-coaching-plan.md (2026-09-30) ([plan](../specifications/external-sources-and-coaching-plan.md)). Historical D00 boundary and D01 spike decision (see the [D01 validation receipt](../reports/evidence-extraction-d01-validation.md)); built-in DOCX/PDF extraction and native worker supervision were retired before production implementation. Issues: #9 and #10; date: 2026-09-28.
 
 ## Decision
 
-v1 covers local Markdown, DOCX and PDF. Parser adapters emit the same immutable block/coverage contract. The domain knows no filesystem, PDF/ZIP library, CLI, web server or model. Use cases own policy, expected revision and publication; adapters implement storage/extraction ports. CLI/MCP/web compose those adapters. Coaching imports evidence/proposal contracts; evidence never imports coaching.
+Historical D00/D01 scope (superseded by docs/specifications/external-sources-and-coaching-plan.md (2026-09-30), which retired built-in DOCX/PDF extraction in favor of externally supplied text): the original v1 proposal covered local Markdown, DOCX and PDF. Parser adapters emit the same immutable block/coverage contract. The domain knows no filesystem, PDF/ZIP library, CLI, web server or model. Use cases own policy, expected revision and publication; adapters implement storage/extraction ports. CLI/MCP/web compose those adapters. Coaching imports evidence/proposal contracts; evidence never imports coaching.
 
 No mandatory remote service, silent dependency installation, OCR or chart interpretation. Preserve a chart/image as a referenced visual block and mark semantics unsupported. A scan without text is explicit partial extraction with a gap; it cannot become semantic text through optimistic reporting. External DOCX relationships may be recorded as inert metadata but are never fetched. Reject macros, active embedded content and unsupported encrypted documents; corruption, parser absence and timeout produce stable error codes and actionable owner guidance.
 
