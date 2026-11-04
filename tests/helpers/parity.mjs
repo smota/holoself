@@ -12,7 +12,7 @@
 //   - ISO-8601 timestamps, including dash forms in generated file names -> <TIME>
 //   - UUIDs (proposal ids, packet ids) -> <UUID:n>, numbered by first appearance per case
 //   - hexadecimal values under the JSON keys in VOLATILE_HEX_KEYS (random salts and secrets,
-//     path-derived ids, cache keys, registry hashes) -> <HEX:n>, numbered by first appearance per
+//     path-derived ids, cache keys, links-registry hashes) -> <HEX:n>, numbered by first appearance per
 //     case; the same values are masked wherever else they appear (plain-text packets, cursor
 //     payloads). All other digests are content-derived and kept verbatim.
 //   - pagination cursors (base64url { p, sig }) -> decoded payload kept, HMAC signature -> <HMAC>
@@ -245,9 +245,9 @@ export const VOLATILE_HEX_KEYS = new Set([
   'binding_salt', // random per link
   'project_id', // hs-space-<hash of canonical project path>
   'space_id',
-  'registry_hash', // links registry stores absolute project paths and timestamps
+  'registry_hash', // links-registry hash (absolute project paths, timestamps); see volatileKey() for lens commands
   'hash', // lens bindings file hash: the bindings are keyed by absolute project path
-  'preview_hash', // proposal preview hash covers absolute canonical target paths
+  'preview_hash', // proposal preview hash embeds the random proposal UUID
   'sig' // cursor HMAC
 ])
 // Owner-direct packets carry the absolute self path, and linked CLI JSON lists pending proposals
@@ -256,6 +256,14 @@ export const VOLATILE_HEX_KEYS = new Set([
 // trimming cannot depend on the path; the path-independence test proves the rest is stable.
 const PATH_DEPENDENT_SIZE_KEYS = new Set(['total_bytes', 'estimated_tokens_total', 'estimated_tokens_total_heuristic'])
 const HEX_RUN = /(?<![0-9a-z])[0-9a-f]{16,}(?![0-9a-z])/gi
+// Volatility is scoped by command where one key name means different things: `lens list|show|validate`
+// print the LENS registry hash under `registry_hash`, which is content-derived and stays verbatim
+// (as does `lens_registry_hash` everywhere); elsewhere `registry_hash` is the links registry's hash.
+function volatileKey(key, entry) {
+  if (!VOLATILE_HEX_KEYS.has(key)) return false
+  if (key === 'registry_hash' && entry.args?.[0] === 'lens') return false
+  return true
+}
 
 export function normalise(cases, fx) {
   const roots = []
@@ -271,16 +279,17 @@ export function normalise(cases, fx) {
   // Pass 1: learn the volatile hex values from volatile keys anywhere in the run (JSON output,
   // embedded JSON strings, decoded cursors), so the same values are also masked in plain text.
   const volatile = new Set()
-  const learn = (value, key) => {
-    if (typeof value === 'string' && VOLATILE_HEX_KEYS.has(key)) for (const run of value.match(HEX_RUN) || []) volatile.add(run.toLowerCase())
-  }
   const textKey = new RegExp(`"(${[...VOLATILE_HEX_KEYS].join('|')})":\\s*"([^"]*)"|Preview hash: ([0-9a-f]+)`, 'g')
   for (const entry of cases) {
     if (entry.skipped) continue
+    const learn = (value, key) => {
+      if (typeof value === 'string' && volatileKey(key, entry)) for (const run of value.match(HEX_RUN) || []) volatile.add(run.toLowerCase())
+    }
     entry.args?.forEach((arg, index) => { if (entry.args[index - 1] === '--cursor') visit(decodeCursor(arg), '', learn) })
     for (const parsed of parseOutput(entry.stdout || '')) visit(parsed, '', learn)
     // Plain-text output (concatenated JSON documents, approval previews) is scanned by pattern.
     for (const match of `${entry.stdout || ''}\n${entry.stderr || ''}`.matchAll(textKey)) {
+      if (match[1] && !volatileKey(match[1], entry)) continue
       for (const run of (match[2] || match[3] || '').match(HEX_RUN) || []) volatile.add(run.toLowerCase())
     }
   }
