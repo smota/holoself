@@ -179,7 +179,7 @@ function hookRemovalTargets(project, runtime, ids = null) {
     .filter(id => {
       if (recordedHook(runtime, id)) return true
       try {
-        return ['installed', 'installed-untrusted', 'drifted'].includes(inspectHook(project, id).state)
+        return ['installed', 'installed-trust-unverified', 'installed-untrusted', 'drifted'].includes(inspectHook(project, id).state)
       } catch {
         return false
       }
@@ -719,7 +719,7 @@ export function activationStatus(project, options = {}) {
   }
 }
 
-// Per activated host: installed | installed-untrusted | missing | drifted | unsafe | invalid | untracked | disabled | not-installed | unsupported.
+// Per activated host: installed | installed-trust-unverified | installed-untrusted | missing | drifted | unsafe | invalid | untracked | disabled | not-installed | unsupported.
 export function sessionStartHookStatus(project, runtime = readRuntime(project)) {
   return activeAdapterIds(project, runtime)
     .filter(id => id !== 'agents')

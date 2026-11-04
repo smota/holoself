@@ -3,7 +3,7 @@
 // Holoself entry changes, so a canonically formatted file round-trips byte-for-byte through install and removal.
 import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { loadVerificationMatrix } from '../mcp-verification.mjs'
 import { fileModeOr, invalidJsonDetail } from '../shared/fs.mjs'
 import { safeProjectFile } from './registry.mjs'
@@ -86,7 +86,8 @@ function unquoteTomlKey(raw) {
 
 function codexConfigPath(env = process.env) {
   if (process.env.NODE_TEST_CONTEXT && env.HOLOSELF_TEST_CODEX_CONFIG !== undefined) return env.HOLOSELF_TEST_CODEX_CONFIG || null
-  if (env.CODEX_HOME) return join(env.CODEX_HOME, 'config.toml')
+  const codexHome = typeof env.CODEX_HOME === 'string' ? env.CODEX_HOME.trim() : ''
+  if (codexHome && isAbsolute(codexHome)) return join(codexHome, 'config.toml')
   const home = env.HOME || env.USERPROFILE || homedir()
   return home ? join(home, '.codex', 'config.toml') : null
 }
@@ -183,13 +184,13 @@ function inspectAgyHook(host, path, read) {
   )
   const owned = (handlers || []).filter(ownedHook),
     otherEvents = group ? Object.keys(group).some(key => key !== host.event) : false,
-    mixed = (owned.length > 0 && ((handlers || []).some(h => !ownedHook(h)) || otherEvents)) || foreignOwned
-  if (!owned.length && !foreignOwned) return { state: 'missing', path, exists: read.exists }
+    mixed = (handlers || []).some(h => !ownedHook(h)) || otherEvents || foreignOwned
+  if (!owned.length && !mixed) return { state: 'missing', path, exists: read.exists }
   const exact = !mixed && owned.length === 1 && JSON.stringify(owned[0]) === JSON.stringify(desiredHookGroup('agy'))
   return { state: exact ? 'installed' : 'drifted', path, exists: read.exists, mixed, owned: owned.length + (foreignOwned ? 1 : 0) }
 }
 
-// State of the host hook file: installed | installed-untrusted | missing | drifted | unsafe | invalid.
+// State of the host hook file: installed | installed-trust-unverified | installed-untrusted | missing | drifted | unsafe | invalid.
 // `mixed` marks a group that holds the Holoself hook together with foreign hooks, which Holoself refuses to edit.
 export function inspectHook(project, id, env = process.env) {
   const host = HOOK_HOSTS[id],
@@ -212,7 +213,9 @@ export function inspectHook(project, id, env = process.env) {
     const groupIndex = (groups || []).findIndex(group => groupHooks(group).some(ownedHook)),
       trusted = isCodexHookTrusted(path, groupIndex, 0, env)
     return {
-      state: trusted ? 'installed' : 'installed-untrusted',
+      // Codex does not publish its trusted_hash digest input; presence of a hash proves only that some version of this
+      // hook slot was reviewed, not that it matches the current .codex/hooks.json bytes.
+      state: trusted ? 'installed-trust-unverified' : 'installed-untrusted',
       path,
       exists: read.exists,
       mixed,
@@ -285,7 +288,7 @@ export function hookChange(project, id, install, { createdFile = false, createdC
       createdContainers ??
       // Without a runtime record, containers left empty by removing the Holoself-owned entry are treated as Holoself's.
       (install ? [...(hooks === undefined ? ['hooks'] : []), ...(hooks?.[host.event] === undefined ? [host.event] : [])] : ['hooks', host.event])
-  if (install && ['installed', 'installed-untrusted'].includes(inspected.state))
+  if (install && ['installed', 'installed-trust-unverified', 'installed-untrusted'].includes(inspected.state))
     return { ...base, after: before, action: 'unchanged', createdContainers: created }
   if (!install && inspected.state === 'missing') return { ...base, after: before, action: 'unchanged', createdContainers: created }
   const at = index < 0 ? kept.length : index,

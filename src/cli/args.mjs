@@ -210,6 +210,11 @@ export function validateFlags(o) {
     error.code = 'INVALID_ARGUMENT'
     throw error
   }
+  if (o.hookFormat !== undefined && !['text', 'agy-json'].includes(o.hookFormat)) {
+    const error = new Error(`invalid hook format: ${o.hookFormat}; expected text or agy-json`)
+    error.code = o.hook ? 'HOOK_OPTION_REFUSED' : 'INVALID_ARGUMENT'
+    throw error
+  }
   if (o.focus !== undefined && !o.harvest) {
     const error = new Error('--focus requires --harvest')
     error.code = 'INVALID_ARGUMENT'

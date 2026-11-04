@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { activateProject, readRuntime } from '../src/adapters.mjs'
-import { HOOK_HOSTS, hookSupport } from '../src/adapters/hooks.mjs'
+import { HOOK_HOSTS, hookSupport, isCodexHookTrusted } from '../src/adapters/hooks.mjs'
 import { run } from '../src/cli.mjs'
+import { parseArguments } from '../src/cli/args.mjs'
 import { readLink } from '../src/link/config.mjs'
 import { applyMcpConfiguration } from '../src/mcp-config.mjs'
 import { appendAuditLine } from '../src/shared/audit-log.mjs'
@@ -669,7 +670,27 @@ test('Codex and AGY refuse symlinks, invalid JSON, and mixed groups; broken file
     )
     rmSync(agyFile)
 
-    // Mixed AGY group (foreign handler inside holoself-session-start.SessionStart) is refused.
+    // Foreign handler alone under our 'holoself-session-start' named entry is refused; file stays byte-identical.
+    for (const foreignUnderOurName of [
+      JSON.stringify({ 'holoself-session-start': { SessionStart: [{ type: 'command', command: 'echo foreign' }] } }, null, 2) + '\n',
+      JSON.stringify(
+        {
+          'holoself-session-start': { SessionStart: [{ type: 'command', command: 'echo foreign' }] },
+          'other-named-hook': { SessionStart: [{ type: 'command', command: 'echo keep-me' }] }
+        },
+        null,
+        2
+      ) + '\n'
+    ]) {
+      writeFileSync(agyFile, foreignUnderOurName)
+      await assert.rejects(
+        run(['link', 'activate', '--project', project, '--activate', 'agy', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']),
+        /shares a group with other hooks/
+      )
+      assert.equal(readFileSync(agyFile, 'utf8'), foreignUnderOurName)
+    }
+
+    // Mixed AGY group (foreign handler + owned handler inside holoself-session-start.SessionStart) is refused.
     const mixedAgy = JSON.stringify(
       {
         'holoself-session-start': {
@@ -690,6 +711,14 @@ test('Codex and AGY refuse symlinks, invalid JSON, and mixed groups; broken file
     assert.equal(readFileSync(agyFile, 'utf8'), mixedAgy)
     rmSync(agyFile)
 
+    // Foreign named entries under other names are preserved when our named entry is installed.
+    writeFileSync(agyFile, FOREIGN_AGY)
+    await capture(() => run(['link', 'activate', '--project', project, '--activate', 'agy', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']))
+    assert.deepEqual(json(readFileSync(agyFile, 'utf8'))['foreign-workspace-hook'], json(FOREIGN_AGY)['foreign-workspace-hook'])
+    await capture(() => run(['link', 'deactivate', '--project', project, '--yes']))
+    assert.equal(readFileSync(agyFile, 'utf8'), FOREIGN_AGY)
+    rmSync(agyFile)
+
     // Broken hook files report unremovable on deactivate without blocking deactivation.
     await capture(() => run(['link', 'activate', '--project', project, '--activate', 'codex,agy', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']))
     writeFileSync(codexFile, '{ broken')
@@ -703,7 +732,7 @@ test('Codex and AGY refuse symlinks, invalid JSON, and mixed groups; broken file
   }
 })
 
-test('Codex trust state: installed-untrusted until ~/.codex/config.toml has the matching trusted_hash (read-only)', async () => {
+test('Codex trust state: installed-untrusted without trusted_hash, installed-trust-unverified when present (read-only); relative CODEX_HOME ignored', async () => {
   const { base, project } = await fixture({ settings: null, claudeDir: false })
   const codexFile = join(project, CODEX_HOOKS),
     codexConfig = join(base, 'codex-config.toml'),
@@ -737,15 +766,22 @@ test('Codex trust state: installed-untrusted until ~/.codex/config.toml has the 
     status = json(await capture(() => run(['link', 'status', '--project', project])))
     assert.equal(status.session_start_hooks[0].state, 'installed-untrusted')
 
-    // Matching group index (1:0) in table form marks the hook installed.
+    // Matching group index (1:0) in table form marks the hook installed-trust-unverified (hash input is not reproduced).
     const configContent = `[hooks.state."${escapedPath}:session_start:1:0"]\ntrusted_hash = "sha256:${'b'.repeat(64)}"\n`
     writeFileSync(codexConfig, configContent)
     status = json(await capture(() => run(['link', 'status', '--project', project])))
-    assert.equal(status.session_start_hooks[0].state, 'installed')
+    assert.equal(status.session_start_hooks[0].state, 'installed-trust-unverified')
     assert.equal(status.session_start_hooks[0].trust_step, undefined)
     doctor = json(await capture(() => run(['link', 'doctor', '--project', project])))
-    assert.equal(doctor.checks.session_start_hook, 'installed')
+    assert.equal(doctor.state, 'activated')
+    assert.equal(doctor.checks.session_start_hook, 'installed-trust-unverified')
+    assert.equal(doctor.session_start_hooks[0].state, 'installed-trust-unverified')
     assert.equal(readFileSync(codexConfig, 'utf8'), configContent, 'config.toml is strictly read-only')
+
+    // Second activate while installed-trust-unverified is idempotent.
+    const installedBytes = readFileSync(codexFile, 'utf8')
+    await capture(() => run(['link', 'activate', '--project', project, '--activate', 'codex', '--hooks', '--no-mcp', '--install-skill', 'none', '--yes']))
+    assert.equal(readFileSync(codexFile, 'utf8'), installedBytes)
 
     // Dotted key form in config.toml is also recognised.
     writeFileSync(
@@ -753,7 +789,22 @@ test('Codex trust state: installed-untrusted until ~/.codex/config.toml has the 
       `hooks.state."${escapedPath}:session_start:1:0".trusted_hash = "sha256:${'c'.repeat(64)}"\n`
     )
     status = json(await capture(() => run(['link', 'status', '--project', project])))
-    assert.equal(status.session_start_hooks[0].state, 'installed')
+    assert.equal(status.session_start_hooks[0].state, 'installed-trust-unverified')
+
+    // Relative CODEX_HOME is ignored and falls back to HOME; absolute CODEX_HOME is honoured.
+    delete process.env.HOLOSELF_TEST_CODEX_CONFIG
+    const fakeHome = join(base, 'fake-home'),
+      absCodexHome = join(base, 'abs-codex-home'),
+      relCodexDir = join(process.cwd(), 'relative-codex-home-should-not-be-read')
+    mkdirSync(join(fakeHome, '.codex'), { recursive: true })
+    mkdirSync(absCodexHome, { recursive: true })
+    writeFileSync(join(fakeHome, '.codex', 'config.toml'), configContent)
+    assert.equal(isCodexHookTrusted(codexFile, 1, 0, { CODEX_HOME: 'relative-codex-home-should-not-be-read', HOME: fakeHome }), true)
+    assert.equal(existsSync(relCodexDir), false)
+    writeFileSync(join(fakeHome, '.codex', 'config.toml'), '')
+    assert.equal(isCodexHookTrusted(codexFile, 1, 0, { CODEX_HOME: 'relative-codex-home-should-not-be-read', HOME: fakeHome }), false)
+    writeFileSync(join(absCodexHome, 'config.toml'), configContent)
+    assert.equal(isCodexHookTrusted(codexFile, 1, 0, { CODEX_HOME: absCodexHome, HOME: fakeHome }), true)
   } finally {
     if (savedConfig === undefined) delete process.env.HOLOSELF_TEST_CODEX_CONFIG
     else process.env.HOLOSELF_TEST_CODEX_CONFIG = savedConfig
@@ -804,11 +855,18 @@ test('AGY hook-format agy-json wraps packet in injectSteps, respects the 9,000-b
     emptyEnvelope(runIn([...installedCmd, '--bogus-flag'], project), 'bad flag')
     emptyEnvelope(runIn([...installedCmd, '--restricted-host'], project), 'restricted-host')
 
-    // Unsupported --hook-format value fails closed with empty stdout.
+    // Unsupported --hook-format value: in hook mode prints nothing and exits 0; outside hook mode parser rejects with INVALID_ARGUMENT.
     const badFormat = runIn([...installedCmd.slice(0, -1), 'bogus-format'], project)
     assert.equal(badFormat.status, 0)
     assert.equal(badFormat.stdout, '')
     assert.equal(badFormat.stderr, '')
+    assert.throws(
+      () => parseArguments(['context', '--project', project, '--hook-format', 'bogus-format']),
+      err => err.code === 'INVALID_ARGUMENT' && /invalid hook format: bogus-format/.test(err.message)
+    )
+    const badFormatOutsideHook = runIn(['context', '--project', project, '--hook-format', 'bogus-format'], project)
+    assert.notEqual(badFormatOutsideHook.status, 0)
+    assert.match(badFormatOutsideHook.stderr, /invalid hook format: bogus-format/)
 
     // Large profile: total serialized agy-json envelope stays <= 9,000 bytes and keeps the receipt.
     const filler = Array.from({ length: 400 }, (_, i) => `- Synthetic preference line ${i} with enough words to take space.`).join('\n')

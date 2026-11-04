@@ -7,13 +7,14 @@ import { contextData } from '../../../retrieval/context.mjs'
 import { redactRootPaths } from '../../../shared/redact.mjs'
 import { commandStatus } from '../../link-helpers.mjs'
 
-// One summary over hosts with a Holoself hook integration: the first unhealthy state wins, else installed-untrusted, else the shared state.
+// One summary over hosts with a Holoself hook integration: the first unhealthy state wins, else installed-untrusted, else installed-trust-unverified, else the shared state.
 function hookCheck(hooks) {
   const states = hooks.filter(hook => hook.state !== 'unsupported').map(hook => hook.state)
   if (!states.length) return hooks.length ? 'unsupported' : 'not-applicable'
   return (
     states.find(state => ['missing', 'drifted', 'unsafe', 'invalid', 'untracked'].includes(state)) ||
     states.find(state => state === 'installed-untrusted') ||
+    states.find(state => state === 'installed-trust-unverified') ||
     states[0]
   )
 }
