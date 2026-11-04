@@ -28,9 +28,61 @@ export const LEDGER_SURFACES = new Set(['cli', 'mcp', 'hook', 'workbench'])
 export const LEDGER_MODES = new Set(['packet', 'manifest', 'get'])
 export const LEDGER_LOCK_STALE_MS = 10000
 
-const ledgerWaitBuffer = new Int32Array(new SharedArrayBuffer(4))
-function sleepLedgerMs(ms) {
-  Atomics.wait(ledgerWaitBuffer, 0, 0, ms)
+const LOCK_CONTENTION_CODES = new Set(['EEXIST', 'EPERM', 'EACCES', 'EBUSY'])
+const ledgerWaitBuffer = typeof SharedArrayBuffer === 'function' ? new Int32Array(new SharedArrayBuffer(4)) : null
+
+export function sleepLedgerMs(ms) {
+  const waitMs = Math.max(1, Math.min(100, Math.floor(Number(ms) || 1)))
+  if (ledgerWaitBuffer) {
+    try {
+      Atomics.wait(ledgerWaitBuffer, 0, 0, waitMs)
+      return
+    } catch {}
+  }
+  const end = Date.now() + waitMs
+  while (Date.now() < end) {}
+}
+
+function noLinkBelow(root, target, label) {
+  assertNoLinkBelow(root, target, link =>
+    Object.assign(new Error(`${label} traverses symlink: ${link}`), { code: 'LEDGER_SYMLINK_REFUSED' })
+  )
+}
+
+function rmWithRetry(filePath) {
+  const backoffs = [4, 10, 25, 50]
+  for (let i = 0; i <= backoffs.length; i++) {
+    try {
+      rmSync(filePath, { force: true })
+      return
+    } catch (err) {
+      if (err?.code === 'ENOENT') return
+      if (LOCK_CONTENTION_CODES.has(err?.code) && i < backoffs.length) {
+        sleepLedgerMs(backoffs[i])
+        continue
+      }
+      if (!LOCK_CONTENTION_CODES.has(err?.code)) throw err
+    }
+  }
+}
+
+function renameWithRetry(src, dst) {
+  const backoffs = [4, 10, 25, 50]
+  let lastErr = null
+  for (let i = 0; i <= backoffs.length; i++) {
+    try {
+      renameSync(src, dst)
+      return
+    } catch (err) {
+      lastErr = err
+      if (LOCK_CONTENTION_CODES.has(err?.code) && i < backoffs.length) {
+        sleepLedgerMs(backoffs[i])
+        continue
+      }
+      throw err
+    }
+  }
+  if (lastErr) throw lastErr
 }
 
 export function ledgerFilePath(baseDir) {
@@ -61,37 +113,47 @@ export function getOrCreateLedgerKey(selfRoot) {
         if (existingSt.isSymbolicLink() || !existingSt.isFile() || existingSt.nlink !== 1) {
           throw Object.assign(new Error('ledger HMAC key refuses symlink or non-regular file'), { code: 'LEDGER_SYMLINK_REFUSED' })
         }
-        assertNoLinkBelow(resolvedSelf, keyFile, 'ledger HMAC key')
+        noLinkBelow(resolvedSelf, keyFile, 'ledger HMAC key')
         const existingBuf = readFileSync(keyFile)
         if (existingBuf.length >= 32) return existingBuf
       }
       ensureHoloselfGitignore(resolvedSelf)
       const runtimeDir = join(resolvedSelf, '.holoself', 'runtime')
       mkdirSync(runtimeDir, { recursive: true })
-      assertNoLinkBelow(resolvedSelf, runtimeDir, 'ledger HMAC key directory')
+      noLinkBelow(resolvedSelf, runtimeDir, 'ledger HMAC key directory')
       const generated = randomBytes(32)
       const noFollow = fsConstants.O_NOFOLLOW || 0
-      try {
-        const fd = openSync(keyFile, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | noFollow, 0o600)
+      for (let attempt = 0; attempt < 8; attempt++) {
         try {
+          const fd = openSync(keyFile, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | noFollow, 0o600)
           try {
-            fchmodSync(fd, 0o600)
-          } catch {}
-          writeSync(fd, generated)
-        } finally {
-          closeSync(fd)
-        }
-        return generated
-      } catch (err) {
-        if (err?.code === 'EEXIST') {
-          const retrySt = lstatSync(keyFile, { throwIfNoEntry: false })
-          if (!retrySt || retrySt.isSymbolicLink() || !retrySt.isFile() || retrySt.nlink !== 1) {
-            throw Object.assign(new Error('ledger HMAC key refuses symlink or non-regular file'), { code: 'LEDGER_SYMLINK_REFUSED' })
+            try {
+              fchmodSync(fd, 0o600)
+            } catch {}
+            writeSync(fd, generated)
+          } finally {
+            closeSync(fd)
           }
-          const retryBuf = readFileSync(keyFile)
-          if (retryBuf.length >= 32) return retryBuf
+          return generated
+        } catch (err) {
+          if (LOCK_CONTENTION_CODES.has(err?.code)) {
+            sleepLedgerMs(5 + attempt * 5)
+            try {
+              const retrySt = lstatSync(keyFile, { throwIfNoEntry: false })
+              if (retrySt) {
+                if (retrySt.isSymbolicLink() || !retrySt.isFile() || retrySt.nlink !== 1) {
+                  throw Object.assign(new Error('ledger HMAC key refuses symlink or non-regular file'), { code: 'LEDGER_SYMLINK_REFUSED' })
+                }
+                const retryBuf = readFileSync(keyFile)
+                if (retryBuf.length >= 32) return retryBuf
+              }
+            } catch (readErr) {
+              if (readErr?.code === 'LEDGER_SYMLINK_REFUSED') throw readErr
+            }
+            continue
+          }
+          throw err
         }
-        throw err
       }
     }
   }
@@ -265,25 +327,57 @@ function assertSafeLedgerSlot(baseDir, filePath) {
   }
   try {
     assertContainedPath(baseDir, filePath, 'served-context ledger file')
-    assertNoLinkBelow(baseDir, filePath, 'served-context ledger file')
+    noLinkBelow(baseDir, filePath, 'served-context ledger file')
   } catch (error) {
     throw Object.assign(error, { code: error?.code || 'LEDGER_SYMLINK_REFUSED' })
   }
   return st
 }
 
-function withLedgerLock(baseDir, fn, { staleMs = LEDGER_LOCK_STALE_MS } = {}) {
+function inspectLockFile(filePath, staleMs) {
+  let st
+  try {
+    st = lstatSync(filePath, { throwIfNoEntry: false })
+  } catch (err) {
+    if (err?.code === 'ENOENT' || LOCK_CONTENTION_CODES.has(err?.code)) return { exists: false, stale: false }
+    throw err
+  }
+  if (!st) return { exists: false, stale: false }
+  if (st.isSymbolicLink()) {
+    throw Object.assign(new Error('served-context ledger refuses symlink lock file'), { code: 'LEDGER_SYMLINK_REFUSED' })
+  }
+  let raw = ''
+  try {
+    raw = readFileSync(filePath, 'utf8').trim()
+  } catch (err) {
+    if (err?.code === 'ENOENT' || LOCK_CONTENTION_CODES.has(err?.code)) return { exists: false, stale: false }
+    return { exists: true, stale: Date.now() - st.mtimeMs > Math.min(staleMs, 2000), raw: '', mtimeMs: st.mtimeMs }
+  }
+  if (!raw) {
+    return { exists: true, stale: Date.now() - st.mtimeMs > Math.min(staleMs, 2000), raw: '', mtimeMs: st.mtimeMs }
+  }
+  try {
+    const parsed = JSON.parse(raw)
+    const age = Date.now() - Number(parsed?.timestamp || 0)
+    const deadPid = Number.isInteger(parsed?.pid) && parsed.pid > 0 && !isPidAlive(parsed.pid)
+    return { exists: true, stale: age > staleMs || deadPid, raw, mtimeMs: st.mtimeMs }
+  } catch {
+    return { exists: true, stale: Date.now() - st.mtimeMs > Math.min(staleMs, 2000), raw, mtimeMs: st.mtimeMs }
+  }
+}
+
+export function withLedgerLock(baseDir, fn, { staleMs = LEDGER_LOCK_STALE_MS } = {}) {
   const lockFile = ledgerLockPath(baseDir)
   assertContainedPath(baseDir, lockFile, 'served-context ledger lock')
-  assertNoLinkBelow(baseDir, lockFile, 'served-context ledger lock')
+  noLinkBelow(baseDir, lockFile, 'served-context ledger lock')
   const noFollow = fsConstants.O_NOFOLLOW || 0
   let acquired = false
-  for (let attempt = 0; attempt < 250; attempt++) {
-    const preSt = lstatSync(lockFile, { throwIfNoEntry: false })
-    if (preSt && preSt.isSymbolicLink()) {
-      throw Object.assign(new Error('served-context ledger refuses symlink lock file'), { code: 'LEDGER_SYMLINK_REFUSED' })
-    }
+  for (let attempt = 0; attempt < 600; attempt++) {
     try {
+      const preSt = lstatSync(lockFile, { throwIfNoEntry: false })
+      if (preSt && preSt.isSymbolicLink()) {
+        throw Object.assign(new Error('served-context ledger refuses symlink lock file'), { code: 'LEDGER_SYMLINK_REFUSED' })
+      }
       const fd = openSync(lockFile, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | noFollow, 0o600)
       try {
         const payload = `${JSON.stringify({ pid: process.pid, timestamp: Date.now() })}\n`
@@ -294,33 +388,42 @@ function withLedgerLock(baseDir, fn, { staleMs = LEDGER_LOCK_STALE_MS } = {}) {
       acquired = true
       break
     } catch (err) {
-      if (err?.code !== 'EEXIST') throw err
-      let stale = false
-      const st = lstatSync(lockFile, { throwIfNoEntry: false })
-      if (st?.isSymbolicLink()) {
+      if (err?.code === 'ELOOP' || err?.code === 'LEDGER_SYMLINK_REFUSED') {
         throw Object.assign(new Error('served-context ledger refuses symlink lock file'), { code: 'LEDGER_SYMLINK_REFUSED' })
       }
-      if (st) {
-        try {
-          const raw = readFileSync(lockFile, 'utf8').trim()
-          if (raw) {
-            const parsed = JSON.parse(raw)
-            const age = Date.now() - (parsed.timestamp || 0)
-            if (age > staleMs || (parsed.pid && !isPidAlive(parsed.pid))) stale = true
-          } else if (Date.now() - st.mtimeMs > 1000) {
-            stale = true
+      if (!LOCK_CONTENTION_CODES.has(err?.code) && err?.code !== 'ENOENT') throw err
+
+      const first = inspectLockFile(lockFile, staleMs)
+      if (first.stale) {
+        sleepLedgerMs(3)
+        const second = inspectLockFile(lockFile, staleMs)
+        if (second.stale && second.raw === first.raw && second.mtimeMs === first.mtimeMs) {
+          const stalePath = `${lockFile}.stale-${process.pid}-${randomBytes(4).toString('hex')}`
+          let renamed = false
+          try {
+            renameSync(lockFile, stalePath)
+            renamed = true
+          } catch (renameErr) {
+            if (!LOCK_CONTENTION_CODES.has(renameErr?.code) && renameErr?.code !== 'ENOENT') {
+              throw renameErr
+            }
           }
-        } catch {
-          if (Date.now() - st.mtimeMs > 1000) stale = true
+          if (renamed) {
+            const verify = inspectLockFile(stalePath, staleMs)
+            if (!verify.stale && verify.exists) {
+              try {
+                renameSync(stalePath, lockFile)
+              } catch {
+                rmWithRetry(stalePath)
+              }
+            } else {
+              rmWithRetry(stalePath)
+              continue
+            }
+          }
         }
       }
-      if (stale) {
-        try {
-          rmSync(lockFile, { force: true })
-        } catch {}
-        continue
-      }
-      sleepLedgerMs(Math.min(25, 4 + (attempt % 12)))
+      sleepLedgerMs(Math.min(20, 3 + (attempt % 12)))
     }
   }
   if (!acquired) {
@@ -329,9 +432,13 @@ function withLedgerLock(baseDir, fn, { staleMs = LEDGER_LOCK_STALE_MS } = {}) {
   try {
     return fn()
   } finally {
+    const releasePath = `${lockFile}.stale-${process.pid}-${randomBytes(4).toString('hex')}`
     try {
-      rmSync(lockFile, { force: true })
-    } catch {}
+      renameWithRetry(lockFile, releasePath)
+      rmWithRetry(releasePath)
+    } catch {
+      rmWithRetry(lockFile)
+    }
   }
 }
 
@@ -343,17 +450,17 @@ function rotateLedgerFiles(baseDir, maxKeep = LEDGER_ROTATE_KEEP) {
   }
   const oldestPath = rotatedLedgerFilePath(baseDir, maxKeep)
   if (lstatSync(oldestPath, { throwIfNoEntry: false })) {
-    rmSync(oldestPath, { force: true })
+    rmWithRetry(oldestPath)
   }
   for (let i = maxKeep - 1; i >= 1; i--) {
     const src = rotatedLedgerFilePath(baseDir, i)
     const dst = rotatedLedgerFilePath(baseDir, i + 1)
     if (lstatSync(src, { throwIfNoEntry: false })) {
-      renameSync(src, dst)
+      renameWithRetry(src, dst)
     }
   }
   if (lstatSync(activePath, { throwIfNoEntry: false })) {
-    renameSync(activePath, rotatedLedgerFilePath(baseDir, 1))
+    renameWithRetry(activePath, rotatedLedgerFilePath(baseDir, 1))
   }
 }
 
@@ -366,12 +473,12 @@ export function appendLedgerLine(baseDir, entry, { maxBytes = LEDGER_MAX_BYTES, 
     mkdirSync(holoselfDir, { recursive: true })
   }
   assertSafeLedgerTarget(baseDir)
-  ensureHoloselfGitignore(baseDir)
 
   const line = `${JSON.stringify(entry)}\n`
   const lineBytes = Buffer.byteLength(line)
 
   return withLedgerLock(baseDir, () => {
+    ensureHoloselfGitignore(baseDir)
     const activePath = ledgerFilePath(baseDir)
     const activeStat = assertSafeLedgerSlot(baseDir, activePath)
     for (let i = 1; i <= keep; i++) {

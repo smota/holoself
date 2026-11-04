@@ -198,6 +198,7 @@ export function cli(args, { stdin, allowFailure = false, timeoutMs = 60000, maxS
     child.on('close', code =>
       code === 0 || allowFailure ? finish(null, { stdout: out.trim(), stderr: err.trim(), code }) : finish(cliFailure(err.trim(), code))
     )
+    child.stdin.on('error', () => {})
     child.stdin.end(stdin || '')
     const timer = setTimeout(() => {
       child.kill()

@@ -261,7 +261,7 @@ export function writeLink(project, self, lens = 'general', secondary = [], proje
 }
 export const HOLOSELF_GITIGNORE_PATTERNS = [
   'ledger*.ndjson',
-  'ledger*.lock',
+  'ledger*.lock*',
   'catalog/',
   'index/',
   'runtime/',
