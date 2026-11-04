@@ -1,12 +1,14 @@
 // MCP-facing facade over context, search, status and proposals for a fixed linked project.
 import { existsSync } from 'node:fs'
-import { basename, resolve } from 'node:path'
+import { basename, relative, resolve } from 'node:path'
 import { readIndex, searchIndex } from '../catalog/index.mjs'
 import { loadLensRegistry, resolveLens } from '../lenses.mjs'
 import { linkedLensAuthority } from '../link/attestation.mjs'
 import { readLink } from '../link/config.mjs'
 import { healthStatus } from '../link/health.mjs'
-import { createProposal, listProposalData, proposalPreviewData } from '../proposals/store.mjs'
+import { parseClaimBlocks } from '../markdown/claim-blocks.mjs'
+import { createProposal, listProposalData, proposalChanges, proposalPreviewData, safeTarget } from '../proposals/store.mjs'
+import { slash } from '../shared/fs.mjs'
 import { contextData } from './context.mjs'
 
 export function mcpContextData(project, options = {}) {
@@ -88,14 +90,48 @@ export function holoselfMcpSearch(project, input) {
   })
   return { query: input.query, lens, federated: false, results: results.slice(0, input.limit || 10) }
 }
+// Claim ids in a self document as this link's own lenses deliver it (any lifecycle status). Hidden claims never
+// reach delivery, so their ids are never visible here; MCP may only target claims it could already read.
+function mcpVisibleClaimIds(project, target) {
+  const link = readLink(project),
+    ids = new Set()
+  for (const lens of new Set([link.default_lens, ...(link.secondary_lenses || [])])) {
+    let data
+    try {
+      data = mcpContextData(project, { lens, temporal: 'all', budget: 'deep', sources: [target] })
+    } catch {
+      continue
+    }
+    for (const doc of data.self?.documents || []) if (doc.path === target) for (const block of parseClaimBlocks(doc.content, target)) ids.add(block.claim_id)
+  }
+  return ids
+}
+function assertMcpClaimTargets(project, changes) {
+  const self = readLink(project).path,
+    cache = new Map()
+  for (const change of changes) {
+    if ((change.operation || 'append_claim') === 'append_claim') continue
+    const target = slash(relative(self, safeTarget(self, change.target || 'context/claims.md')))
+    if (!cache.has(target)) cache.set(target, mcpVisibleClaimIds(project, target))
+    if (!cache.get(target).has(change.claim_id)) {
+      const error = new Error(`claim not found in ${target}: ${change.claim_id}`)
+      error.code = 'CLAIM_NOT_FOUND'
+      throw error
+    }
+  }
+}
 export function holoselfMcpCreateProposal(project, input) {
-  const p = createProposal(resolve(project), input),
+  const linked = resolve(project)
+  assertMcpClaimTargets(linked, [input])
+  const p = createProposal(linked, input),
     clean = { ...p }
   delete clean.source_project_path
   return clean
 }
 export function holoselfMcpPreviewProposal(project, id) {
-  const preview = proposalPreviewData(resolve(project), id)
+  const linked = resolve(project),
+    preview = proposalPreviewData(linked, id)
+  assertMcpClaimTargets(linked, proposalChanges(preview.proposal))
   return {
     proposal_id: preview.proposal.proposal_id,
     status: preview.proposal.status,

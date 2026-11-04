@@ -138,6 +138,8 @@ function help() {
       `[--skill-home <dir>] [--dry-run|--yes]\n  context [--project <dir>] [--lens <lens>] [--task <text>] ` +
       `[--session-start] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze ` +
       `overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n` +
+      `  propose --project <dir> --op replace|supersede|retire --claim-id <id> --evidence <text> ` +
+      `--source-file <path> [--claim <text>|--reason <text>]\n` +
       `  proposals list|audit --project <dir>\n  proposals show|approve|reject|defer|supersede <id> --project <dir>\n` +
       `  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir>\n  ` +
       `instructions render|audit --project <dir> [--json]\n  knowledge migrate-lenses [--output <plan>] | --apply ` +

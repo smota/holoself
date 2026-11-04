@@ -1,5 +1,6 @@
 // Markdown text helpers: sections, links, tags, claims and tokenization.
 import { frontmatter } from '../policy/privacy-fields.mjs'
+import { claimBlockPattern, parseClaimBlocks } from './claim-blocks.mjs'
 
 const STOPWORDS = new Set(
   (
@@ -58,18 +59,12 @@ export function claims(text) {
     .filter(x => x.length >= 20 && !x.startsWith('#'))
     .slice(0, 50)
 }
+// Wording of the current canonical claims; superseded and retired claim blocks are history, not live claims.
 export function canonicalClaims(text) {
   const { body } = frontmatter(text),
     found = []
-  const blocks = [...body.matchAll(/<!-- holoself-claim visibility=[a-z-]+ -->([\s\S]*?)<!-- \/holoself-claim -->/g)]
-  for (const [, block] of blocks) {
-    const lines = block
-      .split(/\r?\n/)
-      .map(x => x.trim())
-      .filter(x => x && !x.startsWith('#') && !/^[-*]\s+(?:Evidence|Confidence|Visibility|Provenance|Approved):/i.test(x))
-    if (lines.length) found.push(lines.join(' '))
-  }
-  const withoutBlocks = body.replace(/<!-- holoself-claim visibility=[a-z-]+ -->[\s\S]*?<!-- \/holoself-claim -->/g, '')
+  for (const block of parseClaimBlocks(body)) if (block.status === 'current' && block.text) found.push(block.text)
+  const withoutBlocks = body.replace(claimBlockPattern(), '')
   for (const section of sections(withoutBlocks)) {
     if (!/^CLAIM(?:[- _]|$)/i.test(section.heading)) continue
     const approved = section.content

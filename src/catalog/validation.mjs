@@ -5,10 +5,10 @@ import { VISIBILITIES } from '../annotations.mjs'
 import { loadLensRegistry, resolveLens } from '../lenses.mjs'
 import { readLink } from '../link/config.mjs'
 import { canonicalFiles, markdownFiles, projectMarkdownFiles } from '../markdown/files.mjs'
+import { normalize, parseClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { canonicalClaims } from '../markdown/text.mjs'
 import { canonicalPath, samePath } from '../path-guard.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
-import { normalize } from '../proposals/analysis.mjs'
 import { readProposal } from '../proposals/store.mjs'
 import { slash } from '../shared/fs.mjs'
 import { redactRootPaths } from '../shared/redact.mjs'
@@ -74,6 +74,15 @@ export function ecosystemValidationErrors(root, project = null) {
           if (!VISIBILITIES.includes(value)) errors.push(`invalid field visibility ${value}: ${rel}`)
       for (const match of text.matchAll(/\[[^\]]*\]\(([^)#]+)(?:#[^)]+)?\)/g))
         if (!/^(?:https?:|mailto:)/.test(match[1]) && !existsSync(resolve(dirname(path), match[1]))) errors.push(`broken reference ${match[1]}: ${rel}`)
+      if (text.includes('<!-- holoself-claim')) {
+        const claimIds = new Set()
+        for (const block of parseClaimBlocks(text, rel)) {
+          if (block.attrs.id && claimIds.has(block.attrs.id)) errors.push(`duplicate claim id ${block.attrs.id}: ${rel}`)
+          if (block.attrs.id) claimIds.add(block.attrs.id)
+          if (block.attrs.status !== undefined && !['superseded', 'historical'].includes(block.attrs.status))
+            errors.push(`invalid claim status ${block.attrs.status}: ${rel}`)
+        }
+      }
       const generated = metadata.generated_from
       if (Array.isArray(generated)) {
         for (const source of generated) {

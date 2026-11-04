@@ -6,11 +6,11 @@ import { VISIBILITIES } from '../annotations.mjs'
 import { canonicalSort } from '../catalog.mjs'
 import { loadLensRegistry } from '../lenses.mjs'
 import { createLinkDirs, readLink } from '../link/config.mjs'
+import { CLAIM_ID_RE, claimBlockPattern, claimStatus, formatClaimMarker, normalize, parseClaimAttrs, parseClaimBlocks, proposalClaimId } from '../markdown/claim-blocks.mjs'
 import { claims } from '../markdown/text.mjs'
 import { canonicalPath, samePath } from '../path-guard.mjs'
 import { assertContainedPath, atomicWrite, ensureDir, hash, slash } from '../shared/fs.mjs'
 import { parseYaml, yamlObject } from '../shared/yaml.mjs'
-import { normalize } from './analysis.mjs'
 
 export const PROPOSAL_TYPES = [
   'new_fact',
@@ -24,6 +24,15 @@ export const PROPOSAL_TYPES = [
   'conflict_resolution'
 ]
 export const PROPOSAL_STATES = ['pending', 'approved', 'rejected', 'deferred', 'superseded']
+export const PROPOSAL_OPERATIONS = ['append_claim', 'replace_claim', 'supersede_claim', 'retire_claim']
+// Per-operation change fields beyond change_id, target, operation and proposal_type; unknown keys are rejected.
+const CHANGE_FIELDS = {
+  append_claim: { required: ['claim', 'evidence', 'confidence', 'visibility'], optional: [] },
+  replace_claim: { required: ['claim_id', 'claim', 'evidence', 'confidence'], optional: ['visibility'] },
+  supersede_claim: { required: ['claim_id', 'claim', 'evidence', 'confidence'], optional: ['visibility'] },
+  retire_claim: { required: ['claim_id', 'reason', 'evidence'], optional: [] }
+}
+const DEFAULT_PROPOSAL_TYPE = { append_claim: 'new_fact', replace_claim: 'fact_correction', supersede_claim: 'fact_update', retire_claim: 'fact_update' }
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 export const UUID_PREFIX_RE = /^[0-9a-f-]{8,36}$/i
 export function proposalDir(project) {
@@ -96,7 +105,13 @@ export function validateProposal(p) {
         if (typeof change[key] !== 'string' || !change[key].trim()) errors.push(`proposal change ${key} must be a non-empty string`)
       if (ids.has(change.change_id)) errors.push(`duplicate change_id: ${change.change_id}`)
       ids.add(change.change_id)
-      if (change.operation !== 'append_claim') errors.push(`unsupported proposal operation: ${change.operation}`)
+      const fields = CHANGE_FIELDS[change.operation]
+      if (!fields) {
+        errors.push(`unsupported proposal operation: ${change.operation}`)
+        continue
+      }
+      const allowedChangeKeys = new Set(['change_id', 'target', 'operation', 'proposal_type', ...fields.required, ...fields.optional])
+      for (const key of Object.keys(change)) if (!allowedChangeKeys.has(key)) errors.push(`unknown ${change.operation} field: ${key}`)
       if (
         isAbsolute(change.target || '') ||
         slash(change.target || '')
@@ -108,10 +123,17 @@ export function validateProposal(p) {
       )
         errors.push(`proposal change target must be a contained relative Markdown path: ${change.change_id}`)
       if (!PROPOSAL_TYPES.includes(change.proposal_type)) errors.push(`invalid proposal_type: ${change.proposal_type}`)
-      if (!VISIBILITIES.includes(change.visibility) && !(terminal && ['career', 'publishing'].includes(change.visibility)))
+      if (
+        (fields.required.includes('visibility') || change.visibility !== undefined) &&
+        !VISIBILITIES.includes(change.visibility) &&
+        !(terminal && ['career', 'publishing'].includes(change.visibility))
+      )
         errors.push(`invalid proposal visibility: ${change.visibility}`)
-      for (const key of ['claim', 'evidence', 'confidence'])
+      for (const key of fields.required.filter(key => key !== 'visibility'))
         if (typeof change[key] !== 'string' || !change[key].trim()) errors.push(`proposal change ${key} must be a non-empty string`)
+      if (change.claim_id !== undefined && (typeof change.claim_id !== 'string' || !CLAIM_ID_RE.test(change.claim_id)))
+        errors.push(`proposal change claim_id must be a lowercase UUID: ${change.change_id}`)
+      if (typeof change.reason === 'string' && /[\r\n]/.test(change.reason)) errors.push(`proposal change reason must be a single line: ${change.change_id}`)
     }
   }
   if (
@@ -137,7 +159,7 @@ export function validateProposal(p) {
     p.claim,
     p.evidence,
     p.confidence,
-    ...proposalChanges(p).flatMap(x => [x.claim, x.evidence, x.confidence]),
+    ...proposalChanges(p).flatMap(x => [x.claim, x.evidence, x.confidence, x.reason]),
     ...(Array.isArray(p.provenance) ? p.provenance : [])
   ]
   if (textFields.some(x => typeof x === 'string' && /<!--\s*\/?holoself-claim/i.test(x))) errors.push('proposal text contains reserved claim markers')
@@ -230,6 +252,35 @@ export function saveProposal(p, path = p._path) {
   delete clean._path
   atomicWrite(path, proposalText(clean))
 }
+function claimError(message, code) {
+  return Object.assign(new Error(message), { code })
+}
+// One stored change from caller input: operation-specific fields only, with the documented defaults.
+function proposalChange(input, sourceFiles, changeId) {
+  const operation = input.operation || 'append_claim'
+  if (!PROPOSAL_OPERATIONS.includes(operation)) throw claimError(`unsupported proposal operation: ${operation}`, 'INVALID_ARGUMENT')
+  if (operation !== 'append_claim' && !input.evidence) throw claimError(`${operation} requires evidence`, 'INVALID_ARGUMENT')
+  const change = {
+    change_id: changeId,
+    target: input.target || 'context/claims.md',
+    operation,
+    proposal_type: input.proposal_type || DEFAULT_PROPOSAL_TYPE[operation]
+  }
+  if (operation !== 'append_claim') change.claim_id = input.claim_id
+  if (operation === 'retire_claim') change.reason = input.reason
+  else change.claim = input.claim
+  change.evidence = input.evidence || `Source project files: ${sourceFiles.join(', ')}`
+  if (operation !== 'retire_claim') change.confidence = input.confidence || 'unverified'
+  if (operation === 'append_claim') change.visibility = input.visibility || 'private'
+  else if (operation !== 'retire_claim' && input.visibility) change.visibility = input.visibility
+  for (const key of ['claim', 'reason', 'claim_id'])
+    if (change[key] === undefined && CHANGE_FIELDS[operation].required.includes(key)) throw claimError(`${operation} requires ${key}`, 'INVALID_ARGUMENT')
+  if (operation === 'retire_claim' && (input.claim || input.confidence || input.visibility))
+    throw claimError('retire_claim accepts reason and evidence, not claim, confidence or visibility', 'INVALID_ARGUMENT')
+  if (operation !== 'retire_claim' && input.reason) throw claimError(`${operation} does not accept reason`, 'INVALID_ARGUMENT')
+  if (operation === 'append_claim' && input.claim_id) throw claimError('append_claim does not accept claim_id', 'INVALID_ARGUMENT')
+  return change
+}
 export function createProposal(project, input) {
   const link = readLink(project)
   if (link.proposals !== 'enabled') throw new Error('proposals are not enabled for link')
@@ -239,34 +290,125 @@ export function createProposal(project, input) {
     const path = assertContainedPath(project, resolve(project, source), 'proposal source file')
     if (!existsSync(path) || lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) throw new Error(`source file not found or unsafe: ${source}`)
   }
-  const p = {
-    schema_version: 2,
-    proposal_id: randomUUID(),
-    title: `Review reusable context from ${basename(project)}`,
-    source_project: basename(project),
-    source_project_path: slash(project),
-    source_files: sourceFiles,
-    status: 'pending',
-    created_at: new Date().toISOString(),
-    provenance: sourceFiles.map(x => `${basename(project)}:${x}`),
-    changes: [
-      {
-        change_id: 'claim',
-        target: input.target || 'context/claims.md',
-        operation: 'append_claim',
-        proposal_type: input.proposal_type || 'new_fact',
-        claim: input.claim,
-        evidence: input.evidence || `Source project files: ${sourceFiles.join(', ')}`,
-        confidence: input.confidence || 'unverified',
-        visibility: input.visibility || 'private'
-      }
-    ]
-  }
+  const inputs = Array.isArray(input.changes) && input.changes.length ? input.changes : [input],
+    p = {
+      schema_version: 2,
+      proposal_id: randomUUID(),
+      title: `Review reusable context from ${basename(project)}`,
+      source_project: basename(project),
+      source_project_path: slash(project),
+      source_files: sourceFiles,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      provenance: sourceFiles.map(x => `${basename(project)}:${x}`),
+      changes: inputs.map((item, i) => proposalChange(item, sourceFiles, item.change_id || (inputs.length === 1 ? 'claim' : `change-${i + 1}`)))
+    }
   const errors = validateProposal(p)
   if (errors.length) throw new Error(errors.join('; '))
+  // Refuse early when a targeted claim is missing, ambiguous or no longer current, exactly as preview would.
+  planProposalChanges(p, link.path)
   createLinkDirs(project, { preserveReadme: true })
   saveProposal(p, proposalFile(project, p.proposal_id))
   return p
+}
+// Current claim lines of a document, ignoring superseded/retired history and optionally one block being rewritten.
+function currentClaimLines(text, skip = null) {
+  return claims(
+    text.replace(claimBlockPattern(), (block, _visibility, rawAttrs, _body, offset) =>
+      (skip && offset === skip.start) || claimStatus(parseClaimAttrs(rawAttrs)) !== 'current' ? '' : block
+    )
+  )
+}
+function claimBody(p, change, visibility) {
+  return (
+    `## Approved proposal ${p.proposal_id}/${change.change_id}\n\n${change.claim}\n\n` +
+    `- Evidence: ${change.evidence}\n- Confidence: ${change.confidence}\n- Visibility: ${visibility}\n` +
+    `- Provenance: ${p.provenance.join('; ')}\n- Approved: <commit-time>\n`
+  )
+}
+function targetedClaim(text, rel, change) {
+  const found = parseClaimBlocks(text, rel).filter(block => block.claim_id === change.claim_id)
+  if (!found.length) throw claimError(`claim not found in ${rel}: ${change.claim_id} (${change.change_id})`, 'CLAIM_NOT_FOUND')
+  if (found.length > 1) throw claimError(`claim id is ambiguous in ${rel}: ${change.claim_id} (${change.change_id})`, 'CLAIM_AMBIGUOUS')
+  const block = found[0]
+  if (block.status !== 'current') throw claimError(`claim is already ${block.status}: ${change.claim_id} (${change.change_id})`, 'CLAIM_NOT_CURRENT')
+  return block
+}
+function refuseDuplicate(text, change, skip = null) {
+  if (currentClaimLines(text, skip).some(x => normalize(x) === normalize(change.claim)))
+    throw claimError(`proposal duplicates an existing canonical claim: ${change.change_id}`, 'DUPLICATE_CLAIM')
+}
+const diffLines = (removed, added) => [...removed.map(x => x.split('\n').map(line => `-${line}`).join('\n')), ...added.map(x => x.split('\n').map(line => `+${line}`).join('\n'))].join('\n')
+// Applies one change to the current text of its target. `<commit-time>` stays a placeholder until approval commits.
+export function applyClaimChange(text, rel, change, p) {
+  const close = '<!-- /holoself-claim -->'
+  if (change.operation === 'append_claim') {
+    refuseDuplicate(text, change)
+    const claimId = proposalClaimId(p.proposal_id, change.change_id),
+      block = `\n\n${formatClaimMarker(change.visibility, { id: claimId })}\n${claimBody(p, change, change.visibility)}${close}\n`
+    return { after: text.trimEnd() + block, claim_id: claimId, before_block: null, after_block: block.trim(), preview: block.trim() }
+  }
+  const old = targetedClaim(text, rel, change),
+    splice = replacement => text.slice(0, old.start) + replacement + text.slice(old.end),
+    attrs = { ...old.attrs, id: old.claim_id }
+  if (change.operation === 'replace_claim') {
+    if (normalize(old.text) === normalize(change.claim)) throw claimError(`replacement wording matches the existing claim: ${change.change_id}`, 'CLAIM_UNCHANGED')
+    refuseDuplicate(text, change, old)
+    const visibility = change.visibility || old.visibility,
+      block = `${formatClaimMarker(visibility, { id: old.claim_id, supersedes: old.attrs.supersedes })}\n${claimBody(p, change, visibility)}${close}`
+    return { after: splice(block), claim_id: old.claim_id, before_block: old.raw, after_block: block, preview: diffLines([old.raw], [block]) }
+  }
+  if (change.operation === 'supersede_claim') {
+    if (normalize(old.text) === normalize(change.claim)) throw claimError(`superseding wording matches the existing claim: ${change.change_id}`, 'CLAIM_UNCHANGED')
+    refuseDuplicate(text, change, old)
+    const claimId = proposalClaimId(p.proposal_id, change.change_id),
+      visibility = change.visibility || old.visibility,
+      marked = `${formatClaimMarker(old.visibility, { ...attrs, status: 'superseded', superseded_by: claimId, superseded_at: '<commit-time>' })}${old.body}${close}`,
+      block = `${formatClaimMarker(visibility, { id: claimId, supersedes: old.claim_id })}\n${claimBody(p, change, visibility)}${close}`
+    return {
+      after: `${splice(marked).trimEnd()}\n\n${block}\n`,
+      claim_id: claimId,
+      before_block: old.raw,
+      after_block: `${marked}\n\n${block}`,
+      preview: diffLines([old.raw], [marked, '', block])
+    }
+  }
+  const marked =
+    `${formatClaimMarker(old.visibility, { ...attrs, status: 'historical', retired_at: '<commit-time>' })}${old.body.trimEnd()}\n` +
+    `- Retired: <commit-time> by proposal ${p.proposal_id}/${change.change_id}\n- Retirement reason: ${change.reason}\n` +
+    `- Retirement evidence: ${change.evidence}\n- Retirement provenance: ${p.provenance.join('; ')}\n${close}`
+  return { after: splice(marked), claim_id: old.claim_id, before_block: old.raw, after_block: marked, preview: diffLines([old.raw], [marked]) }
+}
+function emptyTarget(self) {
+  return `---\naccess_lenses: [${loadLensRegistry(self)
+    .lenses.map(lens => lens.id)
+    .join(', ')}]\ndisclosure: review-required\nsensitivity: personal\ndocument_role: evidence\n---\n`
+}
+// Applies every change in order, grouping by target so several changes to one file compose deterministically.
+export function planProposalChanges(p, self) {
+  const grouped = new Map(),
+    previews = []
+  for (const change of proposalChanges(p)) {
+    const target = safeTarget(self, change.target),
+      rel = slash(relative(self, target)),
+      state = grouped.get(target),
+      existed = state?.existed ?? existsSync(target),
+      before = state?.before ?? (existed ? readFileSync(target, 'utf8') : emptyTarget(self)),
+      applied = applyClaimChange(state?.after ?? before, rel, { ...change, operation: change.operation || 'append_claim' }, p)
+    grouped.set(target, { target, before, after: applied.after, existed })
+    previews.push({
+      change_id: change.change_id,
+      operation: change.operation || 'append_claim',
+      target: rel,
+      claim_id: applied.claim_id,
+      before_sha256: hash(before),
+      after_sha256: hash(applied.after),
+      before_block: applied.before_block,
+      after_block: applied.after_block,
+      preview: applied.preview
+    })
+  }
+  return { grouped, previews }
 }
 export function proposalPreviewData(project, id) {
   const p = findProposal(project, id)
@@ -274,35 +416,7 @@ export function proposalPreviewData(project, id) {
   const projectErrors = proposalProjectErrors(p, project)
   if (projectErrors.length) throw new Error(`proposal provenance validation failed: ${projectErrors.join('; ')}`)
   const link = readLink(project),
-    grouped = new Map(),
-    approvedAt = '<commit-time>',
-    previews = []
-  for (const change of proposalChanges(p)) {
-    const target = safeTarget(link.path, change.target),
-      before =
-        grouped.get(target)?.before ??
-        (existsSync(target)
-          ? readFileSync(target, 'utf8')
-          : `---\naccess_lenses: [${loadLensRegistry(link.path)
-              .lenses.map(lens => lens.id)
-              .join(', ')}]\ndisclosure: review-required\nsensitivity: personal\ndocument_role: evidence\n---\n`)
-    if (claims(before).some(x => normalize(x) === normalize(change.claim)))
-      throw new Error(`proposal duplicates an existing canonical claim: ${change.change_id}`)
-    const block =
-        `\n\n<!-- holoself-claim visibility=${change.visibility} -->\n## Approved proposal ${p.proposal_id}/${change.change_id}\n\n${change.claim}\n\n` +
-        `- Evidence: ${change.evidence}\n- Confidence: ${change.confidence}\n- Visibility: ${change.visibility}\n` +
-        `- Provenance: ${p.provenance.join('; ')}\n- Approved: ${approvedAt}\n<!-- /holoself-claim -->\n`,
-      current = grouped.get(target)?.after ?? before,
-      after = current.trimEnd() + block
-    grouped.set(target, { target, before, after, existed: grouped.get(target)?.existed ?? existsSync(target) })
-    previews.push({
-      change_id: change.change_id,
-      target: slash(relative(link.path, target)),
-      before_sha256: hash(before),
-      after_sha256: hash(after),
-      preview: block.trim()
-    })
-  }
+    { grouped, previews } = planProposalChanges(p, link.path)
   return { proposal: p, link, grouped, changes: previews, preview_hash: hash(JSON.stringify(previews)) }
 }
 export function stateProposal(project, p, state, details = {}) {

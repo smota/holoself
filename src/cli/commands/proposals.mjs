@@ -15,6 +15,14 @@ import {
 import { atomicWrite, hash } from '../../shared/fs.mjs'
 import { askConfirm, projectPath } from '../link-helpers.mjs'
 
+// One readable line per change for `proposals show`, emitted as YAML comments above the record.
+function changeSummary(change) {
+  const one = text => String(text).replace(/\s+/g, ' ').trim()
+  if (change.operation === 'replace_claim') return `replace claim ${change.claim_id} in ${change.target} with "${one(change.claim)}"`
+  if (change.operation === 'supersede_claim') return `supersede claim ${change.claim_id} in ${change.target} with new claim "${one(change.claim)}"`
+  if (change.operation === 'retire_claim') return `retire claim ${change.claim_id} in ${change.target} as historical: ${one(change.reason)}`
+  return `append claim to ${change.target}: "${one(change.claim)}"`
+}
 export async function runProposals(o, sub) {
   const project = projectPath(o),
     action = sub
@@ -38,7 +46,11 @@ export async function runProposals(o, sub) {
   if (!id) throw new Error(`proposals ${action} requires <id>`)
   const p = findProposal(project, id)
   if (action === 'show') {
-    console.log(proposalText(Object.fromEntries(Object.entries(p).filter(([k]) => k !== '_path'))))
+    const changes = proposalChanges(p),
+      summary = changes.some(x => (x.operation || 'append_claim') !== 'append_claim')
+        ? changes.map(x => `# ${x.change_id}: ${changeSummary(x)}`).join('\n') + '\n'
+        : ''
+    console.log(summary + proposalText(Object.fromEntries(Object.entries(p).filter(([k]) => k !== '_path'))))
     return true
   }
   if (!['approve', 'reject', 'defer', 'supersede'].includes(action))
@@ -58,7 +70,13 @@ export async function runProposals(o, sub) {
       o.json
         ? JSON.stringify({ proposal_id: p.proposal_id, changes: previews, preview_hash: previewHash }, null, 2)
         : `Affected files: ${[...grouped.keys()].join(', ')}\nPreview hash: ${previewHash}\n--- proposed diff ---\n` +
-            `${previews.map(x => `--- ${x.change_id}: ${x.target} ---\n+${x.preview.replaceAll('\n', '\n+')}`).join('\n')}`
+            `${previews
+              .map(x =>
+                x.operation === 'append_claim'
+                  ? `--- ${x.change_id}: ${x.target} ---\n+${x.preview.replaceAll('\n', '\n+')}`
+                  : `--- ${x.change_id}: ${x.operation} ${x.claim_id} in ${x.target} ---\n${x.preview}`
+              )
+              .join('\n')}`
     )
     if (o.digest && o.digest !== previewHash) {
       const error = new Error('proposal preview is stale')
@@ -76,11 +94,27 @@ export async function runProposals(o, sub) {
         ...item,
         after_sha256: hash(grouped.get(safeTarget(link.path, item.target)).after.replaceAll('<commit-time>', commitTime))
       }))
+    // A target edited after the preview was computed (for example while confirmation was pending) is stale.
+    for (const item of grouped.values()) {
+      const current = existsSync(item.target) ? readFileSync(item.target, 'utf8') : null
+      if (item.existed ? current !== item.before : current !== null) {
+        const error = new Error(`proposal preview is stale: ${item.target} changed after preview`)
+        error.code = 'STALE_PREVIEW'
+        throw error
+      }
+    }
     try {
       for (const item of grouped.values()) atomicWrite(item.target, item.after.replaceAll('<commit-time>', commitTime))
       stateProposal(project, p, 'approved', {
         preview_sha256: previewHash,
-        applied_changes: appliedChanges.map(({ change_id, target, before_sha256, after_sha256 }) => ({ change_id, target, before_sha256, after_sha256 }))
+        applied_changes: appliedChanges.map(({ change_id, operation, target, claim_id, before_sha256, after_sha256 }) => ({
+          change_id,
+          operation,
+          target,
+          claim_id,
+          before_sha256,
+          after_sha256
+        }))
       })
       const errors = ecosystemValidationErrors(link.path, project)
       if (errors.length) throw new Error(`post-approval validation failed: ${errors.join('; ')}`)

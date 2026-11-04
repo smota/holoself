@@ -2,6 +2,7 @@
 import { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES } from '../annotations.mjs'
 import { KNOWLEDGE_STATUSES, TEMPORAL_SCOPES, dateValue } from '../context-selection.mjs'
 import { DEFAULT_LENS_IDS } from '../lenses.mjs'
+import { claimBlockPattern, claimStatus, parseClaimAttrs } from '../markdown/claim-blocks.mjs'
 
 export const LENSES = DEFAULT_LENS_IDS
 export const SENSITIVITY_LENSES = {
@@ -110,9 +111,23 @@ export function allowed(meta, lens, adapter = 'generic', task = null, resolution
 }
 export function filterClaimVisibility(body, lens, source, restrictions, resolution = null, identityKind = 'owner:direct') {
   const behaviorLens = lens
-  return body.replace(/<!-- holoself-claim visibility=([a-z-]+) -->[\s\S]*?<!-- \/holoself-claim -->/g, (block, claimVisibility) => {
+  return body.replace(claimBlockPattern(), (block, claimVisibility) => {
     if (visibleUnderBehavior(claimVisibility, behaviorLens, 'generic')) return block
     if (identityKind === 'owner:direct') restrictions.push({ source, reason: `claim visibility ${claimVisibility} excluded by ${lens} lens` })
+    return ''
+  })
+}
+// A claim block's own lifecycle status narrows its document's: current claims follow the document, while superseded
+// and retired (historical) claims appear only when the temporal selector asks for that status or for `all`.
+export function claimStatusIncluded(status = 'current', temporal = 'current') {
+  return status === 'current' || temporal === 'all' || temporal === status
+}
+export function filterClaimStatus(body, temporal, source, restrictions, identityKind = 'owner:direct') {
+  return body.replace(claimBlockPattern(), (block, _visibility, rawAttrs) => {
+    const status = claimStatus(parseClaimAttrs(rawAttrs))
+    if (claimStatusIncluded(status, temporal || 'current')) return block
+    if (identityKind === 'owner:direct' && !restrictions.some(x => x.source === source && x.reason === `claim status ${status} excluded by temporal selector`))
+      restrictions.push({ source, reason: `claim status ${status} excluded by temporal selector` })
     return ''
   })
 }

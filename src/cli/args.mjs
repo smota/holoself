@@ -147,6 +147,9 @@ export const COMMAND_FLAGS = {
   propose: [
     ...PROJECT_FLAGS,
     '--claim',
+    '--op',
+    '--claim-id',
+    '--reason',
     '--source-file',
     '--target-file',
     '--proposal-type',
@@ -310,6 +313,13 @@ export function parse(args) {
     } else if (a === '--restricted-host') o.restrictedHost = true
     else if (a === '--claude-project-dir') o.claudeProjectDir = true
     else if (a === '--claim') o.claim = requiredValue(args, i++, a)
+    else if (a === '--op') {
+      const value = requiredValue(args, i++, a),
+        ops = { append: 'append_claim', replace: 'replace_claim', supersede: 'supersede_claim', retire: 'retire_claim' }
+      if (!ops[value] && !Object.values(ops).includes(value)) throw new Error('--op must be append, replace, supersede, or retire')
+      o.operation = ops[value] || value
+    } else if (a === '--claim-id') o.claimId = requiredValue(args, i++, a)
+    else if (a === '--reason') o.reason = requiredValue(args, i++, a)
     else if (a === '--evidence') o.evidence = requiredValue(args, i++, a)
     else if (a === '--target-file') o.targetFile = requiredValue(args, i++, a)
     else if (a === '--proposal-type' || a === '--type') o.proposalType = requiredValue(args, i++, a)

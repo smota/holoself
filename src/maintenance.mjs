@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { DEFAULT_LENSES, loadLensRegistry } from './lenses.mjs'
 import { normalizeProjectPath, readBindings } from './bindings.mjs'
 import { assertNoLinkBelow, linkBelow } from './path-guard.mjs'
+import { claimBlockPattern } from './markdown/claim-blocks.mjs'
 import { hash as sha, pathExists, slash } from './shared/fs.mjs'
 
 export const renamedLens = id => ({ career: 'professional', publishing: 'public-voice' })[id] || id
@@ -88,7 +89,7 @@ export function renameLensMetadata(text) {
       .join('')
     return start + next + end
   })
-  value = value.replace(/<!-- holoself-claim visibility=(career|publishing) -->[\s\S]*?<!-- \/holoself-claim -->/g, block =>
+  value = value.replace(claimBlockPattern('career|publishing'), block =>
     block
       .replace(/(visibility=)(career|publishing)/, (_, prefix, id) => prefix + renamedLens(id))
       .replace(/^(- Visibility: )(career|publishing)$/gm, (_, prefix, id) => prefix + renamedLens(id))
