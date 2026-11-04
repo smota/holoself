@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { run } from '../src/cli.mjs'
 import {
   CONSERVATIVE_PRIVACY_DEFAULTS,
+  PUBLISH_APPROVED_SKIP_WARNING,
   applyValidateFixPlan,
   buildValidateFixPlan,
   contextData,
@@ -220,7 +221,14 @@ test('validate --fix digest-bound apply, --out plan file, PLAN_CHANGED refusal, 
     const planRes = await runCliCapture(['validate', '--fix', '--out', planFile, '--json', '--root', root])
     assert.equal(planRes.exitCode, 0)
     assert.ok(existsSync(planFile))
-    const savedPlan = JSON.parse(readFileSync(planFile, 'utf8'))
+    if (process.platform !== 'win32') {
+      assert.equal(lstatSync(planFile).mode & 0o777, 0o600)
+    }
+    const rawPlanText = readFileSync(planFile, 'utf8')
+    assert.equal(rawPlanText.includes(root), false, 'plan file must not contain absolute root path')
+    const savedPlan = JSON.parse(rawPlanText)
+    assert.equal(Object.hasOwn(savedPlan, 'root'), false)
+    assert.match(savedPlan.root_id, /^[0-9a-f]{64}$/)
     assert.equal(savedPlan.excluded_count, 2)
 
     // Remove the temporary plan file before running validate later so markdownFiles doesn't see any stray files
@@ -498,5 +506,210 @@ test('Workbench /api/overview is token-protected and returns excluded_incomplete
   } finally {
     if (server) await new Promise(resolve => server.server.close(resolve))
     rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test(
+  'validate --fix preserves 0600 and 0640 file modes on apply and rollback and creates new _policy.yaml with 0600',
+  { skip: process.platform === 'win32' },
+  async () => {
+    const root = makeTempDir('holoself-vf-modes-')
+    try {
+      await runCliCapture(['init', '--root', root])
+
+      const doc600 = join(root, 'context', 'mode-600.md')
+      const doc640 = join(root, 'profile', 'mode-640.md')
+      writeFileSync(doc600, '# Mode 0600 doc\n')
+      writeFileSync(doc640, '# Mode 0640 doc\n')
+      chmodSync(doc600, 0o600)
+      chmodSync(doc640, 0o640)
+
+      const workDir = join(root, 'topics', 'shared-policy')
+      mkdirSync(workDir, { recursive: true })
+      const workA = join(workDir, 'a.md')
+      const workB = join(workDir, 'b.md')
+      writeFileSync(workA, '# Work A\n')
+      writeFileSync(workB, '# Work B\n')
+      chmodSync(workA, 0o600)
+      chmodSync(workB, 0o640)
+
+      const plan = buildValidateFixPlan(root)
+      assert.equal(plan.excluded_count, 4)
+
+      // 1. Trigger rollback after writing both mode-600.md and mode-640.md and verify modes are preserved after rollback
+      assert.throws(
+        () =>
+          applyValidateFixPlan(root, plan, {
+            expectedDigest: plan.digest,
+            validate: () => {
+              throw new Error('simulated post-write validation failure')
+            }
+          }),
+        /simulated post-write validation failure/
+      )
+      assert.equal(readFileSync(doc600, 'utf8'), '# Mode 0600 doc\n')
+      assert.equal(readFileSync(doc640, 'utf8'), '# Mode 0640 doc\n')
+      assert.equal(lstatSync(doc600).mode & 0o777, 0o600)
+      assert.equal(lstatSync(doc640).mode & 0o777, 0o640)
+
+      // 2. Apply with --with-policy-files and verify 0600 / 0640 documents keep their modes and new _policy.yaml gets 0600
+      const policyPlan = buildValidateFixPlan(root, { withPolicyFiles: true })
+      applyValidateFixPlan(root, policyPlan, { expectedDigest: policyPlan.digest, withPolicyFiles: true })
+
+      assert.equal(lstatSync(doc600).mode & 0o777, 0o600)
+      assert.equal(lstatSync(doc640).mode & 0o777, 0o640)
+      const createdPolicy = join(workDir, '_policy.yaml')
+      assert.ok(existsSync(createdPolicy))
+      assert.equal(lstatSync(createdPolicy).mode & 0o777, 0o600)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  }
+)
+
+test('validate --fix skips publish-approved and legacy public-safe documents by default with warning, and includes them with --allow-publish-approved', async () => {
+  const root = makeTempDir('holoself-vf-pub-')
+  try {
+    await runCliCapture(['init', '--root', root])
+
+    // 1. Document with disclosure: publish-approved (missing access_lenses, sensitivity, document_role)
+    const pubApprovedDoc = join(root, 'context', 'pub-approved.md')
+    const pubApprovedBefore = ['---', 'disclosure: publish-approved', '---', '# Publish approved draft', ''].join('\n')
+    writeFileSync(pubApprovedDoc, pubApprovedBefore)
+
+    // 2. Document with legacy visibility: public-safe + access_lenses: [public-voice, private] (missing sensitivity, document_role)
+    const legacyPubSafeVisDoc = join(root, 'profile', 'legacy-vis-pub.md')
+    const legacyPubSafeVisBefore = ['---', 'visibility: public-safe', 'access_lenses: [public-voice, private]', '---', '# Legacy vis pub', ''].join('\n')
+    writeFileSync(legacyPubSafeVisDoc, legacyPubSafeVisBefore)
+
+    // 3. Document with legacy public_safe: true (missing access_lenses/visibility)
+    const legacyPubSafeFlagDoc = join(root, 'topics', 'legacy-flag-pub.md')
+    const legacyPubSafeFlagBefore = ['---', 'public_safe: true', '---', '# Legacy flag pub', ''].join('\n')
+    writeFileSync(legacyPubSafeFlagDoc, legacyPubSafeFlagBefore)
+
+    // 4. Ordinary untagged document that should still be repaired by default
+    const normalDoc = join(root, 'history', 'normal-note.md')
+    writeFileSync(normalDoc, '# Normal note\n')
+
+    // Default validate --fix skips all 3 publish-approved/public-safe docs with clear warnings
+    const defaultTextRes = await runCliCapture(['validate', '--fix', '--root', root])
+    assert.equal(defaultTextRes.exitCode, 0)
+    assert.ok(defaultTextRes.stdout.includes(PUBLISH_APPROVED_SKIP_WARNING))
+    assert.match(defaultTextRes.stdout, /context\/pub-approved\.md: would activate publish-approved; add the missing fields by hand or rerun with --allow-publish-approved/)
+    assert.match(defaultTextRes.stdout, /profile\/legacy-vis-pub\.md: would activate publish-approved; add the missing fields by hand or rerun with --allow-publish-approved/)
+    assert.match(defaultTextRes.stdout, /topics\/legacy-flag-pub\.md: would activate publish-approved; add the missing fields by hand or rerun with --allow-publish-approved/)
+
+    const defaultPlan = buildValidateFixPlan(root)
+    assert.equal(defaultPlan.excluded_count, 4)
+    assert.equal(defaultPlan.allow_publish_approved, false)
+    assert.deepEqual(
+      defaultPlan.files.map(f => f.path),
+      ['history/normal-note.md']
+    )
+    assert.deepEqual(
+      defaultPlan.operations.map(op => op.path),
+      ['history/normal-note.md']
+    )
+    assert.deepEqual(
+      defaultPlan.skipped_publish_approved.map(s => s.path),
+      ['context/pub-approved.md', 'profile/legacy-vis-pub.md', 'topics/legacy-flag-pub.md']
+    )
+    for (const skipped of defaultPlan.skipped_publish_approved) {
+      assert.equal(skipped.warning, PUBLISH_APPROVED_SKIP_WARNING)
+    }
+
+    // Apply default plan: normal-note.md is fixed, while the 3 publish-approved docs remain untouched and excluded
+    const applyDefaultRes = await runCliCapture(['validate', '--fix', '--apply', '--digest', defaultPlan.digest, '--yes', '--json', '--root', root])
+    assert.equal(applyDefaultRes.exitCode, 0)
+    assert.equal(readFileSync(pubApprovedDoc, 'utf8'), pubApprovedBefore)
+    assert.equal(readFileSync(legacyPubSafeVisDoc, 'utf8'), legacyPubSafeVisBefore)
+    assert.equal(readFileSync(legacyPubSafeFlagDoc, 'utf8'), legacyPubSafeFlagBefore)
+    assert.match(readFileSync(normalDoc, 'utf8'), /access_lenses: \[private\]/)
+    assert.equal(excludedCanonicalDocuments(root).length, 3)
+
+    // Now run with explicit --allow-publish-approved opt-in
+    const optInRes = await runCliCapture(['validate', '--fix', '--allow-publish-approved', '--json', '--root', root])
+    assert.equal(optInRes.exitCode, 0)
+    const optInPlan = JSON.parse(optInRes.stdout)
+    assert.equal(optInPlan.allow_publish_approved, true)
+    assert.equal(optInPlan.excluded_count, 3)
+    assert.equal(optInPlan.skipped_publish_approved.length, 0)
+    assert.equal(optInPlan.warnings.length, 0)
+    assert.deepEqual(
+      optInPlan.operations.map(op => op.path),
+      ['context/pub-approved.md', 'profile/legacy-vis-pub.md', 'topics/legacy-flag-pub.md']
+    )
+
+    // Apply opt-in plan and verify all 3 files are fixed and holoself validate passes
+    const applyOptInRes = await runCliCapture([
+      'validate',
+      '--fix',
+      '--apply',
+      '--allow-publish-approved',
+      '--digest',
+      optInPlan.digest,
+      '--yes',
+      '--json',
+      '--root',
+      root
+    ])
+    assert.equal(applyOptInRes.exitCode, 0)
+    assert.equal(excludedCanonicalDocuments(root).length, 0)
+
+    const valAfter = await runCliCapture(['validate', '--root', root])
+    assert.equal(valAfter.exitCode, 0)
+    assert.match(valAfter.stdout, /\[ok\] .* is valid/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('fixed document with conservative defaults is absent from general-lens context and present for owner private lens', async () => {
+  const root = makeTempDir('holoself-vf-lens-self-')
+  const project = makeTempDir('holoself-vf-lens-proj-')
+  const prevCwd = process.cwd()
+  try {
+    await runCliCapture(['init', '--root', root])
+    await runCliCapture(['link', 'add', '--project', project, '--self', root, '--lens', 'general', '--no-activate', '--yes'])
+
+    const docPath = join(root, 'context', 'conservative-fixed.md')
+    writeFileSync(docPath, '# Conservative fixed note\n\nPrivate owner-only content marker 9f8e7d.\n')
+
+    const plan = buildValidateFixPlan(root)
+    assert.equal(plan.excluded_count, 1)
+    applyValidateFixPlan(root, plan, { expectedDigest: plan.digest })
+
+    // 1. Linked project bound to general lens must NOT receive the fixed document
+    process.chdir(project)
+    const generalLinkedPacket = contextData({ project, lens: 'general', args: [] })
+    assert.equal(
+      generalLinkedPacket.sources.some(s => s.path === 'context/conservative-fixed.md'),
+      false,
+      'fixed document must be absent from linked general-lens sources'
+    )
+    assert.equal(JSON.stringify(generalLinkedPacket).includes('9f8e7d'), false)
+
+    // 2. Owner-direct query under general lens must also NOT receive the fixed document
+    process.chdir(root)
+    const generalOwnerPacket = contextData({ root, rootExplicit: true, lens: 'general', args: [] })
+    assert.equal(
+      generalOwnerPacket.sources.some(s => s.path === 'context/conservative-fixed.md'),
+      false,
+      'fixed document must be absent from owner general-lens sources'
+    )
+    assert.equal(JSON.stringify(generalOwnerPacket).includes('9f8e7d'), false)
+
+    // 3. Owner-direct query under private lens MUST include the fixed document
+    const privateOwnerPacket = contextData({ root, rootExplicit: true, lens: 'private', args: [] })
+    assert.equal(
+      privateOwnerPacket.sources.some(s => s.path === 'context/conservative-fixed.md'),
+      true,
+      'fixed document must be present in owner private-lens sources'
+    )
+    assert.equal(JSON.stringify(privateOwnerPacket).includes('9f8e7d'), true)
+  } finally {
+    process.chdir(prevCwd)
+    rmSync(root, { recursive: true, force: true })
+    rmSync(project, { recursive: true, force: true })
   }
 })

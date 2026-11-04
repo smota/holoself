@@ -74,6 +74,7 @@ export const COMMAND_FLAGS = {
     '--out',
     '--output',
     '--with-policy-files',
+    '--allow-publish-approved',
     '--dry-run',
     '--apply',
     '--digest',
@@ -378,6 +379,7 @@ export function parse(args) {
     else if (a === '--include-linked') o.includeLinked = true
     else if (a === '--fix') o.fix = true
     else if (a === '--with-policy-files') o.withPolicyFiles = true
+    else if (a === '--allow-publish-approved') o.allowPublishApproved = true
     else if (a === '--packet-only') o.packetOnly = true
     else if (a === '--self-only') o.selfOnly = true
     else if (a === '--snapshot') o.snapshot = true

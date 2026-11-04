@@ -139,7 +139,7 @@ function isHoloselfLink(p, root) {
 function help() {
   console.log(
     `Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init ` +
-      `| doctor | validate [--fix [--with-policy-files] [--out <plan>] | --fix --apply --digest <sha256> --yes] | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] ` +
+      `| doctor | validate [--fix [--with-policy-files] [--allow-publish-approved] [--out <plan>] | --fix --apply --digest <sha256> --yes] | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] ` +
       `[--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root ` +
       `junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  skill ` +
       `status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens ` +
@@ -434,8 +434,8 @@ export async function run(argv) {
     return
   }
   if (o.command === 'validate') {
-    if (!o.fix && (o.apply || o.output || o.digest || o.withPolicyFiles)) {
-      throw new Error('validate repair options (--apply, --out, --digest, --with-policy-files) require --fix')
+    if (!o.fix && (o.apply || o.output || o.digest || o.withPolicyFiles || o.allowPublishApproved)) {
+      throw new Error('validate repair options (--apply, --out, --digest, --with-policy-files, --allow-publish-approved) require --fix')
     }
     if (o.fix) {
       if (!existsSync(root)) throw new Error('data root does not exist')
@@ -448,7 +448,8 @@ export async function run(argv) {
         const explicitPlan = typeof o.apply === 'string' ? JSON.parse(readFileSync(resolve(o.apply), 'utf8')) : null
         const result = applyValidateFixPlan(root, explicitPlan, {
           expectedDigest: o.digest,
-          withPolicyFiles: Boolean(o.withPolicyFiles)
+          withPolicyFiles: Boolean(o.withPolicyFiles),
+          allowPublishApproved: Boolean(o.allowPublishApproved)
         })
         if (o.json) console.log(JSON.stringify(result, null, 2))
         else
@@ -457,8 +458,11 @@ export async function run(argv) {
           )
         return
       }
-      const plan = buildValidateFixPlan(root, { withPolicyFiles: Boolean(o.withPolicyFiles) })
-      if (o.output) atomicWrite(o.output, JSON.stringify(plan, null, 2) + '\n', { mode: 0o666 })
+      const plan = buildValidateFixPlan(root, {
+        withPolicyFiles: Boolean(o.withPolicyFiles),
+        allowPublishApproved: Boolean(o.allowPublishApproved)
+      })
+      if (o.output) atomicWrite(o.output, JSON.stringify(plan, null, 2) + '\n', { mode: 0o600, exactMode: true })
       if (o.json) console.log(JSON.stringify(plan, null, 2))
       else console.log(formatValidateFixPlanText(plan, { outputPath: o.output || null }))
       return

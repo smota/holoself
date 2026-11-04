@@ -1,12 +1,12 @@
 // Conservative privacy metadata repair plan and transactional apply for `holoself validate --fix`.
-import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { CONFIDENTIAL_SENSITIVITIES, VISIBILITIES } from '../annotations.mjs'
 import { canonicalJson, canonicalSort } from '../catalog.mjs'
 import { loadLensRegistry } from '../lenses.mjs'
 import { safeMaintenancePath } from '../maintenance.mjs'
 import { lstat } from '../path-guard.mjs'
-import { atomicWrite, ensureDir, hash as sha, slash } from '../shared/fs.mjs'
+import { atomicWrite, ensureDir, fileModeOr, hash as sha, slash } from '../shared/fs.mjs'
 import { parseScalar, parseYaml } from '../shared/yaml.mjs'
 import { POLICY_FILE_NAME, resolveDocumentPolicy } from './policy-defaults.mjs'
 import { PRIVACY_FIELDS, canonicalPrivacyMetadataErrors, privacyMetadataErrors, privacyValueValid } from './privacy-fields.mjs'
@@ -19,6 +19,7 @@ export const CONSERVATIVE_PRIVACY_DEFAULTS = Object.freeze({
   sensitivity: 'personal',
   document_role: 'content'
 })
+export const PUBLISH_APPROVED_SKIP_WARNING = 'would activate publish-approved; add the missing fields by hand or rerun with --allow-publish-approved'
 
 const VF_CANONICAL_DIRS = Object.freeze(['profile', 'context', 'topics', 'history'])
 const VF_LIFECYCLE_ONLY_ERRORS = new Set(['valid_from must not be after valid_until', 'superseded knowledge must name superseded_by'])
@@ -559,8 +560,17 @@ function vfComputeDocumentFix(absPath, baseRoot, registry) {
     (docMetadata.visibility !== undefined && docMetadata.visibility !== null) ||
     (docMetadata.public_safe !== undefined && docMetadata.public_safe !== null)
 
+  const keptVisibilityPublicSafe = docMetadata.visibility === 'public-safe' && !Object.hasOwn(orderedChanges, 'visibility')
+  const keptPublicSafeTrue = docMetadata.public_safe === true && !Object.hasOwn(orderedChanges, 'public_safe')
+  const wouldActivatePublishApproved =
+    (orderedKept.includes('disclosure') && proposedMetadata.disclosure === 'publish-approved') ||
+    keptVisibilityPublicSafe ||
+    keptPublicSafeTrue
+
   const reasons = [
     ...orderedKept.map(field => `kept valid ${field}: ${vfFormatYamlScalarOrList(proposedMetadata[field])}`),
+    ...(keptVisibilityPublicSafe ? ['kept valid visibility: public-safe'] : []),
+    ...(keptPublicSafeTrue ? ['kept valid public_safe: true'] : []),
     ...orderedMissing.map(field => `missing ${field} -> ${vfFormatYamlScalarOrList(orderedChanges[field])}`),
     ...invalidFields.map(item => item.reason)
   ]
@@ -582,6 +592,7 @@ function vfComputeDocumentFix(absPath, baseRoot, registry) {
     frontmatter_diff: frontmatterDiff,
     frontmatter_error: parseError,
     has_legacy_visibility: Boolean(hasLegacyOptOut),
+    would_activate_publish_approved: Boolean(wouldActivatePublishApproved),
     validation_errors: allErrors
   }
 }
@@ -621,7 +632,7 @@ export function excludedCanonicalDocuments(root, registry = null) {
   return excluded
 }
 
-function vfBuildPolicySuggestions(baseRoot, excludedDocs) {
+function vfBuildPolicySuggestions(baseRoot, excludedDocs, skippedPublishApprovedDocs = []) {
   const byDir = new Map()
   for (const doc of excludedDocs) {
     if (!doc.directory) continue
@@ -634,6 +645,9 @@ function vfBuildPolicySuggestions(baseRoot, excludedDocs) {
 
   const sortedDirs = [...byDir.keys()].sort(canonicalSort)
   for (const dir of sortedDirs) {
+    // Do not suggest a directory _policy.yaml if it would sit above a skipped publish-approved document and silently activate it.
+    if (skippedPublishApprovedDocs.some(doc => doc.directory === dir || doc.directory.startsWith(`${dir}/`))) continue
+
     const docsInDir = byDir.get(dir)
     const eligibleDocs = docsInDir.filter(
       doc => doc.missing_fields.length > 0 && doc.invalid_fields.length === 0 && !doc.frontmatter_error && !doc.has_legacy_visibility
@@ -699,6 +713,12 @@ function vfBuildPolicySuggestions(baseRoot, excludedDocs) {
   return { policySuggestions, skippedPolicyFiles }
 }
 
+function vfRootId(baseRoot) {
+  const norm = slash(resolve(baseRoot)).normalize('NFC')
+  const canonical = process.platform === 'win32' ? norm.toLowerCase() : norm
+  return sha(`validate-fix-root\0${canonical}`)
+}
+
 function vfComputePlanDigest(planObj) {
   const clean = { ...planObj }
   delete clean.digest
@@ -710,10 +730,12 @@ function vfPlanCachePath(baseRoot, digest) {
   return join(baseRoot, '.holoself', 'runtime', 'validate-fix-plans', `${digest}.json`)
 }
 
-export function buildValidateFixPlan(root, { withPolicyFiles = false, cachePlan = true } = {}) {
+export function buildValidateFixPlan(root, { withPolicyFiles = false, allowPublishApproved = false, cachePlan = true } = {}) {
   const baseRoot = resolve(root)
   const excludedDocs = excludedCanonicalDocuments(baseRoot)
-  const { policySuggestions, skippedPolicyFiles } = vfBuildPolicySuggestions(baseRoot, excludedDocs)
+  const skippedPublishApprovedDocs = allowPublishApproved ? [] : excludedDocs.filter(doc => doc.would_activate_publish_approved)
+  const activeDocs = allowPublishApproved ? excludedDocs : excludedDocs.filter(doc => !doc.would_activate_publish_approved)
+  const { policySuggestions, skippedPolicyFiles } = vfBuildPolicySuggestions(baseRoot, activeDocs, skippedPublishApprovedDocs)
 
   const suggestionByCoveredFile = new Map()
   for (const suggestion of policySuggestions) {
@@ -722,7 +744,7 @@ export function buildValidateFixPlan(root, { withPolicyFiles = false, cachePlan 
     }
   }
 
-  const files = excludedDocs.map(doc => ({
+  const files = activeDocs.map(doc => ({
     path: doc.path,
     directory: doc.directory,
     before_sha256: doc.before_sha256,
@@ -736,6 +758,18 @@ export function buildValidateFixPlan(root, { withPolicyFiles = false, cachePlan 
     frontmatter_diff: doc.frontmatter_diff,
     covered_by_policy_suggestion: suggestionByCoveredFile.get(doc.path) || null
   }))
+
+  const skippedPublishApproved = skippedPublishApprovedDocs.map(doc => ({
+    path: doc.path,
+    directory: doc.directory,
+    before_sha256: doc.before_sha256,
+    missing_fields: doc.missing_fields,
+    invalid_fields: doc.invalid_fields,
+    kept_fields: doc.kept_fields,
+    warning: PUBLISH_APPROVED_SKIP_WARNING,
+    reason: `${doc.path}: ${PUBLISH_APPROVED_SKIP_WARNING}`
+  }))
+  const warnings = skippedPublishApprovedDocs.map(doc => `${doc.path}: ${PUBLISH_APPROVED_SKIP_WARNING}`)
 
   const preconditionsMap = new Map()
   for (const doc of excludedDocs) {
@@ -770,7 +804,7 @@ export function buildValidateFixPlan(root, { withPolicyFiles = false, cachePlan 
         })
       }
     }
-    for (const doc of excludedDocs) {
+    for (const doc of activeDocs) {
       if (usePolicyFiles && suggestionByCoveredFile.has(doc.path)) continue
       ops.push({
         operation: 'transform',
@@ -794,11 +828,14 @@ export function buildValidateFixPlan(root, { withPolicyFiles = false, cachePlan 
   const body = {
     schema_version: 1,
     kind: 'validate-fix',
-    root: slash(baseRoot),
+    root_id: vfRootId(baseRoot),
     mode: withPolicyFiles ? 'with-policy-files' : 'frontmatter',
     with_policy_files: Boolean(withPolicyFiles),
-    excluded_count: files.length,
+    allow_publish_approved: Boolean(allowPublishApproved),
+    excluded_count: excludedDocs.length,
     files,
+    skipped_publish_approved: skippedPublishApproved,
+    warnings,
     policy_suggestions: policySuggestions,
     skipped_policy_files: skippedPolicyFiles,
     preconditions,
@@ -811,7 +848,7 @@ export function buildValidateFixPlan(root, { withPolicyFiles = false, cachePlan 
     try {
       const cacheDir = join(baseRoot, '.holoself', 'runtime', 'validate-fix-plans')
       ensureDir(cacheDir)
-      atomicWrite(vfPlanCachePath(baseRoot, digest), JSON.stringify(plan, null, 2) + '\n', { mode: 0o600 })
+      atomicWrite(vfPlanCachePath(baseRoot, digest), JSON.stringify(plan, null, 2) + '\n', { mode: 0o600, exactMode: true })
       const altBody = {
         ...body,
         mode: !withPolicyFiles ? 'with-policy-files' : 'frontmatter',
@@ -820,14 +857,14 @@ export function buildValidateFixPlan(root, { withPolicyFiles = false, cachePlan 
       }
       const altDigest = vfComputePlanDigest(altBody)
       const altPlan = { ...altBody, digest: altDigest }
-      atomicWrite(vfPlanCachePath(baseRoot, altDigest), JSON.stringify(altPlan, null, 2) + '\n', { mode: 0o600 })
+      atomicWrite(vfPlanCachePath(baseRoot, altDigest), JSON.stringify(altPlan, null, 2) + '\n', { mode: 0o600, exactMode: true })
     } catch {}
   }
 
   return plan
 }
 
-function vfWriteExactFile(path, text, createdDirs) {
+function vfWriteExactFile(path, text, createdDirs, explicitMode = null) {
   let dir = dirname(path)
   const missing = []
   while (!existsSync(dir)) {
@@ -840,13 +877,8 @@ function vfWriteExactFile(path, text, createdDirs) {
     if (existsSync(path)) rmSync(path)
     return
   }
-  const temporary = `${path}.validate-fix-${process.pid}`
-  try {
-    writeFileSync(temporary, text, { flag: 'wx', mode: 0o666 })
-    renameSync(temporary, path)
-  } finally {
-    if (existsSync(temporary)) rmSync(temporary)
-  }
+  const mode = explicitMode ?? fileModeOr(path, 0o600)
+  atomicWrite(path, text, { mode, exactMode: true })
 }
 
 function vfPlanChangedError(message) {
@@ -861,7 +893,11 @@ function vfInvalidDigestError(message = 'validate --fix plan digest mismatch') {
   return err
 }
 
-export function applyValidateFixPlan(root, planOrNull = null, { expectedDigest, withPolicyFiles = false, validate, afterWrite } = {}) {
+export function applyValidateFixPlan(
+  root,
+  planOrNull = null,
+  { expectedDigest, withPolicyFiles = false, allowPublishApproved = false, validate, afterWrite } = {}
+) {
   const baseRoot = resolve(root)
   if (typeof expectedDigest !== 'string' || !/^[0-9a-f]{64}$/i.test(expectedDigest.trim())) {
     throw vfInvalidDigestError()
@@ -901,18 +937,26 @@ export function applyValidateFixPlan(root, planOrNull = null, { expectedDigest, 
       }
     }
     if (!plan) {
-      const currentPlan = buildValidateFixPlan(baseRoot, { withPolicyFiles, cachePlan: false })
-      const altPlan = buildValidateFixPlan(baseRoot, { withPolicyFiles: !withPolicyFiles, cachePlan: false })
-      if (currentPlan.digest === normalizedDigest) plan = currentPlan
-      else if (altPlan.digest === normalizedDigest) plan = altPlan
-      else throw vfInvalidDigestError()
+      for (const allowPub of [Boolean(allowPublishApproved), !allowPublishApproved]) {
+        const currentPlan = buildValidateFixPlan(baseRoot, { withPolicyFiles, allowPublishApproved: allowPub, cachePlan: false })
+        const altPlan = buildValidateFixPlan(baseRoot, { withPolicyFiles: !withPolicyFiles, allowPublishApproved: allowPub, cachePlan: false })
+        if (currentPlan.digest === normalizedDigest) {
+          plan = currentPlan
+          break
+        }
+        if (altPlan.digest === normalizedDigest) {
+          plan = altPlan
+          break
+        }
+      }
+      if (!plan) throw vfInvalidDigestError()
     }
   }
 
   if (
     plan.schema_version !== 1 ||
     plan.kind !== 'validate-fix' ||
-    resolve(plan.root) !== baseRoot ||
+    plan.root_id !== vfRootId(baseRoot) ||
     !Array.isArray(plan.operations)
   ) {
     throw new Error('invalid validate --fix plan')
@@ -1002,7 +1046,10 @@ export function applyValidateFixPlan(root, planOrNull = null, { expectedDigest, 
 
   // Ensure no additional canonical files became excluded since the plan was built.
   const currentExcluded = excludedCanonicalDocuments(baseRoot)
-  const plannedFilePaths = new Set((plan.files || []).map(f => f.path))
+  const plannedFilePaths = new Set([
+    ...(plan.files || []).map(f => f.path),
+    ...(plan.skipped_publish_approved || []).map(f => f.path)
+  ])
   for (const doc of currentExcluded) {
     if (!plannedFilePaths.has(doc.path) && !targets.has(process.platform === 'win32' ? doc.path.toLowerCase() : doc.path)) {
       throw vfPlanChangedError(`unplanned excluded file ${doc.path} appeared since planning`)
@@ -1030,8 +1077,9 @@ export function applyValidateFixPlan(root, planOrNull = null, { expectedDigest, 
       if (current !== op.before) {
         throw vfPlanChangedError(`file ${op.path} changed since planning`)
       }
-      vfWriteExactFile(op.absolute, op.after, createdDirs)
-      applied.push(op)
+      const beforeMode = fileModeOr(op.absolute, 0o600)
+      vfWriteExactFile(op.absolute, op.after, createdDirs, beforeMode)
+      applied.push({ ...op, beforeMode })
       afterWrite?.(op)
     }
     validate?.()
@@ -1042,6 +1090,7 @@ export function applyValidateFixPlan(root, planOrNull = null, { expectedDigest, 
       kind: 'validate-fix',
       mode: effectiveWithPolicy ? 'with-policy-files' : 'frontmatter',
       with_policy_files: effectiveWithPolicy,
+      allow_publish_approved: Boolean(plan.allow_publish_approved),
       plan_digest: normalizedDigest,
       applied_at: new Date().toISOString(),
       operations: ops.map(({ path, kind, before_sha256, after_sha256, reason }) => ({
@@ -1051,6 +1100,7 @@ export function applyValidateFixPlan(root, planOrNull = null, { expectedDigest, 
         after_sha256,
         reason
       })),
+      skipped_publish_approved: plan.skipped_publish_approved || [],
       skipped_policy_files: plan.skipped_policy_files || []
     }
     safeMaintenancePath(baseRoot, receiptRel)
@@ -1059,7 +1109,7 @@ export function applyValidateFixPlan(root, planOrNull = null, { expectedDigest, 
       mkdirSync(receiptDir, { recursive: true })
       createdDirs.push(receiptDir)
     }
-    const fd = openSync(receiptPath, 'wx')
+    const fd = openSync(receiptPath, 'wx', 0o600)
     receiptCreated = true
     try {
       writeFileSync(fd, JSON.stringify(receipt, null, 2) + '\n')
@@ -1071,7 +1121,7 @@ export function applyValidateFixPlan(root, planOrNull = null, { expectedDigest, 
     for (const op of applied.reverse()) {
       try {
         safeMaintenancePath(baseRoot, op.path)
-        vfWriteExactFile(op.absolute, op.before, [])
+        vfWriteExactFile(op.absolute, op.before, [], op.beforeMode)
       } catch {}
     }
     if (receiptCreated) {
@@ -1105,6 +1155,13 @@ export function formatValidateFixPlanText(plan, { outputPath = null } = {}) {
   lines.push(`Mode: ${plan.with_policy_files ? 'directory _policy.yaml where available (--with-policy-files)' : 'per-file frontmatter (default)'}`)
   lines.push('')
 
+  if (Array.isArray(plan.warnings) && plan.warnings.length > 0) {
+    for (const warning of plan.warnings) {
+      lines.push(`[warn] ${warning}`)
+    }
+    lines.push('')
+  }
+
   for (const file of plan.files) {
     lines.push(`File: ${file.path} (before sha256: ${file.before_sha256})`)
     for (const reason of file.reasons) {
@@ -1136,7 +1193,9 @@ export function formatValidateFixPlanText(plan, { outputPath = null } = {}) {
 
   if (outputPath) lines.push(`Plan written to: ${outputPath}`)
   lines.push(`Plan digest: ${plan.digest}`)
-  const applyFlags = plan.with_policy_files ? '--fix --apply --with-policy-files' : '--fix --apply'
-  lines.push(`Apply: holoself validate ${applyFlags} --digest ${plan.digest} --yes`)
+  const flagParts = ['--fix', '--apply']
+  if (plan.with_policy_files) flagParts.push('--with-policy-files')
+  if (plan.allow_publish_approved) flagParts.push('--allow-publish-approved')
+  lines.push(`Apply: holoself validate ${flagParts.join(' ')} --digest ${plan.digest} --yes`)
   return lines.join('\n')
 }

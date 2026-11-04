@@ -101,12 +101,13 @@ Exclusions are surfaced on owner-facing surfaces only:
 
 To repair excluded documents conservatively without widening existing access:
 
-1. **Preview the repair plan**: Run `holoself validate --fix` (or `holoself validate --fix --json --out plan.json`). For each excluded document, Holoself proposes the most conservative defaults:
+1. **Preview the repair plan**: Run `holoself validate --fix` (or `holoself validate --fix --json --out plan.json`; `--out` writes `0600` and stores a hashed `root_id` rather than the absolute filesystem path). For each excluded document, Holoself proposes the most conservative defaults:
    - `access_lenses: [private]`
    - `disclosure: internal-only`
    - `sensitivity: personal` (or keeps the existing valid `sensitivity`)
    - `document_role: content` (or keeps the existing valid `document_role`)
    - **Never widen**: Any field that is already present and valid is kept unchanged. Any field that is present and invalid is replaced with its conservative default and reported in the plan reasons and per-file `frontmatter_diff`.
+   - **No silent publication activation**: If a document's existing kept values include `disclosure: publish-approved` (or legacy `visibility: public-safe` / `public_safe: true`) and the fix would make it newly included, Holoself skips that document by default with a warning (`would activate publish-approved; add the missing fields by hand or rerun with --allow-publish-approved`). Pass `--allow-publish-approved` explicitly to include those documents in the repair plan.
    - **Directory `_policy.yaml` suggestions**: When two or more files in the same directory are excluded for shared missing fields and no `_policy.yaml` exists in that directory yet, the plan also includes a `policy_suggestions` entry for `<dir>/_policy.yaml` as an optional alternative.
-2. **Apply the digest-bound plan**: Run `holoself validate --fix --apply --digest <sha256> --yes` (or confirm interactively in a TTY). Apply verifies every file's `before_sha256` against disk and refuses with `PLAN_CHANGED` if any file changed since planning, rolls back all writes on any error, and writes an immutable receipt under `.holoself/validate-fix-receipts/<digest>.json`.
+2. **Apply the digest-bound plan**: Run `holoself validate --fix --apply --digest <sha256> --yes` (or confirm interactively in a TTY). Apply verifies every file's `before_sha256` against disk and refuses with `PLAN_CHANGED` if any file changed since planning, preserves existing file modes on apply and rollback (and creates new `_policy.yaml` files with mode `0600`), rolls back all writes on any error, and writes an immutable receipt under `.holoself/validate-fix-receipts/<digest>.json`.
 3. **Apply directory `_policy.yaml` suggestions (optional)**: Pass `--with-policy-files` (`holoself validate --fix --with-policy-files` and `holoself validate --fix --apply --with-policy-files --digest <sha256> --yes`) to create `<dir>/_policy.yaml` instead of editing per-file frontmatter in eligible directories. Existing `_policy.yaml` files are never overwritten.
