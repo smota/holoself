@@ -1,7 +1,4 @@
-import {
-  existsSync, lstatSync, statSync, readFileSync, writeFileSync, mkdirSync,
-  readdirSync, renameSync, unlinkSync
-} from 'node:fs'
+import { existsSync, lstatSync, statSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, unlinkSync } from 'node:fs'
 import { join, resolve, relative, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
 import { DEFAULT_LENS_IDS } from './lenses.mjs'
@@ -113,9 +110,7 @@ export function applyFrontmatterModifications(text, changes) {
 }
 
 function evaluateAllowed(meta, lens, adapter, subjectKind) {
-  const readScope = ['shared', 'local', 'restricted'].includes(meta.read_scope)
-    ? meta.read_scope
-    : (meta.visibility === 'private' ? 'restricted' : 'shared')
+  const readScope = ['shared', 'local', 'restricted'].includes(meta.read_scope) ? meta.read_scope : meta.visibility === 'private' ? 'restricted' : 'shared'
 
   // Phase 1
   if (readScope === 'restricted') {
@@ -130,9 +125,16 @@ function evaluateAllowed(meta, lens, adapter, subjectKind) {
   }
 
   // Phase 3 & 4
-  const accessLenses = Array.isArray(meta.access_lenses) && meta.access_lenses.length
-    ? meta.access_lenses
-    : (meta.visibility === 'private' ? ['private'] : (meta.visibility === 'professional' ? ['general', 'professional', 'interview', 'private'] : (meta.visibility === 'public-voice' ? ['general', 'public-voice', 'private'] : ALL_LENSES)))
+  const accessLenses =
+    Array.isArray(meta.access_lenses) && meta.access_lenses.length
+      ? meta.access_lenses
+      : meta.visibility === 'private'
+        ? ['private']
+        : meta.visibility === 'professional'
+          ? ['general', 'professional', 'interview', 'private']
+          : meta.visibility === 'public-voice'
+            ? ['general', 'public-voice', 'private']
+            : ALL_LENSES
   if (!accessLenses.includes(lens)) return false
   if (Array.isArray(meta.exclude_lenses) && meta.exclude_lenses.includes(lens)) return false
 
@@ -155,9 +157,16 @@ function evaluateAllowedV1(meta, lens, adapter, subjectKind) {
     return false
   }
 
-  const accessLenses = Array.isArray(meta.access_lenses) && meta.access_lenses.length
-    ? meta.access_lenses
-    : (meta.visibility === 'private' ? ['private'] : (meta.visibility === 'professional' ? ['general', 'professional', 'interview', 'private'] : (meta.visibility === 'public-voice' ? ['general', 'public-voice', 'private'] : ALL_LENSES)))
+  const accessLenses =
+    Array.isArray(meta.access_lenses) && meta.access_lenses.length
+      ? meta.access_lenses
+      : meta.visibility === 'private'
+        ? ['private']
+        : meta.visibility === 'professional'
+          ? ['general', 'professional', 'interview', 'private']
+          : meta.visibility === 'public-voice'
+            ? ['general', 'public-voice', 'private']
+            : ALL_LENSES
   if (!accessLenses.includes(lens)) return false
   if (Array.isArray(meta.exclude_lenses) && meta.exclude_lenses.includes(lens)) return false
 
@@ -244,7 +253,11 @@ function parseSimpleFrontmatter(text) {
     const key = trimmed.slice(0, colonIdx).trim()
     let valStr = trimmed.slice(colonIdx + 1).trim()
     if (valStr.startsWith('[') && valStr.endsWith(']')) {
-      metadata[key] = valStr.slice(1, -1).split(',').map(s => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean)
+      metadata[key] = valStr
+        .slice(1, -1)
+        .split(',')
+        .map(s => s.trim().replace(/^['"]|['"]$/g, ''))
+        .filter(Boolean)
     } else {
       valStr = valStr.replace(/^['"]|['"]$/g, '')
       if (valStr === 'true') metadata[key] = true
@@ -264,7 +277,9 @@ function atomicWriteFile(target, content, mode = 0o600) {
     renameSync(tmp, target)
   } finally {
     if (existsSync(tmp)) {
-      try { unlinkSync(tmp) } catch {}
+      try {
+        unlinkSync(tmp)
+      } catch {}
     }
   }
 }
@@ -278,7 +293,7 @@ export function planPolicyMigration(selfRoot, options = {}) {
   for (const folder of ['profile', 'context', 'history', 'topics']) {
     const d = join(selfRoot, folder)
     if (!existsSync(d)) continue
-    const walk = (dir) => {
+    const walk = dir => {
       for (const e of readdirSync(dir, { withFileTypes: true })) {
         const full = join(dir, e.name)
         if (e.isSymbolicLink()) throw new Error(`symlink forbidden in self root: ${full}`)
@@ -300,7 +315,7 @@ export function planPolicyMigration(selfRoot, options = {}) {
         for (const l of reg.links || []) {
           if (l.status === 'active' && l.project_path && existsSync(l.project_path)) {
             const pPath = l.project_path
-            const walkProj = (dir) => {
+            const walkProj = dir => {
               for (const e of readdirSync(dir, { withFileTypes: true })) {
                 const full = join(dir, e.name)
                 if (e.isSymbolicLink()) throw new Error(`symlink forbidden in linked project: ${full}`)

@@ -1,0 +1,94 @@
+// holoself link remove subcommand (moved verbatim from runEcosystem).
+import { existsSync, lstatSync, readFileSync, rmSync } from 'node:fs'
+import { deactivateProject } from '../../../adapters.mjs'
+import { writeBinding } from '../../../bindings.mjs'
+import { isCanonicalSelf, linkPath } from '../../../link/config.mjs'
+import { canonicalProjectPath, canonicalSpaceId, readRegistry, registryFilePath, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { pathExists } from '../../../shared/fs.mjs'
+import { parseYaml } from '../../../shared/yaml.mjs'
+import { askConfirm } from '../../link-helpers.mjs'
+
+export async function linkRemove(o, sub, project) {
+  const path = linkPath(project)
+  const canonicalProj = canonicalProjectPath(project)
+  const pId = canonicalSpaceId(project)
+  if (!pathExists(path)) {
+    console.log('[ok] no link configuration found')
+    let selfRoot = o.self || o.root
+    if (selfRoot) {
+      const cSelf = canonicalProjectPath(selfRoot)
+      if (existsSync(cSelf) && isCanonicalSelf(cSelf)) {
+        const regPath = registryFilePath(cSelf)
+        if (existsSync(regPath)) {
+          await withRegistryLock(cSelf, () => {
+            const currentReg = readRegistry(cSelf)
+            const nowIso = new Date().toISOString()
+            writeRegistry(
+              cSelf,
+              links => {
+                const idx = links.findIndex(l => l.project_id === pId || l.project_path === canonicalProj)
+                if (idx >= 0) links[idx] = { ...links[idx], status: 'revoked', revoked_at: nowIso, updated_at: nowIso }
+                return links
+              },
+              currentReg.registry_hash
+            )
+          })
+        }
+      }
+    }
+    return true
+  }
+  if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) throw new Error(`${path} is not a regular link configuration; refusing to remove`)
+  if (!(await askConfirm(o, `Remove managed activation and link configuration ${path}?`))) {
+    console.log('Cancelled.')
+    return true
+  }
+  let parsedRaw = null
+  try {
+    parsedRaw = parseYaml(readFileSync(path, 'utf8'))
+  } catch (e) {
+    throw new Error(`cannot parse link at ${path}: ${e.message}`)
+  }
+  let selfRoot = o.self || parsedRaw?.self_context?.path || (o.rootExplicit ? o.root : null)
+  let selfReachable = false
+  if (selfRoot) {
+    try {
+      const cSelf = canonicalProjectPath(selfRoot)
+      if (existsSync(cSelf) && !lstatSync(cSelf).isSymbolicLink() && isCanonicalSelf(cSelf)) {
+        selfRoot = cSelf
+        const regPath = registryFilePath(selfRoot)
+        if (existsSync(regPath) && !lstatSync(regPath).isSymbolicLink()) selfReachable = true
+      }
+    } catch {}
+  }
+  if (!selfReachable) {
+    if (!o.force) {
+      const err = new Error(`sovereign self at ${selfRoot || '(unspecified)'} is unreachable or invalid; refusing removal without sovereign revocation`)
+      err.code = 'SOVEREIGN_SELF_UNREACHABLE'
+      throw err
+    }
+    console.warn(
+      `Warning: sovereign self at ${selfRoot || '(unspecified)'} is unreachable or invalid; local link configuration and adapters removed, ` +
+        `but sovereign registry was NOT updated. Run 'holoself link approve --project <dir> --revoke' from self root to complete sovereign revocation.`
+    )
+  } else {
+    await withRegistryLock(selfRoot, () => {
+      const currentReg = readRegistry(selfRoot)
+      const nowIso = new Date().toISOString()
+      writeRegistry(
+        selfRoot,
+        links => {
+          const idx = links.findIndex(l => l.project_id === pId || l.project_path === canonicalProj)
+          if (idx >= 0) links[idx] = { ...links[idx], status: 'revoked', revoked_at: nowIso, updated_at: nowIso }
+          return links
+        },
+        currentReg.registry_hash
+      )
+    })
+  }
+  if (!o.dryRun && selfReachable) writeBinding(selfRoot, project, null)
+  deactivateProject(project, { dryRun: o.dryRun })
+  if (!o.dryRun) rmSync(path)
+  console.log(`[ok] removed ${path}; indexes, reports, and proposals preserved`)
+  return true
+}

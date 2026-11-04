@@ -208,8 +208,10 @@ function dispatchedCommands(dispatch){
   return inventory
 }
 test('every dispatched command has a flag contract',async()=>{
-  const {runEcosystem}=await import('../src/ecosystem.mjs')
-  const inventory=new Set(['','mcp','instructions','index','link','migrate',...dispatchedCommands(run.toString()),...dispatchedCommands(runEcosystem.toString())])
+  // The ecosystem dispatcher is a command table; render each entry as the equivalent if-branch for discovery.
+  const {COMMANDS}=await import('../src/cli/dispatch.mjs')
+  const ecosystemDispatch=COMMANDS.map(({command,subcommands,run:handler})=>`if(o.command===${JSON.stringify(command)}${subcommands?` && ${JSON.stringify(subcommands)}.includes(sub)`:''}){${handler.toString()}}`).join('\n')
+  const inventory=new Set(['','mcp','instructions','index','link','migrate',...dispatchedCommands(run.toString()),...dispatchedCommands(ecosystemDispatch)])
   const assertCoverage=(table,keys=inventory)=>{for(const key of keys)assert.ok(Object.hasOwn(table,key),'missing flag contract: '+key)}
   assertCoverage(COMMAND_FLAGS)
   for(const key of ['index','instructions','link skill migrate-global']){const broken={...COMMAND_FLAGS};delete broken[key];assert.throws(()=>assertCoverage(broken),/missing flag contract/)}

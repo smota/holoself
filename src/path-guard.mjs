@@ -8,29 +8,38 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 // (macOS /var -> /private/var, symlinked home directories) and are accepted.
 // Symlinks or junctions AT (when requested) or BELOW the boundary fail closed.
 
-const fold = value => process.platform === 'win32' ? value.toLowerCase() : value
+const fold = value => (process.platform === 'win32' ? value.toLowerCase() : value)
 
 function lstat(path) {
-  try { return lstatSync(path) }
-  catch (error) { if (['ENOENT', 'ENOTDIR'].includes(error.code)) return null; throw error }
+  try {
+    return lstatSync(path)
+  } catch (error) {
+    if (['ENOENT', 'ENOTDIR'].includes(error.code)) return null
+    throw error
+  }
 }
 
 // Realpath of the nearest existing ancestor with the missing tail re-appended.
 export function canonicalPath(path) {
-  const absolute = resolve(path), tail = []
+  const absolute = resolve(path),
+    tail = []
   let current = absolute
   while (true) {
-    try { return tail.length ? join(realpathSync(current), ...tail.reverse()) : realpathSync(current) }
-    catch (error) {
+    try {
+      return tail.length ? join(realpathSync(current), ...tail.reverse()) : realpathSync(current)
+    } catch (error) {
       if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error
       const parent = dirname(current)
       if (parent === current) return absolute
-      tail.push(basename(current)); current = parent
+      tail.push(basename(current))
+      current = parent
     }
   }
 }
 
-export function samePath(a, b) { return fold(a) === fold(b) }
+export function samePath(a, b) {
+  return fold(a) === fold(b)
+}
 
 export function isWithin(root, path) {
   const rel = relative(fold(root), fold(path))
@@ -41,20 +50,24 @@ export function isWithin(root, path) {
 // the boundary. Returns the lexical ancestor of `target` that is the boundary
 // (`base`) and the components below it, or null when `target` is outside.
 export function locateBelow(root, target) {
-  const lexicalRoot = resolve(root), lexicalTarget = resolve(target)
+  const lexicalRoot = resolve(root),
+    lexicalTarget = resolve(target)
   if (isWithin(lexicalRoot, lexicalTarget)) return { base: lexicalRoot, parts: split(relative(lexicalRoot, lexicalTarget)) }
   const canonicalRoot = canonicalPath(lexicalRoot)
   if (isWithin(canonicalRoot, lexicalTarget)) return { base: canonicalRoot, parts: split(relative(canonicalRoot, lexicalTarget)) }
   // Mixed spelling: choose the HIGHEST ancestor that canonicalises to the root,
   // so a loop link below it (root/sub/loop -> root) is still inspected.
   const chain = []
-  for (let current = lexicalTarget;; current = dirname(current)) { chain.push(current); if (dirname(current) === current) break }
+  for (let current = lexicalTarget; ; current = dirname(current)) {
+    chain.push(current)
+    if (dirname(current) === current) break
+  }
   for (const current of chain.reverse()) {
     if (samePath(canonicalPath(current), canonicalRoot)) return { base: current, parts: split(relative(current, lexicalTarget)) }
   }
   return null
 }
-const split = rel => rel ? rel.split(sep) : []
+const split = rel => (rel ? rel.split(sep) : [])
 
 // First symlink/junction at or below the boundary on the way to `target`, as a
 // lexical path, or null. `includeRoot` also rejects a boundary that is itself a
