@@ -21,6 +21,6 @@ MCP is not a fourth data mode. It is an interaction adapter layered on this meta
 
 ## Legacy live mount
 
-`link --target` creates project `.holoself` as a symlink/junction to complete data root. This exposes more private context and conflicts with metadata directory mode. It remains compatibility-only. New integrations should normally use `link add`.
+`link --target` creates project `.holoself` as a symlink/junction to complete data root. This exposes more private context and conflicts with metadata directory mode. It is deprecated: `link --target` and `unlink --target` print a warning naming the removal version (0.13.0), and are removed in 0.13.0. Migrate an existing mount with `holoself link setup --project <dir> --self <path>`. New integrations should use `link add`.
 
 Never convert between these modes silently.

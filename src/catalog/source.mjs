@@ -33,10 +33,14 @@ export function privacySections(body, policy) {
       })
     return ''
   })
+  // Ordinary sections without a field rule inherit the document's own access and disclosure (the document gate already
+  // decides who sees them), so they are delivered wherever the document is, including publication adapters when the
+  // document is approved for publication. They no longer depend on the deprecated document `visibility`.
+  const inherited = policy.publication_allowed ? 'public-safe' : 'linked-projects'
   for (const section of sections(ordinary)) {
     const heading = section.heading.toLowerCase(),
       fieldRule = Object.entries(policy.field_visibility || {}).find(([field]) => heading.includes(field.toLowerCase())),
-      v = fieldRule?.[1] || policy.visibility
+      v = fieldRule?.[1] || inherited
     chunks.push({ ...section, visibility: v, claim: false, disclosure: policy.disclosure })
   }
   return chunks

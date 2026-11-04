@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { loadLensRegistry, resolveLens } from '../lenses.mjs'
 import { linkedLensAuthority } from '../link/attestation.mjs'
-import { findLinkUpwards, isCanonicalSelf, linkPath, readLink } from '../link/config.mjs'
+import { LEGACY_MOUNT_DEPRECATION, findLinkUpwards, isCanonicalSelf, linkPath, readLink } from '../link/config.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { canonicalPath, samePath } from '../path-guard.mjs'
 import { assertContainedPath, pathExists } from '../shared/fs.mjs'
@@ -27,7 +27,7 @@ export function resolveCaller(o) {
   if (project) {
     const holoselfDir = join(project, '.holoself')
     if (existsSync(holoselfDir) && lstatSync(holoselfDir).isSymbolicLink()) {
-      const err = new Error(`project uses a legacy filesystem junction mount: ${project}; run holoself link setup to migrate to a bounded link`)
+      const err = new Error(`project uses a legacy filesystem junction mount: ${project}; run holoself link setup to migrate to a bounded link; ${LEGACY_MOUNT_DEPRECATION}`)
       err.code = 'LEGACY_MOUNT_DETECTED'
       throw err
     }

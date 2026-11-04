@@ -160,10 +160,15 @@ export function projectContextErrors(value) {
       errors.push(`project_context.${key} must be a string array`)
   return errors
 }
+// The legacy live mount (`link --target` / `unlink --target`) is deprecated (docs/decisions/privacy-fields-and-legacy-mount.md).
+export const LEGACY_MOUNT_REMOVAL_VERSION = '0.13.0'
+export const LEGACY_MOUNT_DEPRECATION =
+  `the legacy live mount (link --target, unlink --target) is deprecated and will be removed in ${LEGACY_MOUNT_REMOVAL_VERSION}; ` +
+  'use holoself link setup --project <dir> --self <path>'
 export function readLink(project, { tolerant = false } = {}) {
   const holoselfDir = join(project, '.holoself')
   if (existsSync(holoselfDir) && lstatSync(holoselfDir).isSymbolicLink()) {
-    const error = new Error(`legacy filesystem junction mount detected at ${holoselfDir}; run holoself link setup to migrate to a bounded link`)
+    const error = new Error(`legacy filesystem junction mount detected at ${holoselfDir}; run holoself link setup to migrate to a bounded link; ${LEGACY_MOUNT_DEPRECATION}`)
     error.code = 'LEGACY_MOUNT_DETECTED'
     throw error
   }

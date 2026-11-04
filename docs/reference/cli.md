@@ -107,7 +107,8 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `data-root` | Print selected private data root |
 | `init` | Create private data root and starter files |
 | `doctor` | Check runtime and required layout |
-| `validate` | Validate root, links, proposals, visibility, provenance, references, and markers |
+| `validate` | Validate root, links, proposals, visibility, provenance, references, and markers; warn on stderr for each document and deprecated privacy field (`visibility`, `public_safe`, `field_visibility`, claim-marker `visibility=`) |
+| `migrate policy` | Plan (`--dry-run`), apply (`--apply <plan_id>`, `--confirm-narrowing` only when the plan reports coverage loss) or revert (`--revert <receipt_id>`) the exact migration of deprecated `visibility` / `public_safe` to `access_lenses`, `read_scope`, `disclosure`, `sensitivity` and `document_role` |
 | `validate --fix` | Build or apply (`--apply --digest <sha256> --yes`, optional `--with-policy-files`, `--allow-publish-approved`, `--out <plan>`, `--json`) a digest-bound conservative privacy metadata repair plan for excluded canonical documents |
 | `migrate --from <dir>` | Copy supported PersonalOS data after confirmation |
 | `export --target <dir>` | Create reviewable project packet snapshot |
@@ -181,7 +182,7 @@ link --target <project> [--root-setup] [--dry-run] [--force] [--yes]
 unlink --target <project> [--dry-run] [--yes]
 ```
 
-This is a filesystem symlink/junction mechanism, not metadata project link. It exposes complete selected data root to project tools. Retained for compatibility; prefer `link add` for new integrations.
+This is a filesystem symlink/junction mechanism, not metadata project link. It exposes complete selected data root to project tools. Deprecated: `link --target` and `unlink --target` print a deprecation warning on stderr on every run, including `--dry-run`, and are removed in 0.13.0. Migrate an existing mount with `holoself link setup --project <dir> --self <path>`, or remove it with `unlink --target` until 0.13.0. `LEGACY_MOUNT_DETECTED` errors and `link status` (`mode: legacy-mount`, `deprecation`) carry the same warning.
 
 ## General behavior
 

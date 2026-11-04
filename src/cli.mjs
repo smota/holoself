@@ -8,6 +8,7 @@ import {
   applyValidateFixPlan,
   buildValidateFixPlan,
   catalogBuildWarnings,
+  deprecatedFieldWarnings,
   ecosystemValidationErrors,
   excludedCanonicalDocuments,
   excludedIncompleteMetadataNotice,
@@ -16,7 +17,7 @@ import {
   runEcosystem
 } from './ecosystem.mjs'
 import { seedLensDefinitions } from './lenses.mjs'
-import { ensureHoloselfGitignore } from './link/config.mjs'
+import { LEGACY_MOUNT_DEPRECATION, ensureHoloselfGitignore } from './link/config.mjs'
 import { VERSION } from './version.mjs'
 import { mcpPlatformSupport } from './mcp-verification.mjs'
 import { buildLensMigrationPlan, buildTransformationPlan, applyTransformationPlan } from './maintenance.mjs'
@@ -141,8 +142,8 @@ function help() {
   console.log(
     `Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init ` +
       `| doctor | validate [--fix [--with-policy-files] [--allow-publish-approved] [--out <plan>] | --fix --apply --digest <sha256> --yes] | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] ` +
-      `[--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root ` +
-      `junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  skill ` +
+      `[--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Deprecated (removed in 0.13.0): legacy live ` +
+      `data-root junction\n  unlink --target <dir>     Deprecated (removed in 0.13.0): remove legacy managed junction\n\nLinked ecosystem:\n  skill ` +
       `status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens ` +
       `list|show|validate|bind|unbind|bindings [id] [--root <self-root>]\n  link ` +
       `add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  link deactivate ` +
@@ -502,6 +503,8 @@ export async function run(argv, options = {}) {
     }
     const warnings = existsSync(root) ? catalogBuildWarnings(root, o.project) : []
     for (const w of warnings) console.log(`[warn] ${w}`)
+    // Deprecation notices go to stderr so scripted consumers of stdout are unaffected.
+    for (const w of existsSync(root) ? deprecatedFieldWarnings(root, o.project) : []) console.error(`[warn] ${w}`)
     const excludedCount = existsSync(root) ? excludedCanonicalDocuments(root).length : 0
     if (excludedCount > 0) console.log(excludedIncompleteMetadataNotice(excludedCount))
     errors.push(...ecosystemValidationErrors(root, o.project))
@@ -570,6 +573,7 @@ export async function run(argv, options = {}) {
   }
   if (o.command === 'link') {
     if (!o.target) throw new Error('link requires --target <project>')
+    console.error(`[warn] ${LEGACY_MOUNT_DEPRECATION}`)
     if (!existsSync(root)) throw new Error('data root missing; run init first')
     // Validate every instruction file before changing the link, so malformed or
     // unsafe project files cannot leave a partially-applied root setup.
@@ -594,6 +598,7 @@ export async function run(argv, options = {}) {
   }
   if (o.command === 'unlink') {
     if (!o.target) throw new Error('unlink requires --target <project>')
+    console.error(`[warn] ${LEGACY_MOUNT_DEPRECATION}`)
     const p = join(o.target, '.holoself')
     if (!pathExists(p)) {
       console.log('[ok] no link found')

@@ -24,8 +24,21 @@ export const CONFIDENTIAL_SENSITIVITIES = [
 export const KNOWLEDGE_STATUSES = Object.freeze(['current', 'historical', 'superseded'])
 export const TEMPORAL_SCOPES = Object.freeze(['current', 'time-bounded', 'historical', 'timeless'])
 
+// The effective publication state the runtime uses. Legacy `public_safe: false` overrides `disclosure`; legacy
+// `public_safe: true` and `visibility: public-safe` supply `publish-approved` only when `disclosure` is missing.
+export function effectiveDisclosure(metadata = {}) {
+  if (metadata.public_safe === false) return 'review-required'
+  if (DISCLOSURES.includes(metadata.disclosure)) return metadata.disclosure
+  if (metadata.public_safe === true || (metadata.visibility || 'linked-projects') === 'public-safe') return 'publish-approved'
+  return 'internal-only'
+}
+// The only publication decision: an effective `publish-approved` disclosure and a non-confidential sensitivity.
+export function publicationAllowed(metadata = {}) {
+  return effectiveDisclosure(metadata) === 'publish-approved' && !CONFIDENTIAL_SENSITIVITIES.includes(metadata.sensitivity || '')
+}
+// Alias of publicationAllowed (docs/decisions/privacy-fields-and-legacy-mount.md): one answer to "may this be published?".
 export function derivedPublicSafe(metadata = {}) {
-  return metadata.disclosure === 'publish-approved' && !CONFIDENTIAL_SENSITIVITIES.includes(metadata.sensitivity)
+  return publicationAllowed(metadata || {})
 }
 
 export function annotationSchema(lenses = []) {

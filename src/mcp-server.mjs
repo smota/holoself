@@ -13,7 +13,7 @@ import {
   PROPOSAL_TYPES,
   VISIBILITIES
 } from './ecosystem.mjs'
-import { readLink } from './link/config.mjs'
+import { LEGACY_MOUNT_DEPRECATION, readLink } from './link/config.mjs'
 import { HARVEST_PROMPT_NAME, HARVEST_PROMPT_TEXT, HARVEST_PROMPT_VERSION, harvestPromptText, validateHarvestPromptArgs } from './instructions.mjs'
 import { recordServedPacket } from './ledger.mjs'
 import { createToolPool } from './mcp-pool.mjs'
@@ -227,7 +227,7 @@ function resolveBoundProject(projectInput, env = process.env, cwd = process.cwd(
     fail('project binding is not a safe local directory', 'PROJECT_BINDING_INVALID')
   const holoselfDir = join(project, '.holoself')
   if (existsSync(holoselfDir) && lstatSync(holoselfDir).isSymbolicLink())
-    fail('project has a legacy filesystem junction mount; run holoself link setup to migrate to a bounded link', 'LEGACY_MOUNT_DETECTED')
+    fail(`project has a legacy filesystem junction mount; run holoself link setup to migrate to a bounded link; ${LEGACY_MOUNT_DEPRECATION}`, 'LEGACY_MOUNT_DETECTED')
   const link = join(project, '.holoself', 'link.yaml')
   if (!existsSync(link) || lstatSync(link).isSymbolicLink() || !lstatSync(link).isFile()) fail('fixed project has no safe .holoself/link.yaml', 'LINK_REQUIRED')
   holoselfMcpStatus(project)

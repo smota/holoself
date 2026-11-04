@@ -1,5 +1,5 @@
 // Document access policy: lens, visibility, disclosure, sensitivity and task gates.
-import { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES } from '../annotations.mjs'
+import { DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES, effectiveDisclosure, publicationAllowed } from '../annotations.mjs'
 import { KNOWLEDGE_STATUSES, TEMPORAL_SCOPES, dateValue } from '../context-selection.mjs'
 import { DEFAULT_LENS_IDS } from '../lenses.mjs'
 import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
@@ -27,22 +27,12 @@ export function accessLenses(meta) {
   return Array.isArray(meta.access_lenses) ? meta.access_lenses : legacyAccessLenses(meta)
 }
 export function disclosure(meta) {
-  if (meta.public_safe === false) return 'review-required'
-  if (DISCLOSURES.includes(meta.disclosure)) return meta.disclosure
-  if (meta.public_safe === true || visibility(meta) === 'public-safe') return 'publish-approved'
-  return 'internal-only'
+  return effectiveDisclosure(meta)
 }
 export function documentRole(meta) {
   return DOCUMENT_ROLES.includes(meta.document_role) ? meta.document_role : 'content'
 }
-export function publicationAllowed(meta) {
-  return (
-    disclosure(meta) === 'publish-approved' &&
-    !['compensation-confidential', 'third-party-personal', 'recruiter-confidential', 'employer-confidential', 'application-private', 'restricted'].includes(
-      meta.sensitivity || ''
-    )
-  )
-}
+export { publicationAllowed }
 export function taskAllowed(meta, task) {
   const include = Array.isArray(meta.task_include) ? meta.task_include : [],
     exclude = Array.isArray(meta.task_exclude) ? meta.task_exclude : [],

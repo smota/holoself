@@ -1,10 +1,9 @@
 import { existsSync, lstatSync, statSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { DISCLOSURES } from './annotations.mjs'
 import { canonicalJson } from './catalog.mjs'
 import { HASH_RE } from './catalog/schema.mjs'
 import { CUSTOM_SENSITIVITY_CATEGORIES, DEFAULT_LENSES, DEFAULT_LENS_IDS, lensIdStructurallyValid, loadLensRegistry } from './lenses.mjs'
-import { allowedDocument, publicationAllowed, PUBLICATION_ADAPTERS } from './policy/access.mjs'
+import { allowedDocument, disclosure as runtimeDisclosure, legacyAccessLenses, publicationAllowed, PUBLICATION_ADAPTERS, visibility as legacyVisibility } from './policy/access.mjs'
 import { resolveDocumentPolicy } from './policy/policy-defaults.mjs'
 import { frontmatter, privacyMetadataErrors, restrictPrivacyMetadata } from './policy/privacy-fields.mjs'
 import { atomicWrite, hash, slash } from './shared/fs.mjs'
@@ -38,72 +37,59 @@ function normalizeMigrationMetadata(input, registry = null, tolerant = true) {
   return defined
 }
 
+// Deprecated document-level fields (docs/decisions/privacy-fields-and-legacy-mount.md). `migrate policy` removes them
+// in the same edit that materializes their exact runtime meaning as target fields. `field_visibility` and claim-marker
+// `visibility=` stay until the runtime reads their replacements (`field_access`, lens-vocabulary claim markers).
+export const DEPRECATED_DOCUMENT_FIELDS = Object.freeze(['visibility', 'public_safe'])
+
+// The exact, non-widening target metadata for a document (decision record, section 2, "Mapping: document level").
+// `meta` is the metadata the runtime serves (runtime-parsed, so invalid privacy values are already restricted). Every
+// explicit, valid modern field is kept; only the gaps the legacy runtime filled implicitly are materialized, and the
+// deprecated fields are dropped. The mapping is the same for self, project and contrib documents (`kind` is accepted
+// for compatibility only).
 export function computeMeetMetadata(meta, kind = 'self', registry = null) {
+  void kind
   const raw = meta && typeof meta === 'object' ? meta : {}
   const defined = {}
   for (const [k, v] of Object.entries(raw)) {
     if (v !== undefined) defined[k] = Array.isArray(v) ? [...v] : v
   }
-
-  const errors = privacyMetadataErrors(defined, registry)
-  if (errors.length > 0) {
-    return restrictPrivacyMetadata({ ...defined })
-  }
+  if (privacyMetadataErrors(defined, registry).length > 0) restrictPrivacyMetadata(defined)
 
   const result = { ...defined }
-  const vis = defined.visibility || 'private'
+  delete result.publication_allowed
+  for (const key of DEPRECATED_DOCUMENT_FIELDS) delete result[key]
 
-  // read_scope
-  if (!['shared', 'local', 'restricted'].includes(defined.read_scope)) {
-    result.read_scope = vis === 'private' ? 'restricted' : 'shared'
-  }
-
-  // access_lenses
-  if (!Array.isArray(defined.access_lenses)) {
-    if (kind === 'self') {
-      if (vis === 'private') {
-        result.access_lenses = ['private']
-      } else if (vis === 'linked-projects') {
-        result.access_lenses = ['general', 'professional', 'public-voice', 'technical', 'leadership', 'interview', 'private']
-      } else if (vis === 'professional') {
-        result.access_lenses = ['general', 'professional', 'interview', 'private']
-      } else if (vis === 'public-voice' || vis === 'public-safe') {
-        result.access_lenses = ['general', 'public-voice', 'private']
-      } else {
-        result.access_lenses = ['general', 'private']
-      }
-    } else {
-      if (vis === 'private') {
-        result.access_lenses = ['private']
-      } else if (vis === 'linked-projects') {
-        result.access_lenses = ['general', 'technical']
-      } else if (vis === 'public-safe') {
-        result.access_lenses = ['general', 'public-voice']
-      } else {
-        result.access_lenses = ['general']
-      }
-    }
-  }
-
-  // disclosure
-  if (defined.public_safe === false) {
-    result.disclosure = defined.disclosure === 'internal-only' ? 'internal-only' : 'review-required'
-  } else if (!DISCLOSURES.includes(defined.disclosure)) {
-    result.disclosure =
-      defined.public_safe === true || vis === 'public-safe' || defined.publication_allowed ? 'publish-approved' : 'internal-only'
-  }
-
-  // sensitivity
-  if (!defined.sensitivity) {
-    result.sensitivity = 'personal'
-  }
-
-  // document_role
-  if (!defined.document_role) {
-    result.document_role = 'content'
-  }
-
+  // read_scope: the runtime default is restricted for visibility private, shared otherwise.
+  if (!['shared', 'local', 'restricted'].includes(defined.read_scope)) result.read_scope = legacyVisibility(defined) === 'private' ? 'restricted' : 'shared'
+  // access_lenses: the legacy lens set when missing (custom lenses excluded, as at runtime).
+  if (!Array.isArray(defined.access_lenses)) result.access_lenses = legacyAccessLenses(defined)
+  // A restricted read_scope or sensitivity admits only the direct owner under the private lens, whatever else is
+  // listed, so non-private lenses are dropped (same decisions, and the result is canonically valid). When `private`
+  // is not listed the document is already unreachable and its lenses are left as they are.
+  if (
+    (result.read_scope === 'restricted' || defined.sensitivity === 'restricted') &&
+    result.access_lenses.includes('private') &&
+    result.access_lenses.some(lens => lens !== 'private')
+  )
+    result.access_lenses = ['private']
+  // disclosure: the runtime's effective value. `public_safe: false` overrides publish-approved with review-required;
+  // an explicit internal-only is kept (a label-only narrowing, identical decisions).
+  result.disclosure = defined.public_safe === false && defined.disclosure === 'internal-only' ? 'internal-only' : runtimeDisclosure(defined)
+  // sensitivity and document_role: the runtime defaults (personal is ungated, like a missing value).
+  if (!defined.sensitivity) result.sensitivity = 'personal'
+  if (!defined.document_role) result.document_role = 'content'
   return result
+}
+
+// Frontmatter changes that migrate one document: every target field that differs from its own frontmatter (so
+// inherited values are pinned explicitly) plus `null` (removal) for each deprecated field it carries.
+export function migrationChanges(rawMeta, meetMeta) {
+  const changes = {}
+  for (const key of MIGRATION_REQUIRED_FIELDS)
+    if (meetMeta[key] !== undefined && JSON.stringify(rawMeta[key]) !== JSON.stringify(meetMeta[key])) changes[key] = meetMeta[key]
+  for (const key of DEPRECATED_DOCUMENT_FIELDS) if (Object.hasOwn(rawMeta, key)) changes[key] = null
+  return changes
 }
 
 export function applyFrontmatterModifications(text, changes) {
@@ -131,6 +117,18 @@ export function applyFrontmatterModifications(text, changes) {
       formattedVal = String(value)
     }
 
+    if (value === null) {
+      // Removal: the key line and any more-indented continuation lines (block lists or nested mappings).
+      if (existingLineIdx < 0) continue
+      let removeCount = 1
+      while (existingLineIdx + removeCount < lines.length) {
+        const nextLine = lines[existingLineIdx + removeCount]
+        if (!nextLine.trim() || nextLine.length === nextLine.trimStart().length) break
+        removeCount++
+      }
+      lines.splice(existingLineIdx, removeCount)
+      continue
+    }
     if (existingLineIdx >= 0) {
       const match = lines[existingLineIdx].match(keyRegex)
       const baseIndent = match[1].length
@@ -386,31 +384,9 @@ export function planPolicyMigration(selfRoot, options = {}) {
     )
     const meetMeta = governedByDirectoryPolicy ? beforeEffective : computeMeetMetadata(beforeEffective, item.kind, registry)
 
-    const changes = {}
-    if (!governedByDirectoryPolicy) {
-      // Compare against the document's own frontmatter so inherited values are pinned explicitly: a migrated
-      // document is self-describing and a later _policy.yaml edit cannot widen it.
-      if (rawMeta.read_scope !== meetMeta.read_scope) changes.read_scope = meetMeta.read_scope
-      const beforeAccess = Array.isArray(rawMeta.access_lenses) ? rawMeta.access_lenses : null
-      if (!beforeAccess || JSON.stringify(beforeAccess) !== JSON.stringify(meetMeta.access_lenses)) {
-        changes.access_lenses = meetMeta.access_lenses
-      }
-    }
-    if (!governedByDirectoryPolicy && wasRestricted) {
-      if (rawMeta.visibility !== undefined && rawMeta.visibility !== meetMeta.visibility) changes.visibility = meetMeta.visibility
-      if (rawMeta.disclosure !== undefined && rawMeta.disclosure !== meetMeta.disclosure) changes.disclosure = meetMeta.disclosure
-      if (rawMeta.public_safe !== undefined && rawMeta.public_safe !== meetMeta.public_safe) changes.public_safe = meetMeta.public_safe
-      if (rawMeta.sensitivity !== undefined && rawMeta.sensitivity !== meetMeta.sensitivity) changes.sensitivity = meetMeta.sensitivity
-      if (rawMeta.document_role !== undefined && rawMeta.document_role !== meetMeta.document_role) changes.document_role = meetMeta.document_role
-    }
-
-    if (Object.keys(changes).length > 0) {
-      // Migrated documents carry all four required fields plus read_scope, so access_lenses never lands without
-      // disclosure/sensitivity/document_role (canonical validation) and no required field is left to inheritance.
-      for (const key of MIGRATION_REQUIRED_FIELDS) {
-        if (!Object.hasOwn(changes, key) && rawMeta[key] === undefined && meetMeta[key] !== undefined) changes[key] = meetMeta[key]
-      }
-    }
+    // Ungoverned documents are migrated to the exact target fields (all four required canonical fields plus
+    // read_scope, so no required field is left to inheritance) and lose their deprecated fields in the same edit.
+    const changes = governedByDirectoryPolicy ? {} : migrationChanges(rawMeta, meetMeta)
 
     const beforeSha256 = hash(text)
     const needsMigration = Object.keys(changes).length > 0
