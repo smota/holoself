@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const node = process.execPath
 const checks = [
-  ['tests', ['--test', ...readdirSync(join(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => join('tests', name))]],
+  ['tests', ['scripts/run-tests.mjs', ...readdirSync(join(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => join('tests', name))]],
   ['package audit', ['scripts/package-audit.mjs']],
   ['help', ['bin/holoself.mjs', '--help']],
   ['capabilities', ['bin/holoself.mjs', 'capabilities', '--json']]
