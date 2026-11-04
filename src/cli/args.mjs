@@ -21,6 +21,8 @@ export const ACTIVATION_FLAGS = [
   '--install-skill',
   '--skill-home',
   '--no-activate',
+  '--hooks',
+  '--no-hooks',
   '--force',
   '--dry-run',
   ...CONFIRM_FLAGS
@@ -36,6 +38,7 @@ export const CONTEXT_FLAGS = [
   '--budget',
   '--source',
   '--session-start',
+  '--hook',
   '--temporal',
   '--include-history',
   '--manifest',
@@ -233,6 +236,12 @@ export function parse(args) {
       o.sources.push(requiredValue(args, i++, a))
     } else if (a === '--manifest') o.manifest = true
     else if (a === '--session-start') o.sessionStart = true
+    else if (a === '--hook') o.hook = requiredValue(args, i++, a)
+    else if (a === '--hooks' || a === '--no-hooks') {
+      const value = a === '--hooks' ? 'on' : 'off'
+      if (o.hooks && o.hooks !== value) throw new Error('--hooks and --no-hooks cannot be combined')
+      o.hooks = value
+    }
     else if (a === '--include-history') o.includeHistory = true
     else if (a === '--no-cache') o.noCache = true
     else if (a === '--format') o.format = requiredValue(args, i++, a)

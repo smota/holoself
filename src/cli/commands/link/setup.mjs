@@ -9,7 +9,7 @@ import { loadLensRegistry } from '../../../lenses.mjs'
 import { createLinkDirs, inspectLinkCollisions, linkPath, linkSchemaErrors, writeLink } from '../../../link/config.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { atomicWrite, pathExists, safeRealpath, slash } from '../../../shared/fs.mjs'
-import { askConfirm, askValue, setupFindings } from '../../link-helpers.mjs'
+import { askConfirm, askValue, setupFindings, hookPlanSummary, printHookResults } from '../../link-helpers.mjs'
 
 export async function linkSetup(o, sub, project) {
   const findings = setupFindings(project)
@@ -48,13 +48,14 @@ export async function linkSetup(o, sub, project) {
       platforms: o.platforms || [],
       instructions: o.instructions,
       installSkill: o.installSkill || 'auto',
+      hooks: o.hooks,
       skillHome: o.skillHome,
       dryRun: o.dryRun,
       force: o.force
     })
     console.log(
       JSON.stringify(
-        { activation_plan: { canonical: plan.canonical, adapters: plan.adapters, skills: plan.skills, global_skills: plan.globalSkills, writes: plan.writes } },
+        { activation_plan: { canonical: plan.canonical, adapters: plan.adapters, skills: plan.skills, global_skills: plan.globalSkills, ...hookPlanSummary(plan), writes: plan.writes } },
         null,
         2
       )
@@ -123,11 +124,13 @@ export async function linkSetup(o, sub, project) {
         platforms: o.platforms || [],
         instructions: o.instructions,
         installSkill: o.installSkill || 'auto',
+        hooks: o.hooks,
         skillHome: o.skillHome,
         dryRun: o.dryRun,
         force: o.force
       })
       for (const item of result.results) console.log(` - ${item.id}: ${item.file} (${item.result})`)
+      printHookResults(result)
     }
     console.log('[ok] setup complete; no files deleted or relocated')
   } catch (error) {

@@ -3,9 +3,14 @@ import { join } from 'node:path'
 import { packetFormat } from '../../render/packet.mjs'
 import { contextData } from '../../retrieval/context.mjs'
 import { assertContainedPath, atomicWrite, slash } from '../../shared/fs.mjs'
+import { hookContext } from '../hook-mode.mjs'
 import { projectPath } from '../link-helpers.mjs'
 
 export async function runContext(o, sub) {
+  if (o.hook) {
+    console.log(hookContext(o).content.trimEnd())
+    return true
+  }
   const data = contextData(o),
     format = o.json ? 'json' : o.format || 'packet',
     packetAdapter = o.restrictedHost ? 'restricted-host' : o.adapter || format,

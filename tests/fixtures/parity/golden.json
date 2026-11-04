@@ -154,6 +154,8 @@
           "project_skill_overrides": [],
           "project_skill_override_details": [],
           "project_skill_deployments": [],
+          "session_start_hooks": [],
+          "hook_policy": null,
           "cli_command": {
             "available": "not-verified",
             "invocation": "source-checkout",
@@ -23073,6 +23075,8 @@
           "project_skill_overrides": [],
           "project_skill_override_details": [],
           "project_skill_deployments": [],
+          "session_start_hooks": [],
+          "hook_policy": null,
           "cli_command": {
             "available": "not-verified",
             "invocation": "source-checkout",
@@ -23108,6 +23112,7 @@
             "activation": "degraded",
             "skill_installation": "degraded",
             "project_skill_overrides": "not-applicable",
+            "session_start_hook": "not-applicable",
             "cli_command": {
               "available": "not-verified",
               "invocation": "source-checkout",
@@ -23124,7 +23129,8 @@
             "no public skill installation"
           ],
           "project_skill_override_details": [],
-          "project_skill_deployments": []
+          "project_skill_deployments": [],
+          "session_start_hooks": []
         }
       },
       "stderr": ""
@@ -23141,7 +23147,7 @@
         "--dry-run"
       ],
       "status": 1,
-      "stdout": "{\n  \"instructions\": [\n    \"AGENTS.md\"\n  ],\n  \"context\": [\n    \"profile-notes.md\"\n  ],\n  \"suggested_lens\": \"general\",\n  \"likely_duplicates\": [\n    \"profile-notes.md\"\n  ],\n  \"migration_recommendations\": [\n    \"profile-notes.md: compare with canonical self; retain project-specific content and propose reusable knowledge\"\n  ]\n}\n{\n  \"activation_plan\": {\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true,\n        \"file\": \"AGENTS.md\",\n        \"skillDirs\": [\n          \".agents/skills/holoself\"\n        ]\n      }\n    ],\n    \"skills\": [\n      {\n        \"adapter\": \"agents\",\n        \"file\": \".agents/skills/holoself/SKILL.md\"\n      }\n    ],\n    \"global_skills\": [],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \".agents/skills/holoself/SKILL.md\"\n    ]\n  }\n}\n",
+      "stdout": "{\n  \"instructions\": [\n    \"AGENTS.md\"\n  ],\n  \"context\": [\n    \"profile-notes.md\"\n  ],\n  \"suggested_lens\": \"general\",\n  \"likely_duplicates\": [\n    \"profile-notes.md\"\n  ],\n  \"migration_recommendations\": [\n    \"profile-notes.md: compare with canonical self; retain project-specific content and propose reusable knowledge\"\n  ]\n}\n{\n  \"activation_plan\": {\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true,\n        \"file\": \"AGENTS.md\",\n        \"skillDirs\": [\n          \".agents/skills/holoself\"\n        ]\n      }\n    ],\n    \"skills\": [\n      {\n        \"adapter\": \"agents\",\n        \"file\": \".agents/skills/holoself/SKILL.md\"\n      }\n    ],\n    \"global_skills\": [],\n    \"hook_policy\": \"auto\",\n    \"session_start_hooks\": [],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \".agents/skills/holoself/SKILL.md\"\n    ]\n  }\n}\n",
       "stderr": "[!!] Create and activate link using <ROOT>/self and general lens? Re-run with --yes to confirm.\n"
     },
     {
@@ -23159,7 +23165,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "{\n  \"instructions\": [\n    \"AGENTS.md\"\n  ],\n  \"context\": [\n    \"profile-notes.md\"\n  ],\n  \"suggested_lens\": \"general\",\n  \"likely_duplicates\": [\n    \"profile-notes.md\"\n  ],\n  \"migration_recommendations\": [\n    \"profile-notes.md: compare with canonical self; retain project-specific content and propose reusable knowledge\"\n  ]\n}\n{\n  \"activation_plan\": {\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true,\n        \"file\": \"AGENTS.md\",\n        \"skillDirs\": [\n          \".agents/skills/holoself\"\n        ]\n      },\n      {\n        \"id\": \"claude\",\n        \"name\": \"Claude Code\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Claude Code\",\n        \"tested_version\": null,\n        \"evidence\": \"CLAUDE.md activation is generated and covered by filesystem tests; product discovery is not asserted without a recorded smoke test.\",\n        \"last_verified\": null,\n        \"detected\": false,\n        \"file\": \"CLAUDE.md\",\n        \"skillDirs\": [\n          \".claude/skills/holoself\"\n        ]\n      }\n    ],\n    \"skills\": [\n      {\n        \"adapter\": \"agents\",\n        \"file\": \".agents/skills/holoself/SKILL.md\"\n      }\n    ],\n    \"global_skills\": [],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \"CLAUDE.md\",\n      \".agents/skills/holoself/SKILL.md\"\n    ]\n  }\n}\n[dry-run] setup complete; no files deleted or relocated\n",
+      "stdout": "{\n  \"instructions\": [\n    \"AGENTS.md\"\n  ],\n  \"context\": [\n    \"profile-notes.md\"\n  ],\n  \"suggested_lens\": \"general\",\n  \"likely_duplicates\": [\n    \"profile-notes.md\"\n  ],\n  \"migration_recommendations\": [\n    \"profile-notes.md: compare with canonical self; retain project-specific content and propose reusable knowledge\"\n  ]\n}\n{\n  \"activation_plan\": {\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true,\n        \"file\": \"AGENTS.md\",\n        \"skillDirs\": [\n          \".agents/skills/holoself\"\n        ]\n      },\n      {\n        \"id\": \"claude\",\n        \"name\": \"Claude Code\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Claude Code\",\n        \"tested_version\": null,\n        \"evidence\": \"CLAUDE.md activation is generated and covered by filesystem tests; product discovery is not asserted without a recorded smoke test.\",\n        \"last_verified\": null,\n        \"detected\": false,\n        \"file\": \"CLAUDE.md\",\n        \"skillDirs\": [\n          \".claude/skills/holoself\"\n        ]\n      }\n    ],\n    \"skills\": [\n      {\n        \"adapter\": \"agents\",\n        \"file\": \".agents/skills/holoself/SKILL.md\"\n      }\n    ],\n    \"global_skills\": [],\n    \"hook_policy\": \"auto\",\n    \"session_start_hooks\": [\n      {\n        \"adapter\": \"claude\",\n        \"file\": \".claude/settings.local.json\",\n        \"event\": \"SessionStart\",\n        \"hook_id\": \"holoself-session-start\",\n        \"support\": \"verified\",\n        \"install\": true,\n        \"action\": \"create\"\n      }\n    ],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \"CLAUDE.md\",\n      \".agents/skills/holoself/SKILL.md\",\n      \".claude/settings.local.json\"\n    ]\n  }\n}\n[dry-run] setup complete; no files deleted or relocated\n",
       "stderr": ""
     },
     {
@@ -23231,18 +23237,38 @@
               }
             ],
             "global_skills": [],
+            "hook_policy": "auto",
+            "session_start_hooks": [
+              {
+                "adapter": "claude",
+                "file": ".claude/settings.local.json",
+                "event": "SessionStart",
+                "hook_id": "holoself-session-start",
+                "support": "verified",
+                "install": true,
+                "action": "create"
+              }
+            ],
+            "unsupported_hooks": [
+              {
+                "adapter": "codex",
+                "state": "unsupported",
+                "reason": "Codex 0.166.0 runs SessionStart hooks from .codex/hooks.json only after the user trusts each hook (a trusted_hash in the user's ~/.codex/config.toml), which Holoself must not write; not installed or verified."
+              }
+            ],
             "writes": [
               ".holoself/BOOTSTRAP.md",
               ".holoself/runtime.json",
               "AGENTS.md",
               "CLAUDE.md",
               "CODEX.md",
-              ".agents/skills/holoself/SKILL.md"
+              ".agents/skills/holoself/SKILL.md",
+              ".claude/settings.local.json"
             ]
           }
         }
       },
-      "stderr": "[!!] Activate Holoself by modifying bounded managed files: .holoself/BOOTSTRAP.md, .holoself/runtime.json, AGENTS.md, CLAUDE.md, CODEX.md, .agents/skills/holoself/SKILL.md? Re-run with --yes to confirm.\n"
+      "stderr": "[!!] Activate Holoself by modifying bounded managed files: .holoself/BOOTSTRAP.md, .holoself/runtime.json, AGENTS.md, CLAUDE.md, CODEX.md, .agents/skills/holoself/SKILL.md, .claude/settings.local.json? Re-run with --yes to confirm.\n"
     },
     {
       "name": "link activate dry-run",
@@ -23257,7 +23283,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "{\n  \"activation_plan\": {\n    \"source\": \"explicit\",\n    \"adapter_ids\": [\n      \"agents\",\n      \"claude\",\n      \"codex\"\n    ],\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"file\": \"AGENTS.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true\n      },\n      {\n        \"id\": \"claude\",\n        \"name\": \"Claude Code\",\n        \"file\": \"CLAUDE.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Claude Code\",\n        \"tested_version\": null,\n        \"evidence\": \"CLAUDE.md activation is generated and covered by filesystem tests; product discovery is not asserted without a recorded smoke test.\",\n        \"last_verified\": null,\n        \"detected\": false\n      },\n      {\n        \"id\": \"codex\",\n        \"name\": \"Codex\",\n        \"file\": \"CODEX.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Codex\",\n        \"tested_version\": null,\n        \"evidence\": \"Codex instruction pointer is generated; product discovery requires versioned smoke-test evidence.\",\n        \"last_verified\": null,\n        \"detected\": false\n      }\n    ],\n    \"skills\": [\n      {\n        \"adapter\": \"agents\",\n        \"file\": \".agents/skills/holoself/SKILL.md\"\n      }\n    ],\n    \"global_skills\": [],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \"CLAUDE.md\",\n      \"CODEX.md\",\n      \".agents/skills/holoself/SKILL.md\"\n    ]\n  }\n}\n - agents: AGENTS.md (planned)\n - claude: CLAUDE.md (planned)\n - codex: CODEX.md (planned)\n",
+      "stdout": "{\n  \"activation_plan\": {\n    \"source\": \"explicit\",\n    \"adapter_ids\": [\n      \"agents\",\n      \"claude\",\n      \"codex\"\n    ],\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"file\": \"AGENTS.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true\n      },\n      {\n        \"id\": \"claude\",\n        \"name\": \"Claude Code\",\n        \"file\": \"CLAUDE.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Claude Code\",\n        \"tested_version\": null,\n        \"evidence\": \"CLAUDE.md activation is generated and covered by filesystem tests; product discovery is not asserted without a recorded smoke test.\",\n        \"last_verified\": null,\n        \"detected\": false\n      },\n      {\n        \"id\": \"codex\",\n        \"name\": \"Codex\",\n        \"file\": \"CODEX.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Codex\",\n        \"tested_version\": null,\n        \"evidence\": \"Codex instruction pointer is generated; product discovery requires versioned smoke-test evidence.\",\n        \"last_verified\": null,\n        \"detected\": false\n      }\n    ],\n    \"skills\": [\n      {\n        \"adapter\": \"agents\",\n        \"file\": \".agents/skills/holoself/SKILL.md\"\n      }\n    ],\n    \"global_skills\": [],\n    \"hook_policy\": \"auto\",\n    \"session_start_hooks\": [\n      {\n        \"adapter\": \"claude\",\n        \"file\": \".claude/settings.local.json\",\n        \"event\": \"SessionStart\",\n        \"hook_id\": \"holoself-session-start\",\n        \"support\": \"verified\",\n        \"install\": true,\n        \"action\": \"create\"\n      }\n    ],\n    \"unsupported_hooks\": [\n      {\n        \"adapter\": \"codex\",\n        \"state\": \"unsupported\",\n        \"reason\": \"Codex 0.166.0 runs SessionStart hooks from .codex/hooks.json only after the user trusts each hook (a trusted_hash in the user's ~/.codex/config.toml), which Holoself must not write; not installed or verified.\"\n      }\n    ],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \"CLAUDE.md\",\n      \"CODEX.md\",\n      \".agents/skills/holoself/SKILL.md\",\n      \".claude/settings.local.json\"\n    ]\n  }\n}\n - agents: AGENTS.md (planned)\n - claude: CLAUDE.md (planned)\n - codex: CODEX.md (planned)\n - claude: .claude/settings.local.json SessionStart hook (planned)\n",
       "stderr": ""
     },
     {
@@ -23274,7 +23300,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "{\n  \"activation_plan\": {\n    \"source\": \"explicit\",\n    \"adapter_ids\": [\n      \"agents\",\n      \"claude\",\n      \"codex\"\n    ],\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"file\": \"AGENTS.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true\n      },\n      {\n        \"id\": \"claude\",\n        \"name\": \"Claude Code\",\n        \"file\": \"CLAUDE.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Claude Code\",\n        \"tested_version\": null,\n        \"evidence\": \"CLAUDE.md activation is generated and covered by filesystem tests; product discovery is not asserted without a recorded smoke test.\",\n        \"last_verified\": null,\n        \"detected\": false\n      },\n      {\n        \"id\": \"codex\",\n        \"name\": \"Codex\",\n        \"file\": \"CODEX.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Codex\",\n        \"tested_version\": null,\n        \"evidence\": \"Codex instruction pointer is generated; product discovery requires versioned smoke-test evidence.\",\n        \"last_verified\": null,\n        \"detected\": false\n      }\n    ],\n    \"skills\": [],\n    \"global_skills\": [],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \"CLAUDE.md\",\n      \"CODEX.md\"\n    ]\n  }\n}\n - agents: AGENTS.md (created)\n - claude: CLAUDE.md (created)\n - codex: CODEX.md (created)\n",
+      "stdout": "{\n  \"activation_plan\": {\n    \"source\": \"explicit\",\n    \"adapter_ids\": [\n      \"agents\",\n      \"claude\",\n      \"codex\"\n    ],\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"file\": \"AGENTS.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true\n      },\n      {\n        \"id\": \"claude\",\n        \"name\": \"Claude Code\",\n        \"file\": \"CLAUDE.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Claude Code\",\n        \"tested_version\": null,\n        \"evidence\": \"CLAUDE.md activation is generated and covered by filesystem tests; product discovery is not asserted without a recorded smoke test.\",\n        \"last_verified\": null,\n        \"detected\": false\n      },\n      {\n        \"id\": \"codex\",\n        \"name\": \"Codex\",\n        \"file\": \"CODEX.md\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Codex\",\n        \"tested_version\": null,\n        \"evidence\": \"Codex instruction pointer is generated; product discovery requires versioned smoke-test evidence.\",\n        \"last_verified\": null,\n        \"detected\": false\n      }\n    ],\n    \"skills\": [],\n    \"global_skills\": [],\n    \"hook_policy\": \"auto\",\n    \"session_start_hooks\": [\n      {\n        \"adapter\": \"claude\",\n        \"file\": \".claude/settings.local.json\",\n        \"event\": \"SessionStart\",\n        \"hook_id\": \"holoself-session-start\",\n        \"support\": \"verified\",\n        \"install\": true,\n        \"action\": \"create\"\n      }\n    ],\n    \"unsupported_hooks\": [\n      {\n        \"adapter\": \"codex\",\n        \"state\": \"unsupported\",\n        \"reason\": \"Codex 0.166.0 runs SessionStart hooks from .codex/hooks.json only after the user trusts each hook (a trusted_hash in the user's ~/.codex/config.toml), which Holoself must not write; not installed or verified.\"\n      }\n    ],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \"CLAUDE.md\",\n      \"CODEX.md\",\n      \".claude/settings.local.json\"\n    ]\n  }\n}\n - agents: AGENTS.md (created)\n - claude: CLAUDE.md (created)\n - codex: CODEX.md (created)\n - claude: .claude/settings.local.json SessionStart hook (create)\n",
       "stderr": ""
     },
     {
@@ -23406,6 +23432,24 @@
           "project_skill_overrides": [],
           "project_skill_override_details": [],
           "project_skill_deployments": [],
+          "session_start_hooks": [
+            {
+              "id": "claude",
+              "file": ".claude/settings.local.json",
+              "event": "SessionStart",
+              "hook_id": "holoself-session-start",
+              "state": "installed",
+              "support": "verified",
+              "tested_version": "2.1.318",
+              "last_verified": "2026-11-04"
+            },
+            {
+              "id": "codex",
+              "state": "unsupported",
+              "reason": "Codex 0.166.0 runs SessionStart hooks from .codex/hooks.json only after the user trusts each hook (a trusted_hash in the user's ~/.codex/config.toml), which Holoself must not write; not installed or verified."
+            }
+          ],
+          "hook_policy": "auto",
           "cli_command": {
             "available": "not-verified",
             "invocation": "source-checkout",
@@ -25387,7 +25431,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "Deactivation plan:\n - AGENTS.md: removed\n - CLAUDE.md: removed\n - CODEX.md: removed\nApplied:\n - AGENTS.md: removed\n - CLAUDE.md: removed\n - CODEX.md: removed\n",
+      "stdout": "Deactivation plan:\n - AGENTS.md: removed\n - CLAUDE.md: removed\n - CODEX.md: removed\n - claude: .claude/settings.local.json: hook-delete\nApplied:\n - AGENTS.md: removed\n - CLAUDE.md: removed\n - CODEX.md: removed\n - claude: .claude/settings.local.json: hook-delete\n",
       "stderr": ""
     },
     {
@@ -25500,6 +25544,8 @@
           "project_skill_overrides": [],
           "project_skill_override_details": [],
           "project_skill_deployments": [],
+          "session_start_hooks": [],
+          "hook_policy": null,
           "cli_command": {
             "available": "not-verified",
             "invocation": "source-checkout",

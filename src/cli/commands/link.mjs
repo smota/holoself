@@ -5,7 +5,7 @@ import { stdin as input, stdout as output } from 'node:process'
 import { activateProject, preflightActivation } from '../../adapters.mjs'
 import { loadLensRegistry, resolveLens } from '../../lenses.mjs'
 import { DEFAULT_PROJECT_EXCLUDES, createLinkDirs, inspectLinkCollisions, writeLink } from '../../link/config.mjs'
-import { askConfirm, askValue, projectPath, setupFindings } from '../link-helpers.mjs'
+import { askConfirm, askValue, projectPath, setupFindings, hookPlanSummary, printHookResults } from '../link-helpers.mjs'
 
 import { linkAdd } from './link/add.mjs'
 import { linkSetup } from './link/setup.mjs'
@@ -71,13 +71,14 @@ async function linkSetupTail(o, sub, project) {
       platforms: o.platforms || [],
       instructions: o.instructions,
       installSkill: o.installSkill || 'auto',
+      hooks: o.hooks,
       skillHome: o.skillHome,
       dryRun: o.dryRun,
       force: o.force
     })
     console.log(
       JSON.stringify(
-        { activation_plan: { canonical: plan.canonical, adapters: plan.adapters, skills: plan.skills, global_skills: plan.globalSkills, writes: plan.writes } },
+        { activation_plan: { canonical: plan.canonical, adapters: plan.adapters, skills: plan.skills, global_skills: plan.globalSkills, ...hookPlanSummary(plan), writes: plan.writes } },
         null,
         2
       )
@@ -114,11 +115,13 @@ async function linkSetupTail(o, sub, project) {
       platforms: o.platforms || [],
       instructions: o.instructions,
       installSkill: o.installSkill || 'auto',
+      hooks: o.hooks,
       skillHome: o.skillHome,
       dryRun: o.dryRun,
       force: o.force
     })
     for (const item of result.results) console.log(` - ${item.id}: ${item.file} (${item.result})`)
+      printHookResults(result)
   }
   console.log(`${o.dryRun ? '[dry-run] ' : '[ok] '}setup complete; no files deleted or relocated`)
   return true

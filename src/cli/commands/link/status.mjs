@@ -78,6 +78,8 @@ export async function linkStatus(o, sub, project) {
     project_skill_overrides: health.activation.projectSkillOverrides,
     project_skill_override_details: health.activation.projectSkillOverrideDetails,
     project_skill_deployments: health.activation.projectSkillDeployments,
+    session_start_hooks: health.activation.hooks,
+    hook_policy: health.activation.runtime?.hookPolicy || null,
     cli_command: commandStatus(),
     errors: health.errors
   }

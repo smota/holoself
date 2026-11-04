@@ -58,6 +58,7 @@ export async function activateLinkedProject(o, project, link, verb = 'Activate',
     platforms: o.platforms || [],
     instructions: o.instructions,
     installSkill: o.installSkill || readRuntime(project)?.skillInstallPolicy || 'auto',
+    hooks: o.hooks || readRuntime(project)?.hookPolicy || 'auto',
     skillHome: o.skillHome,
     dryRun: o.dryRun,
     force: o.force
@@ -89,6 +90,7 @@ export async function activateLinkedProject(o, project, link, verb = 'Activate',
           ),
           skills: plan.skills,
           global_skills: plan.globalSkills,
+          ...hookPlanSummary(plan),
           writes: plan.writes
         }
       },
@@ -99,7 +101,19 @@ export async function activateLinkedProject(o, project, link, verb = 'Activate',
   if (!(await askConfirm(o, `${verb} Holoself by modifying bounded managed files: ${plan.writes.join(', ')}?`))) return null
   const result = activateProject(project, link, options)
   for (const item of result.results) console.log(` - ${item.id}: ${item.file} (${item.result})`)
+  printHookResults(result)
   return result
+}
+// Session-start hook part of an activation plan, for the JSON plan printed before confirmation.
+export function hookPlanSummary(plan) {
+  return {
+    hook_policy: plan.hookPolicy,
+    session_start_hooks: plan.hooks.map(({ adapter, file, event, hook_id, support, install, action }) => ({ adapter, file, event, hook_id, support, install, action })),
+    ...(plan.unsupportedHooks.length ? { unsupported_hooks: plan.unsupportedHooks } : {})
+  }
+}
+export function printHookResults(result) {
+  for (const item of result.hookResults || []) console.log(` - ${item.adapter}: ${item.file} ${item.event} hook (${item.result})`)
 }
 export function commandStatus() {
   const invoked = slash(resolve(process.argv[1] || '')),

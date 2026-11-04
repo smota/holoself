@@ -34,6 +34,7 @@ holoself link activate --project . --platform claude --platform pi --yes
 holoself link repair --project . --yes
 holoself link deactivate --project . --yes
 holoself link deactivate --project . --adapters claude --dry-run
+holoself link activate --project . --no-hooks --yes
 holoself link doctor --project .
 ```
 
@@ -42,6 +43,39 @@ holoself link doctor --project .
 `link repair` restores the adapters recorded in `.holoself/runtime.json`. It does not re-detect hosts, so it doesn't add adapters you didn't activate. With no usable runtime record, it falls back to adapters that still have managed markers, then to detected hosts. In that last fallback it skips any adapter whose instruction file exists without Holoself markers (a file you wrote by hand) and lists it under `skipped_unmanaged`. `AGENTS.md` is always kept, because it holds the canonical section. The printed `activation_plan.source` says which set applied: `recorded`, `detected`, or `explicit` when you pass `--activate` or `--platform`. Recorded adapters that no longer exist are listed under `dropped_adapters`. Run `link repair --project . --dry-run --yes` to see the plan without writing.
 
 Use `--no-activate` only for deliberate configuration-only workflows. Use `--instructions <relative-file>` to identify an existing canonical manual. Use `--install-skill auto|project|global|none` to control skill resolution. `project` installs full public skills under `.agents`, `.claude`, and `.pi`; `global` requires validated user-level installations and creates no project copies; `none` disables skill management and validation. Preview lists every instruction, bootstrap/runtime artifact, and skill installation. Activation upgrades the old generated miniature shim in place, rejects symlink parents, malformed or reversed markers, and preserves unmanaged skill files unless `--force --yes` appends a bounded managed installation. Deactivation deletes an unchanged Holoself-owned install, but removes only the managed block when user content was appended. Managed writes roll back on failure.
+
+## Session-start hooks
+
+Instruction pointers and skills ask the agent to load context; nothing guarantees it does. Where a host runs a command when a session starts, activation also installs a session-start hook, so the session begins with the bounded session-start packet for the bound lens. The hook only reads; it never writes canonical data.
+
+| Host | Hook file (project) | State |
+|---|---|---|
+| Claude Code | `.claude/settings.local.json`, `hooks.SessionStart` | Installed by default; verified on 2.1.318 |
+| Codex | `.codex/hooks.json` (host feature) | Not installed: each hook needs the user's trust hash in `~/.codex/config.toml` |
+| AGY | `.agents/hooks.json` (host feature) | Not installed: different output contract; not verified |
+| Other hosts | none | `unsupported` |
+
+Holoself adds one entry to the Claude Code settings file:
+
+```json
+{
+  "matcher": "startup|resume|clear|compact",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "holoself context --project \"$CLAUDE_PROJECT_DIR\" --session-start --budget small --format packet --hook holoself-session-start",
+      "timeout": 30
+    }
+  ]
+}
+```
+
+- **Why `settings.local.json`.** The command needs `holoself` on this machine's `PATH` and a link to your self root, which collaborators don't share, so it belongs in per-machine settings rather than the committed `.claude/settings.json`. Holoself doesn't edit `.gitignore`. Check `git check-ignore .claude/settings.local.json` before committing; on the verification machine the pattern `**/.claude/settings.local.json` was already in the user's global git ignore file.
+- **Ownership.** The `--hook holoself-session-start` text in the command marks the entry as Holoself's. Every other key and every foreign hook, including other `SessionStart` hooks, is kept. The file is rewritten as 2-space JSON only when the Holoself entry changes, so a file in that format is byte-for-byte identical after activation and deactivation. A settings file that Holoself created is deleted again when nothing else is left in it.
+- **Choice.** `--hooks` installs the hook even for a host without a recorded verification; `--no-hooks` skips it and removes an existing Holoself entry. The choice is recorded as `hookPolicy` in `.holoself/runtime.json`, and `link repair` restores the recorded `hookInstallations`. `link deactivate`, including `--adapters claude`, removes the entry.
+- **Safety.** A symlinked settings file or `.claude` folder, invalid JSON, and a group that holds the Holoself hook together with foreign hooks are refused before any write. The plan (`session_start_hooks`, with `install` and `action`) is printed before confirmation and by `--dry-run`. Hook writes roll back with the other managed files on failure.
+- **Hook mode.** `--hook holoself-session-start` makes `holoself context` exit 0 in every case, write nothing to stderr, and print only the packet. Any refusal (revoked link, missing lens binding, missing self root, unknown hook id, no `--project`) prints nothing, so the session starts without context rather than with context Holoself didn't authorise. Set `HOLOSELF_HOOK_AUDIT_LOG=<file>` to append one line per run with the outcome, error code, packet id and receipt; it records no content or paths.
+- **Status.** `link status` lists `session_start_hooks` for each activated host as `installed`, `missing`, `drifted`, `untracked`, `disabled`, `not-installed`, or `unsupported`. `link doctor` summarises them in `checks.session_start_hook`; `missing` and `drifted` make the link degraded.
 
 ## User-level skills and project cleanup
 

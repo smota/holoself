@@ -20,6 +20,8 @@ export function healthStatus(project, link, o = {}) {
     if (a.marker !== 'active') errors.push(`${a.file}: ${a.marker}`)
     else if (a.drift) errors.push(`${a.file}: managed block drift`)
   }
+  for (const hook of activation.hooks)
+    if (['missing', 'drifted', 'unsafe', 'invalid', 'untracked'].includes(hook.state)) errors.push(`${hook.file}: session-start hook ${hook.state}`)
   for (const skill of activation.skillInstallations) if (!skill.installed || skill.kind !== 'full-public-skill') errors.push(`${skill.file}: ${skill.kind}`)
   if (skillPolicy === 'global') {
     if (!activation.globalSkillInstallations.length) errors.push('no global public skill installation')

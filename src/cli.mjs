@@ -145,7 +145,7 @@ function help() {
       `section-replacement|instruction-replacement] [--output <plan>]\n  knowledge cleanup [--output <plan>] | ` +
       `--apply <plan> --digest <sha256> --yes\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides ` +
       `environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill ` +
-      `auto|project|global|none --no-activate.\nProject filters: --project-include/--project-exclude and ` +
+      `auto|project|global|none --no-activate --hooks|--no-hooks.\nProject filters: --project-include/--project-exclude and ` +
       (`--project-assert-include/--project-assert-exclude <globs>.
 Efficiency: context supports --budget small|standard|deep|unbounded, --manifest, repeatable --source, and ` +
         `--temporal current|historical|superseded|all.\nInstruction consolidation: instructions render|audit --project ` +

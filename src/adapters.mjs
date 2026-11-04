@@ -25,6 +25,7 @@ import {
 } from './adapters/registry.mjs'
 import { injectMarker, managedBlockHash, managedMarkerState, markerInfo, removeMarker } from './adapters/markers.mjs'
 import { contentHash, globalSkillStatus, inspectGlobalSkillPath, normalizedSkill, skillState } from './adapters/global-skills.mjs'
+import { HOOK_HOSTS, HOOK_ID, HOOK_NOT_INSTALLED, HOOK_POLICIES, hookChange, hookSupport, inspectHook } from './adapters/hooks.mjs'
 export { globalSkillStatus, installGlobalSkills } from './adapters/global-skills.mjs'
 export { injectMarker, managedMarkerState, removeMarker } from './adapters/markers.mjs'
 export { detectAdapters, safeProjectFile } from './adapters/registry.mjs'
@@ -78,13 +79,70 @@ export function activationPlan(project, options = {}) {
     install === 'global'
       ? userSkillTargets(providers.length ? providers : ['agents'], options).map(x => ({ ...x, status: inspectGlobalSkillPath(x, options).status }))
       : []
+  const hookPolicy = options.hooks || 'auto'
+  if (!HOOK_POLICIES.includes(hookPolicy)) throw new Error(`invalid hook policy: ${hookPolicy}`)
+  const hooks = mapped
+    .filter(adapter => HOOK_HOSTS[adapter.id])
+    .map(adapter => {
+      const host = HOOK_HOSTS[adapter.id],
+        support = hookSupport(adapter.id)
+      return {
+        adapter: adapter.id,
+        file: host.file,
+        event: host.event,
+        hook_id: HOOK_ID,
+        command: host.command,
+        support: support.support,
+        tested_version: support.tested_version,
+        last_verified: support.last_verified,
+        install: hookPolicy === 'on' || (hookPolicy === 'auto' && support.support === 'verified'),
+        action: 'pending'
+      }
+    })
+  const unsupportedHooks = mapped
+    .filter(adapter => adapter.id !== 'agents' && !HOOK_HOSTS[adapter.id])
+    .map(adapter => ({ adapter: adapter.id, state: 'unsupported', reason: HOOK_NOT_INSTALLED[adapter.id] || 'No session-start hook integration for this host.' }))
   return {
     canonical,
     adapters: mapped,
     skills,
     globalSkills,
+    hookPolicy,
+    hooks,
+    unsupportedHooks,
     writes: unique(['.holoself/BOOTSTRAP.md', '.holoself/runtime.json', ...mapped.map(x => x.file), ...skills.map(x => x.file)])
   }
+}
+function recordedHook(runtime, id) {
+  return (runtime?.hookInstallations || []).find(x => x.id === id) || null
+}
+function applyHookChange(change) {
+  if (change.action === 'unchanged') return
+  if (change.after === null) rmSync(change.path, { force: true })
+  else atomicWrite(change.path, change.after, { mode: 0o666 })
+}
+// Hook entries to remove on deactivation: recorded installations plus any Holoself-owned entry still on disk.
+function hookRemovalTargets(project, runtime, ids = null) {
+  return Object.keys(HOOK_HOSTS)
+    .filter(id => !ids || ids.includes(id))
+    .filter(id => {
+      if (recordedHook(runtime, id)) return true
+      try {
+        return ['installed', 'drifted'].includes(inspectHook(project, id).state)
+      } catch {
+        return false
+      }
+    })
+    .map(id => ({ adapter: id, file: HOOK_HOSTS[id].file, createdFile: recordedHook(runtime, id)?.createdFile === true }))
+}
+function hookRemovalChanges(project, targets) {
+  return targets.map(target => {
+    try {
+      return { ...target, change: hookChange(project, target.adapter, false, { createdFile: target.createdFile }) }
+    } catch (error) {
+      throw new Error(`deactivation preflight failed: ${error.message}`)
+    }
+  })
 }
 function generatedSkillOutside(text, info) {
   const outside = normalizedSkill(text.slice(0, info.start) + text.slice(info.end))
@@ -147,6 +205,16 @@ function preflight(project, plan, options = {}) {
   }
   for (const skill of plan.globalSkills || [])
     if (!['full-public-skill-current', 'full-public-skill-compatible'].includes(skill.status)) collisions.push(`${skill.path}: global skill ${skill.status}`)
+  const runtime = readRuntime(project)
+  for (const hook of plan.hooks || []) {
+    try {
+      const change = hookChange(project, hook.adapter, hook.install, { createdFile: recordedHook(runtime, hook.adapter)?.createdFile === true })
+      hook.action = change.action
+      if (change.action !== 'unchanged' && !plan.writes.includes(hook.file)) plan.writes.push(hook.file)
+    } catch (error) {
+      collisions.push(error.message)
+    }
+  }
   for (const rel of options.metadataAbsent ? [] : ['.holoself/BOOTSTRAP.md', '.holoself/runtime.json']) {
     const p = safeProjectFile(project, rel, 'activation artifact')
     if (existsSync(p) && !lstatSync(p).isFile()) collisions.push(`${p}: not a regular file`)
@@ -180,6 +248,7 @@ export function activateProject(project, link, options = {}) {
       plan,
       results: plan.adapters.map(x => ({ ...x, result: 'planned' })),
       skillResults: plan.skills.map(x => ({ ...x, result: 'planned' })),
+      hookResults: plan.hooks.map(x => ({ ...x, result: 'planned' })),
       runtime: null
     }
   const previousRuntime = readRuntime(project),
@@ -198,7 +267,8 @@ export function activateProject(project, link, options = {}) {
     ),
     snapshots = snapshotPaths(project, plan.writes),
     results = [],
-    skillResults = []
+    skillResults = [],
+    hookResults = []
   try {
     atomicWrite(safeProjectFile(project, '.holoself/BOOTSTRAP.md', 'bootstrap write'), bootstrapText(link), { mode: 0o666 })
     for (const adapter of plan.adapters) {
@@ -206,11 +276,32 @@ export function activateProject(project, link, options = {}) {
       results.push({ ...adapter, result: injectMarker(project, adapter.file, section, false) })
     }
     for (const skill of plan.skills) skillResults.push({ ...skill, result: writeSkill(project, skill.file, false, options.force === true) })
+    const hookInstallations = []
+    for (const hook of plan.hooks) {
+      const previous = recordedHook(previousRuntime, hook.adapter),
+        change = hookChange(project, hook.adapter, hook.install, { createdFile: previous?.createdFile === true })
+      applyHookChange(change)
+      hookResults.push({ ...hook, action: change.action, result: change.action })
+      if (hook.install)
+        hookInstallations.push({
+          id: hook.adapter,
+          file: hook.file,
+          event: hook.event,
+          hookId: hook.hook_id,
+          command: hook.command,
+          status: 'installed',
+          createdFile: previous ? previous.createdFile === true : !change.existed,
+          support: hook.support,
+          tested_version: hook.tested_version,
+          last_verified: hook.last_verified
+        })
+    }
     const installations = skillResults.map(x => {
       const text = readFileSync(safeProjectFile(project, x.file, 'skill runtime hash'), 'utf8'),
         owned = x.result === 'created' || previousUnchangedOwned.get(x.file) === true
       return { id: x.adapter, file: x.file, status: 'installed', kind: 'full-public-skill', owned, contentHash: owned ? contentHash(text) : null }
     })
+    if (options.afterHooks) options.afterHooks()
     const globalInstallations = (plan.globalSkills || []).map(x => ({
       id: x.id,
       file: x.file,
@@ -244,13 +335,15 @@ export function activateProject(project, link, options = {}) {
       skillInstallations: installations,
       globalSkillInstallations: globalInstallations,
       skillShims: installations.map(({ contentHash, ...x }) => ({ ...x, status: 'active' })),
+      hookPolicy: plan.hookPolicy,
+      hookInstallations,
       fallback: '.holoself/BOOTSTRAP.md',
       instructionEvidence: instructionEvidence(link),
       lastValidated: new Date().toISOString(),
       toolVersion: VERSION
     }
     atomicWrite(runtimeFile(project), JSON.stringify(runtime, null, 2) + '\n', { mode: 0o666 })
-    return { plan, results, skillResults, runtime }
+    return { plan, results, skillResults, hookResults, runtime }
   } catch (error) {
     rollback(snapshots)
     throw error
@@ -321,12 +414,16 @@ function deactivateAdapters(project, ids, options = {}) {
     const state = skillState(safeProjectFile(project, file, 'skill deactivation preflight'))
     if (['unsafe', 'malformed'].includes(state)) throw new Error(`deactivation preflight failed: ${file}: ${state}`)
   }
+  const hookRemovals = hookRemovalChanges(project, hookRemovalTargets(project, runtime, selected))
   const keptFiles = new Set([
     ...recorded.filter(x => remaining.includes(x.id)).map(x => x.file),
     ...installations.filter(x => remaining.includes(x.id)).map(x => x.file)
   ])
   const installationByFile = new Map(installations.map(x => [x.file, x])),
-    snapshots = snapshotPaths(project, unique([...instructionFiles.map(x => x.file), ...skillFiles.map(x => x.file), '.holoself/runtime.json'])),
+    snapshots = snapshotPaths(
+      project,
+      unique([...instructionFiles.map(x => x.file), ...skillFiles.map(x => x.file), ...hookRemovals.map(x => x.file), '.holoself/runtime.json'])
+    ),
     results = []
   try {
     for (const { adapter, file } of instructionFiles)
@@ -347,6 +444,10 @@ function deactivateAdapters(project, ids, options = {}) {
         results.push({ adapter, file, result: 'removed' })
       } else results.push({ adapter, file, result: removeSkill(project, file, options.dryRun) })
     }
+    for (const { adapter, file, change } of hookRemovals) {
+      if (!options.dryRun) applyHookChange(change)
+      results.push({ adapter, file, kind: 'session-start-hook', result: change.action === 'unchanged' ? 'unchanged' : `hook-${change.action}` })
+    }
     for (const adapter of ids.filter(id => !active.includes(id))) results.push({ adapter, file: null, result: 'not-active' })
     if (!options.dryRun && runtime) {
       const keep = x => !selected.includes(x.id)
@@ -358,7 +459,8 @@ function deactivateAdapters(project, ids, options = {}) {
             activatedAdapters: recorded.filter(keep),
             ...(runtime.skillInstallations ? { skillInstallations: runtime.skillInstallations.filter(keep) } : {}),
             ...(runtime.skillShims ? { skillShims: runtime.skillShims.filter(keep) } : {}),
-            ...(runtime.globalSkillInstallations ? { globalSkillInstallations: runtime.globalSkillInstallations.filter(keep) } : {})
+            ...(runtime.globalSkillInstallations ? { globalSkillInstallations: runtime.globalSkillInstallations.filter(keep) } : {}),
+            ...(runtime.hookInstallations ? { hookInstallations: runtime.hookInstallations.filter(keep) } : {})
           },
           null,
           2
@@ -395,10 +497,15 @@ export function deactivateProject(project, options = {}) {
     const state = skillState(safeProjectFile(project, file, 'skill deactivation preflight'))
     if (['unsafe', 'malformed'].includes(state)) throw new Error(`deactivation preflight failed: ${file}: ${state}`)
   }
-  const rels = unique([...instructionFiles, ...skillFiles, '.holoself/runtime.json']),
+  const hookRemovals = hookRemovalChanges(project, hookRemovalTargets(project, runtime))
+  const rels = unique([...instructionFiles, ...skillFiles, ...hookRemovals.map(x => x.file), '.holoself/runtime.json']),
     snapshots = snapshotPaths(project, rels)
   try {
     for (const file of instructionFiles) results.push({ file, result: removeMarker(project, file, options.dryRun) })
+    for (const { adapter, file, change } of hookRemovals) {
+      if (!options.dryRun) applyHookChange(change)
+      results.push({ adapter, file, kind: 'session-start-hook', result: change.action === 'unchanged' ? 'unchanged' : `hook-${change.action}` })
+    }
     for (const file of skillFiles) {
       const path = safeProjectFile(project, file, 'skill discovery'),
         state = skillState(path)
@@ -461,7 +568,9 @@ export function activationStatus(project, options = {}) {
       : []
   const projectSkillOverrides = projectSkillOverrideDetails.map(item => item.file)
   const active = bootstrap && adapters.length > 0 && adapters.every(a => a.marker === 'active' && !a.drift)
+  const hooks = sessionStartHookStatus(project, runtime)
   return {
+    hooks,
     runtime,
     bootstrap,
     adapters,
@@ -472,6 +581,41 @@ export function activationStatus(project, options = {}) {
     projectSkillDeployments,
     active
   }
+}
+
+// Per activated host: installed | missing | drifted | unsafe | invalid | untracked | disabled | not-installed | unsupported.
+export function sessionStartHookStatus(project, runtime = readRuntime(project)) {
+  return activeAdapterIds(project, runtime)
+    .filter(id => id !== 'agents')
+    .map(id => {
+      if (!HOOK_HOSTS[id]) return { id, state: 'unsupported', reason: HOOK_NOT_INSTALLED[id] || 'No session-start hook integration for this host.' }
+      const record = recordedHook(runtime, id),
+        support = hookSupport(id)
+      let inspected
+      try {
+        inspected = inspectHook(project, id)
+      } catch (error) {
+        inspected = { state: 'unsafe', detail: error.message }
+      }
+      const state = record
+        ? inspected.state
+        : inspected.state === 'missing'
+          ? runtime?.hookPolicy === 'off'
+            ? 'disabled'
+            : 'not-installed'
+          : 'untracked'
+      return {
+        id,
+        file: HOOK_HOSTS[id].file,
+        event: HOOK_HOSTS[id].event,
+        hook_id: HOOK_ID,
+        state,
+        ...(inspected.detail ? { detail: inspected.detail } : {}),
+        support: support.support,
+        tested_version: support.tested_version,
+        last_verified: support.last_verified
+      }
+    })
 }
 
 export function activeAdapterIds(project, runtime) {
