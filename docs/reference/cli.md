@@ -85,7 +85,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `analyze conflicts` | `--project`, `--target`, `--json` |
 | `analyze stale` | `--project`, `--target`, `--json` |
 | `analyze all` | `--project`, `--target`, `--json` |
-| `propose` | `--project`, `--target`, `--claim`, `--source-file`, `--target-file`, `--proposal-type`, `--type`, `--evidence`, `--confidence`, `--visibility`, `--json` |
+| `propose` | `--project`, `--target`, `--claim`, `--op`, `--claim-id`, `--reason`, `--source-file`, `--target-file`, `--proposal-type`, `--type`, `--evidence`, `--confidence`, `--visibility`, `--json` |
 | `proposals list` | `--project`, `--target`, `--json` |
 | `proposals audit` | `--project`, `--target`, `--json` |
 | `proposals show` | `--project`, `--target` |

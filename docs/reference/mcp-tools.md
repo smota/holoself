@@ -10,7 +10,7 @@ All tools are bound to one linked project at server startup. No tool accepts a p
 | `holoself_context_manifest` | Read-only | _(none)_ | `task`, `lens`, `budget`, `temporal`, `cursor`, `session_start`, `need` | Return bounded source handles, metadata, restrictions, and a deterministic receipt. It does not return source bodies. |
 | `holoself_context_get` | Read-only | `source_ids` | `task`, `lens`, `budget`, `temporal`, `cursor`, `session_start` | Resolve only the requested manifest source handles through the link, lens, lifecycle, and privacy gates. |
 | `holoself_search` | Read-only | `query` | `lens`, `temporal`, `federated`, `limit` | Search the deterministic local privacy-filtered index for the fixed linked project. |
-| `holoself_proposal_create` | Project-local write | `claim`, `source_files` | `evidence`, `target`, `proposal_type`, `confidence`, `visibility` | Create a project-local pending proposal backed by contained project evidence. It never writes canonical self. |
+| `holoself_proposal_create` | Project-local write | `source_files` | `operation`, `claim`, `claim_id`, `reason`, `evidence`, `target`, `proposal_type`, `confidence`, `visibility` | Create a project-local pending proposal backed by contained project evidence. It never writes canonical self. operation append_claim (default) adds a claim; replace_claim, supersede_claim and retire_claim target an existing claim by the claim_id shown in delivered context and require evidence. |
 | `holoself_proposal_preview` | Read-only | `proposal_id` | _(none)_ | Preview the exact canonical changes and digest for a pending proposal without applying or approving it. |
 <!-- generated:end -->
 

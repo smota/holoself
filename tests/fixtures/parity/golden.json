@@ -9379,14 +9379,38 @@
                 {
                   "name": "holoself_proposal_create",
                   "title": "Create Holoself proposal",
-                  "description": "Create a project-local pending proposal backed by contained project evidence. It never writes canonical self.",
+                  "description": "Create a project-local pending proposal backed by contained project evidence. It never writes canonical self. operation append_claim (default) adds a claim; replace_claim, supersede_claim and retire_claim target an existing claim by the claim_id shown in delivered context and require evidence.",
                   "inputSchema": {
                     "type": "object",
                     "properties": {
+                      "operation": {
+                        "type": "string",
+                        "enum": [
+                          "append_claim",
+                          "replace_claim",
+                          "supersede_claim",
+                          "retire_claim"
+                        ],
+                        "default": "append_claim",
+                        "description": "append_claim and the claim operations replace_claim, supersede_claim (keeps the old claim as history) and retire_claim (marks it historical)."
+                      },
                       "claim": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 4000
+                        "maxLength": 4000,
+                        "description": "Claim wording; required except for retire_claim."
+                      },
+                      "claim_id": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                        "description": "Id of the existing claim (the id= attribute of a holoself-claim block in delivered context); required for replace_claim, supersede_claim and retire_claim."
+                      },
+                      "reason": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^[^\\r\\n]+$",
+                        "description": "Single-line retirement reason; required for retire_claim."
                       },
                       "evidence": {
                         "type": "string",
@@ -9422,8 +9446,7 @@
                           "new_decision",
                           "privacy_warning",
                           "conflict_resolution"
-                        ],
-                        "default": "new_fact"
+                        ]
                       },
                       "confidence": {
                         "type": "string",
@@ -9439,12 +9462,10 @@
                           "professional",
                           "public-voice",
                           "public-safe"
-                        ],
-                        "default": "private"
+                        ]
                       }
                     },
                     "required": [
-                      "claim",
                       "source_files"
                     ],
                     "additionalProperties": false
@@ -24472,7 +24493,7 @@
         "<ROOT>/project"
       ],
       "status": 1,
-      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim visibility=private -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n",
+      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim visibility=private id=<UUID:2> -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n",
       "stderr": "[!!] Approve proposal and apply grouped canonical self changes? Re-run with --yes to confirm.\n"
     },
     {
@@ -24486,7 +24507,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim visibility=private -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n[ok] approved <UUID:1>; 1 change(s), validation passed\n",
+      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim visibility=private id=<UUID:2> -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n[ok] approved <UUID:1>; 1 change(s), validation passed\n",
       "stderr": ""
     },
     {
