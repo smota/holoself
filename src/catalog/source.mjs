@@ -6,7 +6,7 @@ import { canonicalSort, readSourceWithStat, slugHeading, sourceRef } from '../ca
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { claims, links, sections, tags } from '../markdown/text.mjs'
-import { privacyMetadata, visibility } from '../policy/access.mjs'
+import { fieldHeadingRule, fieldLineRule, intersectVisibility, privacyMetadata, visibility } from '../policy/access.mjs'
 import { resolveDocumentPolicy } from '../policy/policy-defaults.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
 import { SECRET_RE, secretFile } from '../policy/secrets.mjs'
@@ -21,9 +21,11 @@ export function catalogFilePath(project) {
 export function privacySections(body, policy) {
   const chunks = []
   const ordinary = replaceClaimBlocks(body, block => {
-    const v = block.visibility,
-      status = block.status
-    for (const section of sections(block.body))
+    const status = block.status
+    for (const section of sections(block.body)) {
+      // A field heading rule inside a claim block narrows that section too, as filterFieldVisibility does for content.
+      const headingRule = fieldHeadingRule(section.heading, policy.field_visibility || {}),
+        v = headingRule ? intersectVisibility(block.visibility, headingRule) : block.visibility
       chunks.push({
         ...section,
         visibility: v,
@@ -31,6 +33,7 @@ export function privacySections(body, policy) {
         disclosure: v === 'public-safe' ? 'publish-approved' : 'review-required',
         ...(status === 'current' ? {} : { claim_status: status })
       })
+    }
     return ''
   })
   // Ordinary sections without a field rule inherit the document's own access and disclosure (the document gate already
@@ -64,12 +67,35 @@ export function buildCatalogSections(rawSections, defaults = {}) {
     }
   })
 }
-export function extractSectionAnnotations(rawSections) {
-  const annotatedClaims = rawSections.flatMap(sec =>
-    claims(sec.content).map(text => ({ text, visibility: sec.visibility, ...(sec.claim_status ? { claim_status: sec.claim_status } : {}) }))
-  )
-  const annotatedLinks = rawSections.flatMap(sec => links(sec.content).map(value => ({ value, visibility: sec.visibility })))
-  const annotatedTags = rawSections.flatMap(sec => tags(sec.content).map(value => ({ value, visibility: sec.visibility })))
+// Claims, links and tags of each section carry the visibility of the text they come from: the section's (claim or
+// ordinary) visibility, narrowed by any field_visibility heading or `Field: value` line rule, exactly as
+// filterFieldVisibility narrows delivered content and snippets. A field line hidden from a lens or adapter therefore
+// never surfaces through claims, tags, links or search text either.
+export function extractSectionAnnotations(rawSections, policy = {}) {
+  const fieldVisibility = policy?.field_visibility || {}
+  const annotatedClaims = [],
+    annotatedLinks = [],
+    annotatedTags = []
+  for (const sec of rawSections) {
+    const headingRule = fieldHeadingRule(sec.heading || '', fieldVisibility)
+    const base = headingRule ? intersectVisibility(sec.visibility, headingRule) : sec.visibility
+    const byVisibility = new Map()
+    for (const line of String(sec.content).split(/\r?\n/)) {
+      const lineRule = fieldLineRule(line, fieldVisibility),
+        v = lineRule ? intersectVisibility(base, lineRule) : base
+      if (!byVisibility.has(v)) byVisibility.set(v, [])
+      byVisibility.get(v).push(line)
+    }
+    const status = sec.claim_status ? { claim_status: sec.claim_status } : {}
+    const sectionClaims = []
+    for (const [visibility, lines] of byVisibility) {
+      const text = lines.join('\n')
+      sectionClaims.push(...claims(text).map(value => ({ text: value, visibility, ...status })))
+      annotatedLinks.push(...links(text).map(value => ({ value, visibility })))
+      annotatedTags.push(...tags(text).map(value => ({ value, visibility })))
+    }
+    annotatedClaims.push(...sectionClaims.slice(0, 50))
+  }
   annotatedClaims.sort((a, b) => canonicalSort(a.text, b.text))
   annotatedLinks.sort((a, b) => canonicalSort(a.value, b.value))
   annotatedTags.sort((a, b) => canonicalSort(a.value, b.value))
@@ -102,7 +128,7 @@ export function buildCatalogSource(file, sourceKind, root, registry, tolerant = 
   const policy = privacyMetadata(effectiveMetadata, registry)
   const rawSections = privacySections(body, policy)
   const catalogSections = buildCatalogSections(rawSections)
-  const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSections)
+  const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSections, policy)
 
   const sourceTextHash = hash(text)
   const spaceId = sourceKind === 'canonical' ? 'self' : sourceKind === 'project' ? canonicalSpaceId(root) : 'contrib'

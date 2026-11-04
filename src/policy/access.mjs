@@ -52,6 +52,32 @@ export function visibleUnderBehavior(visibility, behaviorLens, adapter = 'generi
   if (v === 'linked-projects' || v === 'public-safe') return true
   return legacyAccessLenses({ visibility: v }).includes(behaviorLens)
 }
+// The narrowest single visibility admitted wherever both a and b are (an element governed by two rules, such as a
+// field line inside a claim block). public-safe adds only publication to linked-projects (every lens). The one
+// intersection with no exact name, professional with public-voice ({general, private}), fails closed to private.
+export function intersectVisibility(a, b) {
+  const x = VISIBILITIES.includes(a) ? a : 'private',
+    y = VISIBILITIES.includes(b) ? b : 'private'
+  if (x === y) return x
+  if (x === 'public-safe') return y
+  if (y === 'public-safe') return x
+  if (x === 'linked-projects') return y
+  if (y === 'linked-projects') return x
+  return 'private'
+}
+// The rule filterFieldVisibility applies to one line: `Field: value` lines whose field name equals a rule.
+export function fieldLineRule(line, fieldVisibility = {}) {
+  const field = String(line).match(/^\s*[-*]?\s*([^:]{2,40}):\s*(.+)$/)
+  if (!field) return null
+  const rule = Object.entries(fieldVisibility || {}).find(([name]) => field[1].trim().toLowerCase() === name.toLowerCase())
+  return rule ? rule[1] : null
+}
+// The rule filterFieldVisibility applies to a whole section through its heading.
+export function fieldHeadingRule(heading, fieldVisibility = {}) {
+  const key = String(heading).trim().toLowerCase()
+  const rule = Object.entries(fieldVisibility || {}).find(([name]) => key.includes(name.toLowerCase()))
+  return rule ? rule[1] : null
+}
 export function allowedDocument(meta, lens, adapter = 'generic', task = null, resolution = null, subject = null, sourceSpaceId = null) {
   const subj = subject || { kind: 'owner:direct', accessible_spaces: ['self', 'contrib'] }
   const srcSpace = sourceSpaceId || 'self'

@@ -121,7 +121,7 @@ export function createRecordDelivery(o, { project, self, identity, registry, len
           )
           return { ...sec, snippet: filtered }
         })
-      const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSecs)
+      const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSecs, safeMeta)
       claimsList = annotatedClaims.filter(c => visibleUnderBehavior(c.visibility, behaviorLens, adapter) && claimStatusIncluded(c.claim_status, temporal))
       tagsList = annotatedTags.filter(t => visibleUnderBehavior(t.visibility, behaviorLens, adapter))
       linksList = annotatedLinks.filter(l => visibleUnderBehavior(l.visibility, behaviorLens, adapter))

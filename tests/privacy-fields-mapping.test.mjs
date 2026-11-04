@@ -21,7 +21,7 @@ import {
   revertPolicyMigration,
   verifyNonAmplification
 } from '../src/migration.mjs'
-import { PUBLICATION_ADAPTERS, allowedDocument, publicationAllowed } from '../src/policy/access.mjs'
+import { PUBLICATION_ADAPTERS, allowedDocument, intersectVisibility, publicationAllowed, visibleUnderBehavior } from '../src/policy/access.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../src/policy/privacy-fields.mjs'
 
 const CUSTOM = Object.freeze({ id: 'custom-audit', sensitivity_access: ['personal', 'employer-confidential'] })
@@ -384,4 +384,74 @@ test('publication adapters: migrated documents deliver what legacy ones did, and
       assert.match(value.content, /SAFE_CLAIM_SENTINEL/)
     }
   }
+})
+
+// Decision record §6: on every adapter, content, sections, claims, tags, links and search text (including the
+// --manifest view and search passages) apply the same field rule. A private field line, a private field heading and a
+// private field line inside a claim block never surface through any of them.
+test('field rules hide a private line, heading and in-claim line from every output path on every adapter', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'holoself-fields-lines-')),
+    project = await mkdtemp(join(tmpdir(), 'holoself-fields-lines-project-'))
+  await quiet(() => run(['init', '--root', root]))
+  await quiet(() => run(['link', 'add', '--self', root, '--project', project, '--lens', 'general', '--secondary-lenses', 'professional', '--yes', '--no-activate']))
+  const body = id =>
+    [
+      `# Overview ${id}`,
+      `OPEN_${id} overview sentence long enough to be a claim. #opentag${id} [o](https://open${id}.example)`,
+      `- salary: SALLINE_${id} base figure long enough #saltag${id} [s](https://sal${id}.example)`,
+      `## Salary details`,
+      `SALHEAD_${id} heading text long enough to be a claim. #headtag${id} [h](https://head${id}.example)`,
+      `## After`,
+      `<!-- holoself-claim visibility=public-safe -->`,
+      `CLAIMOK_${id} public claim text long enough to count.`,
+      `- salary: CLAIMSAL_${id} figure inside a claim block #claimtag${id} [c](https://claim${id}.example)`,
+      `<!-- /holoself-claim -->`,
+      ''
+    ].join('\n')
+  const fv = 'field_visibility:\n  salary: private\n'
+  const docs = {
+    a: `access_lenses: [general, professional, private]\ndisclosure: publish-approved\nsensitivity: personal\ndocument_role: content\n${fv}`,
+    b: `visibility: public-safe\n${fv}`,
+    c: `visibility: linked-projects\npublic_safe: true\n${fv}`,
+    d: `access_lenses: [general, professional, private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n${fv}`
+  }
+  for (const [id, meta] of Object.entries(docs)) await writeFile(join(root, 'context', `fl-${id}.md`), `---\n${meta}---\n${body(id)}`)
+  const hidden = id => [`SALLINE_${id}`, `saltag${id}`, `sal${id}.example`, `SALHEAD_${id}`, `headtag${id}`, `head${id}.example`, `CLAIMSAL_${id}`, `claimtag${id}`, `claim${id}.example`]
+  const index = buildIndex(project)
+  let checked = 0
+  for (const adapter of ['generic', ...PUBLICATION_ADAPTERS])
+    for (const lens of ['general', 'professional']) {
+      const outputs = []
+      for (const manifest of [false, true]) {
+        const cwd = process.cwd()
+        process.chdir(root)
+        try {
+          outputs.push(JSON.stringify(contextData({ lens, adapter, task: 'overview salary', budget: 'unbounded', ...(manifest ? { manifest: true } : {}), json: true, root, rootExplicit: true })))
+        } finally {
+          process.chdir(cwd)
+        }
+      }
+      for (const id of Object.keys(docs))
+        for (const query of ['OPEN', 'SALLINE', 'SALHEAD', 'CLAIMSAL', 'saltag', 'headtag']) outputs.push(JSON.stringify(searchIndex(index, `${query}_${id}`, lens, null, null, 'current', { adapter })))
+      const all = outputs.join('\n')
+      for (const id of Object.keys(docs))
+        for (const token of hidden(id)) {
+          checked++
+          assert.ok(!all.includes(token), `${adapter}/${lens}: ${token} leaked`)
+        }
+      // The rule narrows only the governed text: the ordinary line still surfaces wherever its document does.
+      assert.match(all, /OPEN_a/)
+      if (adapter === 'generic') assert.match(all, /opentaga/, 'tags of ungoverned lines are kept')
+    }
+  assert.equal(checked, 4 * 2 * 4 * 9)
+})
+
+test('intersectVisibility is never visible where either input is hidden', () => {
+  const values = ['private', 'linked-projects', 'professional', 'public-voice', 'public-safe', 'career']
+  for (const a of values)
+    for (const b of values)
+      for (const lens of LENS_IDS)
+        for (const adapter of ADAPTERS)
+          if (visibleUnderBehavior(intersectVisibility(a, b), lens, adapter))
+            assert.ok(visibleUnderBehavior(a, lens, adapter) && visibleUnderBehavior(b, lens, adapter), `${a} x ${b} on ${lens}/${adapter}`)
 })
