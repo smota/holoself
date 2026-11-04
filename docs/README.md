@@ -42,6 +42,7 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 - [Retrieval evaluation](guides/retrieval-evaluation.md)
 - [Runtime adapters](guides/runtime-adapters.md)
 - [Local MCP integration](guides/local-mcp.md)
+- [Served-context ledger](guides/served-context-ledger.md)
 - [Common use cases](guides/common-use-cases.md)
 - [Migration](guides/migration.md)
 - [Adoption and rollback runbook](guides/adoption-and-rollback-runbook.md)
