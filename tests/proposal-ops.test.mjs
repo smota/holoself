@@ -451,3 +451,29 @@ test('preview flags visibility changes and approval waits on the self registry l
   const output = await capture(() => run(['proposals', 'approve', made.proposal_id, '--project', project, '--yes']))
   assert.match(output, /! visibility: professional → public-safe/)
 })
+
+test('invisible format characters cannot hide a claim marker from parsing or from the reserved-marker check', async () => {
+  const { self, project, claims } = await fixture(),
+    base = await readFile(claims, 'utf8'),
+    spaces = { ZWSP: '​', ZWNJ: '‌', ZWJ: '‍', BOM: '﻿', NBSP: ' ' }
+  for (const [name, x] of Object.entries(spaces)) {
+    const secret = `SECRET${name}`
+    await writeFile(claims, `${base}\n<!--${x} holoself-claim${x}visibility=private${x}-->\n${secret} private claim body text.\n<!--${x}/${x}holoself-claim${x}-->\n`)
+    const blocks = parseClaimBlocks(await readFile(claims, 'utf8'))
+    assert.ok(blocks.some(block => block.text.includes(secret) && block.visibility === 'private' && !block.malformed), `${name} opener parses`)
+    assert.doesNotMatch(await contextText(project, ['--temporal', 'all']), new RegExp(secret), name)
+    assert.deepEqual(ecosystemValidationErrors(self), [], name)
+    for (const claim of [`Leak <!--${x} holoself-claim visibility=public-safe --> now.`, `End <!--${x}/holoself-claim--> here.`])
+      assert.throws(() => createProposal(project, { source_files: ['Context/evidence.md'], claim }), /reserved claim markers/, `${name} in proposal text`)
+  }
+})
+
+test('a stray closing marker fails closed back to the previous block boundary', async () => {
+  const { self, project, claims } = await fixture()
+  await writeFile(claims, `${await readFile(claims, 'utf8')}\nSECRET-STRAY text whose opener was lost.\n<!-- /holoself-claim -->\n\n## Notes\n\nAfter-closer ordinary notes stay visible.\n`)
+  const delivered = await contextText(project, ['--temporal', 'all'])
+  assert.doesNotMatch(delivered, /SECRET-STRAY/)
+  assert.match(delivered, /After-closer ordinary notes stay visible/)
+  assert.match(delivered, new RegExp(VISIBLE), 'blocks before the stray closer are kept')
+  assert.ok(ecosystemValidationErrors(self).some(x => /unbalanced claim markers/.test(x)))
+})
