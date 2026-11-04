@@ -40,7 +40,7 @@ export async function linkStatus(o, sub, project) {
     return true
   }
   const health = healthStatus(project, link, o),
-    { project_context, binding_salt, ...selfContext } = link,
+    { project_context, binding_salt, ledger: _ledger, ...selfContext } = link,
     proposalScan = scanProposalStore(project)
   const selfExists = existsSync(link.path)
   let registryAttested = false
