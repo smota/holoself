@@ -22,7 +22,7 @@ export const documentProjection = r => ({
 // When the body is delivered in documents[], body-derived fields (search_text, sections, claims, links) are left out
 // and headings stay as a short outline. Manifest entries carry no body, so they keep their snippets.
 export function sourceIndexEntry(record) {
-  const { content, metadata, absolute_path, ...entry } = record
+  const { content, metadata, absolute_path, policy_sources, ...entry } = record
   if (record.manifest_only) return entry
   // Metadata copies (access_lenses, disclosure, ...) and source_ref are dropped too: documents[].metadata and source_id/source_hash carry them.
   const {
@@ -47,7 +47,7 @@ export function withoutPrivatePaths(value) {
   if (!value || typeof value !== 'object') return value
   const clean = {}
   for (const [key, item] of Object.entries(value)) {
-    if (['absolute_path', '_path', 'source_project_path'].includes(key)) continue
+    if (['absolute_path', '_path', 'source_project_path', 'policy_sources'].includes(key)) continue
     if (key === 'path' && (value === value.self || value === value.project)) continue
     clean[key] = withoutPrivatePaths(item)
   }

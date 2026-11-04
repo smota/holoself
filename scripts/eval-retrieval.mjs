@@ -11,6 +11,19 @@ import { HOLOSELF_BIN, SYNTHETIC_DOCUMENTS, createRetrievalEvalFixture } from '.
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const DEFAULT_CASES_PATH = join(REPO_ROOT, 'tests', 'fixtures', 'retrieval-eval', 'cases.json')
 export const DEFAULT_BASELINE_PATH = join(REPO_ROOT, 'tests', 'fixtures', 'retrieval-eval', 'baseline.json')
+export const DEFAULT_FTS5_BASELINE_PATH = join(REPO_ROOT, 'tests', 'fixtures', 'retrieval-eval', 'baseline-fts5.json')
+export const EVAL_ENGINES = Object.freeze(['auto', 'json', 'fts5'])
+const JSON_ENGINE = 'deterministic-json'
+
+// Each retrieval engine keeps its own baseline: deterministic-json in baseline.json, fts5 in baseline-fts5.json.
+export function baselinePathFor(engine) {
+  return engine === 'fts5' ? DEFAULT_FTS5_BASELINE_PATH : DEFAULT_BASELINE_PATH
+}
+
+// known_gap is either a boolean or the list of engines for which the case is still a known gap.
+export function isKnownGap(evalCase, engine = JSON_ENGINE) {
+  return Array.isArray(evalCase.known_gap) ? evalCase.known_gap.includes(engine) : Boolean(evalCase.known_gap)
+}
 const RESTRICTED_PATHS = new Set(
   SYNTHETIC_DOCUMENTS.filter(doc => doc.frontmatter.sensitivity === 'restricted').map(doc => doc.path)
 )
@@ -22,7 +35,8 @@ export function parseEvalOptions(argv = []) {
     out: null,
     updateBaseline: false,
     casesPath: DEFAULT_CASES_PATH,
-    baselinePath: DEFAULT_BASELINE_PATH,
+    baselinePath: null,
+    engine: 'auto',
     concurrency: 6,
     quietTable: false
   }
@@ -39,6 +53,11 @@ export function parseEvalOptions(argv = []) {
     else if (arg === '--update-baseline') options.updateBaseline = true
     else if (arg === '--cases') options.casesPath = resolve(valueAfter(arg, i++))
     else if (arg === '--baseline') options.baselinePath = resolve(valueAfter(arg, i++))
+    else if (arg === '--engine') {
+      const engine = valueAfter(arg, i++)
+      if (!EVAL_ENGINES.includes(engine)) throw new Error(`--engine must be one of ${EVAL_ENGINES.join(', ')}`)
+      options.engine = engine
+    }
     else if (arg === '--concurrency') {
       const n = Number(valueAfter(arg, i++))
       if (!Number.isInteger(n) || n < 1 || n > 16) throw new Error('--concurrency must be an integer from 1 to 16')
@@ -93,7 +112,11 @@ function invokeContextCli(projectDir, env, cliArgs) {
   })
 }
 
-export function scoreCaseResult(evalCase, packet) {
+export function packetEngine(packet) {
+  return packet?.context_receipt?.engine || JSON_ENGINE
+}
+
+export function scoreCaseResult(evalCase, packet, engine = packetEngine(packet)) {
   const selfDocs = Array.isArray(packet?.self?.documents) ? packet.self.documents : []
   const sources = Array.isArray(packet?.sources) ? packet.sources : []
   const deliveredPaths = [...new Set([...selfDocs.map(doc => doc.path), ...sources.map(src => src.path)])]
@@ -135,7 +158,7 @@ export function scoreCaseResult(evalCase, packet) {
     temporal: evalCase.temporal || 'current',
     lens: evalCase.lens,
     budget: evalCase.budget,
-    known_gap: Boolean(evalCase.known_gap),
+    known_gap: isKnownGap(evalCase, engine),
     gap_issue: evalCase.gap_issue || null,
     context_need: packet?.selection?.context_need || 'helpful',
     expected_count: expected.length,
@@ -217,25 +240,35 @@ export async function runRetrievalEval(options = {}) {
   const concurrency = options.concurrency || 6
 
   const fixture = await createRetrievalEvalFixture()
+  const requested = options.engine || 'auto'
+  const env = { ...fixture.env }
+  if (requested === 'auto') delete env.HOLOSELF_INDEX_ENGINE
+  else env.HOLOSELF_INDEX_ENGINE = requested
   try {
-    const results = new Array(rawCases.cases.length)
+    const results = new Array(rawCases.cases.length),
+      engines = new Set()
     let cursor = 0
     const worker = async () => {
       while (cursor < rawCases.cases.length) {
         const index = cursor++
         const evalCase = rawCases.cases[index]
         const cliArgs = buildCliArgs(evalCase, fixture.project)
-        const { data } = await invokeContextCli(fixture.project, fixture.env, cliArgs)
+        const { data } = await invokeContextCli(fixture.project, env, cliArgs)
+        engines.add(packetEngine(data))
         results[index] = scoreCaseResult(evalCase, data)
       }
     }
     const workers = Array.from({ length: Math.min(concurrency, rawCases.cases.length) }, () => worker())
     await Promise.all(workers)
+    if (engines.size !== 1) throw new Error(`cases ran under more than one engine: ${[...engines].sort().join(', ')}`)
+    const engine = [...engines][0]
+    if (requested === 'fts5' && engine !== 'fts5') throw new Error('--engine fts5 requested but node:sqlite with FTS5 is unavailable')
 
     const summary = aggregateMetrics(results)
     return {
       schema_version: 1,
       kind: 'retrieval-eval-report',
+      engine,
       dataset_version: rawCases.dataset_version || 1,
       corpus_document_count: fixture.documentCount,
       corpus_digest: fixture.corpusDigest,
@@ -251,6 +284,7 @@ export async function runRetrievalEval(options = {}) {
 export function formatEvalTable(report) {
   const lines = []
   lines.push('Retrieval Evaluation Summary (by category)')
+  lines.push(`Engine: ${report.engine || JSON_ENGINE}`)
   lines.push('Category       | Cases | Non-Gap | Gap | Recall | Non-Gap Recall | Precision | Leaks | Avg Bytes')
   lines.push('---------------+-------+---------+-----+--------+----------------+-----------+-------+----------')
   for (const [category, stats] of Object.entries(report.summary.by_category)) {
@@ -303,6 +337,10 @@ export function compareWithBaseline(report, baseline, { tolerance = 0.02 } = {})
   const improvements = []
   const EPS = 1e-9
 
+  const reportEngine = report.engine || JSON_ENGINE,
+    baselineEngine = baseline?.engine || JSON_ENGINE
+  if (reportEngine !== baselineEngine) failures.push(`Engine mismatch: report ran under ${reportEngine} but the baseline was recorded under ${baselineEngine}`)
+
   if (report.summary.total_forbidden_leaks > 0) {
     const leakingCases = report.cases.filter(c => c.forbidden_leaks > 0).map(c => `${c.id} (${c.leaked_paths.join(', ')})`)
     failures.push(`Forbidden privacy/lifecycle leaks detected (${report.summary.total_forbidden_leaks}): ${leakingCases.join('; ')}`)
@@ -342,7 +380,7 @@ export function compareWithBaseline(report, baseline, { tolerance = 0.02 } = {})
 
   const hint =
     improvements.length > 0
-      ? 'Retrieval recall improved over baseline. Update the baseline with: npm run eval:retrieval -- --update-baseline'
+      ? `Retrieval recall improved over baseline. Update the baseline with: npm run eval:retrieval -- --update-baseline --engine ${reportEngine === 'fts5' ? 'fts5' : 'json'}`
       : null
 
   return {
@@ -361,8 +399,9 @@ export async function main(argv = process.argv.slice(2)) {
     const json = `${JSON.stringify(report, null, 2)}\n`
 
     if (options.updateBaseline) {
-      await mkdir(dirname(options.baselinePath), { recursive: true })
-      await writeFile(options.baselinePath, json, 'utf8')
+      const baselinePath = options.baselinePath || baselinePathFor(report.engine)
+      await mkdir(dirname(baselinePath), { recursive: true })
+      await writeFile(baselinePath, json, 'utf8')
     }
     if (options.out) {
       await mkdir(dirname(options.out), { recursive: true })

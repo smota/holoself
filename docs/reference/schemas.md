@@ -9,6 +9,7 @@ Proposed D00 contracts, not active runtime interfaces: [evidence v1](../../schem
 - [`schemas/adapter-capability.schema.json`](../../schemas/adapter-capability.schema.json): startup adapter capability evidence
 - [`schemas/context.schema.json`](../../schemas/context.schema.json): resolved runtime context
 - [`schemas/document-metadata.schema.json`](../../schemas/document-metadata.schema.json): canonical Markdown frontmatter
+- [`schemas/policy-defaults.schema.json`](../../schemas/policy-defaults.schema.json): directory-level privacy policy defaults (`_policy.yaml`)
 - [`schemas/catalog.schema.json`](../../schemas/catalog.schema.json): deterministic incremental catalog
 - [`schemas/context-decision-cache.schema.json`](../../schemas/context-decision-cache.schema.json): content-free context decision cache (deprecated; on-disk decision cache removed)
 - [`schemas/proposal.schema.json`](../../schemas/proposal.schema.json): proposal lifecycle

@@ -1,8 +1,9 @@
-import { readFileSync, readlinkSync, realpathSync, mkdirSync, writeFileSync, chmodSync, unlinkSync, rmdirSync, symlinkSync } from 'node:fs'
+import { existsSync, readFileSync, readlinkSync, realpathSync, mkdirSync, writeFileSync, chmodSync, unlinkSync, rmdirSync, symlinkSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { preflightActivation, activateProject, deactivateProject, detectAdapters, readRuntime, recordedActivation, safeProjectFile } from './adapters.mjs'
 import { spaceLinkConfiguration, readSpaceLink, configureSpaceLink, withSpaceConfigurationLock } from './ecosystem.mjs'
 import { loadLensRegistry } from './lenses.mjs'
+import { isCanonicalSelf } from './link/config.mjs'
 import { lstat as stat } from './path-guard.mjs'
 import { hash as digest } from './shared/fs.mjs'
 
@@ -28,39 +29,100 @@ function metadataChild(path, metadata) {
   return path.startsWith(metadata + sep)
 }
 function safeRoot(root) {
-  for (const rel of ['profile', 'context', 'lenses', 'lenses/bindings.json', '.holoself', '.holoself/links.json', '.holoself/links.json.lock'])
+  if (!stat(root)?.isDirectory())
+    throw new Error('space root is not a canonical self root: lacks canonical profile/context layout')
+  for (const rel of ['config.json', 'profile', 'context', 'lenses', 'lenses/bindings.json', '.holoself', '.holoself/links.json', '.holoself/links.json.lock'])
     safeProjectFile(root, rel, 'space root metadata')
-  if (!stat(join(root, 'profile'))?.isDirectory() || !stat(join(root, 'context'))?.isDirectory())
-    throw new Error('space root lacks canonical profile/context layout')
+  if (!isCanonicalSelf(root) || !stat(join(root, 'config.json'))?.isFile() || !stat(join(root, 'profile'))?.isDirectory() || !stat(join(root, 'context'))?.isDirectory())
+    throw new Error('space root is not a canonical self root: lacks canonical profile/context layout')
 }
 
 // Pure filesystem planning: no locks, reconciliation, temporary directories or CLI calls.
-export function planSpaceAction({ root, project, action, lens = 'general' }, { absentRegistryParent = false } = {}) {
+export function planSpaceAction(request, { absentRegistryParent = false } = {}) {
+  const {
+    action,
+    lens = 'general',
+    explicitLens,
+    secondaryLenses,
+    projectContext,
+    activate,
+    platforms,
+    instructions,
+    installSkill,
+    hooks,
+    mcp,
+    approveReadTools,
+    skillHome,
+    force,
+    noActivate
+  } = request
   if (!actions.has(action)) throw new Error(`unsupported space action: ${action}`)
-  root = realpathSync(resolve(root))
-  project = realpathSync(resolve(project))
-  safeRoot(root)
-  if (identity(root) === identity(project)) throw new Error('a canonical root cannot be its own linked space')
-  const metadata = join(project, '.holoself'),
+  if (!request.project || !existsSync(resolve(request.project))) throw new Error(`project not found: ${resolve(request.project || '')}`)
+  const project = realpathSync(resolve(request.project)),
+    metadata = join(project, '.holoself'),
     metadataState = state(metadata),
     legacy = metadataState.type === 'link'
-  if (legacy && (action !== 'setup' || identity(metadata) !== identity(root)))
-    throw new Error('setup requires a legacy junction pointing exactly to this canonical root')
+  let root
+  if (legacy) {
+    if (action !== 'setup') throw new Error('setup requires a legacy junction pointing exactly to this canonical root')
+    let mountTarget
+    try {
+      mountTarget = realpathSync(metadata)
+    } catch {
+      throw new Error(`legacy mount target is not a canonical self root: ${metadata}`)
+    }
+    safeRoot(mountTarget)
+    if (request.root !== undefined && request.root !== null) {
+      let requestedRoot
+      try {
+        requestedRoot = realpathSync(resolve(request.root))
+      } catch {
+        throw new Error('legacy mount target does not match --self: setup requires a legacy junction pointing exactly to this canonical root')
+      }
+      if (identity(mountTarget) !== identity(requestedRoot))
+        throw new Error('legacy mount target does not match --self: setup requires a legacy junction pointing exactly to this canonical root')
+      safeRoot(requestedRoot)
+      root = requestedRoot
+    } else {
+      root = mountTarget
+    }
+  } else {
+    if (request.root === undefined || request.root === null) throw new Error('space action requires canonical root')
+    root = realpathSync(resolve(request.root))
+    safeRoot(root)
+  }
+  if (identity(root) === identity(project)) throw new Error('a canonical root cannot be its own linked space')
   if (!legacy) safeProjectFile(project, '.holoself', 'space metadata')
-  const configuration = ['setup', 'relink'].includes(action) ? spaceLinkConfiguration(project, root, { lens, metadataAbsent: legacy }) : null
+  const configuration = ['setup', 'relink'].includes(action)
+    ? spaceLinkConfiguration(project, root, {
+        lens,
+        explicitLens,
+        secondaryLenses,
+        projectContext,
+        force,
+        metadataAbsent: legacy
+      })
+    : null
   const link = configuration?.link || readSpaceLink(project)
   if (!configuration && identity(link.path) !== identity(root)) throw new Error('linked space does not belong to this canonical root')
   const runtime = legacy ? null : readRuntime(project),
     selection = recordedActivation(project, runtime)
   const options = {
-    activate: selection.ids.join(','),
-    instructions: runtime?.activatedAdapters?.find(x => x.id === 'agents')?.file || 'AGENTS.md',
-    installSkill: runtime?.skillInstallPolicy || 'auto'
+    activate: activate || selection.ids.join(','),
+    ...(platforms?.length ? { platforms } : {}),
+    instructions: instructions || runtime?.activatedAdapters?.find(x => x.id === 'agents')?.file || 'AGENTS.md',
+    installSkill: installSkill || runtime?.skillInstallPolicy || 'auto',
+    ...(hooks !== undefined ? { hooks } : {}),
+    ...(mcp !== undefined ? { mcp } : {}),
+    ...(approveReadTools !== undefined ? { approveReadTools } : {}),
+    ...(skillHome !== undefined ? { skillHome } : {}),
+    ...(force ? { force: true } : {}),
+    ...(noActivate ? { noActivate: true } : {})
   }
   let activation = null,
     deactivation = null
-  if (action !== 'deactivate') activation = preflightActivation(project, { ...options, metadataAbsent: legacy }).plan
-  else deactivation = deactivateProject(project, { dryRun: true })
+  if (action !== 'deactivate' && !options.noActivate) activation = preflightActivation(project, { ...options, metadataAbsent: legacy }).plan
+  else if (action === 'deactivate') deactivation = deactivateProject(project, { dryRun: true })
   const mutations = new Map(),
     inputs = new Map(),
     registryParent = join(root, '.holoself')
@@ -211,9 +273,23 @@ export function applySpaceAction(request, planHash, { afterConfigure } = {}) {
         const link = plan.configuration ? configureSpaceLink(plan.project, plan.root, plan.configuration) : readSpaceLink(plan.project)
         // Internal synchronous dependency seam for deterministic recovery verification.
         if (afterConfigure) afterConfigure(plan)
+        let activation = null
         if (plan.action === 'deactivate') deactivateProject(plan.project)
-        else activateProject(plan.project, link, plan.options)
-        return { output: `${plan.action} applied to ${plan.project}`, plan_hash: planHash, files: plan.files }
+        else if (!plan.options?.noActivate) activation = activateProject(plan.project, link, plan.options)
+        return {
+          output: `${plan.action} applied to ${plan.project}`,
+          plan_hash: planHash,
+          files: plan.files,
+          ...(activation
+            ? {
+                activation: {
+                  results: activation.results,
+                  hookResults: activation.hookResults,
+                  mcpResults: activation.mcpResults
+                }
+              }
+            : {})
+        }
       } catch (error) {
         try {
           restore(snapshots, { lockedParent: plan.configuration ? registryParent : undefined, plan })

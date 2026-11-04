@@ -58,7 +58,9 @@ function cleanEnv(home) {
   for (const [key, value] of Object.entries(process.env)) if (!/^(HOLOSELF_|CLAUDE|CODEX|OPENRIG|MESHLOOP)/i.test(key)) env[key] = value
   // HOLOSELF_TEST_PLATFORM (test-only, needs NODE_TEST_CONTEXT) pins session-start hook support to the Linux record so
   // the golden is the same on every platform; Windows behaviour has its own unit test.
-  return { ...env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), NO_COLOR: '1', TZ: 'UTC', HOLOSELF_TEST_PLATFORM: 'linux' }
+  // HOLOSELF_INDEX_ENGINE=json pins the deterministic JSON engine so the golden does not depend on node:sqlite
+  // availability; the optional FTS5 engine has its own suite (tests/fts-index.test.mjs).
+  return { ...env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), NO_COLOR: '1', TZ: 'UTC', HOLOSELF_TEST_PLATFORM: 'linux', HOLOSELF_INDEX_ENGINE: 'json' }
 }
 
 export async function seedParityFixture(fx) {

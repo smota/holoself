@@ -1,9 +1,19 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
 import { validateAnnotationMetadata } from './annotations.mjs'
+import { loadLensRegistry } from './lenses.mjs'
 import { assertNoLinkBelow } from './path-guard.mjs'
+import { resolveDocumentPolicy } from './policy/policy-defaults.mjs'
 import { frontmatter } from './policy/privacy-fields.mjs'
 import { atomicWrite, hash, slash } from './shared/fs.mjs'
+
+function loadRootRegistry(root) {
+  try {
+    return existsSync(join(resolve(root), 'lenses')) ? loadLensRegistry(root) : null
+  } catch {
+    return null
+  }
+}
 
 const ROOTS = new Set(['profile', 'context', 'topics', 'reference', 'me', 'contribs', 'history'])
 export const ANNOTATION_FIELDS = {
@@ -75,12 +85,15 @@ export function parseAnnotatedMarkdown(content) {
   }
   return { metadata, unknownMetadata: unknown, segments }
 }
-function serializeAnnotated(original, metadata, segments, { knownLenses = [] } = {}) {
+function serializeAnnotated(original, metadata, segments, { knownLenses = [], policyDefaults = {} } = {}) {
   const parsed = parseAnnotatedMarkdown(original),
     merged = { ...parsed.metadata, ...metadata }
   for (const [key, value] of Object.entries(merged)) if (value === null) delete merged[key]
   if (!Number.isInteger(merged.schema_version) || merged.schema_version < 1) throw new Error('schema_version must be a positive integer')
-  const policy = validateAnnotationMetadata(merged, knownLenses, { allowLegacy: true })
+  const hasLegacyVis =
+    (merged.visibility !== undefined && merged.visibility !== null) || (merged.public_safe !== undefined && merged.public_safe !== null)
+  const effectiveForValidation = hasLegacyVis ? { ...merged } : { ...policyDefaults, ...merged }
+  const policy = validateAnnotationMetadata(effectiveForValidation, knownLenses, { allowLegacy: true })
   if (!policy.valid) throw new Error(policy.errors.join(' '))
   const known = Object.keys(ANNOTATION_FIELDS)
       .filter(key => merged[key] !== undefined)
@@ -117,6 +130,7 @@ function safe(root, name, { missing = false } = {}) {
 }
 export function listDocuments(root) {
   const out = []
+  const registry = loadRootRegistry(root)
   for (const top of ['profile', 'context', 'topics', 'reference', 'me', 'contribs/local', 'history']) {
     const base = join(resolve(root), top)
     if (!existsSync(base)) continue
@@ -128,15 +142,18 @@ export function listDocuments(root) {
         else if (e.isFile() && e.name.endsWith('.md')) {
           const text = readFileSync(p, 'utf8'),
             s = lstatSync(p),
-            metadata = parseAnnotatedMarkdown(text).metadata
+            metadata = parseAnnotatedMarkdown(text).metadata,
+            resolved = resolveDocumentPolicy(p, root, metadata, registry),
+            effective = resolved.effectiveMetadata
           out.push({
             path: slash(relative(resolve(root), p)),
             bytes: s.size,
             modified_at: s.mtime.toISOString(),
             hash: hash(text),
-            knowledge_status: metadata.knowledge_status || 'current',
-            temporal_scope: metadata.temporal_scope || 'current',
-            review_after: metadata.review_after || null
+            knowledge_status: effective.knowledge_status || 'current',
+            temporal_scope: effective.temporal_scope || 'current',
+            review_after: effective.review_after || null,
+            policy_sources: resolved.policySources
           })
         }
       }
@@ -148,12 +165,25 @@ export function listDocuments(root) {
 export function readDocument(root, name) {
   const item = safe(root, name)
   const content = readFileSync(item.path, 'utf8')
-  return { ...item, content, annotations: parseAnnotatedMarkdown(content), hash: hash(content) }
+  const annotations = parseAnnotatedMarkdown(content)
+  const registry = loadRootRegistry(root)
+  const resolved = resolveDocumentPolicy(item.path, root, annotations.metadata, registry)
+  return {
+    ...item,
+    content,
+    annotations,
+    effective_policy: resolved.effectiveMetadata,
+    policy_defaults: resolved.policyDefaults,
+    policy_sources: resolved.policySources,
+    hash: hash(content)
+  }
 }
 export async function saveAnnotatedDocument(root, name, { metadata, segments, expectedHash }, { validate, knownLenses = [] } = {}) {
   const item = safe(root, name),
     original = readFileSync(item.path, 'utf8'),
-    content = serializeAnnotated(original, metadata, segments, { knownLenses })
+    registry = loadRootRegistry(root),
+    resolved = resolveDocumentPolicy(item.path, root, {}, registry),
+    content = serializeAnnotated(original, metadata, segments, { knownLenses, policyDefaults: resolved.policyDefaults })
   return saveDocument(root, name, content, expectedHash, { validate })
 }
 export async function saveDocument(root, name, content, expectedHash, { validate } = {}) {

@@ -8577,6 +8577,7 @@
         "json": {
           "query": "refactoring",
           "federated": false,
+          "engine": "deterministic-json",
           "results": [
             {
               "source_file": "context/note-00.md",
@@ -13591,7 +13592,196 @@
               "key": "<HEX:1>",
               "hit": false,
               "persistent": false
-            }
+            },
+            "policy_sources": {
+              "context/career-plan.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/work-context.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/preferences.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/thinking.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/voice.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/identity.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/change.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-05.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-01.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-03.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/publishing.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-00.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-10.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-02.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-08.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-07.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-04.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-11.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-13.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-12.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-09.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-06.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/leadership.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/projects.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/people.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/career.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/technical.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/story-bank.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/admin.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/collaboration.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/decisions.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              }
+            },
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {
@@ -15022,7 +15212,106 @@
               "key": "<HEX:1>",
               "hit": false,
               "persistent": false
-            }
+            },
+            "policy_sources": {
+              "context/restricted.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/thinking.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/voice.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/preferences.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/change.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/publishing.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/identity.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/work-context.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/leadership.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/projects.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/people.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/career.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/technical.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/story-bank.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/admin.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/decisions.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              }
+            },
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {
@@ -17036,7 +17325,196 @@
               "key": "<HEX:1>",
               "hit": false,
               "persistent": false
-            }
+            },
+            "policy_sources": {
+              "profile/thinking.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/publishing.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/voice.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/preferences.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/change.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/leadership.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-05.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/career-plan.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/projects.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-01.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-03.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-00.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/people.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-10.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-02.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-08.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/career.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-07.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-04.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-11.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/identity.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "profile/work-context.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-13.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-12.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/technical.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-09.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/story-bank.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/admin.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/collaboration.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/note-06.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              },
+              "context/decisions.md": {
+                "access_lenses": "frontmatter",
+                "disclosure": "frontmatter",
+                "document_role": "frontmatter",
+                "sensitivity": "frontmatter"
+              }
+            },
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {
@@ -17307,7 +17785,9 @@
               "key": "<HEX:1>",
               "hit": false,
               "persistent": false
-            }
+            },
+            "policy_sources": {},
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {
@@ -22767,6 +23247,7 @@
                         "query": "refactoring",
                         "lens": "general",
                         "federated": false,
+                        "engine": "deterministic-json",
                         "results": [
                           {
                             "source_file": "context/note-00.md",
@@ -22970,6 +23451,7 @@
                   "query": "refactoring",
                   "lens": "general",
                   "federated": false,
+                  "engine": "deterministic-json",
                   "results": [
                     {
                       "source_file": "context/note-00.md",

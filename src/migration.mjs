@@ -5,8 +5,21 @@ import { canonicalJson } from './catalog.mjs'
 import { HASH_RE } from './catalog/schema.mjs'
 import { CUSTOM_SENSITIVITY_CATEGORIES, DEFAULT_LENSES, DEFAULT_LENS_IDS, lensIdStructurallyValid, loadLensRegistry } from './lenses.mjs'
 import { allowedDocument, publicationAllowed, PUBLICATION_ADAPTERS } from './policy/access.mjs'
+import { resolveDocumentPolicy } from './policy/policy-defaults.mjs'
 import { frontmatter, privacyMetadataErrors, restrictPrivacyMetadata } from './policy/privacy-fields.mjs'
 import { atomicWrite, hash, slash } from './shared/fs.mjs'
+
+// Fields every migrated document carries explicitly (the four required canonical fields plus read_scope).
+const MIGRATION_REQUIRED_FIELDS = Object.freeze(['access_lenses', 'disclosure', 'sensitivity', 'document_role', 'read_scope'])
+
+// The metadata the catalog serves a document with: its (already privacy-validated) frontmatter plus inherited
+// _policy.yaml defaults, resolved exactly as buildCatalogSource does for canonical documents (including the
+// legacy visibility/public_safe skip and fail-closed handling of invalid policy files). Non-canonical documents
+// (docPath null) never inherit directory defaults.
+function effectiveMigrationMetadata(meta, docPath, selfRoot, registry = null) {
+  if (!docPath || !selfRoot) return meta
+  return resolveDocumentPolicy(docPath, selfRoot, meta, registry).effectiveMetadata
+}
 
 function normalizeMigrationMetadata(input, registry = null, tolerant = true) {
   if (typeof input === 'string') {
@@ -186,8 +199,11 @@ export function verifyNonAmplification(beforeInput, afterInput, options = {}) {
   const tolerant = options.tolerant ?? true
   const sourceSpaceId = options.sourceSpaceId || 'self'
 
-  const beforeMeta = normalizeMigrationMetadata(beforeInput, registry, tolerant)
-  const afterMeta = normalizeMigrationMetadata(afterInput, registry, tolerant)
+  // With options.docPath (a canonical document under options.selfRoot), both sides are compared as the catalog would
+  // serve them: frontmatter plus inherited _policy.yaml defaults. Without it, inputs are taken as already effective.
+  const policyDocPath = sourceSpaceId === 'self' && options.selfRoot && options.docPath ? options.docPath : null
+  const beforeMeta = effectiveMigrationMetadata(normalizeMigrationMetadata(beforeInput, registry, tolerant), policyDocPath, options.selfRoot, registry)
+  const afterMeta = effectiveMigrationMetadata(normalizeMigrationMetadata(afterInput, registry, tolerant), policyDocPath, options.selfRoot, registry)
 
   const lenses = collectMigrationLenses(registry, beforeMeta, afterMeta)
   const allLensIds = new Set(lenses.map(l => l.id))
@@ -352,17 +368,35 @@ export function planPolicyMigration(selfRoot, options = {}) {
 
     const rawParsed = frontmatter(text, { tolerant: true, validatePrivacy: false, registry })
     const rawMeta = rawParsed.metadata
+    // Parse exactly as the catalog does (src/catalog/source.mjs), then layer inherited _policy.yaml defaults onto
+    // canonical (self) documents, so BEFORE is the effective metadata the runtime actually serves from.
     const parsed = frontmatter(text, { tolerant: true, registry })
+    const effectiveOf = meta => effectiveMigrationMetadata(meta, item.kind === 'self' ? item.absPath : null, selfRoot, registry)
+    const resolvedPolicy = item.kind === 'self' ? resolveDocumentPolicy(item.absPath, selfRoot, parsed.metadata, registry) : null
+    const beforeEffective = resolvedPolicy ? resolvedPolicy.effectiveMetadata : parsed.metadata
     const wasRestricted = parsed.warnings.some(w => w.includes('restricted')) || privacyMetadataErrors(rawMeta, registry).length > 0
-    const meetMeta = computeMeetMetadata(parsed.metadata, item.kind, registry)
+    const governedByDirectoryPolicy = Boolean(
+      resolvedPolicy &&
+        !wasRestricted &&
+        !Object.hasOwn(rawMeta, 'visibility') &&
+        !Object.hasOwn(rawMeta, 'public_safe') &&
+        !Object.hasOwn(rawMeta, 'access_lenses') &&
+        Array.isArray(resolvedPolicy.policyDefaults.access_lenses) &&
+        resolvedPolicy.policyDefaults.access_lenses.length > 0
+    )
+    const meetMeta = governedByDirectoryPolicy ? beforeEffective : computeMeetMetadata(beforeEffective, item.kind, registry)
 
     const changes = {}
-    if (rawMeta.read_scope !== meetMeta.read_scope) changes.read_scope = meetMeta.read_scope
-    const beforeAccess = Array.isArray(rawMeta.access_lenses) ? rawMeta.access_lenses : null
-    if (!beforeAccess || JSON.stringify(beforeAccess) !== JSON.stringify(meetMeta.access_lenses)) {
-      changes.access_lenses = meetMeta.access_lenses
+    if (!governedByDirectoryPolicy) {
+      // Compare against the document's own frontmatter so inherited values are pinned explicitly: a migrated
+      // document is self-describing and a later _policy.yaml edit cannot widen it.
+      if (rawMeta.read_scope !== meetMeta.read_scope) changes.read_scope = meetMeta.read_scope
+      const beforeAccess = Array.isArray(rawMeta.access_lenses) ? rawMeta.access_lenses : null
+      if (!beforeAccess || JSON.stringify(beforeAccess) !== JSON.stringify(meetMeta.access_lenses)) {
+        changes.access_lenses = meetMeta.access_lenses
+      }
     }
-    if (wasRestricted) {
+    if (!governedByDirectoryPolicy && wasRestricted) {
       if (rawMeta.visibility !== undefined && rawMeta.visibility !== meetMeta.visibility) changes.visibility = meetMeta.visibility
       if (rawMeta.disclosure !== undefined && rawMeta.disclosure !== meetMeta.disclosure) changes.disclosure = meetMeta.disclosure
       if (rawMeta.public_safe !== undefined && rawMeta.public_safe !== meetMeta.public_safe) changes.public_safe = meetMeta.public_safe
@@ -370,17 +404,29 @@ export function planPolicyMigration(selfRoot, options = {}) {
       if (rawMeta.document_role !== undefined && rawMeta.document_role !== meetMeta.document_role) changes.document_role = meetMeta.document_role
     }
 
+    if (Object.keys(changes).length > 0) {
+      // Migrated documents carry all four required fields plus read_scope, so access_lenses never lands without
+      // disclosure/sensitivity/document_role (canonical validation) and no required field is left to inheritance.
+      for (const key of MIGRATION_REQUIRED_FIELDS) {
+        if (!Object.hasOwn(changes, key) && rawMeta[key] === undefined && meetMeta[key] !== undefined) changes[key] = meetMeta[key]
+      }
+    }
+
     const beforeSha256 = hash(text)
     const needsMigration = Object.keys(changes).length > 0
     let afterText = text
     let afterSha256 = beforeSha256
+    let afterEffective = beforeEffective
 
     if (needsMigration) {
       afterText = applyFrontmatterModifications(text, changes)
       afterSha256 = hash(afterText)
       const afterParsed = frontmatter(afterText, { tolerant: true, registry })
+      // AFTER is resolved with inheritance too: an edit that turns policy inheritance on (or off) is judged on the
+      // metadata the catalog would really use.
+      afterEffective = effectiveOf(afterParsed.metadata)
 
-      const nonAmp = verifyNonAmplification(parsed.metadata, afterParsed.metadata, {
+      const nonAmp = verifyNonAmplification(beforeEffective, afterEffective, {
         registry,
         sourceSpaceId: item.spaceId
       })
@@ -402,8 +448,8 @@ export function planPolicyMigration(selfRoot, options = {}) {
       after_sha256: afterSha256,
       needs_migration: needsMigration,
       changes,
-      before_metadata: parsed.metadata,
-      after_metadata: meetMeta,
+      before_metadata: beforeEffective,
+      after_metadata: needsMigration ? afterEffective : meetMeta,
       before_text: text,
       after_text: afterText
     })

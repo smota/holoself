@@ -8,10 +8,87 @@ import { bindingsPath } from '../../../bindings.mjs'
 import { loadLensRegistry } from '../../../lenses.mjs'
 import { createLinkDirs, inspectLinkCollisions, linkPath, linkSchemaErrors, writeLink } from '../../../link/config.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { lstat } from '../../../path-guard.mjs'
 import { atomicWrite, pathExists, safeRealpath, slash } from '../../../shared/fs.mjs'
+import { applySpaceAction, planSpaceAction } from '../../../space-actions.mjs'
 import { askConfirm, askValue, setupFindings, hookPlanSummary, mcpPlanSummary, printHookResults } from '../../link-helpers.mjs'
 
+async function migrateLegacyMount(o, project) {
+  const findings = setupFindings(project),
+    request = {
+      root: o.self,
+      project,
+      action: 'setup',
+      lens: o.lens || findings.suggested_lens || 'general',
+      explicitLens: o.lens,
+      secondaryLenses: o.secondaryLenses,
+      projectContext: o.projectContext,
+      activate: o.activate,
+      platforms: o.platforms,
+      instructions: o.instructions,
+      installSkill: o.installSkill,
+      hooks: o.hooks,
+      mcp: o.mcp,
+      approveReadTools: o.approveReadTools,
+      skillHome: o.skillHome,
+      force: o.force,
+      noActivate: o.noActivate
+    },
+    plan = planSpaceAction(request),
+    metadata = join(plan.project, '.holoself'),
+    mountDep = plan.dependencies.find(x => x.path === metadata)
+  const preview = {
+    mode: 'legacy-mount-migration',
+    legacy: true,
+    project: slash(plan.project),
+    self: slash(plan.root),
+    mount: slash(metadata),
+    mount_target: slash(mountDep?.target || plan.root),
+    default_lens: plan.configuration.link.default_lens,
+    secondary_lenses: plan.configuration.link.secondary_lenses,
+    plan_hash: plan.plan_hash,
+    files: plan.files.map(item => ({ path: slash(item.path), operation: item.operation })),
+    transient_files: plan.transient_files.map(slash),
+    findings,
+    ...(plan.activation
+      ? {
+          activation_plan: {
+            canonical: plan.activation.canonical,
+            adapters: plan.activation.adapters,
+            skills: plan.activation.skills,
+            global_skills: plan.activation.globalSkills,
+            ...hookPlanSummary(plan.activation),
+            ...mcpPlanSummary(plan.activation),
+            writes: plan.activation.writes
+          }
+        }
+      : {})
+  }
+  console.log(JSON.stringify(preview, null, 2))
+  if (o.dryRun) {
+    console.log('[dry-run] setup complete; no files deleted or relocated')
+    return true
+  }
+  if (
+    !(await askConfirm(
+      o,
+      `Migrate legacy mount ${metadata} -> ${plan.root} to a metadata link using ${plan.configuration.link.default_lens} lens?`
+    ))
+  ) {
+    console.log('Cancelled.')
+    return true
+  }
+  const applied = await applySpaceAction(request, plan.plan_hash, { afterConfigure: o.afterConfigure })
+  if (applied.activation) {
+    for (const item of applied.activation.results) console.log(` - ${item.id}: ${item.file} (${item.result})`)
+    printHookResults(applied.activation)
+  }
+  console.log('[ok] setup complete; no files deleted or relocated')
+  return true
+}
+
 export async function linkSetup(o, sub, project) {
+  if (lstat(join(project, '.holoself'))?.isSymbolicLink()) return migrateLegacyMount(o, project)
   const findings = setupFindings(project)
   console.log(JSON.stringify(findings, null, 2))
   let self = o.self
