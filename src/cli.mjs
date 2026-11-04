@@ -145,13 +145,13 @@ function help() {
       `section-replacement|instruction-replacement] [--output <plan>]\n  knowledge cleanup [--output <plan>] | ` +
       `--apply <plan> --digest <sha256> --yes\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides ` +
       `environment).\nActivation: --activate auto|all|<list> --platform <id> --instructions <file> --install-skill ` +
-      `auto|project|global|none --no-activate --hooks|--no-hooks.\nProject filters: --project-include/--project-exclude and ` +
+      `auto|project|global|none --no-activate --hooks|--no-hooks --mcp|--no-mcp [--approve-read-tools].\nProject filters: --project-include/--project-exclude and ` +
       (`--project-assert-include/--project-assert-exclude <globs>.
 Efficiency: context supports --budget small|standard|deep|unbounded, --manifest, repeatable --source, and ` +
         `--temporal current|historical|superseded|all.\nInstruction consolidation: instructions render|audit --project ` +
         `<dir>.\nSafety confirmations: --yes. Packet adapters: --adapter ` +
         `pi|claude|codex|generic|obsidian|restricted-host.\nMCP: mcp [--project <linked-project>] | mcp ` +
-        `configure|status --project <dir> [--platform codex|agy|claude].\n`)
+        `configure|status --project <dir> [--platform codex|agy|claude | --all-detected] [--force-replace].\n`)
   )
 }
 async function confirm(o, message) {
@@ -286,12 +286,24 @@ export async function run(argv) {
       return
     }
     if (action !== 'configure') throw new Error('mcp requires no subcommand, status, or configure')
-    const plan = mcpConfigurationPlan(o.project, { platforms: o.platforms || [] }),
+    if (o.allDetected && o.platforms?.length) throw new Error('--all-detected cannot be combined with --platform')
+    const options = { platforms: o.platforms || [], allDetected: o.allDetected === true, forceReplace: o.forceReplace === true },
+      plan = mcpConfigurationPlan(o.project, options),
       publicPlan = { ...plan, _changes: undefined }
     console.log(JSON.stringify({ configuration_plan: publicPlan }, null, 2))
     if (o.dryRun) return
-    if (!(await confirm(o, `Configure local STDIO MCP files for ${plan.changes.map(change => change.platform).join(', ')} in ${o.project}?`))) return
-    console.log(JSON.stringify(applyMcpConfiguration(o.project, { platforms: o.platforms || [] }), null, 2))
+    if (!plan.changes.length) {
+      console.log('No MCP clients detected for this project; nothing to configure.')
+      return
+    }
+    const replacing = plan.changes.filter(change => change.action === 'replace').map(change => change.relative)
+    if (replacing.length && !o.yes && !(input.isTTY && output.isTTY))
+      throw new Error(`--force-replace overwrites the existing holoself MCP server in ${replacing.join(', ')}; re-run with --yes to confirm.`)
+    const question =
+      `Configure local STDIO MCP files for ${plan.changes.map(change => change.platform).join(', ')} in ${o.project}` +
+      `${replacing.length ? `, replacing the existing holoself server in ${replacing.join(', ')}` : ''}?`
+    if (!(await confirm(o, question))) return
+    console.log(JSON.stringify(applyMcpConfiguration(o.project, { ...options, expectedPlanHash: plan.plan_sha256 }), null, 2))
     return
   }
   if (o.command === 'data-root') {

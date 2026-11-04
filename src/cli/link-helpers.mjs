@@ -59,6 +59,8 @@ export async function activateLinkedProject(o, project, link, verb = 'Activate',
     instructions: o.instructions,
     installSkill: o.installSkill || readRuntime(project)?.skillInstallPolicy || 'auto',
     hooks: o.hooks || readRuntime(project)?.hookPolicy || 'auto',
+    mcp: o.mcp || readRuntime(project)?.mcpPolicy || 'auto',
+    approveReadTools: o.approveReadTools ?? readRuntime(project)?.mcpApproveReadTools === true,
     skillHome: o.skillHome,
     dryRun: o.dryRun,
     force: o.force
@@ -91,6 +93,7 @@ export async function activateLinkedProject(o, project, link, verb = 'Activate',
           skills: plan.skills,
           global_skills: plan.globalSkills,
           ...hookPlanSummary(plan),
+          ...mcpPlanSummary(plan),
           writes: plan.writes
         }
       },
@@ -112,8 +115,34 @@ export function hookPlanSummary(plan) {
     ...(plan.unsupportedHooks.length ? { unsupported_hooks: plan.unsupportedHooks } : {})
   }
 }
+// MCP part of an activation plan: which hosts get the project-local MCP entry, and which keep BOOTSTRAP + CLI.
+export function mcpPlanSummary(plan) {
+  return {
+    mcp_policy: plan.mcpPolicy,
+    mcp_approve_read_tools: plan.mcpApproveReadTools,
+    mcp_servers: plan.mcp.map(({ adapter, file, support, install, action, approval, approval_action, reason }) => ({
+      adapter,
+      file,
+      support,
+      install,
+      action,
+      ...(approval ? { read_tool_approval: approval } : {}),
+      ...(approval_action ? { approval_action } : {}),
+      ...(reason ? { reason } : {})
+    })),
+    ...(plan.mcpFallback.length ? { mcp_fallback: plan.mcpFallback } : {}),
+    ...(plan.mcp.some(entry => entry.install && entry.adapter !== 'claude')
+      ? { mcp_commit_warning: 'Codex and AGY MCP configuration embeds this host project path; keep it uncommitted unless explicitly reviewed.' }
+      : {})
+  }
+}
 export function printHookResults(result) {
   for (const item of result.hookResults || []) console.log(` - ${item.adapter}: ${item.file} ${item.event} hook (${item.result})`)
+  for (const item of result.mcpResults || [])
+    console.log(
+      ` - ${item.adapter}: ${item.file} MCP server (${item.result})${item.approval_action ? `; read-tool approvals (${item.approval_action})` : ''}` +
+        `${item.approve_read_tools && item.approval?.mechanism === 'documented-only' ? `; read-tool approvals not written: ${item.approval.example}` : ''}`
+    )
 }
 export function commandStatus() {
   const invoked = slash(resolve(process.argv[1] || '')),

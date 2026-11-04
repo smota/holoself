@@ -79,6 +79,27 @@ Holoself adds one entry to the Claude Code settings file:
 - **Hook mode.** `--hook holoself-session-start` makes `holoself context` exit 0 in every case, write nothing to stderr, and print only the packet. Any refusal (revoked link, missing lens binding, missing self root, unknown hook id, no project, `--restricted-host` or a non-packet format) prints nothing, so the session starts without context rather than with context Holoself didn't authorise. The packet is capped at 9,000 bytes, because Claude Code moves hook output above 10,000 characters to a file and shows the model only a preview; documents are dropped first and the receipt is kept. Set `HOLOSELF_HOOK_AUDIT_LOG=<absolute file>` to append one line per run with the outcome, error code, packet id and receipt; it records no content or paths and uses the same hardened writer as the MCP audit log (no symlinks or hard links, mode 0600, 10 MiB cap).
 - **Status.** `link status` lists `session_start_hooks` for each activated host as `installed`, `missing`, `drifted`, `untracked`, `disabled`, `not-installed`, or `unsupported`. `link doctor` summarises them in `checks.session_start_hook`; `missing` and `drifted` make the link degraded.
 
+## MCP servers
+
+Activation also configures the project-local MCP server for hosts where Holoself MCP is verified (see [local MCP](local-mcp.md)). The default (`auto`) covers each activated host whose MCP support is `verified` in `docs/reference/platform-verification.json`; a host is activated when it is detected for this project (its directory or instruction file) or selected with `--platform`/`--activate`. Other hosts, such as Pi or Gemini CLI, keep `.holoself/BOOTSTRAP.md` and the CLI and are listed under `mcp_fallback`.
+
+| Host | File | Default |
+|---|---|---|
+| Claude Code | `.mcp.json` | configured when activated (verified on 2.1.318) |
+| Codex | `.codex/config.toml` managed block | configured when activated (verified on 0.166.0) |
+| AGY | `.agents/mcp_config.json` | configured when activated (verified on 1.5.0) |
+
+```text
+holoself link activate --project . --no-mcp --yes          # keep BOOTSTRAP + CLI only
+holoself link activate --project . --mcp --yes             # every activated MCP-capable host, verified or not
+holoself link activate --project . --approve-read-tools --yes
+```
+
+- **Plan.** `mcp_policy`, `mcp_servers` (with `install`, `action` and any `reason`), `mcp_fallback` and, when Codex or AGY are configured, `mcp_commit_warning` are printed before confirmation and by `--dry-run`.
+- **Ownership.** `.holoself/runtime.json` records `mcpPolicy`, `mcpApproveReadTools` and `mcpInstallations` (file, whether Holoself created the file or the `mcpServers` container, and the approval entries it added). `link repair` restores them. `link deactivate`, including `--adapters <host>`, removes only those recorded entries: other MCP servers, other permissions and your own copies of the same rules stay, and a file Holoself created is deleted when nothing else is left in it. A recorded entry that was changed by hand is reported as `unremovable` and left alone. Entries written by `holoself mcp configure` are not recorded and are not removed by deactivation.
+- **Collisions.** The default skips a host whose file already has a different `holoself` server and reports `action: skipped`; `--mcp` refuses instead. Symlinked or invalid configuration files are refused before any write, and MCP writes roll back with the other managed files.
+- **Read-tool pre-approval.** `--approve-read-tools` is opt-in and recorded; `--no-approve-read-tools` removes the recorded entries. It never includes `holoself_proposal_create`. Claude Code entries go in `.claude/settings.local.json` next to the session-start hook, Codex entries in the managed block, and AGY is documented only (no project settings file).
+
 ## User-level skills and project cleanup
 
 Install or inspect the complete public skill once for the current user:

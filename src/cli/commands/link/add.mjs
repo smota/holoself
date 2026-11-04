@@ -8,7 +8,7 @@ import { loadLensRegistry } from '../../../lenses.mjs'
 import { DEFAULT_PROJECT_EXCLUDES, createLinkDirs, inspectLinkCollisions, linkPath, linkSchemaErrors, writeLink } from '../../../link/config.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { atomicWrite, pathExists, safeRealpath, slash } from '../../../shared/fs.mjs'
-import { askConfirm, hookPlanSummary, printHookResults } from '../../link-helpers.mjs'
+import { askConfirm, hookPlanSummary, mcpPlanSummary, printHookResults } from '../../link-helpers.mjs'
 
 export async function linkAdd(o, sub, project) {
   if (!o.self) throw new Error('link add requires --self <path>')
@@ -43,6 +43,8 @@ export async function linkAdd(o, sub, project) {
       instructions: o.instructions,
       installSkill: o.installSkill || 'auto',
       hooks: o.hooks,
+      mcp: o.mcp,
+      approveReadTools: o.approveReadTools,
       skillHome: o.skillHome,
       dryRun: o.dryRun,
       force: o.force
@@ -66,7 +68,7 @@ export async function linkAdd(o, sub, project) {
             })),
             skills: plan.skills,
             global_skills: plan.globalSkills,
-            ...hookPlanSummary(plan),
+            ...hookPlanSummary(plan), ...mcpPlanSummary(plan),
             writes: plan.writes
           }
         },
@@ -135,6 +137,8 @@ export async function linkAdd(o, sub, project) {
         instructions: o.instructions,
         installSkill: o.installSkill || 'auto',
         hooks: o.hooks,
+        mcp: o.mcp,
+        approveReadTools: o.approveReadTools,
         skillHome: o.skillHome,
         dryRun: o.dryRun,
         force: o.force

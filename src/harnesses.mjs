@@ -12,6 +12,10 @@ function candidates(name, env = process.env, platform = process.platform) {
   const exts = platform === 'win32' ? (env.PATHEXT || '.EXE;.CMD;.BAT').split(';') : ['']
   return (env.PATH || '').split(platform === 'win32' ? ';' : delimiter).flatMap(dir => exts.map(ext => join(dir, name + ext.toLowerCase())))
 }
+// Regular files named `name` on PATH, in PATH order (with PATHEXT variants on Windows).
+export function executablesOnPath(name, env = process.env, platform = process.platform) {
+  return candidates(name, env, platform).filter(path => isAbsolute(path) && existsSync(path) && lstatSync(path).isFile())
+}
 function shimInvocation(path) {
   try {
     const text = readFileSync(path, 'utf8'),

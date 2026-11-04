@@ -26,6 +26,21 @@ import {
 import { injectMarker, managedBlockHash, managedMarkerState, markerInfo, removeMarker } from './adapters/markers.mjs'
 import { contentHash, globalSkillStatus, inspectGlobalSkillPath, normalizedSkill, skillState } from './adapters/global-skills.mjs'
 import { HOOK_HOSTS, HOOK_ID, HOOK_NOT_INSTALLED, HOOK_POLICIES, hookChange, hookSupport, inspectHook } from './adapters/hooks.mjs'
+import {
+  MCP_POLICIES,
+  applyMcpEntryChanges,
+  applyMcpRemovals,
+  mcpActivationEntries,
+  mcpEntryChanges,
+  mcpFallbackAdapters,
+  mcpInstallationRecord,
+  mcpRemovalChanges,
+  mcpRemovalFiles,
+  mcpRemovalKept,
+  recordedMcp
+} from './adapters/mcp-activation.mjs'
+import { CLAUDE_APPROVAL_FILE } from './adapters/mcp-approvals.mjs'
+import { removeEmptyMcpDirs } from './mcp-config.mjs'
 export { globalSkillStatus, installGlobalSkills } from './adapters/global-skills.mjs'
 export { injectMarker, managedMarkerState, removeMarker } from './adapters/markers.mjs'
 export { detectAdapters, safeProjectFile } from './adapters/registry.mjs'
@@ -102,6 +117,9 @@ export function activationPlan(project, options = {}) {
   const unsupportedHooks = mapped
     .filter(adapter => adapter.id !== 'agents' && !HOOK_HOSTS[adapter.id])
     .map(adapter => ({ adapter: adapter.id, state: 'unsupported', reason: HOOK_NOT_INSTALLED[adapter.id] || 'No session-start hook integration for this host.' }))
+  const mcpPolicy = options.mcp || 'auto'
+  if (!MCP_POLICIES.includes(mcpPolicy)) throw new Error(`invalid MCP policy: ${mcpPolicy}`)
+  const adapterIds = mapped.map(adapter => adapter.id)
   return {
     canonical,
     adapters: mapped,
@@ -110,6 +128,10 @@ export function activationPlan(project, options = {}) {
     hookPolicy,
     hooks,
     unsupportedHooks,
+    mcpPolicy,
+    mcpApproveReadTools: options.approveReadTools === true,
+    mcp: mcpActivationEntries(adapterIds, mcpPolicy, options.approveReadTools === true),
+    mcpFallback: mcpFallbackAdapters(adapterIds),
     writes: unique(['.holoself/BOOTSTRAP.md', '.holoself/runtime.json', ...mapped.map(x => x.file), ...skills.map(x => x.file)])
   }
 }
@@ -216,14 +238,31 @@ function preflight(project, plan, options = {}) {
   }
   for (const skill of plan.globalSkills || [])
     if (!['full-public-skill-current', 'full-public-skill-compatible'].includes(skill.status)) collisions.push(`${skill.path}: global skill ${skill.status}`)
-  const runtime = readRuntime(project)
+  const runtime = readRuntime(project),
+    hookAfter = {}
   for (const hook of plan.hooks || []) {
     try {
       const change = hookChange(project, hook.adapter, hook.install, hookRecordOptions(recordedHook(runtime, hook.adapter)))
       hook.action = change.action
+      hookAfter[hook.adapter] = { text: change.after, exists: change.after !== null }
       if (change.action !== 'unchanged' && !plan.writes.includes(hook.file)) plan.writes.push(hook.file)
     } catch (error) {
       collisions.push(error.message)
+    }
+  }
+  for (const entry of plan.mcp || []) {
+    try {
+      const changes = mcpEntryChanges(project, entry, recordedMcp(runtime, entry.adapter), { claudeBase: entry.adapter === 'claude' ? hookAfter.claude : null })
+      entry.action = changes.server?.action ?? 'unchanged'
+      if (changes.approval) entry.approval_action = changes.approval.action
+      if (changes.server && changes.server.action !== 'unchanged' && !plan.writes.includes(entry.file)) plan.writes.push(entry.file)
+      if (changes.approval && changes.approval.action !== 'unchanged' && !plan.writes.includes(CLAUDE_APPROVAL_FILE)) plan.writes.push(CLAUDE_APPROVAL_FILE)
+    } catch (error) {
+      // The default never overrides a divergent `holoself` entry: the host is skipped and keeps the CLI fallback.
+      if (error.code === 'MCP_DIVERGENT' && plan.mcpPolicy === 'auto' && entry.install) {
+        Object.assign(entry, { install: false, approve_read_tools: false, approval: null, action: 'skipped' })
+        entry.reason = `${error.message}; review it, then run holoself mcp configure --platform ${entry.adapter} --force-replace to replace it`
+      } else collisions.push(error.message)
     }
   }
   for (const rel of options.metadataAbsent ? [] : ['.holoself/BOOTSTRAP.md', '.holoself/runtime.json']) {
@@ -236,6 +275,14 @@ function preflight(project, plan, options = {}) {
 export function preflightActivation(project, options = {}) {
   const plan = activationPlan(project, options)
   return preflight(project, plan, options)
+}
+// The Claude approval removal edits the same settings file as the hook removal, so it starts from the hook's result.
+function claudeRemovalBase(runtime, hookRemovals) {
+  const change = hookRemovals.find(item => item.adapter === 'claude')?.change
+  return {
+    claudeBase: change ? { text: change.after, exists: change.after !== null } : null,
+    claudeFileCreated: recordedHook(runtime, 'claude')?.createdFile === true
+  }
 }
 function snapshotPaths(project, rels) {
   return rels.map(rel => {
@@ -260,6 +307,7 @@ export function activateProject(project, link, options = {}) {
       results: plan.adapters.map(x => ({ ...x, result: 'planned' })),
       skillResults: plan.skills.map(x => ({ ...x, result: 'planned' })),
       hookResults: plan.hooks.map(x => ({ ...x, result: 'planned' })),
+      mcpResults: plan.mcp.map(x => ({ ...x, result: x.action === 'skipped' ? 'skipped' : 'planned' })),
       runtime: null
     }
   const previousRuntime = readRuntime(project),
@@ -279,7 +327,9 @@ export function activateProject(project, link, options = {}) {
     snapshots = snapshotPaths(project, plan.writes),
     results = [],
     skillResults = [],
-    hookResults = []
+    hookResults = [],
+    mcpResults = [],
+    mcpCreatedDirs = []
   try {
     atomicWrite(safeProjectFile(project, '.holoself/BOOTSTRAP.md', 'bootstrap write'), bootstrapText(link), { mode: 0o666 })
     for (const adapter of plan.adapters) {
@@ -314,6 +364,25 @@ export function activateProject(project, link, options = {}) {
       return { id: x.adapter, file: x.file, status: 'installed', kind: 'full-public-skill', owned, contentHash: owned ? contentHash(text) : null }
     })
     if (options.afterHooks) options.afterHooks()
+    const mcpInstallations = []
+    for (const entry of plan.mcp) {
+      if (entry.action === 'skipped') {
+        mcpResults.push({ ...entry, result: 'skipped' })
+        continue
+      }
+      const previous = recordedMcp(previousRuntime, entry.adapter),
+        changes = mcpEntryChanges(project, entry, previous)
+      if (changes.server?.action !== 'unchanged') mcpCreatedDirs.push(...(changes.server?.createdDirs || []))
+      applyMcpEntryChanges(changes)
+      mcpResults.push({
+        ...entry,
+        action: changes.server?.action ?? 'unchanged',
+        ...(changes.approval ? { approval_action: changes.approval.action } : {}),
+        result: changes.server?.action ?? 'unchanged'
+      })
+      if (entry.install) mcpInstallations.push(mcpInstallationRecord(entry, changes, previous))
+    }
+    if (options.afterMcp) options.afterMcp()
     const globalInstallations = (plan.globalSkills || []).map(x => ({
       id: x.id,
       file: x.file,
@@ -349,15 +418,19 @@ export function activateProject(project, link, options = {}) {
       skillShims: installations.map(({ contentHash, ...x }) => ({ ...x, status: 'active' })),
       hookPolicy: plan.hookPolicy,
       hookInstallations,
+      mcpPolicy: plan.mcpPolicy,
+      mcpApproveReadTools: plan.mcpApproveReadTools,
+      mcpInstallations,
       fallback: '.holoself/BOOTSTRAP.md',
       instructionEvidence: instructionEvidence(link),
       lastValidated: new Date().toISOString(),
       toolVersion: VERSION
     }
     atomicWrite(runtimeFile(project), JSON.stringify(runtime, null, 2) + '\n', { mode: 0o666 })
-    return { plan, results, skillResults, hookResults, runtime }
+    return { plan, results, skillResults, hookResults, mcpResults, runtime }
   } catch (error) {
     rollback(snapshots)
+    removeEmptyMcpDirs(project, mcpCreatedDirs)
     throw error
   }
 }
@@ -426,7 +499,8 @@ function deactivateAdapters(project, ids, options = {}) {
     const state = skillState(safeProjectFile(project, file, 'skill deactivation preflight'))
     if (['unsafe', 'malformed'].includes(state)) throw new Error(`deactivation preflight failed: ${file}: ${state}`)
   }
-  const hookRemovals = hookRemovalChanges(project, hookRemovalTargets(project, runtime, selected))
+  const hookRemovals = hookRemovalChanges(project, hookRemovalTargets(project, runtime, selected)),
+    mcpRemovals = mcpRemovalChanges(project, runtime, selected, claudeRemovalBase(runtime, hookRemovals))
   const keptFiles = new Set([
     ...recorded.filter(x => remaining.includes(x.id)).map(x => x.file),
     ...installations.filter(x => remaining.includes(x.id)).map(x => x.file)
@@ -434,7 +508,13 @@ function deactivateAdapters(project, ids, options = {}) {
   const installationByFile = new Map(installations.map(x => [x.file, x])),
     snapshots = snapshotPaths(
       project,
-      unique([...instructionFiles.map(x => x.file), ...skillFiles.map(x => x.file), ...hookRemovals.map(x => x.file), '.holoself/runtime.json'])
+      unique([
+        ...instructionFiles.map(x => x.file),
+        ...skillFiles.map(x => x.file),
+        ...hookRemovals.map(x => x.file),
+        ...mcpRemovalFiles(mcpRemovals),
+        '.holoself/runtime.json'
+      ])
     ),
     results = []
   try {
@@ -457,6 +537,7 @@ function deactivateAdapters(project, ids, options = {}) {
       } else results.push({ adapter, file, result: removeSkill(project, file, options.dryRun) })
     }
     results.push(...applyHookRemovals(hookRemovals, options.dryRun))
+    results.push(...applyMcpRemovals(mcpRemovals, options.dryRun))
     for (const adapter of ids.filter(id => !active.includes(id))) results.push({ adapter, file: null, result: 'not-active' })
     if (!options.dryRun && runtime) {
       const keep = x => !selected.includes(x.id)
@@ -471,7 +552,8 @@ function deactivateAdapters(project, ids, options = {}) {
             ...(runtime.globalSkillInstallations ? { globalSkillInstallations: runtime.globalSkillInstallations.filter(keep) } : {}),
             ...(runtime.hookInstallations
               ? { hookInstallations: runtime.hookInstallations.filter(x => keep(x) || hookRemovals.some(r => r.adapter === x.id && !r.change)) }
-              : {})
+              : {}),
+            ...(runtime.mcpInstallations ? { mcpInstallations: runtime.mcpInstallations.filter(x => keep(x) || mcpRemovalKept(mcpRemovals).has(x.id)) } : {})
           },
           null,
           2
@@ -508,12 +590,14 @@ export function deactivateProject(project, options = {}) {
     const state = skillState(safeProjectFile(project, file, 'skill deactivation preflight'))
     if (['unsafe', 'malformed'].includes(state)) throw new Error(`deactivation preflight failed: ${file}: ${state}`)
   }
-  const hookRemovals = hookRemovalChanges(project, hookRemovalTargets(project, runtime))
-  const rels = unique([...instructionFiles, ...skillFiles, ...hookRemovals.map(x => x.file), '.holoself/runtime.json']),
+  const hookRemovals = hookRemovalChanges(project, hookRemovalTargets(project, runtime)),
+    mcpRemovals = mcpRemovalChanges(project, runtime, null, claudeRemovalBase(runtime, hookRemovals))
+  const rels = unique([...instructionFiles, ...skillFiles, ...hookRemovals.map(x => x.file), ...mcpRemovalFiles(mcpRemovals), '.holoself/runtime.json']),
     snapshots = snapshotPaths(project, rels)
   try {
     for (const file of instructionFiles) results.push({ file, result: removeMarker(project, file, options.dryRun) })
     results.push(...applyHookRemovals(hookRemovals, options.dryRun))
+    results.push(...applyMcpRemovals(mcpRemovals, options.dryRun))
     for (const file of skillFiles) {
       const path = safeProjectFile(project, file, 'skill discovery'),
         state = skillState(path)

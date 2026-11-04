@@ -23,6 +23,10 @@ export const ACTIVATION_FLAGS = [
   '--no-activate',
   '--hooks',
   '--no-hooks',
+  '--mcp',
+  '--no-mcp',
+  '--approve-read-tools',
+  '--no-approve-read-tools',
   '--force',
   '--dry-run',
   ...CONFIRM_FLAGS
@@ -71,7 +75,7 @@ export const COMMAND_FLAGS = {
   web: [...ROOT_FLAGS, '--project', '--port', '--no-open'],
   mcp: ['--project', '--claude-project-dir'],
   'mcp status': ['--project', '--platform', ...JSON_FLAGS],
-  'mcp configure': ['--project', '--platform', '--dry-run', ...CONFIRM_FLAGS, ...JSON_FLAGS],
+  'mcp configure': ['--project', '--platform', '--all-detected', '--force-replace', '--dry-run', ...CONFIRM_FLAGS, ...JSON_FLAGS],
   coaching: [],
   'coaching start': [...ROOT_FLAGS, '--question', ...JSON_FLAGS],
   'coaching note': [...ROOT_FLAGS, '--expected-revision', '--kind', '--text', ...JSON_FLAGS],
@@ -242,6 +246,16 @@ export function parse(args) {
       if (o.hooks && o.hooks !== value) throw new Error('--hooks and --no-hooks cannot be combined')
       o.hooks = value
     }
+    else if (a === '--mcp' || a === '--no-mcp') {
+      const value = a === '--mcp' ? 'on' : 'off'
+      if (o.mcp && o.mcp !== value) throw new Error('--mcp and --no-mcp cannot be combined')
+      o.mcp = value
+    } else if (a === '--approve-read-tools' || a === '--no-approve-read-tools') {
+      const value = a === '--approve-read-tools'
+      if (o.approveReadTools !== undefined && o.approveReadTools !== value) throw new Error('--approve-read-tools and --no-approve-read-tools cannot be combined')
+      o.approveReadTools = value
+    } else if (a === '--all-detected') o.allDetected = true
+    else if (a === '--force-replace') o.forceReplace = true
     else if (a === '--include-history') o.includeHistory = true
     else if (a === '--no-cache') o.noCache = true
     else if (a === '--format') o.format = requiredValue(args, i++, a)

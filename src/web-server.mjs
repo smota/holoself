@@ -10,6 +10,7 @@ import { loadLensRegistry, removeCustomLens, saveCustomLens, saveLensInstruction
 import { connectorLaunchPlan, launchConnector, loadConnectors, saveConnectorExtension, validateConnector } from './connectors.mjs'
 import { annotationSchema, validateAnnotationMetadata } from './annotations.mjs'
 import { applyCleanupPlan } from './cleanup.mjs'
+import { mcpClientOverview } from './mcp-config.mjs'
 import { canonicalPath, samePath } from './path-guard.mjs'
 import {
   CONFLICT_CODES,
@@ -339,6 +340,11 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
         return send(res, 200, { ok: true, data: clientCheck(() => applyCleanupPlan(root, b.plan, { expectedDigest: b.digest }), 'INVALID_CLEANUP_PLAN') })
       }
       if (url.pathname === '/api/connectors' && req.method === 'GET') return send(res, 200, { ok: true, data: loadConnectors(root) })
+      // Per linked space and MCP client: not-detected | detected | configured | verified | failing (read-only).
+      if (url.pathname === '/api/mcp/clients' && req.method === 'GET') {
+        const catalog = reconcileCatalog(root)
+        return send(res, 200, { ok: true, data: catalog.spaces.map(space => ({ id: space.id, path: space.path, ...mcpClientOverview(space.path) })) })
+      }
       if (url.pathname === '/api/connectors' && req.method === 'POST') {
         const b = await body(req)
         clientCheck(() => validateConnector(b), 'INVALID_CONNECTOR')
