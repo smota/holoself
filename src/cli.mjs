@@ -396,7 +396,7 @@ export async function run(argv) {
   }
   if (o.command === 'doctor') {
     const checks = [
-      ['node', Number(process.versions.node.split('.')[0]) >= 20],
+      ['node', Number(process.versions.node.split('.')[0]) >= 22],
       ['data root', existsSync(root)],
       ['config', existsSync(configPath(root))],
       ['profile', existsSync(join(root, 'profile'))],
