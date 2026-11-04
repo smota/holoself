@@ -4,7 +4,7 @@ import { DISCLOSURES } from './annotations.mjs'
 import { canonicalJson } from './catalog.mjs'
 import { HASH_RE } from './catalog/schema.mjs'
 import { CUSTOM_SENSITIVITY_CATEGORIES, DEFAULT_LENSES, DEFAULT_LENS_IDS, lensIdStructurallyValid, loadLensRegistry } from './lenses.mjs'
-import { allowedDocument, publicationAllowed } from './policy/access.mjs'
+import { allowedDocument, publicationAllowed, PUBLICATION_ADAPTERS } from './policy/access.mjs'
 import { frontmatter, privacyMetadataErrors, restrictPrivacyMetadata } from './policy/privacy-fields.mjs'
 import { atomicWrite, hash, slash } from './shared/fs.mjs'
 
@@ -108,7 +108,8 @@ export function applyFrontmatterModifications(text, changes) {
 
   const lines = frontmatterContent ? frontmatterContent.split(/\r?\n/) : []
   for (const [key, value] of Object.entries(changes)) {
-    const keyRegex = new RegExp(`^(\\s*)${key}\\s*:`, 'i')
+    // Top-level keys only: never rewrite a nested key such as field_visibility.visibility.
+    const keyRegex = new RegExp(`^()${key}\\s*:`)
     const existingLineIdx = lines.findIndex(l => keyRegex.test(l))
     let formattedVal = ''
     if (Array.isArray(value)) {
@@ -178,6 +179,8 @@ function loadMigrationRegistry(selfRoot) {
   }
 }
 
+export const VERIFY_NON_AMPLIFICATION_ADAPTERS = Object.freeze(['generic', ...PUBLICATION_ADAPTERS])
+
 export function verifyNonAmplification(beforeInput, afterInput, options = {}) {
   const registry = options.registry || (options.selfRoot ? loadMigrationRegistry(options.selfRoot) : null)
   const tolerant = options.tolerant ?? true
@@ -199,7 +202,7 @@ export function verifyNonAmplification(beforeInput, afterInput, options = {}) {
         ]
       : [])
   ]
-  const adapters = ['generic', 'public', 'obsidian-public', 'restricted-host']
+  const adapters = verifyNonAmplification.adapters
   const tasks = [
     null,
     ...(Array.isArray(beforeMeta.task_include) ? beforeMeta.task_include : []),
@@ -259,6 +262,7 @@ export function verifyNonAmplification(beforeInput, afterInput, options = {}) {
 
   return { valid: true, violation: null, coverageLoss }
 }
+verifyNonAmplification.adapters = VERIFY_NON_AMPLIFICATION_ADAPTERS
 
 export function validateMigrationPlanSchema(plan) {
   const errors = []

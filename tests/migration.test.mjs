@@ -12,7 +12,7 @@ import {
   applyPolicyMigration,
   applyFrontmatterModifications
 } from '../src/migration.mjs'
-import { accessLenses, allowedDocument, disclosure, publicationAllowed, visibility } from '../src/policy/access.mjs'
+import { accessLenses, allowedDocument, disclosure, publicationAllowed, visibility, PUBLICATION_ADAPTERS } from '../src/policy/access.mjs'
 import { frontmatter } from '../src/policy/privacy-fields.mjs'
 
 async function temp(prefix = 'holoself-migration-') {
@@ -548,4 +548,68 @@ test('regression (d): synthetic exhaustive check over visibility x public_safe x
   assert.equal(planWidened, 0)
   assert.equal(exactWidened, 0)
   assert.equal(exactFalseCoverageLoss, 0)
+})
+
+test('regression (e): applyFrontmatterModifications anchors keys at column 0 to preserve nested field_visibility', async () => {
+  // Assert verifyNonAmplification adapter list includes every entry of PUBLICATION_ADAPTERS
+  assert.ok(Array.isArray(verifyNonAmplification.adapters))
+  for (const adapter of PUBLICATION_ADAPTERS) {
+    assert.ok(
+      verifyNonAmplification.adapters.includes(adapter),
+      `verifyNonAmplification adapters must include publication adapter ${adapter}`
+    )
+  }
+
+  const self = await temp()
+  await mkdir(join(self, 'context'), { recursive: true })
+
+  const nestedLine = '  visibility: public-safe'
+  const initialContent = [
+    '---',
+    'field_visibility:',
+    nestedLine,
+    'visibility: private',
+    '---',
+    '# Canonical Doc',
+    'Body text.',
+    ''
+  ].join('\n')
+
+  const docPath = join(self, 'context', 'canonical-doc.md')
+  await writeFile(docPath, initialContent)
+
+  // Run the migrate-policy plan/apply path existing tests use
+  const plan = planPolicyMigration(self)
+  assert.equal(plan.summary.modified_files, 1)
+  assert.equal(plan.summary.non_amplification_verified, true)
+  assert.deepEqual(plan.summary.coverage_loss, {})
+
+  const entry = plan.entries[0]
+  assert.equal(entry.changes.read_scope, 'restricted')
+  assert.deepEqual(entry.changes.access_lenses, ['private'])
+
+  const receipt = applyPolicyMigration(self, plan.plan_id)
+  assert.equal(receipt.status, 'applied')
+
+  const updated = await readFile(docPath, 'utf8')
+
+  // Assert the nested line is byte-unchanged
+  assert.ok(
+    updated.includes(nestedLine),
+    'nested field_visibility line must remain byte-unchanged'
+  )
+  assert.match(updated, /field_visibility:\r?\n  visibility: public-safe/)
+
+  // Assert top-level key is the one migrated
+  assert.match(updated, /^visibility:\s*private/m)
+  assert.match(updated, /^read_scope:\s*restricted/m)
+  assert.match(updated, /^access_lenses:\s*\[private\]/m)
+
+  // Also assert directly that applyFrontmatterModifications modifies top-level key without rewriting nested key
+  const directModified = applyFrontmatterModifications(initialContent, { visibility: 'public-safe' })
+  assert.ok(
+    directModified.includes(nestedLine),
+    'applyFrontmatterModifications must not rewrite nested line when modifying visibility'
+  )
+  assert.match(directModified, /^visibility:\s*public-safe/m)
 })
