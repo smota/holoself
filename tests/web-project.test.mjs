@@ -4,10 +4,15 @@ import { normalizeProjectPath, writeBinding } from '../src/bindings.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, writeFile, lstat, readFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { tmpdir, homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { request } from 'node:http'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { run } from '../src/cli.mjs'
-import { startWebServer as startServer } from '../src/web-server.mjs'
+import { startWebServer as startServer, scrubMessage } from '../src/web-server.mjs'
+
+const BIN=fileURLToPath(new URL('../bin/holoself.mjs',import.meta.url))
 
 const temp=()=>mkdtemp(join(tmpdir(),'holoself-web-project-'))
 // Every Workbench API route requires the session token and mutations require a loopback Origin, as the served page sends them.
@@ -214,4 +219,129 @@ test('space plan binds absent adapter dependencies and restores regular setup af
  await assert.rejects(applySpaceAction(request,preview.plan_hash,{afterConfigure(){throw new Error('injected setup failure')}}),/injected setup failure/);assert.deepEqual([tree(self),tree(project)],before)
  mkdirSync(join(project,'.claude'));const drift=[tree(self),tree(project)];await assert.rejects(applySpaceAction(request,preview.plan_hash),{code:'PLAN_CHANGED'});assert.deepEqual([tree(self),tree(project)],drift)
  const current=planSpaceAction(request);await applySpaceAction(request,current.plan_hash);assert.ok(lstatSync(join(project,'.holoself','link.yaml')).isFile())
+})
+
+test('scrubMessage preserves URLs and relative tokens while redacting local paths with spaces',()=>{
+ assert.equal(scrubMessage('See https://example.com/x for details'),'See https://example.com/x for details')
+ assert.equal(scrubMessage('invalid pair key:/value in config'),'invalid pair key:/value in config')
+ assert.equal(scrubMessage('use and/or /api/lenses endpoint'),'use and/or /api/lenses endpoint')
+ assert.equal(scrubMessage('missing file C:\\Users\\John Smith\\x: not found'),'missing file <local-path>: not found')
+ const homeDoc=join(homedir(),'My Docs','x.md'),tmpDoc=join(tmpdir(),'My Docs','x.md')
+ assert.equal(scrubMessage(`cannot read ${homeDoc}: permission denied`),'cannot read <local-path>: permission denied')
+ assert.equal(scrubMessage(`cannot read ${tmpDoc}`),'cannot read <local-path>')
+ assert.equal(scrubMessage('cannot read /home/jane/My Docs/x.md: missing'),'cannot read <local-path>: missing')
+})
+
+test('bin/holoself.mjs emits structured JSON on stderr when HOLOSELF_ERROR_FORMAT=json and human format otherwise',()=>{
+ const refusal=spawnSync(process.execPath,[BIN,'unknown-subcommand'],{env:{...process.env,HOLOSELF_ERROR_FORMAT:'json'},encoding:'utf8'})
+ assert.equal(refusal.status,1)
+ const refusalLines=refusal.stderr.trim().split(/\r?\n/)
+ assert.equal(refusalLines.length,1)
+ const refusalJson=JSON.parse(refusalLines[0])
+ assert.equal(refusalJson.holoself_error.kind,'refusal')
+ assert.equal(refusalJson.holoself_error.name,'Error')
+ assert.match(refusalJson.holoself_error.message,/unknown command/i)
+
+ const internal=spawnSync(process.execPath,[BIN,'version'],{env:{...process.env,HOLOSELF_ERROR_FORMAT:'json',HOLOSELF_TEST_FORCE_INTERNAL:'1'},encoding:'utf8'})
+ assert.equal(internal.status,1)
+ const internalLines=internal.stderr.trim().split(/\r?\n/)
+ assert.equal(internalLines.length,1)
+ const internalJson=JSON.parse(internalLines[0])
+ assert.equal(internalJson.holoself_error.kind,'internal')
+ assert.equal(internalJson.holoself_error.name,'TypeError')
+
+ const humanEnv={...process.env};delete humanEnv.HOLOSELF_ERROR_FORMAT;delete humanEnv.HOLOSELF_TEST_FORCE_INTERNAL
+ const human=spawnSync(process.execPath,[BIN,'unknown-subcommand'],{env:humanEnv,encoding:'utf8'})
+ assert.equal(human.status,1)
+ assert.match(human.stderr,/^\[!!\] unknown command:/im)
+})
+
+test('Workbench maps validation and CLI refusals to 400/413, stale hashes to 409, and internal failures to 500 without leaking absolute paths',async()=>{
+ const self=await temp(),project=await temp(),missingDir=join(self,'missing-folder')
+ await run(['init','--root',self])
+ await run(['link','add','--project',project,'--self',self,'--lens','professional','--no-activate','--yes'])
+ const app=await startServer({root:self,port:0})
+ try{
+  const shell=await (await globalThis.fetch(app.url)).text(),meta=shell.match(/<meta name="holoself-token" content="([^"]+)">/)
+  assert.ok(meta?.[1])
+  const token=meta[1],origin=new URL(app.url).origin
+  const call=async(path,{method='GET',body,rawBody}={},expectedStatus)=>{
+   const headers={'x-holoself-token':token,...(method==='GET'?{}:{origin,'content-type':'application/json'})}
+   const res=await globalThis.fetch(`${app.url}${path}`,{method,headers,body:rawBody??(body!==undefined?JSON.stringify(body):undefined)})
+   const text=await res.text()
+   assert.equal(res.status,expectedStatus,`${method} ${path}: ${text}`)
+   for(const leaked of [self,project,tmpdir(),homedir()])assert.equal(text.includes(leaked),false,`leaked ${leaked} in ${text}`)
+   assert.doesNotMatch(text,/(?:^|[\s("'=])\/(?:tmp|home|var|usr|etc|opt|root|Users|private)\b|(?<![A-Za-z0-9])[A-Za-z]:[\\/](?!\/)/)
+   return JSON.parse(text)
+  }
+
+  const {port}=new URL(app.url)
+  const badHostStatus=await new Promise((ok,no)=>{const req=request({host:'127.0.0.1',port,path:'/api/session',method:'GET',headers:{host:`evil.example.com:${port}`,'x-holoself-token':token}},res=>{res.resume();res.on('end',()=>ok(res.statusCode))});req.on('error',no);req.end()})
+  assert.equal(badHostStatus,421)
+  const noToken=await globalThis.fetch(`${app.url}/api/session`)
+  assert.equal(noToken.status,403)
+  const badOrigin=await globalThis.fetch(`${app.url}/api/spaces/discover`,{method:'POST',headers:{'x-holoself-token':token,origin:'http://evil.example.com'}})
+  assert.equal(badOrigin.status,403)
+  const notFound=await call('/api/unknown-endpoint',{},404)
+  assert.equal(notFound.error.code,'not_found')
+
+  const badJson=await call('/api/spaces',{method:'POST',rawBody:'{not-json'},400)
+  assert.equal(badJson.ok,false);assert.equal(badJson.error.code,'INVALID_JSON')
+  const multiByteOverflow=JSON.stringify({text:'é'.repeat(1024*1024+32)})
+  assert.ok(multiByteOverflow.length<2*1024*1024&&Buffer.byteLength(multiByteOverflow)>2*1024*1024)
+  const tooLarge=await call('/api/spaces',{method:'POST',rawBody:multiByteOverflow},413)
+  assert.equal(tooLarge.ok,false);assert.equal(tooLarge.error.code,'PAYLOAD_TOO_LARGE')
+  await call('/api/filesystem/folders?path=relative/path',{},400)
+  await call(`/api/filesystem/folders?path=${encodeURIComponent(missingDir)}`,{},400)
+  const missingSpaceRefusal=await call('/api/spaces',{method:'POST',body:{path:missingDir,lens:'general'}},400)
+  assert.match(missingSpaceRefusal.error.message,/project not found: <local-path>/)
+  await call('/api/spaces/nonexistent-space',{method:'DELETE'},400)
+  await call('/api/document?path=..%2Fsecret.md',{},400)
+  await call('/api/document?path=profile%2Fmissing.md',{},400)
+  const lensesData=(await (await globalThis.fetch(`${app.url}/api/lenses`,{headers:{'x-holoself-token':token}})).json()).data
+  await call('/api/lenses/INVALID_ID',{method:'PUT',body:{definition:{schema_version:1,id:'INVALID_ID',title:'Bad'},expectedHash:lensesData.registry_hash}},400)
+
+  const currentBindings=(await (await globalThis.fetch(`${app.url}/api/bindings`,{headers:{'x-holoself-token':token}})).json()).data
+  const invalidLensBind=await call('/api/bindings',{method:'PUT',body:{project,default_lens:'nonexistent-lens',secondary_lenses:[],expectedHash:currentBindings.hash}},400)
+  assert.match(invalidLensBind.error.message,/unknown lens: nonexistent-lens/)
+
+  const spaces=(await (await globalThis.fetch(`${app.url}/api/spaces`,{headers:{'x-holoself-token':token}})).json()).data
+  const space=spaces.find(item=>normalizeProjectPath(item.path)===normalizeProjectPath(project))
+  assert.equal((await call('/api/bindings',{method:'PUT',body:{project,default_lens:'general',secondary_lenses:[],expectedHash:'0'.repeat(64)}},409)).error.code,'STALE_BINDINGS')
+  assert.equal((await call('/api/document',{method:'PUT',body:{path:'profile/identity.md',content:'# Identity\n',expectedHash:'0'.repeat(64)}},409)).error.code,'STALE_DOCUMENT')
+  assert.equal((await call('/api/lenses/general/instructions',{method:'PUT',body:{instructions:{purpose:'Test'},expectedHash:'0'.repeat(64)}},409)).error.code,'STALE_REGISTRY')
+  assert.equal((await call(`/api/spaces/${space.id}/repair`,{method:'POST',body:{apply:true,plan_hash:'0'.repeat(64)}},409)).error.code,'PLAN_CHANGED')
+  assert.equal((await call('/api/proposals/00000000-0000-4000-8000-000000000000/approve',{method:'POST',body:{project}},409)).error.code,'STALE_PREVIEW')
+  const badSourceProposal=await call('/api/proposals',{method:'POST',body:{project,claim:'Prefers concise review feedback',sourceFile:'missing-source.md',target:'profile/identity.md',evidence:'review'}},400)
+  assert.match(badSourceProposal.error.message,/source file not found or unsafe: missing-source\.md/)
+  const missingProposalApprove=await call('/api/proposals/00000000-0000-4000-8000-000000000000/approve',{method:'POST',body:{project,previewHash:'0'.repeat(64)}},400)
+  assert.match(missingProposalApprove.error.message,/proposal not found/i)
+  writeFileSync(join(project,'notes.md'),'# Notes\nPrefers concise review feedback.\n')
+  const createdProposal=(await (await globalThis.fetch(`${app.url}/api/proposals`,{method:'POST',headers:{'x-holoself-token':token,origin,'content-type':'application/json'},body:JSON.stringify({project,claim:'Prefers concise review feedback',sourceFile:'notes.md',target:'profile/identity.md',evidence:'review'})})).json()).data
+  const wrongPreviewApprove=await call(`/api/proposals/${createdProposal.proposal_id}/approve`,{method:'POST',body:{project,previewHash:'0'.repeat(64)}},409)
+  assert.equal(wrongPreviewApprove.error.code,'STALE_PREVIEW')
+  assert.match(wrongPreviewApprove.error.message,/proposal preview is stale/i)
+
+  const bindingsFile=join(self,'lenses','bindings.json'),originalBindings=readFileSync(bindingsFile,'utf8')
+  writeFileSync(bindingsFile,'{corrupt-bindings')
+  try{
+   const err1=await call('/api/bindings',{},500)
+   assert.deepEqual(err1,{ok:false,error:{code:'INTERNAL',message:'internal error'}})
+   const err2=await call('/api/overview',{},500)
+   assert.deepEqual(err2,{ok:false,error:{code:'INTERNAL',message:'internal error'}})
+  }finally{writeFileSync(bindingsFile,originalBindings)}
+
+  const lensFile=join(self,'lenses','general.json'),originalLens=readFileSync(lensFile,'utf8')
+  writeFileSync(lensFile,'{corrupt-lens')
+  try{
+   const err3=await call('/api/annotations/schema',{},500)
+   assert.deepEqual(err3,{ok:false,error:{code:'INTERNAL',message:'internal error'}})
+  }finally{writeFileSync(lensFile,originalLens)}
+
+  process.env.HOLOSELF_TEST_FORCE_INTERNAL='1'
+  try{
+   const err4=await call('/api/lenses',{},500)
+   assert.deepEqual(err4,{ok:false,error:{code:'INTERNAL',message:'internal error'}})
+  }finally{delete process.env.HOLOSELF_TEST_FORCE_INTERNAL}
+ }finally{await new Promise(done=>app.server.close(done))}
 })

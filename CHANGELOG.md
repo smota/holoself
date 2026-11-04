@@ -4,6 +4,8 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- Workbench error handling now distinguishes typed client validation errors (400/413) and stale-state conflicts (409) from unexpected internal or CLI subprocess failures (500 `{code:"INTERNAL",message:"internal error"}`), and scrubs absolute local paths from all HTTP error responses (#53).
+
 - Fix `superseded_by` frontmatter validation throwing a `ReferenceError` and silently dropping the document from the catalog; surface per-file catalog build errors as `[warn]` lines in `holoself validate` and `holoself doctor` and under the additive `warnings` key in `holoself link doctor` JSON with root-relative paths (#52).
 
 - Workbench hardening: the local server answers only `127.0.0.1:<port>` and `localhost:<port>` hosts, requires the session token on every `/api` request (the page now receives it in the served HTML, not from `/api/session`), accepts changes only from a loopback origin, and serves only regular files from its web directory.
