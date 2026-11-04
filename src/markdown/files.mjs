@@ -42,16 +42,19 @@ export function globRegex(pattern) {
 export function matchesAny(path, patterns) {
   return patterns.some(pattern => globRegex(pattern).test(path))
 }
-export function markdownFiles(root, { includeHoloself = false, skipDirs = SKIP_DIRS } = {}) {
+export function markdownFiles(root, { includeHoloself = false, skipDirs = SKIP_DIRS, onSymlink = null, caseInsensitiveExt = true } = {}) {
   const files = []
   if (!existsSync(root)) return files
   const walk = dir => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isSymbolicLink()) continue
-      if (entry.isDirectory() && (skipDirs.has(entry.name) || (!includeHoloself && entry.name === '.holoself'))) continue
       const path = join(dir, entry.name)
+      if (entry.isSymbolicLink()) {
+        if (onSymlink) onSymlink(path)
+        continue
+      }
+      if (entry.isDirectory() && (skipDirs.has(entry.name) || (!includeHoloself && entry.name === '.holoself'))) continue
       if (entry.isDirectory()) walk(path)
-      else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) files.push(path)
+      else if (entry.isFile() && (caseInsensitiveExt ? entry.name.toLowerCase().endsWith('.md') : entry.name.endsWith('.md'))) files.push(path)
     }
   }
   walk(root)

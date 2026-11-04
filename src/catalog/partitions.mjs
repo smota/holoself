@@ -9,7 +9,6 @@ import {
   getStatTuple,
   purgeLegacyIndex,
   readSourceWithStat,
-  slugHeading,
   sourceRef,
   validateCatalogSchema
 } from '../catalog.mjs'
@@ -19,7 +18,7 @@ import { sections } from '../markdown/text.mjs'
 import { SECRET_RE } from '../policy/secrets.mjs'
 import { ensureDir, hash, slash } from '../shared/fs.mjs'
 import { PACKAGE_ROOT } from '../shared/package-root.mjs'
-import { buildCatalogSource, catalogFilePath, catalogRoot } from './source.mjs'
+import { buildCatalogSections, buildCatalogSource, catalogFilePath, catalogRoot } from './source.mjs'
 
 export function isPartitionFresh(catalog, rootDir, files, registry, expectedContextHash, spaceId) {
   if (!catalog) return false
@@ -323,16 +322,8 @@ export function ensureContribPartition(packageRoot, registry, selfRoot = null) {
       valid_until_epoch_ms: null,
       contrib: { id: entry.id, title: entry.title, domain: entry.domain, type: entry.type }
     }
-    const rawSections = sections(text),
-      seenSlugs = new Map()
-    const catalogSections = rawSections.map(sec => {
-      const baseSlug = slugHeading(sec.heading)
-      const count = (seenSlugs.get(baseSlug) || 0) + 1
-      seenSlugs.set(baseSlug, count)
-      const section_id = count === 1 ? baseSlug : `${baseSlug}-${count}`
-      const snippet = (sec.content.length > 360 ? sec.content.slice(0, 357) + '...' : sec.content).trim()
-      return { section_id, heading: sec.heading, visibility: 'linked-projects', disclosure: 'internal-only', claim: false, snippet }
-    })
+    const rawSections = sections(text)
+    const catalogSections = buildCatalogSections(rawSections, { visibility: 'linked-projects', disclosure: 'internal-only', claim: false })
     sources.push({
       source_kind: 'contrib',
       source_ref: sRef,

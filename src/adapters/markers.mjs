@@ -36,7 +36,7 @@ export function injectMarker(project, rel, section, dryRun = false) {
   const existed = existsSync(p),
     old = existed ? readFileSync(p, 'utf8') : '',
     next = nextMarkedContent(old, section)
-  if (!dryRun && next !== old) atomicWrite(p, next)
+  if (!dryRun && next !== old) atomicWrite(p, next, { mode: 0o666 })
   return next === old ? 'unchanged' : state === 'active' ? 'updated' : existed ? 'appended' : 'created'
 }
 export function removeMarker(project, rel, dryRun = false) {
@@ -47,6 +47,6 @@ export function removeMarker(project, rel, dryRun = false) {
   const old = readFileSync(p, 'utf8'),
     info = markerInfo(old),
     next = (old.slice(0, info.start) + old.slice(info.end)).replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
-  if (!dryRun) atomicWrite(p, next)
+  if (!dryRun) atomicWrite(p, next, { mode: 0o666 })
   return 'removed'
 }

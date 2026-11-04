@@ -1,8 +1,12 @@
 // Project analysis that finds overlap, conflicts and candidates for proposals.
 import { statSync } from 'node:fs'
+import { buildCatalogSource } from '../catalog/source.mjs'
 import { readLink } from '../link/config.mjs'
+import { canonicalSpaceId } from '../link/registry.mjs'
+import { canonicalFiles, projectMarkdownFiles } from '../markdown/files.mjs'
 import { tokenize } from '../markdown/text.mjs'
-import { sourceRecords } from '../retrieval/records.mjs'
+import { createRecordDelivery } from '../retrieval/delivery.mjs'
+import { catalogCandidateRecords } from '../retrieval/records.mjs'
 import { slash } from '../shared/fs.mjs'
 
 export function normalize(text) {
@@ -13,17 +17,38 @@ export function normalize(text) {
     .trim()
 }
 export function similarity(a, b) {
-  const aa = tokenize(a),
-    bb = tokenize(b)
+  const aa = new Set(tokenize(a, { stopwords: false })),
+    bb = new Set(tokenize(b, { stopwords: false }))
   if (!aa.size && !bb.size) return 1
   let both = 0
   for (const x of aa) if (bb.has(x)) both++
   return both / (aa.size + bb.size - both)
 }
+function loadAnalysisRecords(root, kind, link) {
+  const files = kind === 'self' ? canonicalFiles(root) : projectMarkdownFiles(root, link)
+  const sourceKind = kind === 'self' ? 'canonical' : 'project'
+  const sources = []
+  for (const file of files) {
+    const built = buildCatalogSource(file, sourceKind, root, null, kind === 'project')
+    if (built?.record) sources.push(built.record)
+  }
+  const spaceId = kind === 'self' ? 'self' : canonicalSpaceId(root)
+  const { records } = catalogCandidateRecords({ space_id: spaceId, sources }, root, kind, 'private', null, 'generic', null, null)
+  const { deliverRecord } = createRecordDelivery(
+    { task: null },
+    { project: root, identity: { kind: 'owner:direct' }, registry: null, lens: 'private', resolution: null, subject: null, adapter: 'generic' }
+  )
+  const deliveredRecords = []
+  for (const cand of records) {
+    const delivered = deliverRecord(cand)
+    if (delivered) deliveredRecords.push({ ...cand, content: delivered.content })
+  }
+  return deliveredRecords
+}
 export function analysis(project) {
   const link = readLink(project)
-  const selfDocs = sourceRecords(link.path, 'self', 'private', null, 'generic', link).records
-  const projectDocs = sourceRecords(project, 'project', 'private', null, 'generic', link).records
+  const selfDocs = loadAnalysisRecords(link.path, 'self', link)
+  const projectDocs = loadAnalysisRecords(project, 'project', link)
   const findings = []
   for (const p of projectDocs) {
     let matched = false

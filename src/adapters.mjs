@@ -108,7 +108,7 @@ function writeSkill(project, rel, dryRun = false, force = false) {
     next = generated === null && force ? old.trimEnd() + '\n\n' + SKILL_BLOCK : generated
   if (next === null)
     throw new Error(`existing skill installation collision: ${p}; use --force --yes to append managed installation or choose --install-skill none`)
-  if (!dryRun && next !== old) atomicWrite(p, next)
+  if (!dryRun && next !== old) atomicWrite(p, next, { mode: 0o666 })
   return next === old ? 'unchanged' : state === 'active' ? 'updated' : old ? 'appended' : 'created'
 }
 function removeSkill(project, rel, dryRun = false) {
@@ -119,7 +119,7 @@ function removeSkill(project, rel, dryRun = false) {
   const old = readFileSync(p, 'utf8'),
     info = markerInfo(old, SKILL_START, SKILL_END),
     next = (old.slice(0, info.start) + old.slice(info.end)).trimEnd() + '\n'
-  if (!dryRun) atomicWrite(p, next)
+  if (!dryRun) atomicWrite(p, next, { mode: 0o666 })
   return 'removed'
 }
 function runtimeFile(project) {
@@ -167,7 +167,7 @@ function snapshotPaths(project, rels) {
 function rollback(snapshots) {
   for (const item of snapshots.reverse()) {
     try {
-      if (item.exists && item.content !== null) atomicWrite(item.path, item.content)
+      if (item.exists && item.content !== null) atomicWrite(item.path, item.content, { mode: 0o666 })
       else if (!item.exists && existsSync(item.path)) rmSync(item.path, { force: true })
     } catch {}
   }
@@ -200,7 +200,7 @@ export function activateProject(project, link, options = {}) {
     results = [],
     skillResults = []
   try {
-    atomicWrite(safeProjectFile(project, '.holoself/BOOTSTRAP.md', 'bootstrap write'), bootstrapText(link))
+    atomicWrite(safeProjectFile(project, '.holoself/BOOTSTRAP.md', 'bootstrap write'), bootstrapText(link), { mode: 0o666 })
     for (const adapter of plan.adapters) {
       const section = adapter.file === plan.canonical ? canonicalSection() : overlaySection(plan.canonical)
       results.push({ ...adapter, result: injectMarker(project, adapter.file, section, false) })
@@ -249,7 +249,7 @@ export function activateProject(project, link, options = {}) {
       lastValidated: new Date().toISOString(),
       toolVersion: VERSION
     }
-    atomicWrite(runtimeFile(project), JSON.stringify(runtime, null, 2) + '\n')
+    atomicWrite(runtimeFile(project), JSON.stringify(runtime, null, 2) + '\n', { mode: 0o666 })
     return { plan, results, skillResults, runtime }
   } catch (error) {
     rollback(snapshots)
@@ -362,7 +362,8 @@ function deactivateAdapters(project, ids, options = {}) {
           },
           null,
           2
-        ) + '\n'
+        ) + '\n',
+        { mode: 0o666 }
       )
     }
     return results

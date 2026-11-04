@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import { hash } from './shared/fs.mjs'
 
 export const INSTRUCTION_SCHEMA = 1
 export const LINK_START = '<!-- holoself-link-start schema=1 -->'
@@ -10,14 +10,12 @@ export const TRUST_INVARIANTS = [
   'Never modify canonical self directly; use proposal/review for durable self changes.',
   'Readable context is not publication approval; publishing requires explicit disclosure approval.'
 ]
-const rawHash = text => createHash('sha256').update(text).digest('hex')
-export const instructionHash = text => rawHash(text.replaceAll('\r\n', '\n'))
+export const instructionHash = text => hash(text.replaceAll('\r\n', '\n'))
 // Accept legacy byte hashes as well as normalized hashes without ignoring content edits.
 export function instructionHashMatches(text, expected) {
   const normalized = text.replaceAll('\r\n', '\n')
-  return [normalized, text, normalized.replaceAll('\n', '\r\n')].some(value => rawHash(value) === expected)
+  return [normalized, text, normalized.replaceAll('\n', '\r\n')].some(value => hash(value) === expected)
 }
-const hash = instructionHash
 
 export function bootstrapText(link) {
   return (
@@ -43,8 +41,8 @@ export function instructionEvidence(link) {
     canonical = canonicalSection().trimEnd()
   return {
     schema_version: INSTRUCTION_SCHEMA,
-    bootstrap_sha256: hash(bootstrap),
-    canonical_block_sha256: hash(canonical),
+    bootstrap_sha256: instructionHash(bootstrap),
+    canonical_block_sha256: instructionHash(canonical),
     normative_source: 'skills/holoself/SKILL.md'
   }
 }
@@ -72,11 +70,13 @@ export function auditInstructions(project, link, runtime = null) {
     return readFileSync(path, 'utf8')
   }
   const bootstrapBody = checkFile(bootstrap, 'BOOTSTRAP_MISSING')
-  if (bootstrapBody && hash(bootstrapBody) !== expected.bootstrap_sha256) diagnostics.push({ code: 'BOOTSTRAP_DRIFT', severity: 'error', path: bootstrap })
+  if (bootstrapBody && instructionHash(bootstrapBody) !== expected.bootstrap_sha256)
+    diagnostics.push({ code: 'BOOTSTRAP_DRIFT', severity: 'error', path: bootstrap })
   const canonicalBody = checkFile(canonicalPath, 'CANONICAL_INSTRUCTIONS_MISSING'),
     block = canonicalBody && markerBlock(canonicalBody)
   if (canonicalBody && !block) diagnostics.push({ code: 'MANAGED_BLOCK_MISSING', severity: 'error', path: canonicalPath })
-  else if (block && hash(block) !== expected.canonical_block_sha256) diagnostics.push({ code: 'CANONICAL_BLOCK_DRIFT', severity: 'error', path: canonicalPath })
+  else if (block && instructionHash(block) !== expected.canonical_block_sha256)
+    diagnostics.push({ code: 'CANONICAL_BLOCK_DRIFT', severity: 'error', path: canonicalPath })
   if (runtime?.instructionEvidence) {
     for (const key of ['bootstrap_sha256', 'canonical_block_sha256'])
       if (runtime.instructionEvidence[key] !== expected[key])

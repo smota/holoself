@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { assertNoLinkBelow } from './path-guard.mjs'
+import { hash as sha } from './shared/fs.mjs'
 
 export const LENS_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 export const CUSTOM_SENSITIVITY_CATEGORIES = [
@@ -76,8 +76,7 @@ export const DEFAULT_LENSES = DEFAULT_LENS_IDS.map(id =>
     instructions: Object.freeze(DEFAULT_INSTRUCTIONS[id])
   })
 )
-const sha = text => createHash('sha256').update(text).digest('hex')
-const fail = (file, message) => {
+const lensFail = (file, message) => {
   throw new Error(`invalid lens definition ${file}: ${message}`)
 }
 
@@ -85,7 +84,7 @@ const fail = (file, message) => {
 function validateSessionStartSources(value, file) {
   if (value === undefined) return undefined
   if (!Array.isArray(value) || value.length > 20 || new Set(value).size !== value.length)
-    fail(file, 'session_start_sources must be an array of at most 20 unique patterns')
+    lensFail(file, 'session_start_sources must be an array of at most 20 unique patterns')
   for (const item of value) {
     if (
       typeof item !== 'string' ||
@@ -96,28 +95,28 @@ function validateSessionStartSources(value, file) {
       item.split('/').some(part => !part || part === '..' || part === '.') ||
       item.includes('**')
     )
-      fail(file, `invalid session_start_sources pattern: ${JSON.stringify(item)}`)
+      lensFail(file, `invalid session_start_sources pattern: ${JSON.stringify(item)}`)
   }
-  if (value.includes('*') && value.length > 1) fail(file, 'session_start_sources "*" must be the only entry')
+  if (value.includes('*') && value.length > 1) lensFail(file, 'session_start_sources "*" must be the only entry')
   return Object.freeze([...value])
 }
 function validateDefinition(value, file) {
-  if (!value || Array.isArray(value) || typeof value !== 'object') fail(file, 'must be an object')
+  if (!value || Array.isArray(value) || typeof value !== 'object') lensFail(file, 'must be an object')
   const allowed = new Set(['schema_version', 'id', 'title', 'sensitivity_access', 'instructions', 'session_start_sources'])
-  for (const key of Object.keys(value)) if (!allowed.has(key)) fail(file, `unknown field ${key}`)
-  for (const key of ['schema_version', 'id', 'title']) if (!Object.hasOwn(value, key)) fail(file, `missing ${key}`)
-  if (value.schema_version !== 1) fail(file, 'schema_version must be 1')
+  for (const key of Object.keys(value)) if (!allowed.has(key)) lensFail(file, `unknown field ${key}`)
+  for (const key of ['schema_version', 'id', 'title']) if (!Object.hasOwn(value, key)) lensFail(file, `missing ${key}`)
+  if (value.schema_version !== 1) lensFail(file, 'schema_version must be 1')
   if (typeof value.id !== 'string' || value.id.length > 40 || !LENS_ID_PATTERN.test(value.id))
-    fail(file, 'id must be lowercase kebab-case, start with a letter, and be at most 40 characters')
-  if (value.id === 'bindings') fail(file, 'bindings is a reserved storage name')
-  if (typeof value.title !== 'string' || !value.title.trim()) fail(file, 'title must be a non-empty string')
+    lensFail(file, 'id must be lowercase kebab-case, start with a letter, and be at most 40 characters')
+  if (value.id === 'bindings') lensFail(file, 'bindings is a reserved storage name')
+  if (typeof value.title !== 'string' || !value.title.trim()) lensFail(file, 'title must be a non-empty string')
   const sensitivity = value.sensitivity_access ?? []
   if (
     !Array.isArray(sensitivity) ||
     new Set(sensitivity).size !== sensitivity.length ||
     sensitivity.some(item => ![...CUSTOM_SENSITIVITY_CATEGORIES, ...(value.id === 'private' ? ['restricted'] : [])].includes(item))
   )
-    fail(file, 'sensitivity_access must contain unique supported categories; restricted is not allowed')
+    lensFail(file, 'sensitivity_access must contain unique supported categories; restricted is not allowed')
   const sessionStart = validateSessionStartSources(value.session_start_sources, file)
   return Object.freeze({
     schema_version: 1,
@@ -149,9 +148,9 @@ export function loadLensRegistry(selfRoot) {
       try {
         parsed = JSON.parse(raw)
       } catch (error) {
-        fail(name, `malformed JSON (${error.message})`)
+        lensFail(name, `malformed JSON (${error.message})`)
       }
-      if (name !== `${parsed.id}.json`) fail(name, 'filename must match lens id')
+      if (name !== `${parsed.id}.json`) lensFail(name, 'filename must match lens id')
       records.push({ name, raw, lens: validateDefinition(parsed, name) })
     }
   }

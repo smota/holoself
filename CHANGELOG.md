@@ -4,6 +4,8 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- Unify frontmatter parsing, tokenization, section splitting and atomic file writes across the CLI, catalog, migration and Workbench modules: Workbench document saves now preserve multi-line YAML `access_lenses` lists without duplicating list items into unknown metadata, unescape single-quoted `''` values, and treat `#` after whitespace in a frontmatter value as a comment, matching catalog reads (#59).
+
 - Document the product, tooling, AgentFlow SDLC framework, and owner-local repository layout in `docs/repository-map.md` and `docs/decisions/agentflow-placement.md`, index all architecture decisions in `docs/README.md`, and enforce the product/framework boundary in `tests/repository-boundary.test.mjs` (#56).
 
 - Move owner-specific working backlog files to the git-ignored `.local/backlog/`, add a synthetic backlog format reference in `docs/backlog/README.md`, and verify that tracked documentation contains no user-home or machine-specific paths (#55).

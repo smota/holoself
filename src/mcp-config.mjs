@@ -1,12 +1,12 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
-import { createHash } from 'node:crypto'
+import { existsSync, lstatSync, readFileSync, rmSync } from 'node:fs'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { holoselfMcpStatus } from './ecosystem.mjs'
 import { assertNoLinkBelow } from './path-guard.mjs'
+import { atomicWrite, hash, slash } from './shared/fs.mjs'
 
 const PLATFORMS = ['codex', 'agy', 'claude']
-const START = '# holoself-mcp-managed-start'
-const END = '# holoself-mcp-managed-end'
+const MCP_START = '# holoself-mcp-managed-start'
+const MCP_END = '# holoself-mcp-managed-end'
 const TOOLS = [
   'holoself_status',
   'holoself_context_manifest',
@@ -15,14 +15,6 @@ const TOOLS = [
   'holoself_proposal_create',
   'holoself_proposal_preview'
 ]
-const hash = text => createHash('sha256').update(text).digest('hex')
-const slash = path => path.replaceAll('\\', '/')
-function atomicWrite(path, content) {
-  mkdirSync(dirname(path), { recursive: true })
-  const temp = `${path}.tmp-${process.pid}-${Date.now()}`
-  writeFileSync(temp, content, 'utf8')
-  renameSync(temp, path)
-}
 function safeConfigPath(project, path) {
   const boundary = resolve(project),
     target = resolve(path),
@@ -84,10 +76,10 @@ function codexPlan(project) {
     path = safeConfigPath(project, join(project, relative)),
     existed = existsSync(path),
     before = safeFile(path),
-    starts = (before.match(new RegExp(START, 'g')) || []).length,
-    ends = (before.match(new RegExp(END, 'g')) || []).length
+    starts = (before.match(new RegExp(MCP_START, 'g')) || []).length,
+    ends = (before.match(new RegExp(MCP_END, 'g')) || []).length
   if (starts !== ends || starts > 1) throw new Error(`${path} has malformed Holoself MCP markers`)
-  const outside = before.replace(new RegExp(`${START}[\\s\\S]*?${END}\\r?\\n?`), '')
+  const outside = before.replace(new RegExp(`${MCP_START}[\\s\\S]*?${MCP_END}\\r?\\n?`), '')
   const semanticCollision = new RegExp(
     [
       String.raw`(?:^|\n)\s*\[\s*["']?mcp_servers["']?\s*\.\s*["']?holoself["']?\s*\]|(?:^|\n)\s*["']?mcp_servers["']?\s*\.\s*["']?holoself["']?\s*=|`,
@@ -100,9 +92,9 @@ function codexPlan(project) {
   const projectArg = slash(project).replaceAll('"', '\\"'),
     toolList = TOOLS.map(tool => `"${tool}"`).join(', ')
   const block =
-    `${START}\n[mcp_servers.holoself]\ncommand = "holoself"\nargs = ["mcp", "--project", "${projectArg}"]\n` +
-    `required = false\nenabled_tools = [${toolList}]\ndefault_tools_approval_mode = "writes"\n${END}\n`
-  const after = starts ? before.replace(new RegExp(`${START}[\\s\\S]*?${END}\\r?\\n?`), block) : (before.trimEnd() ? `${before.trimEnd()}\n\n` : '') + block
+    `${MCP_START}\n[mcp_servers.holoself]\ncommand = "holoself"\nargs = ["mcp", "--project", "${projectArg}"]\n` +
+    `required = false\nenabled_tools = [${toolList}]\ndefault_tools_approval_mode = "writes"\n${MCP_END}\n`
+  const after = starts ? before.replace(new RegExp(`${MCP_START}[\\s\\S]*?${MCP_END}\\r?\\n?`), block) : (before.trimEnd() ? `${before.trimEnd()}\n\n` : '') + block
   return {
     platform: 'codex',
     path,
@@ -137,7 +129,7 @@ export function mcpConfigurationPlan(projectInput, { platforms = PLATFORMS } = {
 export function applyMcpConfiguration(projectInput, options = {}, io = {}) {
   const plan = mcpConfigurationPlan(projectInput, options),
     written = []
-  const write = io.write || atomicWrite,
+  const write = io.write || ((path, content) => atomicWrite(path, content, { mode: 0o666 })),
     remove = io.remove || (path => rmSync(path, { force: true }))
   try {
     for (const change of plan._changes)
@@ -147,7 +139,7 @@ export function applyMcpConfiguration(projectInput, options = {}, io = {}) {
       }
   } catch (error) {
     for (const change of written.reverse()) {
-      if (change.existed) atomicWrite(change.path, change.before)
+      if (change.existed) atomicWrite(change.path, change.before, { mode: 0o666 })
       else remove(change.path)
     }
     throw error

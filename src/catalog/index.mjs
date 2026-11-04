@@ -67,7 +67,7 @@ export function readIndex(project, auto = true, persist = true, options = {}) {
   return buildIndex(project, true, persist, options)
 }
 export function searchIndex(index, query, lens = 'general', registry = null, resolution = null, temporal = 'current', options = {}) {
-  const terms = [...tokenize(query)],
+  const terms = [...tokenize(query, { stopwords: false })],
     results = [],
     behaviorLens = lens
   const entries = index.entries || index.sources || []

@@ -1,131 +1,13 @@
 // Candidate records for context retrieval: catalog candidates, assertions and de-duplication.
-import { readFileSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 import { VISIBILITIES } from '../annotations.mjs'
-import { canonicalSort } from '../catalog.mjs'
 import { relevanceScore } from '../context-selection.mjs'
 import { DEFAULT_PROJECT_EXCLUDES } from '../link/config.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
-import { canonicalFiles, matchesAny, projectMarkdownFiles } from '../markdown/files.mjs'
-import { relevance } from '../markdown/text.mjs'
-import { allowed, allowedDocument, filterClaimVisibility, filterFieldVisibility, privacyMetadata, visibility, visibleUnderBehavior } from '../policy/access.mjs'
-import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
-import { SECRET_RE, secretFile } from '../policy/secrets.mjs'
-import { hash, slash } from '../shared/fs.mjs'
+import { matchesAny } from '../markdown/files.mjs'
+import { allowed, allowedDocument, filterClaimVisibility, filterFieldVisibility, visibleUnderBehavior } from '../policy/access.mjs'
+import { SECRET_RE } from '../policy/secrets.mjs'
 
-export function sourceRecords(
-  root,
-  kind,
-  lens,
-  task,
-  adapter,
-  link = null,
-  registry = null,
-  resolution = null,
-  selectionOptions = {},
-  identityKind = 'owner:direct',
-  subject = null
-) {
-  const records = []
-  const restrictions = [],
-    warnings = []
-  let files
-  if (kind === 'self')
-    files = canonicalFiles(root, { includeHistory: selectionOptions.includeHistory || (selectionOptions.temporal && selectionOptions.temporal !== 'current') })
-  else files = projectMarkdownFiles(root, link)
-  const subj = subject || { kind: identityKind, accessible_spaces: identityKind === 'owner:direct' ? ['self', 'contrib'] : [] }
-  for (const path of files) {
-    const text = readFileSync(path, 'utf8'),
-      rel = slash(relative(root, path))
-    let parsed
-    try {
-      parsed = frontmatter(text, { tolerant: kind === 'project', registry })
-    } catch (error) {
-      restrictions.push({ source: rel, reason: 'invalid canonical privacy metadata; excluded fail-closed' })
-      warnings.push(`${rel}: ${error.message}`)
-      continue
-    }
-    const { metadata, body, warnings: documentWarnings } = parsed
-    for (const warning of documentWarnings) warnings.push(`${rel}: ${warning}`)
-    if (secretFile(path, root) || SECRET_RE.test(text) || ['secret', 'credential', 'credentials'].includes(metadata.sensitivity)) {
-      if (kind === 'project') restrictions.push({ source: rel, reason: 'secret-like content excluded' })
-      continue
-    }
-    if (kind === 'self') {
-      const metadataErrors = canonicalPrivacyMetadataErrors(metadata, registry)
-      if (metadataErrors.length) {
-        restrictions.push({ source: rel, reason: 'invalid canonical privacy metadata; excluded fail-closed' })
-        warnings.push(`${rel}: ${metadataErrors.join('; ')}`)
-        continue
-      }
-    }
-    if (!VISIBILITIES.includes(visibility(metadata))) {
-      restrictions.push({ source: rel, reason: `unsupported visibility: ${visibility(metadata)}` })
-      continue
-    }
-    const docDecision = allowedDocument(
-      metadata,
-      lens,
-      adapter,
-      task,
-      resolution,
-      subj,
-      kind === 'self' ? 'self' : kind === 'contrib' ? 'contrib' : canonicalSpaceId(root)
-    )
-    if (!docDecision.allowed) {
-      if (
-        kind === 'self' &&
-        (metadata.sensitivity === 'restricted' || secretFile(path, root) || (docDecision.phase === 1 && identityKind === 'client:linked'))
-      ) {
-        if (identityKind === 'owner:direct') restrictions.push({ source: rel, reason: docDecision.reason })
-      } else {
-        restrictions.push({ source: rel, reason: docDecision.reason })
-      }
-      continue
-    }
-    const safeMetadata = privacyMetadata(metadata, registry),
-      behaviorLens = lens
-    const filteredBody = filterFieldVisibility(
-      filterClaimVisibility(body, lens, rel, restrictions, resolution, identityKind),
-      metadata,
-      lens,
-      rel,
-      restrictions,
-      resolution,
-      identityKind
-    )
-    const score = relevance(`${rel}\n${filteredBody}`, task)
-    const content = filteredBody.trim()
-    records.push({
-      kind,
-      path: rel,
-      absolute_path: path,
-      access_lenses: safeMetadata.access_lenses,
-      disclosure: safeMetadata.disclosure,
-      document_role: safeMetadata.document_role,
-      publication_allowed: safeMetadata.publication_allowed,
-      visibility: safeMetadata.visibility,
-      public_safe: safeMetadata.public_safe,
-      sensitivity: safeMetadata.sensitivity,
-      confidence: safeMetadata.confidence,
-      freshness: new Date(statSync(path).mtimeMs).toISOString(),
-      source_hash: hash(text),
-      task_relevance: score,
-      content,
-      metadata: safeMetadata
-    })
-  }
-  if (task) {
-    records.sort((a, b) => b.task_relevance - a.task_relevance || canonicalSort(a.path, b.path))
-    if (kind === 'project')
-      for (let i = records.length - 1; i >= 0; i--)
-        if (records[i].task_relevance === 0 && records[i].document_role !== 'policy') {
-          restrictions.push({ source: records[i].path, reason: `no relevance match for task ${task}` })
-          records.splice(i, 1)
-        }
-  }
-  return { records, restrictions, warnings }
-}
 export function catalogCandidateRecords(
   catalog,
   root,

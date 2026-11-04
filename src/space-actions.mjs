@@ -1,23 +1,15 @@
-import { createHash } from 'node:crypto'
-import { lstatSync, readFileSync, readlinkSync, realpathSync, mkdirSync, writeFileSync, chmodSync, unlinkSync, rmdirSync, symlinkSync } from 'node:fs'
+import { readFileSync, readlinkSync, realpathSync, mkdirSync, writeFileSync, chmodSync, unlinkSync, rmdirSync, symlinkSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { preflightActivation, activateProject, deactivateProject, detectAdapters, readRuntime, recordedActivation, safeProjectFile } from './adapters.mjs'
 import { spaceLinkConfiguration, readSpaceLink, configureSpaceLink, withSpaceConfigurationLock } from './ecosystem.mjs'
 import { loadLensRegistry } from './lenses.mjs'
+import { lstat as stat } from './path-guard.mjs'
+import { hash as digest } from './shared/fs.mjs'
 
 const actions = new Set(['activate', 'deactivate', 'relink', 'setup'])
-const digest = value => createHash('sha256').update(value).digest('hex')
 const identity = path => {
   const value = realpathSync(path)
   return process.platform === 'win32' ? value.toLowerCase() : value
-}
-function stat(path) {
-  try {
-    return lstatSync(path)
-  } catch (error) {
-    if (['ENOENT', 'ENOTDIR'].includes(error.code)) return null
-    throw error
-  }
 }
 function state(path) {
   const info = stat(path)

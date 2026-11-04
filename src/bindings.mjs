@@ -1,18 +1,17 @@
-import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync, rmSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve, win32 } from 'node:path'
 import { loadLensRegistry, resolveLens } from './lenses.mjs'
 import { assertNoLinkBelow, canonicalPath } from './path-guard.mjs'
+import { hash, slash } from './shared/fs.mjs'
 
 export function normalizeProjectPath(value) {
   if (typeof value !== 'string' || !value.trim()) throw new Error('binding project path must be absolute')
   if (win32.isAbsolute(value) && (/^[a-z]:[\\/]/i.test(value) || value.startsWith('\\\\') || value.startsWith('//')))
-    return win32.normalize(value).replaceAll('\\', '/').replace(/\/$/, '').toLowerCase()
+    return slash(win32.normalize(value)).replace(/\/$/, '').toLowerCase()
   if (!isAbsolute(value)) throw new Error('binding project path must be absolute')
-  return resolve(value).replaceAll('\\', '/')
+  return slash(resolve(value))
 }
 export const bindingsPath = root => join(resolve(root), 'lenses', 'bindings.json')
-const hash = value => createHash('sha256').update(value).digest('hex')
 function assertSafe(root, path) {
   assertNoLinkBelow(root, path, link => new Error(`unsafe bindings path: ${link}`), { includeRoot: true })
 }

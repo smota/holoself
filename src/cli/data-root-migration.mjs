@@ -129,7 +129,7 @@ export function applyMigration(plan, target) {
     if (!plan.copied.includes(mapping.destination)) continue
     const item = plan._detected.find(x => x.relative === mapping.source)
     const dest = join(target, mapping.destination)
-    atomicWrite(dest, migrationContent(item, mapping.destination))
+    atomicWrite(dest, migrationContent(item, mapping.destination), { mode: 0o666 })
   }
 }
 export function migrationManifest(report) {

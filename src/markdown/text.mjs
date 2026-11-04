@@ -1,7 +1,32 @@
-// Markdown text helpers: sections, links, tags, claims and token relevance.
+// Markdown text helpers: sections, links, tags, claims and tokenization.
 import { frontmatter } from '../policy/privacy-fields.mjs'
 
-export function sections(text) {
+const STOPWORDS = new Set(
+  (
+    `a an and are as at be been before between both but by can current do does for from had has have how i if in ` +
+    `into is it its me more my no not of on or our should so than that the their them then there these they this ` +
+    `those through to under use used using was we were what when where which who why will with you your
+de een en het in is met om op te van voor wat wie zijn
+e o a os as um uma de do da dos das em no na nos nas para por que se seu sua
+der die das ein eine und ist mit von zu`
+  ).split(/\s+/)
+)
+
+export function sections(text, { raw = false } = {}) {
+  if (raw) {
+    const lines = String(text).split(/\r?\n/),
+      out = []
+    let current = []
+    for (const line of lines) {
+      if (/^#{1,4}\s+/.test(line) && current.length) {
+        out.push(current.join('\n'))
+        current = []
+      }
+      current.push(line)
+    }
+    if (current.length) out.push(current.join('\n'))
+    return out
+  }
   const result = []
   let heading = '(document)',
     lines = []
@@ -9,7 +34,7 @@ export function sections(text) {
     const content = lines.join('\n').trim()
     if (content) result.push({ heading, content })
   }
-  for (const line of text.split(/\r?\n/)) {
+  for (const line of String(text).split(/\r?\n/)) {
     const match = line.match(/^#{1,6}\s+(.+)$/)
     if (match) {
       flush()
@@ -62,14 +87,14 @@ export function canonicalClaims(text) {
   }
   return found.map(x => x.trim()).filter(Boolean)
 }
-export function tokenize(text) {
-  return new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || [])
-}
-export function relevance(text, task) {
-  if (!task) return 0
-  const wanted = tokenize(task)
-  const got = tokenize(text)
-  let score = 0
-  for (const token of wanted) if (got.has(token)) score++
-  return score
+export function tokenize(text, { stopwords = true } = {}) {
+  return [
+    ...new Set(
+      (
+        String(text)
+          .toLowerCase()
+          .match(/[\p{L}\p{N}]{3,}/gu) || []
+      ).filter(token => !stopwords || !STOPWORDS.has(token))
+    )
+  ]
 }

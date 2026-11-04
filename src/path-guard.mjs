@@ -10,13 +10,18 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 
 const fold = value => (process.platform === 'win32' ? value.toLowerCase() : value)
 
-function lstat(path) {
+export function lstat(path) {
   try {
     return lstatSync(path)
   } catch (error) {
     if (['ENOENT', 'ENOTDIR'].includes(error.code)) return null
     throw error
   }
+}
+
+export function contained(root, path) {
+  const rel = relative(root, path)
+  return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`))
 }
 
 // Realpath of the nearest existing ancestor with the missing tail re-appended.
