@@ -4,6 +4,8 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- Fix `superseded_by` frontmatter validation throwing a `ReferenceError` and silently dropping the document from the catalog; surface per-file catalog build errors as `[warn]` lines in `holoself validate` and `holoself doctor` and under the additive `warnings` key in `holoself link doctor` JSON with root-relative paths (#52).
+
 - Workbench hardening: the local server answers only `127.0.0.1:<port>` and `localhost:<port>` hosts, requires the session token on every `/api` request (the page now receives it in the served HTML, not from `/api/session`), accepts changes only from a loopback origin, and serves only regular files from its web directory.
 
 - An explicit canonical root containing the current directory now resolves owner-direct even when nested inside a linked project. Explicit project selection and callers outside that root retain linked authority.

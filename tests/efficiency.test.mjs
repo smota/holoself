@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { applyCleanupPlan, buildCleanupPlan } from '../src/cleanup.mjs'
 import { contextNeed, selectContextRecords, sourceId, dateValue, temporalDisposition } from '../src/context-selection.mjs'
+import { canonicalPrivacyMetadataErrors, privacyMetadataErrors, privacyValueValid, redactRootPaths } from '../src/ecosystem.mjs'
 import { runHarness } from '../src/harnesses.mjs'
 import { run } from '../src/cli.mjs'
 
@@ -62,4 +63,115 @@ test('grouped proposal approval binds exact preview and applies two targets with
   const cli=join(process.cwd(),'bin','holoself.mjs'),preview=spawnSync(process.execPath,[cli,'proposals','approve',id,'--project',project,'--json'],{encoding:'utf8',shell:false});assert.notEqual(preview.status,0);const parsed=JSON.parse(preview.stdout);assert.equal(parsed.changes.length,2)
   const stale=spawnSync(process.execPath,[cli,'proposals','approve',id,'--project',project,'--preview-hash','0'.repeat(64),'--yes'],{encoding:'utf8',shell:false});assert.notEqual(stale.status,0);assert.equal(existsSync(join(self,'context','one.md')),false)
   const approved=spawnSync(process.execPath,[cli,'proposals','approve',id,'--project',project,'--preview-hash',parsed.preview_hash,'--yes'],{encoding:'utf8',shell:false});assert.equal(approved.status,0,approved.stderr);assert.match(readFileSync(join(self,'context','one.md'),'utf8'),/First grouped claim/);assert.match(readFileSync(join(self,'context','two.md'),'utf8'),/Second grouped claim/);const receipt=JSON.parse(readFileSync(join(self,'proposals','receipts',`${id}-approved.json`),'utf8'));assert.equal(receipt.applied_changes.length,2);assert.equal(receipt.preview_sha256,parsed.preview_hash)
+})
+
+test('lifecycle frontmatter fields validate valid and invalid values',()=>{
+  for(const status of ['current','historical','superseded'])assert.equal(privacyValueValid('knowledge_status',status),true,status)
+  for(const invalid of ['active','archived','',null,42,['current']])assert.equal(privacyValueValid('knowledge_status',invalid),false)
+
+  for(const scope of ['current','time-bounded','historical','timeless'])assert.equal(privacyValueValid('temporal_scope',scope),true,scope)
+  for(const invalid of ['forever','past','',null,42,['current']])assert.equal(privacyValueValid('temporal_scope',invalid),false)
+
+  for(const field of ['valid_from','valid_until','review_after']){
+    for(const valid of ['2026-09-20','2026-09-20T12:30:00Z','2026-09-20T12:30:00.123+02:00'])assert.equal(privacyValueValid(field,valid),true,`${field}:${valid}`)
+    for(const invalid of ['2026/09/20','2026-13-40','not-a-date','','   ',null,123,['2026-09-20']])assert.equal(privacyValueValid(field,invalid),false,`${field}:${String(invalid)}`)
+  }
+
+  for(const valid of [[],['context/old.md'],['context/old-1.md','context/old-2.md']])assert.equal(privacyValueValid('supersedes',valid),true)
+  for(const invalid of ['context/old.md',[''],['  '],[null],[123],null,{}])assert.equal(privacyValueValid('supersedes',invalid),false)
+
+  for(const valid of ['context/new.md','claim-2026'])assert.equal(privacyValueValid('superseded_by',valid),true,valid)
+  for(const invalid of ['','   ',null,123,['context/new.md'],{}])assert.equal(privacyValueValid('superseded_by',invalid),false)
+
+  const base={access_lenses:['general'],disclosure:'internal-only',sensitivity:'personal',document_role:'content'}
+  assert.deepEqual(privacyMetadataErrors({...base,knowledge_status:'superseded',superseded_by:'context/new.md',supersedes:['context/prior.md'],valid_from:'2026-01-01',valid_until:'2026-12-31',review_after:'2026-06-01'}),[])
+  assert.ok(canonicalPrivacyMetadataErrors({...base,knowledge_status:'superseded'}).some(e=>e.includes('superseded knowledge must name superseded_by')))
+  assert.ok(canonicalPrivacyMetadataErrors({...base,valid_from:'2026-12-31',valid_until:'2026-01-01'}).some(e=>e.includes('valid_from must not be after valid_until')))
+})
+
+test('canonical document with superseded_by is indexed, excluded from current context, and included with history or --temporal',async()=>{
+  const self=temp(),project=temp()
+  const capture=async fn=>{const oldLog=console.log,oldErr=console.error;let stdout='',stderr='';console.log=(...x)=>{stdout+=x.join(' ')+'\n'};console.error=(...x)=>{stderr+=x.join(' ')+'\n'};try{await fn()}finally{console.log=oldLog;console.error=oldErr};return {stdout,stderr}}
+  await capture(()=>run(['init','--root',self]))
+  writeFileSync(join(self,'context','old.md'),'---\naccess_lenses: [general, professional, private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\nknowledge_status: superseded\nsuperseded_by: context/new.md\n---\n# Old Approach\n\nLegacy career architecture notes.\n')
+  writeFileSync(join(self,'context','new.md'),'---\naccess_lenses: [general, professional, private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\nknowledge_status: current\nsupersedes: [context/old.md]\n---\n# New Approach\n\nCurrent career architecture notes.\n')
+  await capture(()=>run(['link','add','--project',project,'--self',self,'--lens','general','--no-activate','--yes']))
+
+  const currentRes=await capture(()=>run(['context','--project',project,'--lens','general','--json']))
+  const current=JSON.parse(currentRes.stdout)
+  assert.equal(current.warnings.some(w=>w.includes('context/old.md')),false)
+  const cat=JSON.parse(readFileSync(join(self,'.holoself','catalog','catalog.json'),'utf8'))
+  const indexedOld=cat.sources.find(s=>s.file==='context/old.md')
+  assert.ok(indexedOld,'context/old.md must be indexed in catalog')
+  assert.equal(indexedOld.frontmatter.superseded_by,'context/new.md')
+  assert.equal(current.sources.some(s=>s.path==='context/old.md'),false,'excluded from current context')
+  assert.equal(current.sources.some(s=>s.path==='context/new.md'),true,'new document included in current context')
+
+  const temporalSuperseded=JSON.parse((await capture(()=>run(['context','--project',project,'--lens','general','--temporal','superseded','--json']))).stdout)
+  assert.equal(temporalSuperseded.sources.some(s=>s.path==='context/old.md'),true,'included with --temporal superseded')
+
+  const temporalAll=JSON.parse((await capture(()=>run(['context','--project',project,'--lens','general','--temporal','all','--json']))).stdout)
+  assert.equal(temporalAll.sources.some(s=>s.path==='context/old.md'),true,'included with --temporal all')
+
+  const withHistory=JSON.parse((await capture(()=>run(['context','--project',project,'--lens','general','--temporal','all','--include-history','--json']))).stdout)
+  assert.equal(withHistory.sources.some(s=>s.path==='context/old.md'),true,'included when history is requested')
+})
+
+test('catalog build errors are surfaced in validate and doctor output with root-relative paths',async()=>{
+  const self=temp(),project=temp()
+  const capture=async fn=>{const oldLog=console.log,oldErr=console.error;let stdout='',stderr='';console.log=(...x)=>{stdout+=x.join(' ')+'\n'};console.error=(...x)=>{stderr+=x.join(' ')+'\n'};try{await fn()}finally{console.log=oldLog;console.error=oldErr};return {stdout,stderr}}
+  await capture(()=>run(['init','--root',self]))
+  await capture(()=>run(['link','add','--project',project,'--self',self,'--lens','general','--no-activate','--yes']))
+  writeFileSync(join(self,'history','broken.md'),'# Untagged history doc\n\nMissing canonical privacy metadata in history.\n')
+  const cli=join(process.cwd(),'bin','holoself.mjs')
+
+  const docRoot=spawnSync(process.execPath,[cli,'doctor','--root',self],{encoding:'utf8',shell:false})
+  assert.equal(docRoot.status,0,'doctor must exit 0 with catalog build warning')
+  assert.match(docRoot.stdout,/\[warn\] history\/broken\.md: canonical privacy metadata missing access_lenses or legacy visibility/)
+  assert.equal((docRoot.stdout.match(/history\/broken\.md/g)||[]).length,1,'doctor prints warning once')
+  assert.equal(docRoot.stdout.includes(self),false,'doctor output must not contain absolute self path')
+
+  const linkDoc=spawnSync(process.execPath,[cli,'link','doctor','--project',project],{encoding:'utf8',shell:false})
+  const linkDocJson=JSON.parse(linkDoc.stdout)
+  assert.ok(linkDocJson.warnings.some(w=>w.includes('history/broken.md')&&w.includes('canonical privacy metadata missing')))
+  assert.ok(linkDocJson.checks.warnings.some(w=>w.includes('history/broken.md')&&w.includes('canonical privacy metadata missing')))
+  assert.equal(linkDoc.stdout.includes(self),false,'link doctor output must not contain absolute self path')
+  assert.equal(linkDoc.stdout.includes(project),false,'link doctor output must not contain absolute project path')
+
+  const valRes=spawnSync(process.execPath,[cli,'validate','--root',self],{encoding:'utf8',shell:false})
+  assert.equal(valRes.status,0,'validate must exit 0 when only a catalog build warning is present')
+  assert.equal(valRes.stderr,'','validate must not emit errors for catalog build warnings')
+  assert.match(valRes.stdout,/\[warn\] history\/broken\.md: canonical privacy metadata missing access_lenses or legacy visibility/)
+  assert.match(valRes.stdout,/\[ok\] .* is valid/)
+  assert.equal((valRes.stdout.match(/history\/broken\.md/g)||[]).length,1,'validate prints warning exactly once')
+  const warnLines=valRes.stdout.split('\n').filter(line=>line.startsWith('[warn]'))
+  assert.equal(warnLines.length,1,'validate emits one warning line')
+  assert.equal(warnLines[0].includes(self),false,'validate warnings must not contain absolute self path')
+})
+
+test('proposals approve succeeds when an unrelated canonical file has a catalog build error',async()=>{
+  const self=temp(),project=temp(),id='55555555-5555-4555-8555-555555555555'
+  await run(['init','--root',self])
+  writeFileSync(join(self,'history','broken-unrelated.md'),'# Unrelated untagged history doc\n')
+  writeFileSync(join(project,'evidence.md'),'# Evidence\nReviewed source.\n')
+  await run(['link','add','--project',project,'--self',self,'--no-activate','--yes'])
+  const dir=join(project,'.holoself','proposals');mkdirSync(dir,{recursive:true})
+  const proposal={schema_version:2,proposal_id:id,title:'Approve despite catalog warning',source_project:basename(project),source_project_path:project.replaceAll('\\','/'),source_files:['evidence.md'],status:'pending',created_at:'2026-08-29T00:00:00.000Z',provenance:[`${basename(project)}:evidence.md`],changes:[{change_id:'one',target:'context/approved-target.md',operation:'append_claim',proposal_type:'new_fact',claim:'Approved claim despite unrelated catalog build warning.',evidence:'evidence.md',confidence:'confirmed',visibility:'private'}]}
+  const yaml=Object.entries(proposal).map(([key,value])=>Array.isArray(value)?`${key}:\n${value.map(item=>`  - ${JSON.stringify(item)}`).join('\n')}`:`${key}: ${JSON.stringify(value)}`).join('\n')+'\n'
+  writeFileSync(join(dir,`${id}.yaml`),yaml)
+  const cli=join(process.cwd(),'bin','holoself.mjs')
+  const preview=spawnSync(process.execPath,[cli,'proposals','approve',id,'--project',project,'--json'],{encoding:'utf8',shell:false})
+  const parsed=JSON.parse(preview.stdout)
+  const approved=spawnSync(process.execPath,[cli,'proposals','approve',id,'--project',project,'--preview-hash',parsed.preview_hash,'--yes'],{encoding:'utf8',shell:false})
+  assert.equal(approved.status,0,approved.stderr)
+  assert.match(readFileSync(join(self,'context','approved-target.md'),'utf8'),/Approved claim despite unrelated catalog build warning/)
+})
+
+test('redactRootPaths preserves sibling-prefix paths, handles win32 case-insensitivity and separators, and truncates echoed values',()=>{
+  assert.equal(redactRootPaths('/tmp/xyz/a.md: error',['/tmp/x'],{platform:'linux'}),'/tmp/xyz/a.md: error')
+  assert.equal(redactRootPaths('/tmp/x/a.md: error at /tmp/x',['/tmp/x'],{platform:'linux'}),'a.md: error at ')
+  assert.equal(redactRootPaths('C:\\Users\\Alice\\Self\\context\\a.md: error in c:/users/alice/self',['C:/Users/Alice/Self'],{platform:'win32'}),'context/a.md: error in ')
+  const longVal='x'.repeat(120)
+  const redacted=redactRootPaths(`context/a.md: invalid superseded_by value ${longVal}`,[])
+  assert.equal(redacted,`context/a.md: invalid superseded_by value ${'x'.repeat(80)}...`)
 })
