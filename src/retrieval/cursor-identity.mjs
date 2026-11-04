@@ -12,6 +12,8 @@ export function getOrCreateCursorSecret(selfRoot) {
   return globalThis.__HOLOSELF_CURSOR_KEY__
 }
 export function getIdentityId(identity, cursorSecret) {
-  const raw = `${identity.kind}:${identity.project || ''}:${[...(identity.allowedLenses || [])].sort().join(',')}`
+  // An unlinked client's cursors are bound to its own grant, never shared with another client on the same lens.
+  const scope = identity.kind === 'client:unlinked' ? `client:${identity.client_id}` : identity.project || ''
+  const raw = `${identity.kind}:${scope}:${[...(identity.allowedLenses || [])].sort().join(',')}`
   return createHmac('sha256', cursorSecret).update(raw).digest('hex').slice(0, 16)
 }

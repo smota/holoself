@@ -49,7 +49,8 @@ function gatherCandidates(o, { project, link, self, identity, registry, lens, re
       : { records: [], restrictions: [], unauthorized_sources_omitted: 0 }
 
   let contribCandidates = []
-  if (o.task && catResult.contrib) {
+  // Contrib methods are owner material; an unlinked client reads self content only.
+  if (o.task && catResult.contrib && identity.kind !== 'client:unlinked') {
     let config = null
     try {
       config = JSON.parse(readFileSync(join(self, 'config.json'), 'utf8'))
@@ -128,7 +129,8 @@ function assembleResult(
 ) {
   const records = [...selected.records]
   const warnings = [...(catResult.warnings || []), ...(identity.kind === 'owner:direct' ? [...(selfData.warnings || []), ...(local.warnings || [])] : [])]
-  if (!link && !o.self && !samePath(canonicalPath(self), canonicalPath(project)))
+  const isUnlinkedClient = identity.kind === 'client:unlinked'
+  if (!link && !o.self && !isUnlinkedClient && !samePath(canonicalPath(self), canonicalPath(project)))
     warnings.push('No project link found; resolved explicit/default self root.')
   if (selected.selection.session_start_unmatched?.length)
     warnings.push(`session_start_sources matched no source: ${selected.selection.session_start_unmatched.join(', ')}`)
@@ -137,7 +139,8 @@ function assembleResult(
     expiresAt = restrictedHost ? new Date(Date.parse(generatedAt) + (o.expiresHours || 24) * 60 * 60 * 1000).toISOString() : null
   const validation = resolvedContextAssertions(records, lens, o.task, adapter, link, resolution, subject)
   const localSpaceId = identity.kind === 'client:linked' ? canonicalSpaceId(project) : 'self'
-  const isLinked = identity.kind === 'client:linked',
+  // `isLinked` marks every non-owner caller: paths are stripped and owner-only diagnostics are withheld.
+  const isLinked = identity.kind === 'client:linked' || isUnlinkedClient,
     isMcp = surface === 'mcp'
   // Document bodies live only in the owning documents array; sources[] is a body-free provenance index.
   const projections = list => {
@@ -145,7 +148,11 @@ function assembleResult(
       localDocs = list.filter(r => r.kind === 'project' && (!r.space_id || r.space_id === localSpaceId)).map(documentProjection)
     return {
       self: isLinked ? { documents: selfDocs } : { path: slash(resolve(self)), documents: selfDocs },
-      project: isLinked ? { name: basename(project), documents: localDocs } : { path: slash(project), name: basename(project), documents: localDocs },
+      project: isUnlinkedClient
+        ? { name: null, documents: [] }
+        : isLinked
+          ? { name: basename(project), documents: localDocs }
+          : { path: slash(project), name: basename(project), documents: localDocs },
       methods: { documents: list.filter(r => r.kind === 'contrib').map(r => ({ ...documentProjection(r), contrib: r.contrib })) },
       sources: list.map(sourceIndexEntry),
       source_hashes: list.map(r => ({ kind: r.kind, path: r.path, sha256: r.source_hash, freshness: r.freshness }))

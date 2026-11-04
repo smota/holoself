@@ -10,11 +10,11 @@ const { executeToolJob } = await import('./mcp-server.mjs')
 // Test seam: synchronous busy time per tool name, set only through createToolPool({ workerData }) in tests.
 const simulateWorkMs = workerData?.simulateWorkMs || {}
 
-parentPort.on('message', ({ jobId, project, name, args }) => {
+parentPort.on('message', ({ jobId, project, client, name, args }) => {
   const busy = simulateWorkMs[name]
   if (busy > 0) {
     const end = Date.now() + busy
     while (Date.now() < end);
   }
-  parentPort.postMessage({ jobId, ...executeToolJob(project, name, args) })
+  parentPort.postMessage({ jobId, ...executeToolJob(project, name, args, client || null) })
 })

@@ -6,7 +6,8 @@ import { existsSync, mkdirSync, readFileSync, appendFileSync, readdirSync, lstat
 import { dirname, extname, join, resolve, sep } from 'node:path'
 import { listDocuments, readDocument, saveAnnotatedDocument, saveDocument } from './documents.mjs'
 import { HARNESS_IDS, detectHarnesses, loadHarnessSettings, runHarness, saveHarnessSettings, validateHarnessConfig } from './harnesses.mjs'
-import { loadLensRegistry, removeCustomLens, saveCustomLens, saveLensInstructions } from './lenses.mjs'
+import { loadLensRegistry, saveCustomLens, saveLensInstructions } from './lenses.mjs'
+import { removeLensUnlessUsed } from './clients/attestation.mjs'
 import { connectorLaunchPlan, launchConnector, loadConnectors, saveConnectorExtension, validateConnector } from './connectors.mjs'
 import { annotationSchema, validateAnnotationMetadata } from './annotations.mjs'
 import { applyCleanupPlan } from './cleanup.mjs'
@@ -246,7 +247,8 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
       if (lm && req.method === 'DELETE') {
         const b = await body(req)
         loadLensRegistry(root)
-        const registry = clientCheck(() => removeCustomLens(root, lm[1], b.expectedHash), 'INVALID_LENS')
+        // A lens still used by a desktop client grant (clients.json) cannot be removed; checked under the registry lock.
+        const registry = await clientCheckAsync(() => removeLensUnlessUsed(root, lm[1], b.expectedHash), 'INVALID_LENS')
         return send(res, 200, { ok: true, data: { registry_hash: registry.registry_hash, lenses: registry.lenses } })
       }
       if (url.pathname === '/api/annotations/schema' && req.method === 'GET') {
@@ -288,7 +290,11 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
           )
         return send(res, 200, { ok: true, data: saved })
       }
+      // The desktop-client inbox (<self>/proposals/inbox/) is reviewed through the same CLI paths with --inbox --root.
+      const inboxScope = ['--inbox', '--root', root]
       if (url.pathname === '/api/proposals' && req.method === 'GET') {
+        if (url.searchParams.get('inbox') === '1')
+          return send(res, 200, { ok: true, data: JSON.parse((await cli(['proposals', 'list', ...inboxScope])).stdout) })
         const project = url.searchParams.get('project')
         if (typeof project !== 'string' || !project.trim()) throw new HttpError(400, 'INVALID_INPUT', 'project path required')
         return send(res, 200, { ok: true, data: JSON.parse((await cli(['proposals', 'list', '--project', project])).stdout) })
@@ -323,8 +329,8 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
       const pp = url.pathname.match(/^\/api\/proposals\/([^/]+)\/preview$/)
       if (pp && req.method === 'POST') {
         const b = await body(req)
-        if (typeof b.project !== 'string' || !b.project.trim()) throw new HttpError(400, 'INVALID_INPUT', 'project path required')
-        const preview = await cli(['proposals', 'approve', pp[1], '--project', b.project, '--json'], { allowFailure: true })
+        if (b.inbox !== true && (typeof b.project !== 'string' || !b.project.trim())) throw new HttpError(400, 'INVALID_INPUT', 'project path required')
+        const preview = await cli(['proposals', 'approve', pp[1], ...(b.inbox === true ? inboxScope : ['--project', b.project]), '--json'], { allowFailure: true })
         if (!preview.stdout) throw cliFailure(preview.stderr, preview.code)
         const data = JSON.parse(preview.stdout)
         return send(res, 200, {
@@ -341,8 +347,8 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
       const pm = url.pathname.match(/^\/api\/proposals\/([^/]+)\/(approve|reject|defer|supersede)$/)
       if (pm && req.method === 'POST') {
         const b = await body(req)
-        if (typeof b.project !== 'string' || !b.project.trim()) throw new HttpError(400, 'INVALID_INPUT', 'project path required')
-        const args = ['proposals', pm[2], pm[1], '--project', b.project, '--yes']
+        if (b.inbox !== true && (typeof b.project !== 'string' || !b.project.trim())) throw new HttpError(400, 'INVALID_INPUT', 'project path required')
+        const args = ['proposals', pm[2], pm[1], ...(b.inbox === true ? inboxScope : ['--project', b.project]), '--yes']
         if (pm[2] === 'approve') {
           if (!b.previewHash) throw new HttpError(409, 'STALE_PREVIEW', 'Preview hash required.')
           args.push('--preview-hash', b.previewHash)

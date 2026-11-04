@@ -15,6 +15,9 @@
 - MCP tools accept no project/self roots and expose no raw canonical resources
 - MCP proposal creation writes only project-local pending review; approval and canonical writes are absent
 - MCP output is bounded and strips absolute self/project paths
+- A desktop MCP client without a project (`holoself mcp --client <client-id>`) is bound at launch to one owner-created grant with exactly one lens that is never `private` and cannot grant `restricted`; it reads self content only, is re-attested on every call (revocation needs no restart), and its context calls are recorded in the served-context ledger with its `client_id`
+- Desktop client proposals are disabled by default; the opt-in inbox requires evidence, appends only to lens-visible documents, is capped at 50 pending per client, and is approved only by the owner outside MCP
+- `holoself mcp configure --client <client-id>` prints by default; writing a host's user-level configuration needs a verified platform, a preview hash, explicit consent, a backup, and refuses collisions, symlinks and hard links
 
 ## User responsibilities
 
@@ -25,4 +28,4 @@
 - Protect filesystem access, backups, and sync providers
 - Understand that pattern-based secret detection cannot identify every secret
 
-Holoself reduces disclosure risk; it cannot guarantee safe publication or defend against a tool already granted unrestricted filesystem access.
+Holoself reduces disclosure risk; it cannot guarantee safe publication or defend against a tool already granted unrestricted filesystem access. A desktop client ID is not a secret: a process running as the same OS user can claim any client ID or read the self root directly.

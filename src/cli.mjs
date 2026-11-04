@@ -158,8 +158,41 @@ Efficiency: context supports --budget small|standard|deep|unbounded, --manifest,
         `--temporal current|historical|superseded|all.\nInstruction consolidation: instructions render|audit --project ` +
         `<dir>.\nSafety confirmations: --yes. Packet adapters: --adapter ` +
         `pi|claude|codex|generic|obsidian|restricted-host.\nMCP: mcp [--project <linked-project>] | mcp ` +
-        `configure|status --project <dir> [--platform codex|agy|claude | --all-detected] [--force-replace].\n`)
+        `configure|status --project <dir> [--platform codex|agy|claude | --all-detected] [--force-replace].\n` +
+        `Desktop MCP clients: client add --name <name> --lens <id> [--proposals inbox] | client list [--json] | ` +
+        `client revoke|remove <id|name>; mcp --client <id> --root <self>; mcp configure --client <id> --platform ` +
+        `claude-desktop|generic [--apply|--remove] [--yes] [--force-replace]; proposals list|show|approve|reject --inbox --root <self>.\n`)
   )
+}
+// `mcp configure|status --client <id>`: print the host snippet (default), or edit the host's user-level file with --apply.
+async function runClientMcpConfiguration(o, action, root) {
+  if (o.project || o.allDetected) throw Object.assign(new Error('--client cannot be combined with --project or --all-detected'), { code: 'CLIENT_BINDING_CONFLICT' })
+  const { clientSelfRoot } = await import('./cli/commands/client.mjs')
+  const config = await import('./mcp-client-config.mjs'),
+    self = clientSelfRoot({ root })
+  if (action === 'status') {
+    console.log(JSON.stringify(config.clientHostStatus(self, o.client, o.platforms?.length ? { platforms: o.platforms } : {}), null, 2))
+    return
+  }
+  if (action !== 'configure') throw new Error('mcp requires no subcommand, status, or configure')
+  if (o.platforms?.length !== 1) throw new Error('mcp configure --client requires exactly one --platform claude-desktop|generic')
+  const platform = o.platforms[0]
+  if (!o.applyHost && !o.remove) {
+    if (o.forceReplace) throw new Error('--force-replace applies only with --apply')
+    const snippet = config.clientConfigSnippet(self, o.client, { platform })
+    console.log(JSON.stringify(snippet, null, 2))
+    return
+  }
+  config.assertApplyPlatform(platform)
+  const options = { platform, remove: o.remove === true, forceReplace: o.forceReplace === true },
+    plan = config.clientHostPlan(self, o.client, options)
+  console.log(JSON.stringify({ host_configuration_plan: { ...plan, _write: undefined } }, null, 2))
+  if (o.dryRun || plan.preview.action === 'unchanged') return
+  const question =
+    `${o.remove ? 'Remove the holoself entry from' : 'Write the holoself entry to'} ${plan.preview.path}` +
+    `${plan.preview.action === 'replace' ? ', replacing a different holoself server' : ''}?`
+  if (!(await confirm(o, question))) return
+  console.log(JSON.stringify(config.applyClientHostConfig(self, o.client, { ...options, expectedPlanHash: plan.plan_sha256 }), null, 2))
 }
 async function confirm(o, message) {
   if (o.yes) return true
@@ -188,7 +221,7 @@ export async function run(argv) {
           version: VERSION,
           interface: 'local-cli',
           contextSchemaVersion: 1,
-          commands: ['doctor', 'context', 'ledger', 'search', 'propose', 'proposals', 'instructions', 'knowledge', 'link', 'skill', 'mcp', 'coaching'],
+          commands: ['doctor', 'context', 'ledger', 'search', 'propose', 'proposals', 'instructions', 'knowledge', 'link', 'skill', 'mcp', 'client', 'coaching'],
           coaching: {
             storage: 'self-root/coaching/sessions',
             commands: ['start', 'note', 'action', 'choose', 'review', 'material', 'resume'],
@@ -201,6 +234,7 @@ export async function run(argv) {
             transport: 'stdio',
             projectBound: true,
             linkAuthority: true,
+            unlinkedClients: { identity: 'client:unlinked', launch: 'mcp --client <client_id> --root <self>', proposals: ['disabled', 'inbox'] },
             tools: [
               'holoself_status',
               'holoself_context',
@@ -281,9 +315,14 @@ export async function run(argv) {
   }
   if (o.command === 'mcp') {
     const action = o.args[0]
+    if (!o.client && (o.rootExplicit || o.applyHost || o.remove)) throw new Error('--root, --apply and --remove apply to client mode; add --client <id>')
     if (!action) {
       const { startMcpServer } = await import('./mcp-server.mjs')
-      await startMcpServer({ project: o.project, requireClaudeProject: o.claudeProjectDir })
+      await startMcpServer({ project: o.project, client: o.client || null, root: o.client ? root : null, requireClaudeProject: o.claudeProjectDir })
+      return
+    }
+    if (o.client) {
+      await runClientMcpConfiguration(o, action, root)
       return
     }
     if (!o.project) throw new Error(`mcp ${action} requires --project <linked-project>`)

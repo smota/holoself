@@ -2,6 +2,8 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { ecosystemValidationErrors } from '../../catalog/validation.mjs'
+import { findClient, readClientRegistry } from '../../clients/registry.mjs'
+import { findInboxProposal, inboxPreviewData, listInboxProposals, scanInbox } from '../../proposals/client-inbox.mjs'
 import {
   findProposal,
   listProposalData,
@@ -9,11 +11,13 @@ import {
   proposalPreviewData,
   proposalText,
   scanProposalStore,
-  stateProposal
+  stateProposal,
+  stateProposalInSelf
 } from '../../proposals/store.mjs'
 import { withRegistryLock } from '../../link/registry.mjs'
 import { atomicWrite, hash } from '../../shared/fs.mjs'
 import { askConfirm, projectPath } from '../link-helpers.mjs'
+import { clientSelfRoot } from './client.mjs'
 
 // One readable line per change for `proposals show`, emitted as YAML comments above the record.
 function changeSummary(change) {
@@ -23,13 +27,54 @@ function changeSummary(change) {
   if (change.operation === 'retire_claim') return `retire claim ${change.claim_id} in ${change.target} as historical: ${one(change.reason)}`
   return `append claim to ${change.target}: "${one(change.claim)}"`
 }
+// The queue under review: a linked project's proposals (default) or, with --inbox, the self-root client inbox. Both
+// use the same preview hash, transactional apply, archive states and receipts.
+function proposalQueue(o) {
+  if (o.inbox) {
+    if (o.project || o.target) throw new Error('--inbox reviews the self-root client inbox; it cannot be combined with --project')
+    const self = clientSelfRoot(o)
+    const clients = () => {
+      try {
+        return readClientRegistry(self).clients
+      } catch {
+        return []
+      }
+    }
+    return {
+      self,
+      project: null,
+      list: () => listInboxProposals(self),
+      scan: () => scanInbox(self),
+      find: id => findInboxProposal(self, id),
+      preview: id => inboxPreviewData(self, id),
+      state: (p, state, details) => stateProposalInSelf(self, p, state, details),
+      // Review shows the client's name and current status; a removed client is reported as removed.
+      describe: p => {
+        const entry = findClient(clients(), p.origin?.client_id, { idOnly: true })
+        return { client: entry ? { name: entry.name, status: entry.status, lens: entry.lens } : { name: null, status: 'removed' } }
+      }
+    }
+  }
+  const project = projectPath(o)
+  return {
+    self: null,
+    project,
+    list: () => listProposalData(project),
+    scan: () => scanProposalStore(project),
+    find: id => findProposal(project, id),
+    preview: id => proposalPreviewData(project, id),
+    state: (p, state, details) => stateProposal(project, p, state, details),
+    describe: () => ({})
+  }
+}
 export async function runProposals(o, sub) {
-  const project = projectPath(o),
+  const queue = proposalQueue(o),
+    project = queue.project,
     action = sub
   if (action === 'list') {
     console.log(
       JSON.stringify(
-        listProposalData(project).map(({ _path, ...p }) => p),
+        queue.list().map(({ _path, ...p }) => ({ ...p, ...queue.describe(p) })),
         null,
         2
       )
@@ -37,28 +82,31 @@ export async function runProposals(o, sub) {
     return true
   }
   if (action === 'audit') {
-    const scan = scanProposalStore(project)
+    const scan = queue.scan()
     console.log(JSON.stringify({ managed: scan.managed.map(({ _path, ...p }) => p), diagnostics: scan.diagnostics }, null, 2))
     if (scan.diagnostics.some(x => x.severity === 'error')) process.exitCode = 1
     return true
   }
   const id = o.args[1]
   if (!id) throw new Error(`proposals ${action} requires <id>`)
-  const p = findProposal(project, id)
+  const p = queue.find(id)
   if (action === 'show') {
     const changes = proposalChanges(p),
       summary = changes.some(x => (x.operation || 'append_claim') !== 'append_claim')
         ? changes.map(x => `# ${x.change_id}: ${changeSummary(x)}`).join('\n') + '\n'
-        : ''
-    console.log(summary + proposalText(Object.fromEntries(Object.entries(p).filter(([k]) => k !== '_path'))))
+        : '',
+      described = queue.describe(p).client,
+      origin = described ? `# client: ${described.name || p.origin.client_id} (${described.status})\n` : ''
+    console.log(origin + summary + proposalText(Object.fromEntries(Object.entries(p).filter(([k]) => k !== '_path'))))
     return true
   }
   if (!['approve', 'reject', 'defer', 'supersede'].includes(action))
     throw new Error('proposals requires list, audit, show, approve, reject, defer, or supersede')
   if (p.status !== 'pending') throw new Error(`proposal is ${p.status}, expected pending`)
   if (action === 'approve') {
-    const prepared = proposalPreviewData(project, p.proposal_id),
-      { link, grouped } = prepared,
+    const prepared = queue.preview(p.proposal_id),
+      { grouped } = prepared,
+      link = { path: queue.self || prepared.link.path },
       changes = proposalChanges(p),
       archive = join(link.path, 'proposals', 'approved', `${p.proposal_id}.yaml`)
     if (existsSync(archive)) throw new Error(`proposal archive collision: ${archive}`)
@@ -68,7 +116,7 @@ export async function runProposals(o, sub) {
       previewHash = prepared.preview_hash
     console.log(
       o.json
-        ? JSON.stringify({ proposal_id: p.proposal_id, changes: previews, preview_hash: previewHash }, null, 2)
+        ? JSON.stringify({ proposal_id: p.proposal_id, ...queue.describe(p), changes: previews, preview_hash: previewHash }, null, 2)
         : `Affected files: ${[...grouped.keys()].join(', ')}\nPreview hash: ${previewHash}\n--- proposed diff ---\n` +
             `${previews
               .map(x =>
@@ -113,7 +161,7 @@ export async function runProposals(o, sub) {
       }
       try {
         for (const item of grouped.values()) atomicWrite(item.target, stamp(item.after))
-        stateProposal(project, p, 'approved', {
+        queue.state(p, 'approved', {
           preview_sha256: previewHash,
           applied_changes: appliedChanges.map(({ change_id, operation, target, claim_id, before_sha256, after_sha256 }) => ({
             change_id,
@@ -145,7 +193,7 @@ export async function runProposals(o, sub) {
     return true
   }
   const state = action === 'reject' ? 'rejected' : action === 'supersede' ? 'superseded' : 'deferred'
-  stateProposal(project, p, state)
+  queue.state(p, state)
   console.log(`[ok] ${state} ${p.proposal_id}`)
   return true
 }

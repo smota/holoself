@@ -80,6 +80,37 @@ Recommended model flow:
 4. Preserve source handles, hashes, restrictions, and the context receipt.
 5. Use `holoself_proposal_create` only for durable reusable discoveries with project evidence; review and approval remain outside MCP.
 
+## Desktop clients without a project
+
+Desktop and app-hosted MCP clients (Claude Desktop and similar) have no project directory, so they cannot use a project link. The owner gives each such app its own grant: an unlinked client identity bound to exactly one lens. It reads self content only, never project content, `private` or `restricted` material. See the [decision record](../decisions/unlinked-client-identity.md).
+
+1. Create the grant from the self root. The command prints the new `client_id`:
+
+   ```bash
+   holoself client add --name claude-desktop-laptop --lens professional --root <self-root>
+   ```
+
+   The lens must exist, must not be `private`, and must not grant `restricted`. The lens and the proposal mode cannot be edited later: to change either, add a new client, reconfigure the host and revoke the old one.
+2. Print the host configuration and add it to the app by hand:
+
+   ```bash
+   holoself mcp configure --client <client-id> --platform claude-desktop --root <self-root>
+   ```
+
+   The snippet uses an absolute command path and the arguments `mcp --client <client-id> --root <self-root>`, because GUI apps do not inherit the shell `PATH`. `--platform generic` prints only the command and arguments for any STDIO host. Printing writes nothing.
+3. Optional: `holoself mcp configure --client <client-id> --platform claude-desktop --apply --root <self-root>` writes the entry into the host's user-level file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows). It is refused with `MCP_PLATFORM_NOT_VERIFIED` until the platform has a native verification record in [platform verification](../reference/platform-verification.md); today Claude Desktop is print-only. When allowed, it previews the path, current SHA-256, action and entry, requires `--yes` or terminal confirmation, refuses a different existing `holoself` entry (unless `--force-replace` with confirmation), never rewrites unparseable JSON, refuses symlinks and hard links, backs up the original next to it (mode `0600` when the original is group- or world-readable), keeps the file mode and restores the original if the write fails. `--remove` deletes only the Holoself entry.
+
+At runtime:
+
+- `holoself mcp --client <client-id> --root <self-root>` refuses `--project`, `--claude-project-dir` and a non-empty `CLAUDE_PROJECT_DIR` (`CLIENT_BINDING_CONFLICT`). It never discovers a link from the working directory. Without `--root` it uses `HOLOSELF_HOME` or `~/.holoself`.
+- Every tool call re-reads `.holoself/clients.json` and the lens definition. A revoked client fails with `CLIENT_REVOKED`, a removed one with `CLIENT_UNKNOWN`, and a lens that became missing, private or invalid with `CLIENT_LENS_INVALID`, without restarting the app. Tool arguments never select an identity, root or lens: any lens other than the bound one returns `LENS_NOT_GRANTED`.
+- `holoself_status` reports `identity: client:unlinked`, the client name, its lens and its proposal mode, never the self path.
+- Context calls use the same core, budgets, envelope caps, source handles and receipts as linked MCP. Successful context calls append served-context ledger entries to `<self>/.holoself/ledger.ndjson` with `surface: mcp` and `client_id`; read them with `holoself ledger --root <self-root> --client <client-id>`.
+- Proposals are off by default: `holoself_proposal_create` and `holoself_proposal_preview` are not listed and calls fail with `CLIENT_PROPOSALS_DISABLED`. A client created with `--proposals inbox` may append one claim to an existing document its lens can read, with required evidence (1–4,000 characters, secret-like text rejected). Pending proposals go to `<self>/proposals/inbox/` with provenance `client:<client-id>`, at most 50 per client (`CLIENT_INBOX_FULL`). Any other target fails with the same `PROPOSAL_TARGET_INVALID` error. Only the owner reviews them: `holoself proposals list --inbox --root <self-root>`, then `holoself proposals approve <id> --inbox --root <self-root>` (or reject). There is no MCP approval tool.
+- Manage grants with `holoself client list --root <self-root>`, `holoself client revoke <client-id> --root <self-root>` and `holoself client remove <client-id> --root <self-root>` (remove refuses an active client). A revoked host keeps a failing server entry until you remove it; `holoself mcp status --client <client-id> --root <self-root>` shows whether the host file still carries it.
+
+The client ID is not a secret. Any process running as the same OS user can launch with any ID or read the self root directly. The boundary is least privilege per host: one owner-chosen lens per app, each grant auditable and revocable.
+
 ## Fallback
 
 If MCP is unavailable, use `.holoself/BOOTSTRAP.md`, the installed public skill, `holoself context`, or a reviewed snapshot. MCP failure never broadens access and does not invalidate the explicit link.
@@ -88,6 +119,7 @@ If MCP is unavailable, use `.holoself/BOOTSTRAP.md`, the installed public skill,
 
 - `LINK_REQUIRED`: link the project first or start from the correct project.
 - `PROJECT_BINDING_AMBIGUOUS`: remove conflicting startup roots; do not guess.
+- `CLIENT_BINDING_CONFLICT`, `CLIENT_UNKNOWN`, `CLIENT_REVOKED`, `CLIENT_LENS_INVALID`: check the desktop client grant with `holoself client list --root <self-root>`.
 - `missing-or-drifted`: rerun configuration preview and review the diff.
 - `mcp status` also reports `client_state` per client: `not-detected`, `detected` (not configured), `configured`, `verified` (configured and natively verified), or `failing` (divergent or drifted entry, unreadable file, or broken link). The Workbench Setup view shows the same states.
 - Client shows pending approval: approve the project-scoped server in that client. This is client trust, not Holoself canonical-write approval.

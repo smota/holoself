@@ -63,7 +63,10 @@ export function proposalChanges(p) {
         }
       ]
 }
-export function validateProposal(p) {
+// `inbox: true` validates a client inbox record (<self>/proposals/inbox/): it carries an `origin` instead of a source
+// project, so the two record shapes can never be read from each other's store.
+export function validateProposal(p, { inbox = false } = {}) {
+  if (inbox) return validateInboxProposal(p)
   const errors = [],
     v2 = p?.schema_version === 2,
     requiredStrings = v2
@@ -170,7 +173,34 @@ export function validateProposal(p) {
     errors.push('proposal text contains reserved claim markers')
   return errors
 }
-export function readProposal(path) {
+export const INBOX_EVIDENCE_MAX = 4000
+const INBOX_KEYS = new Set(['schema_version', 'title', 'proposal_id', 'origin', 'status', 'created_at', 'reviewed_at', 'provenance', 'changes', '_path'])
+// Inbox records: schema 2, append_claim changes only, required evidence (1-4,000 characters), provenance exactly
+// `client:<client_id>`, and no source project or source files (there is no project to cite).
+export function validateInboxProposal(p) {
+  if (!p || Array.isArray(p) || typeof p !== 'object') return ['proposal must be a mapping']
+  const errors = []
+  for (const key of Object.keys(p)) if (!INBOX_KEYS.has(key)) errors.push(`unknown inbox proposal field: ${key}`)
+  if (p.schema_version !== 2) errors.push('inbox proposal schema_version must be 2')
+  const origin = p.origin
+  if (!origin || Array.isArray(origin) || typeof origin !== 'object' || origin.kind !== 'client' || typeof origin.client_id !== 'string' || !UUID_RE.test(origin.client_id))
+    errors.push('inbox proposal origin must be { kind: client, client_id: <uuid> }')
+  else {
+    for (const key of Object.keys(origin)) if (!['kind', 'client_id'].includes(key)) errors.push(`unknown inbox proposal origin field: ${key}`)
+    if (!Array.isArray(p.provenance) || p.provenance.length !== 1 || p.provenance[0] !== `client:${origin.client_id}`)
+      errors.push('inbox proposal provenance must be exactly client:<client_id>')
+  }
+  const shaped = { ...p, source_project: 'client-inbox', source_files: ['inbox'] }
+  delete shaped.origin
+  for (const error of validateProposal(shaped)) errors.push(error)
+  for (const change of Array.isArray(p.changes) ? p.changes : []) {
+    if (change?.operation !== 'append_claim') errors.push('inbox proposals may only append claims')
+    if (typeof change?.evidence !== 'string' || !change.evidence.trim() || change.evidence.length > INBOX_EVIDENCE_MAX)
+      errors.push(`inbox proposal evidence must be 1-${INBOX_EVIDENCE_MAX} characters`)
+  }
+  return errors
+}
+export function readProposal(path, { inbox = false } = {}) {
   if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) throw new Error(`proposal is not a regular file: ${path}`)
   let p
   try {
@@ -178,23 +208,31 @@ export function readProposal(path) {
   } catch (error) {
     throw new Error(`malformed proposal ${path}: ${error.message}`)
   }
-  const errors = validateProposal(p)
+  // 'auto' (self-root archives only) picks the validator from the record: archived inbox records carry an origin.
+  if (inbox === 'auto') inbox = Boolean(p && typeof p === 'object' && !Array.isArray(p) && Object.hasOwn(p, 'origin'))
+  const errors = validateProposal(p, { inbox })
   if (errors.length) throw new Error(`invalid proposal ${path}: ${errors.join('; ')}`)
   if (basename(path, '.yaml') !== p.proposal_id) throw new Error(`proposal filename does not match proposal_id: ${path}`)
   p._path = path
+  if (inbox) Object.defineProperty(p, '_inbox', { value: true, enumerable: false })
   return p
 }
 export function listProposalData(project) {
   return scanProposalStore(project).managed
 }
-export function scanProposalStore(project) {
-  const dir = proposalDir(project)
+export function inboxDir(self) {
+  return assertContainedPath(self, join(resolve(self), 'proposals', 'inbox'), 'proposal inbox')
+}
+export function scanProposalStore(project, { inboxSelf = null } = {}) {
+  const inbox = Boolean(inboxSelf),
+    dir = inbox ? inboxDir(inboxSelf) : proposalDir(project),
+    prefix = inbox ? 'proposals/inbox' : '.holoself/proposals'
   if (!existsSync(dir)) return { managed: [], diagnostics: [] }
   if (lstatSync(dir).isSymbolicLink() || !lstatSync(dir).isDirectory()) throw new Error(`proposal directory is unsafe: ${dir}`)
   const managed = [],
     diagnostics = []
   for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => canonicalSort(a.name, b.name))) {
-    const rel = `.holoself/proposals/${entry.name}`,
+    const rel = `${prefix}/${entry.name}`,
       path = join(dir, entry.name)
     if (entry.isDirectory()) {
       diagnostics.push({ path: rel, code: 'UNMANAGED_PROPOSAL_DIRECTORY', severity: 'warning', suggested_action: 'review-manually' })
@@ -209,7 +247,7 @@ export function scanProposalStore(project) {
       continue
     }
     try {
-      managed.push(readProposal(path))
+      managed.push(readProposal(path, { inbox }))
     } catch (error) {
       diagnostics.push({
         path: rel,
@@ -222,10 +260,10 @@ export function scanProposalStore(project) {
   }
   return { managed, diagnostics }
 }
-export function findProposal(project, id) {
+export function findProposal(project, id, { inboxSelf = null } = {}) {
   if (typeof id !== 'string' || !UUID_PREFIX_RE.test(id) || id.includes('..') || id.includes('/') || id.includes('\\'))
     throw new Error(`invalid proposal id: ${id}`)
-  const scan = scanProposalStore(project),
+  const scan = scanProposalStore(project, { inboxSelf }),
     matches = scan.managed.filter(p => p.proposal_id === id || p.proposal_id.startsWith(id))
   if (!matches.length) {
     const invalid = scan.diagnostics.find(item => basename(item.path, '.yaml').startsWith(id))
@@ -251,7 +289,7 @@ export function proposalProjectErrors(p, project) {
   return errors
 }
 export function saveProposal(p, path = p._path) {
-  const errors = validateProposal(p)
+  const errors = validateProposal(p, { inbox: p._inbox === true })
   if (errors.length) throw new Error(`invalid proposal: ${errors.join('; ')}`)
   const clean = { ...p }
   delete clean._path
@@ -447,9 +485,12 @@ export function proposalPreviewData(project, id, { view = null } = {}) {
   return { proposal: p, link, grouped, steps, commit_time_token, changes: previews, preview_hash: hash(JSON.stringify(previews)) }
 }
 export function stateProposal(project, p, state, details = {}) {
+  return stateProposalInSelf(readLink(project).path, p, state, details)
+}
+// Archives a reviewed proposal (project or inbox) under <self>/proposals/<state>/ with its receipt.
+export function stateProposalInSelf(self, p, state, details = {}) {
   if (!UUID_RE.test(p.proposal_id)) throw new Error('proposal_id must be a UUID')
-  const self = readLink(project).path,
-    dir = assertContainedPath(self, join(self, 'proposals', state), 'proposal archive'),
+  const dir = assertContainedPath(self, join(self, 'proposals', state), 'proposal archive'),
     archive = assertContainedPath(self, join(dir, `${p.proposal_id}.yaml`), 'proposal archive'),
     receiptDir = assertContainedPath(self, join(self, 'proposals', 'receipts'), 'proposal receipts'),
     receipt = assertContainedPath(self, join(receiptDir, `${p.proposal_id}-${state}.json`), 'proposal receipt')
