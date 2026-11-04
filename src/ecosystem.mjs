@@ -60,76 +60,35 @@ import {
   revertPolicyMigration
 } from './migration.mjs'
 
+import { assertContainedPath, atomicWrite, ensureDir, hash, pathExists, safeRealpath, slash } from './shared/fs.mjs'
+import { parseYaml, yamlObject } from './shared/yaml.mjs'
+import {
+  canonicalProjectPath, canonicalSpaceId, computeLinksRegisterHash, readRegistry, registryFilePath, withRegistryLock, writeRegistry
+} from './link/registry.mjs'
+import {
+  DEFAULT_PROJECT_EXCLUDES, createLinkDirs, findLinkUpwards, inspectLinkCollisions, isCanonicalSelf,
+  linkPath, linkSchemaErrors, projectContextErrors, readLink, updateLinkBindingSaltInPlace, writeLink
+} from './link/config.mjs'
+import { linkedLensAuthority } from './link/attestation.mjs'
+import { SECRET_RE, secretFile } from './policy/secrets.mjs'
+import {
+  PRIVACY_FIELDS, canonicalPrivacyMetadataErrors, frontmatter, privacyMetadataErrors, privacyValueValid
+} from './policy/privacy-fields.mjs'
+import {
+  LENSES, allowed, allowedDocument, disclosure, filterClaimVisibility, filterFieldVisibility, privacyMetadata,
+  visibility, visibleUnderBehavior
+} from './policy/access.mjs'
 export { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES }
-export const LENSES = DEFAULT_LENS_IDS
-const SENSITIVITY_LENSES={
-  'compensation-confidential':['professional','interview','private'],
-  'third-party-personal':['leadership','private'],
-  'recruiter-confidential':['professional','interview','private'],
-  'employer-confidential':['professional','technical','leadership','interview','private'],
-  'application-private':['professional','interview','private'],
-  restricted:['private']
-}
+// Re-exported so existing imports of these names from ecosystem.mjs keep working.
+export { LENSES, PRIVACY_FIELDS, canonicalPrivacyMetadataErrors, canonicalSpaceId, privacyMetadataErrors, privacyValueValid }
 export const PROPOSAL_TYPES = ['new_fact','fact_update','fact_correction','new_story','new_preference','preference_update','new_decision','privacy_warning','conflict_resolution']
 export const PROPOSAL_STATES = ['pending','approved','rejected','deferred','superseded']
 const SKIP_DIRS = new Set(['.git','node_modules','.holoself','proposals','exports','.agents','.claude','.codex','.pi','.agy','.gemini','.cursor','.github','skills','Generated','generated'])
-const DEFAULT_PROJECT_EXCLUDES=['.git/**','node_modules/**','.holoself/**','.agents/**','.claude/**','.codex/**','.pi/**','.agy/**','.gemini/**','.cursor/**','.github/**','skills/**','**/Generated/**','**/generated/**']
-const SECRET_RE = /(-----BEGIN [A-Z ]*(?:PRIVATE KEY|OPENSSH PRIVATE KEY)-----|(?:api[_-]?key|client[_-]?secret|password|passwd|secret|access[_-]?token|refresh[_-]?token|auth(?:orization)?)\s*[:=]\s*["']?(?:bearer\s+)?[^\s"']{8,}|\bAKIA[0-9A-Z]{16}\b|\b(?:ghp_|gho_|ghu_|ghs_|github_pat_|xox[baprs]-|sk-(?:proj-)?|npm_)[A-Za-z0-9_-]{12,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis):\/\/[^\s]+:[^\s]+@|(?:sig|signature|se|sp|sv)=[^&\s]{8,}(?:&|$))/i
-const SECRET_FILE_RE = /(^|\/)(?:\.env(?:\..*)?|id_(?:rsa|dsa|ecdsa|ed25519)|[^/]*(?:secret|credential|password|private[-_]?key|access[-_]?token)[^/]*|[^/]+\.(?:pem|p12|pfx|key))(?:\.md)?$/i
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const UUID_PREFIX_RE = /^[0-9a-f-]{8,36}$/i
 const PACKAGE_ROOT=resolve(fileURLToPath(new URL('..',import.meta.url)))
 
-function pathExists(path){try{lstatSync(path);return true}catch{return false}}
-function safeRealpath(p){try{return realpathSync(p)}catch{return resolve(p)}}
-function ensureDir(path){ mkdirSync(path,{recursive:true}) }
-function atomicWrite(path, content){
-  atomicWriteFile(path, content)
-}
-function slash(path){ return path.replaceAll('\\','/') }
-function hash(text){ return createHash('sha256').update(text).digest('hex') }
 function projectPath(o){ return resolve(o.project || o.target || process.cwd()) }
-function assertContainedPath(root,target,label='path'){
-  // Boundary is the canonical root; symlinks above it are the user's environment.
-  const rootReal=canonicalPath(root)
-  if(pathExists(target)&&existsSync(target)){
-    const targetReal=realpathSync(target)
-    if(!isWithin(rootReal,targetReal))throw new Error(`${label} escapes root`)
-    return targetReal
-  }
-  const located=locateBelow(root,target)
-  if(!located)throw new Error(`${label} escapes root`)
-  assertNoLinkBelow(located.base,resolve(target),link=>new Error(`${label} traverses symlink: ${link}`))
-  return located.parts.length?join(rootReal,...located.parts):rootReal
-}
-function isCanonicalSelf(path){
-  if(!pathExists(path))return false
-  const real=safeRealpath(path)
-  try{const st=lstatSync(real);if(!st.isDirectory()||st.isSymbolicLink())return false}catch{return false}
-  return existsSync(join(real,'config.json'))&&existsSync(join(real,'profile'))&&existsSync(join(real,'context'))
-}
-function findLinkUpwards(startDir){
-  let current=resolve(startDir)
-  while(true){
-    const holoselfDir=join(current,'.holoself')
-    if(existsSync(holoselfDir)){
-      try{
-        if(lstatSync(holoselfDir).isSymbolicLink()){
-          const parent=dirname(current)
-          if(parent===current)break
-          current=parent
-          continue
-        }
-      }catch{}
-    }
-    const candidate=linkPath(current)
-    if(pathExists(candidate))return {projectDir:current,linkFilePath:candidate}
-    const parent=dirname(current)
-    if(parent===current)break
-    current=parent
-  }
-  return null
-}
 function getOrCreateCursorSecret(selfRoot){
   const keyPath=join(selfRoot,'.holoself','runtime','.cursor.key')
   try{if(existsSync(keyPath))return readFileSync(keyPath)}catch{}
@@ -140,257 +99,6 @@ function getIdentityId(identity,cursorSecret){
   const raw=`${identity.kind}:${identity.project||''}:${[...(identity.allowedLenses||[])].sort().join(',')}`
   return createHmac('sha256',cursorSecret).update(raw).digest('hex').slice(0,16)
 }
-function linkPath(project){ return join(project,'.holoself','link.yaml') }
-export function canonicalSpaceId(projectDir){
-  const real=safeRealpath(projectDir)
-  const norm=slash(real).normalize('NFC')
-  const canonical=process.platform==='win32'?norm.toLowerCase():norm
-  return 'hs-space-'+hash('project\0'+canonical).slice(0,16)
-}
-function canonicalProjectPath(projectDir){
-  const real=safeRealpath(projectDir)
-  const norm=slash(real).normalize('NFC')
-  return process.platform==='win32'?norm.toLowerCase():norm
-}
-function registryLockPath(selfRoot){ return join(selfRoot,'.holoself','links.json.lock') }
-function registryFilePath(selfRoot){ return join(selfRoot,'.holoself','links.json') }
-function isPidAlive(pid){
-  if(!pid||typeof pid!=='number')return false
-  try{process.kill(pid,0);return true}catch(err){return err.code==='EPERM'}
-}
-async function withRegistryLock(selfRoot,fn){
-  const lockPath=registryLockPath(selfRoot)
-  ensureDir(dirname(lockPath))
-  const backoffs=[50,150,450]
-  let acquired=false
-  for(let attempt=0;attempt<=backoffs.length;attempt++){
-    try{
-      const fd=openSync(lockPath,'wx')
-      const payload=JSON.stringify({pid:process.pid,timestamp:Date.now()})+'\n'
-      writeFileSync(fd,payload,'utf8')
-      closeSync(fd)
-      acquired=true
-      break
-    }catch(err){
-      if(err.code==='EEXIST'){
-        let isStale=false
-        try{
-          const raw=readFileSync(lockPath,'utf8')
-          const parsed=JSON.parse(raw)
-          const age=Date.now()-(parsed.timestamp||0)
-          if(age>5000||(parsed.pid&&!isPidAlive(parsed.pid)))isStale=true
-        }catch{isStale=true}
-        if(isStale){
-          try{rmSync(lockPath,{force:true})}catch{}
-          continue
-        }
-        if(attempt<backoffs.length){
-          await new Promise(r=>setTimeout(r,backoffs[attempt]))
-          continue
-        }
-      }else{throw err}
-    }
-  }
-  if(!acquired){
-    const err=new Error('Timeout acquiring links registry lock')
-    err.code='REGISTRY_LOCK_TIMEOUT'
-    throw err
-  }
-  try{return await fn()}finally{try{rmSync(lockPath,{force:true})}catch{}}
-}
-function readRegistry(selfRoot){
-  const path=registryFilePath(selfRoot)
-  if(!pathExists(path))return {raw:null,baseHash:'__ABSENT__',registry_hash:'__ABSENT__',links:[]}
-  const raw=readFileSync(path,'utf8'),baseHash=hash(raw)
-  let parsed
-  try{parsed=JSON.parse(raw)}catch{const error=new Error(`corrupted links registry: ${path}`);error.code='REGISTRY_CORRUPT';throw error}
-  if(!parsed||parsed.schema_version!==1||!Array.isArray(parsed.links)){const error=new Error(`invalid links registry schema: ${path}`);error.code='REGISTRY_SCHEMA_INVALID';throw error}
-  return {raw,baseHash,registry_hash:baseHash,links:parsed.links}
-}
-function writeRegistry(selfRoot,linksOrFn,baseHash){
-  const path=registryFilePath(selfRoot)
-  const currentBaseHash=pathExists(path)?hash(readFileSync(path,'utf8')):'__ABSENT__'
-  if(baseHash!==undefined&&currentBaseHash!==baseHash){const err=new Error('Concurrent modification detected in links registry');err.code='REGISTRY_CONCURRENT_MODIFICATION';throw err}
-  let currentLinks=[]
-  if(pathExists(path)){
-    try{
-      const parsed=JSON.parse(readFileSync(path,'utf8'))
-      if(parsed&&Array.isArray(parsed.links))currentLinks=parsed.links
-    }catch{}
-  }
-  const links=typeof linksOrFn==='function'?linksOrFn([...currentLinks]):linksOrFn
-  const sortedLinks=[...links].sort((a,b)=>canonicalSort(a.project_id,b.project_id))
-  const payload={schema_version:1,links:sortedLinks}
-  ensureDir(dirname(path))
-  atomicWriteFile(path,JSON.stringify(payload,null,2)+'\n')
-  return hash(JSON.stringify(payload,null,2)+'\n')
-}
-function computeLinksRegisterHash(links){
-  if(!links||!links.length)return hash('[]')
-  const normalized=links.map(l=>({project_id:l.project_id,binding_salt:l.binding_salt,allowed_lenses:[...l.allowed_lenses].sort(canonicalSort),status:l.status})).sort((a,b)=>canonicalSort(a.project_id,b.project_id))
-  return hash(canonicalJson(normalized))
-}
-function updateLinkBindingSaltInPlace(projectDir,salt){
-  const filePath=assertContainedPath(projectDir,linkPath(projectDir),'link configuration')
-  if(!pathExists(filePath)||lstatSync(filePath).isSymbolicLink()||!lstatSync(filePath).isFile())throw new Error(`cannot update link configuration in-place: invalid file ${filePath}`)
-  const raw=readFileSync(filePath,'utf8')
-  const lines=raw.split(/\r?\n/)
-  let selfContextLine=-1,selfContextIndent=0,bindingSaltLine=-1,insertLine=-1
-  for(let i=0;i<lines.length;i++){
-    const line=lines[i]
-    if(/^self_context:\s*$/.test(line.trimEnd())){selfContextLine=i;selfContextIndent=line.length-line.trimStart().length;continue}
-    if(selfContextLine>=0&&i>selfContextLine){
-      const indent=line.length-line.trimStart().length
-      if(line.trim()&&!line.trimStart().startsWith('#')){
-        if(indent<=selfContextIndent){if(insertLine<0)insertLine=i;break}
-        if(/^binding_salt:\s*/.test(line.trimStart())){bindingSaltLine=i;break}
-      }
-    }
-  }
-  if(selfContextLine<0)throw new Error('Cannot update binding_salt: self_context section missing')
-  if(bindingSaltLine>=0){
-    const currentLine=lines[bindingSaltLine]
-    const indent=currentLine.slice(0,currentLine.length-currentLine.trimStart().length)
-    lines[bindingSaltLine]=`${indent}binding_salt: ${quote(salt)}`
-  }else{
-    const indent='  '
-    if(insertLine>=0)lines.splice(insertLine,0,`${indent}binding_salt: ${quote(salt)}`)
-    else lines.splice(selfContextLine+1,0,`${indent}binding_salt: ${quote(salt)}`)
-  }
-  atomicWriteFile(filePath,lines.join('\n')+(raw.endsWith('\n')?'':'\n'))
-}
-function quote(value){ return JSON.stringify(value ?? '') }
-function stripYamlComment(value){let quote=null,escaped=false;for(let i=0;i<value.length;i++){const c=value[i];if(escaped){escaped=false;continue}if(c==='\\'&&quote==='"'){escaped=true;continue}if((c==='"'||c==="'")&&(!quote||quote===c)){quote=quote?null:c;continue}if(c==='#'&&!quote&&(i===0||/\s/.test(value[i-1])))return value.slice(0,i).trimEnd()}return value}
-function parseScalar(value){
-  const v=stripYamlComment(value).trim()
-  if(!v || v==='null' || v==='~') return null
-  if(v==='true') return true; if(v==='false') return false
-  if(/^-?\d+(?:\.\d+)?$/.test(v)) return Number(v)
-  if(v.startsWith('[')){if(!v.endsWith(']'))throw new Error(`invalid YAML scalar: ${v}`);try{return JSON.parse(v)}catch{const inner=v.slice(1,-1).trim();return inner?inner.split(',').map(item=>parseScalar(item)):[]}}
-  if(v.startsWith('{')||v.startsWith('"')){try{return JSON.parse(v)}catch{throw new Error(`invalid YAML scalar: ${v}`)}}
-  if(v.startsWith("'")){if(!v.endsWith("'"))throw new Error(`invalid YAML scalar: ${v}`);return v.slice(1,-1).replaceAll("''", "'")}
-  return v
-}
-function parseYaml(text){
-  const lines=[]
-  for(const [lineNumber,raw] of text.split(/\r?\n/).entries()){
-    if(!raw.trim()||raw.trimStart().startsWith('#'))continue
-    if(raw.includes('\t'))throw new Error(`invalid YAML indentation at line ${lineNumber+1}`)
-    const text=stripYamlComment(raw.trim());if(!text)continue;lines.push({indent:raw.length-raw.trimStart().length,text,line:lineNumber+1})
-  }
-  if(!lines.length)return {}
-  const parseBlock=(start,indent)=>{
-    const array=lines[start].text.startsWith('- '),value=array?[]:Object.create(null);let i=start
-    while(i<lines.length){
-      const item=lines[i];if(item.indent<indent)break;if(item.indent>indent)throw new Error(`unexpected YAML indentation at line ${item.line}`)
-      if(array){
-        if(!item.text.startsWith('- '))throw new Error(`mixed YAML list and mapping at line ${item.line}`)
-        const raw=item.text.slice(2).trim();if(!raw)throw new Error(`empty YAML list item at line ${item.line}`)
-        value.push(parseScalar(raw));i++;continue
-      }
-      if(item.text.startsWith('- '))throw new Error(`unexpected YAML list item at line ${item.line}`)
-      const match=item.text.match(/^([^:#][^:]*):(?:\s*(.*))?$/);if(!match)throw new Error(`invalid YAML mapping at line ${item.line}`)
-      const key=match[1].trim(),raw=match[2]??'';if(['__proto__','prototype','constructor'].includes(key))throw new Error(`unsafe YAML key ${key} at line ${item.line}`);if(Object.hasOwn(value,key))throw new Error(`duplicate YAML key ${key} at line ${item.line}`)
-      if(['>','>-','|','|-'].includes(raw)){
-        const chunks=[];let j=i+1;while(j<lines.length&&lines[j].indent>indent){chunks.push(lines[j].text);j++}
-        const folded=raw.startsWith('>'),keepNewline=!raw.endsWith('-');value[key]=(folded?chunks.join(' '):chunks.join('\n'))+(keepNewline?'\n':'');i=j;continue
-      }
-      if(raw!==''){value[key]=parseScalar(raw);i++;continue}
-      const next=lines[i+1]
-      if(!next||next.indent<=indent){value[key]=null;i++;continue}
-      const child=parseBlock(i+1,next.indent);value[key]=child.value;i=child.next
-    }
-    return {value,next:i}
-  }
-  if(lines[0].indent!==0)throw new Error(`invalid YAML root indentation at line ${lines[0].line}`)
-  const parsed=parseBlock(0,0);if(parsed.next!==lines.length)throw new Error(`invalid YAML at line ${lines[parsed.next].line}`);if(Array.isArray(parsed.value))throw new Error('YAML root must be a mapping');return parsed.value
-}
-function yamlObject(object, indent=''){
-  let out=''
-  for(const [key,value] of Object.entries(object)){
-    if(Array.isArray(value)){
-      if(!value.length)out+=`${indent}${key}: []\n`
-      else {out+=`${indent}${key}:\n`;for(const item of value)out+=`${indent}  - ${quote(item)}\n`}
-    } else if(value && typeof value==='object') out+=`${indent}${key}:\n${yamlObject(value,indent+'  ')}`
-    else out+=`${indent}${key}: ${typeof value==='string'?quote(value):String(value)}\n`
-  }
-  return out
-}
-function linkSchemaErrors(link,registry=null){
-  const errors=[],allowedKeys=new Set(['path','access','proposals','index','default_lens','secondary_lenses','binding_salt']),known=id=>registry?registry.byId.has(id):lensIdStructurallyValid(id)
-  if(!link||Array.isArray(link)||typeof link!=='object')return ['self_context must be a mapping']
-  for(const key of Object.keys(link))if(!allowedKeys.has(key))errors.push(`unknown self_context field: ${key}`)
-  if(typeof link.path!=='string'||!link.path.trim())errors.push('self_context.path must be a non-empty string')
-  if(link.access!=='read')errors.push('self_context.access must be read')
-  if(!['enabled','disabled'].includes(link.proposals))errors.push('self_context.proposals must be enabled or disabled')
-  if(link.index!=='local')errors.push('self_context.index must be local')
-  if(link.default_lens==='private')errors.push('default_lens cannot be private: private is owner-exclusive')
-  else if(link.default_lens!==undefined&&!known(link.default_lens)&&!['career','publishing'].includes(link.default_lens))errors.push(`invalid default lens: ${link.default_lens}`)
-  if(link.secondary_lenses!==undefined){
-    if(!Array.isArray(link.secondary_lenses)||link.secondary_lenses.some(x=>typeof x!=='string'||!known(x)&&!['career','publishing'].includes(x)))errors.push('secondary_lenses must contain only known lenses')
-    else if(link.secondary_lenses.includes('private'))errors.push('secondary_lenses cannot include private: private is owner-exclusive')
-    else if(new Set(link.secondary_lenses).size!==link.secondary_lenses.length)errors.push('secondary_lenses must contain unique lenses')
-  }
-  if(link.binding_salt!==undefined){
-    if(typeof link.binding_salt!=='string'||!/^[0-9a-f]{32}$/.test(link.binding_salt))errors.push('binding_salt must be a 32-character hex string')
-  }
-  return errors
-}
-function projectContextErrors(value){const errors=[];if(value===undefined)return errors;if(!value||Array.isArray(value)||typeof value!=='object')return ['project_context must be a mapping'];for(const key of Object.keys(value))if(!['include','exclude','assert_include','assert_exclude'].includes(key))errors.push(`unknown project_context field: ${key}`);for(const key of ['include','exclude','assert_include','assert_exclude'])if(value[key]!==undefined&&(!Array.isArray(value[key])||value[key].some(x=>typeof x!=='string'||!x.trim())))errors.push(`project_context.${key} must be a string array`);return errors}
-function readLink(project,{tolerant=false}={}){
-  const holoselfDir=join(project,'.holoself')
-  if(existsSync(holoselfDir)&&lstatSync(holoselfDir).isSymbolicLink()){
-    const error=new Error(`legacy filesystem junction mount detected at ${holoselfDir}; run holoself link setup to migrate to a bounded link`)
-    error.code='LEGACY_MOUNT_DETECTED'
-    throw error
-  }
-  const path=assertContainedPath(project,linkPath(project),'link configuration');if(!pathExists(path))throw new Error(`link configuration missing: ${path}`)
-  if(lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())throw new Error(`link configuration is not a regular file: ${path}`)
-  let parsed;try{parsed=parseYaml(readFileSync(path,'utf8'))}catch(error){throw new Error(`malformed link configuration ${path}: ${error.message}`)}
-  if(!Object.hasOwn(parsed,'self_context'))throw new Error(`malformed link configuration ${path}: self_context mapping missing`)
-  for(const key of Object.keys(parsed))if(!['self_context','project_context'].includes(key))throw new Error(`malformed link configuration ${path}: unknown root field ${key}`)
-  const structuralErrors=[...linkSchemaErrors(parsed.self_context),...projectContextErrors(parsed.project_context)];if(structuralErrors.length&&!tolerant)throw new Error(`invalid link configuration ${path}: ${structuralErrors.join('; ')}`)
-  const selfPath=resolve(project,parsed.self_context.path);let registry=null;try{registry=loadLensRegistry(selfPath)}catch(err){if(!tolerant)throw err}
-  const errors=linkSchemaErrors(parsed.self_context);if(errors.length&&!tolerant)throw new Error(`invalid link configuration ${path}: ${errors.join('; ')}`)
-  let binding=null,bindingError=null
-  try{binding=resolveBinding(selfPath,project,{registry})}catch(error){if(!tolerant)throw error;bindingError=error.message}
-  return {...parsed.self_context,...(binding||{}),path:selfPath,secondary_lenses:[...(binding?.secondary_lenses||[])],binding_salt:parsed.self_context.binding_salt||null,project_context:{include:parsed.project_context?.include||[],exclude:[...DEFAULT_PROJECT_EXCLUDES,...(parsed.project_context?.exclude||[])],assert_include:parsed.project_context?.assert_include||[],assert_exclude:parsed.project_context?.assert_exclude||[]},_schemaErrors:[...structuralErrors,...errors],_bindingError:bindingError,_legacyBinding:parsed.self_context.default_lens?{default_lens:parsed.self_context.default_lens,secondary_lenses:parsed.self_context.secondary_lenses||[]}:null}
-
-}
-function writeLink(project,self,lens='general',secondary=[],projectContext={},bindingSalt=null){
-  const registry=loadLensRegistry(resolve(self))
-  let salt=bindingSalt
-  if(!salt){
-    try{
-      if(pathExists(linkPath(project))){
-        const existing=readLink(project,{tolerant:true})
-        if(existing.binding_salt&&/^[0-9a-f]{32}$/.test(existing.binding_salt))salt=existing.binding_salt
-      }
-    }catch{}
-  }
-  const selfContext={path:slash(resolve(self)),access:'read',proposals:'enabled',index:'local'}
-  if(salt)selfContext.binding_salt=salt
-  const data={self_context:selfContext,project_context:{include:projectContext.include||[],exclude:projectContext.exclude||DEFAULT_PROJECT_EXCLUDES,assert_include:projectContext.assert_include||[],assert_exclude:projectContext.assert_exclude||[]}},errors=[...linkSchemaErrors(data.self_context,registry),...projectContextErrors(data.project_context)];if(errors.length)throw new Error(errors.join('; '))
-  writeBinding(self,project,{default_lens:lens,secondary_lenses:secondary});atomicWrite(linkPath(project),yamlObject(data));return {...data.self_context,default_lens:lens,secondary_lenses:secondary,project_context:data.project_context}
-}
-function managedReadme(){ return `# Linked Holoself context\n\nProject owns artifacts. Linked self owns approved reusable knowledge.\n\n- \`link.yaml\` grants read access and proposal delivery; it never copies self files.\n- \`index/\` is local, rebuildable acceleration data. Markdown remains source of truth.\n- \`proposals/\` and \`reports/\` are review artifacts.\n` }
-function inspectLinkCollisions(project){
-  const root=join(project,'.holoself'),collisions=[]
-  if(pathExists(root)){
-    const stat=lstatSync(root);if(stat.isSymbolicLink()||!stat.isDirectory())throw new Error(`${root} is not a regular metadata directory; refusing to replace`)
-    const readme=join(root,'README.md');if(pathExists(readme)){const rs=lstatSync(readme);if(rs.isSymbolicLink()||!rs.isFile())throw new Error(`${readme} is not a regular file; refusing to replace`);if(readFileSync(readme,'utf8')!==managedReadme())collisions.push(readme)}
-    const link=linkPath(project);if(pathExists(link))collisions.push(link)
-    for(const dir of ['catalog','proposals','reports']){const path=join(root,dir);if(pathExists(path)&&(lstatSync(path).isSymbolicLink()||!lstatSync(path).isDirectory()))throw new Error(`${path} is not a regular directory; refusing to replace`)}
-  }
-  return collisions
-}
-function createLinkDirs(project,{preserveReadme=false,purgeLegacy=true}={}){
-  const root=join(project,'.holoself');ensureDir(root)
-  for(const dir of ['catalog','proposals','reports'])ensureDir(join(root,dir))
-  if(purgeLegacy)try{purgeLegacyIndex(project)}catch{}
-  const readme=join(root,'README.md');if(!pathExists(readme))atomicWrite(readme,managedReadme());else if(!preserveReadme&&readFileSync(readme,'utf8')!==managedReadme())throw new Error(`${readme} exists with user content; refusing to replace`)
-}
-function secretFile(path,root){return SECRET_FILE_RE.test(slash(relative(root,path)))}
 function globRegex(pattern){const p=slash(pattern);let s='';for(let i=0;i<p.length;i++){const c=p[i];if(c==='*'&&p[i+1]==='*'){i++;if(p[i+1]==='/'){i++;s+='(?:.*/)?'}else s+='.*'}else if(c==='*')s+='[^/]*';else if(c==='?')s+='[^/]';else s+=/[.\\+^$(){}|[\]]/.test(c)?`\\${c}`:c}return new RegExp(`^${s}$`,'i')}
 function matchesAny(path,patterns){return patterns.some(pattern=>globRegex(pattern).test(path))}
 function markdownFiles(root,{includeHoloself=false,skipDirs=SKIP_DIRS}={}){
@@ -408,82 +116,6 @@ function markdownFiles(root,{includeHoloself=false,skipDirs=SKIP_DIRS}={}){
   walk(root); return files.sort()
 }
 function projectMarkdownFiles(root,link){const config=link?.project_context||{include:['**/*.md'],exclude:DEFAULT_PROJECT_EXCLUDES};return markdownFiles(root,{skipDirs:new Set(['.git','node_modules','.holoself'])}).filter(path=>{const rel=slash(relative(root,path));return matchesAny(rel,config.include)&&!matchesAny(rel,config.exclude)})}
-export const PRIVACY_FIELDS=new Set(['access_lenses','disclosure','sensitivity','document_role','task_include','task_exclude','visibility','read_scope','public_safe','confidence','exclude_lenses','field_visibility','knowledge_status','temporal_scope','valid_from','valid_until','review_after','supersedes','superseded_by'])
-export function privacyValueValid(key,value,registry=null){
-  const known=item=>typeof item==='string'&&(registry?registry.byId.has(item):lensIdStructurallyValid(item))
-  if(key==='access_lenses')return Array.isArray(value)&&value.length>0&&value.every(known)&&new Set(value).size===value.length
-  if(key==='disclosure')return typeof value==='string'&&DISCLOSURES.includes(value)
-  if(key==='sensitivity')return typeof value==='string'&&SENSITIVITIES.includes(value)
-  if(key==='document_role')return typeof value==='string'&&DOCUMENT_ROLES.includes(value)
-  if(key==='task_include'||key==='task_exclude')return Array.isArray(value)&&value.length>0&&value.every(item=>typeof item==='string'&&Boolean(item.trim()))&&new Set(value).size===value.length
-  if(key==='visibility')return typeof value==='string'&&VISIBILITIES.includes(value)
-  if(key==='read_scope')return typeof value==='string'&&['shared','local','restricted'].includes(value)
-  if(key==='public_safe')return typeof value==='boolean'
-  if(key==='confidence')return typeof value==='string'&&Boolean(value.trim())
-  if(key==='exclude_lenses')return Array.isArray(value)&&value.every(known)
-  if(key==='field_visibility')return value&&typeof value==='object'&&!Array.isArray(value)&&Object.values(value).every(item=>typeof item==='string'&&VISIBILITIES.includes(item))
-  if(key==='knowledge_status')return typeof value==='string'&&KNOWLEDGE_STATUSES.includes(value)
-  if(key==='temporal_scope')return typeof value==='string'&&TEMPORAL_SCOPES.includes(value)
-  if(['valid_from','valid_until','review_after'].includes(key))return typeof value==='string'&&/^(?:\d{4}-\d{2}-\d{2}|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))$/.test(value)&&!Number.isNaN(Date.parse(value.includes('T')?value:value+'T00:00:00.000Z'))
-  if(key==='supersedes')return Array.isArray(value)&&value.every(item=>typeof item==='string'&&Boolean(item.trim()))
-  if(key==='superseded_by')return typeof value==='string'&&Boolean(value.trim())
-  return true
-}
-export function privacyMetadataErrors(metadata,registry=null){const errors=[];for(const key of PRIVACY_FIELDS)if(Object.hasOwn(metadata,key)&&!privacyValueValid(key,metadata[key],registry)){const value=typeof metadata[key]==='string'?metadata[key]:JSON.stringify(metadata[key]);errors.push(key==='visibility'?`invalid visibility ${value}`:`invalid ${key} value ${value}`)}return errors}
-export function canonicalPrivacyMetadataErrors(metadata,registry=null){
-  const errors=privacyMetadataErrors(metadata,registry)
-  if(!Object.hasOwn(metadata,'access_lenses')&&!Object.hasOwn(metadata,'visibility'))errors.push('canonical privacy metadata missing access_lenses or legacy visibility')
-  if(Object.hasOwn(metadata,'access_lenses'))for(const key of ['disclosure','sensitivity','document_role']){
-    if(!Object.hasOwn(metadata,key))errors.push(`canonical metadata missing ${key}`)
-    else if(!privacyValueValid(key,metadata[key],registry)&&!errors.some(error=>error.startsWith(`invalid ${key} `)))errors.push(`invalid ${key} value`)
-  }
-  if(metadata.visibility==='public-safe'&&metadata.public_safe===false)errors.push('conflicting legacy privacy metadata: visibility public-safe with public_safe false')
-  if(metadata.valid_from&&metadata.valid_until){
-    const from=Date.parse(metadata.valid_from.includes('T')?metadata.valid_from:metadata.valid_from+'T00:00:00.000Z')
-    const until=Date.parse(metadata.valid_until.includes('T')?metadata.valid_until:metadata.valid_until+'T23:59:59.999Z')
-    if(from>until)errors.push('valid_from must not be after valid_until')
-  }
-  if(metadata.knowledge_status==='superseded'&&!metadata.superseded_by)errors.push('superseded knowledge must name superseded_by')
-  return [...new Set(errors)]
-}
-function restrictPrivacyMetadata(metadata){metadata.access_lenses=['private'];metadata.disclosure='internal-only';metadata.document_role='content';metadata.visibility='private';metadata.read_scope='restricted';metadata.public_safe=false;metadata.sensitivity='restricted';return metadata}
-function salvagePrivacyFrontmatter(raw,{forcePrivate=false,registry=null}={}){
-  const metadata={},recognized=PRIVACY_FIELDS,seen=new Set(),lines=raw.split(/\r?\n/)
-  let malformed=false,block=null
-  const finishBlock=()=>{if(block&&!block.items)malformed=true;block=null}
-  for(const line of lines){
-    const trimmed=line.trim();if(!trimmed||trimmed.startsWith('#'))continue
-    const indent=line.length-line.trimStart().length
-    if(indent===0){
-      finishBlock();const match=trimmed.match(/^([^:#][^:]*):\s*(.*)$/);if(!match)continue
-      const key=match[1].trim(),scalar=match[2].trim();if(!recognized.has(key))continue
-      if(seen.has(key))malformed=true;seen.add(key)
-      if((key==='access_lenses'||key==='exclude_lenses'||key==='task_include'||key==='task_exclude'||key==='field_visibility')&&!scalar){metadata[key]=key==='field_visibility'?{}:[];block={key,items:0};continue}
-      if(!scalar){malformed=true;continue}
-      try{const value=parseScalar(scalar);if(privacyValueValid(key,value,registry))metadata[key]=value;else malformed=true}catch{malformed=true}
-      continue
-    }
-    if(!block)continue
-    if(['exclude_lenses','access_lenses','task_include','task_exclude'].includes(block.key)){
-      const item=trimmed.match(/^-\s+(.+)$/);if(!item){malformed=true;continue}
-      try{const value=parseScalar(item[1]),valid=typeof value==='string'&&(block.key.startsWith('task_')?Boolean(value.trim()):(registry?registry.byId.has(value):lensIdStructurallyValid(value)));if(valid){metadata[block.key].push(value);block.items++}else malformed=true}catch{malformed=true}
-    }else{
-      const item=trimmed.match(/^([^:#][^:]*):\s*(.+)$/);if(!item){malformed=true;continue}
-      try{const value=parseScalar(item[2]);if(typeof value==='string'&&VISIBILITIES.includes(value)){metadata.field_visibility[item[1].trim()]=value;block.items++}else malformed=true}catch{malformed=true}
-    }
-  }
-  finishBlock();if(forcePrivate||malformed||privacyMetadataErrors(metadata,registry).length)restrictPrivacyMetadata(metadata);return metadata
-}
-function frontmatter(text,{tolerant=false,registry=null}={}){
-  if(!text.startsWith('---\n') && !text.startsWith('---\r\n')) return {metadata:{},body:text,warnings:[]}
-  const end=text.indexOf('\n---',4)
-  if(end<0){if(!tolerant)throw new Error('unclosed frontmatter');return {metadata:salvagePrivacyFrontmatter(text.slice(4),{forcePrivate:true,registry}),body:text.slice(4),warnings:['unclosed project frontmatter restricted to private']}}
-  const raw=text.slice(4,end),body=text.slice(end+4).replace(/^\r?\n/,'');let metadata
-  try{metadata=parseYaml(raw)}catch(error){if(!tolerant)throw error;metadata=salvagePrivacyFrontmatter(raw,{registry});if(!Object.keys(metadata).length)restrictPrivacyMetadata(metadata);return {metadata,body,warnings:[`unsupported project frontmatter parsed conservatively: ${error.message}`]}}
-  const privacyErrors=privacyMetadataErrors(metadata,registry)
-  if(privacyErrors.length){if(!tolerant)throw new Error(privacyErrors.join('; '));restrictPrivacyMetadata(metadata);return {metadata,body,warnings:[`invalid project privacy metadata restricted: ${privacyErrors.join(', ')}`]}}
-  return {metadata,body,warnings:[]}
-}
 function sections(text){
   const result=[]; let heading='(document)', lines=[]
   const flush=()=>{ const content=lines.join('\n').trim(); if(content) result.push({heading,content}) }
@@ -511,82 +143,6 @@ function canonicalClaims(text){
   }
   return found.map(x=>x.trim()).filter(Boolean)
 }
-function visibility(meta){ return meta.visibility || 'linked-projects' }
-function legacyAccessLenses(meta){
-  const v=visibility(meta)
-  if(v==='private')return ['private']
-  if(v==='professional')return ['general','professional','interview','private']
-  if(v==='public-voice')return ['general','public-voice','private']
-  return [...LENSES]
-}
-function accessLenses(meta){return Array.isArray(meta.access_lenses)?meta.access_lenses:legacyAccessLenses(meta)}
-function disclosure(meta){
-  if(meta.public_safe===false)return 'review-required'
-  if(DISCLOSURES.includes(meta.disclosure))return meta.disclosure
-  if(meta.public_safe===true||visibility(meta)==='public-safe')return 'publish-approved'
-  return 'internal-only'
-}
-function documentRole(meta){return DOCUMENT_ROLES.includes(meta.document_role)?meta.document_role:'content'}
-function publicationAllowed(meta){return disclosure(meta)==='publish-approved'&&!['compensation-confidential','third-party-personal','recruiter-confidential','employer-confidential','application-private','restricted'].includes(meta.sensitivity||'')}
-function taskAllowed(meta,task){
-  const include=Array.isArray(meta.task_include)?meta.task_include:[],exclude=Array.isArray(meta.task_exclude)?meta.task_exclude:[],value=(task||'').trim().toLowerCase()
-  if(include.length&&(!value||!include.some(pattern=>value.includes(pattern.toLowerCase()))))return false
-  return !value||!exclude.some(pattern=>value.includes(pattern.toLowerCase()))
-}
-function visibleUnderBehavior(visibility,behaviorLens,adapter='generic'){
-  const v=VISIBILITIES.includes(visibility)?visibility:'private'
-  if(['obsidian-public','public','restricted-host'].includes(adapter))return v==='public-safe'
-  if(v==='linked-projects'||v==='public-safe')return true
-  return legacyAccessLenses({visibility:v}).includes(behaviorLens)
-}
-function allowedDocument(meta,lens,adapter='generic',task=null,resolution=null,subject=null,sourceSpaceId=null){
-  const subj=subject||{kind:'owner:direct',accessible_spaces:['self','contrib']}
-  const srcSpace=sourceSpaceId||'self'
-  const explicitReadScope=['shared','local','restricted'].includes(meta.read_scope)?meta.read_scope:null
-  const readScope=explicitReadScope||(visibility(meta)==='private'?'restricted':'shared')
-  if(explicitReadScope==='restricted'){
-    if(!(subj.kind==='owner:direct'&&lens==='private')){
-      return {allowed:false,reason:'restricted read_scope requires direct owner under private lens',phase:1}
-    }
-  }else if(readScope==='local'){
-    const accSpaces=subj.accessible_spaces||[]
-    if(!accSpaces.includes(srcSpace)){
-      return {allowed:false,reason:`local read_scope not accessible from space ${srcSpace}`,phase:1}
-    }
-  }
-  if(subj.kind==='client:linked'){
-    if(lens==='private')return {allowed:false,reason:'private lens not granted to linked client',phase:2}
-    if(subj.effective_allowed_lenses&&!subj.effective_allowed_lenses.has(lens)){
-      return {allowed:false,reason:`lens ${lens} not in effective allowed lenses`,phase:2}
-    }
-  }
-  const docAccessLenses=accessLenses(meta)
-  if(!docAccessLenses.includes(lens))return {allowed:false,reason:`access_lenses exclude ${lens} lens`,phase:3}
-  const excluded=Array.isArray(meta.exclude_lenses)?meta.exclude_lenses:[]
-  if(excluded.includes(lens))return {allowed:false,reason:`access_lenses exclude ${lens} lens`,phase:4}
-  if(!taskAllowed(meta,task))return {allowed:false,reason:`task selector excludes ${task||'(unspecified task)'}`,phase:5}
-  const sensitivity=meta.sensitivity||''
-  if(sensitivity==='restricted'){
-    if(!(subj.kind==='owner:direct'&&lens==='private')){
-      return {allowed:false,reason:`sensitivity ${sensitivity} excludes ${lens} lens`,phase:6}
-    }
-  }
-  if(readScope==='restricted'){
-    if(!(subj.kind==='owner:direct'&&lens==='private')){
-      return {allowed:false,reason:'restricted read_scope requires direct owner under private lens',phase:1}
-    }
-  }
-  if(lens!=='private'&&documentRole(meta)!=='policy'&&SENSITIVITY_LENSES[sensitivity]&&!(resolution?.sensitivity_access||[]).includes(sensitivity)){
-    return {allowed:false,reason:`sensitivity ${sensitivity} excludes ${lens} lens`,phase:6}
-  }
-  if((adapter==='obsidian-public'||adapter==='public'||adapter==='restricted-host')&&!publicationAllowed(meta)){
-    return {allowed:false,reason:'not approved for publication on public adapter',phase:7}
-  }
-  return {allowed:true,reason:null,phase:null}
-}
-function allowed(meta,lens,adapter='generic',task=null,resolution=null,subject=null,sourceSpaceId=null){
-  return allowedDocument(meta,lens,adapter,task,resolution,subject,sourceSpaceId).allowed
-}
 function tokenize(text){ return new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]) }
 function relevance(text,task){
   if(!task) return 0; const wanted=tokenize(task); const got=tokenize(text); let score=0
@@ -598,35 +154,6 @@ function canonicalFiles(root,{includeHistory=false}={}){
   if(includeHistory)files.push(...markdownFiles(join(root,'history')))
   const current=join(root,'topics','.current');if(existsSync(current)){const topic=readFileSync(current,'utf8').trim();if(topic){const path=join(root,'topics',topic.endsWith('.md')?topic:`${topic}.md`);if(existsSync(path))files.push(path)}}
   return [...new Set(files)].sort()
-}
-function filterClaimVisibility(body,lens,source,restrictions,resolution=null,identityKind='owner:direct'){
-  const behaviorLens=lens
-  return body.replace(/<!-- holoself-claim visibility=([a-z-]+) -->[\s\S]*?<!-- \/holoself-claim -->/g,(block,claimVisibility)=>{
-    if(visibleUnderBehavior(claimVisibility,behaviorLens,'generic'))return block
-    if(identityKind==='owner:direct')restrictions.push({source,reason:`claim visibility ${claimVisibility} excluded by ${lens} lens`})
-    return ''
-  })
-}
-function filterFieldVisibility(body,metadata,lens,source,restrictions,resolution=null,identityKind='owner:direct'){
-  const behaviorLens=lens,configured=metadata.field_visibility&&typeof metadata.field_visibility==='object'&&!Array.isArray(metadata.field_visibility)?metadata.field_visibility:{}
-  const policies={...configured}
-  let blockedHeading=false,reportedCompensation=false
-  return body.split(/\r?\n/).filter(line=>{
-    const heading=line.match(/^#{1,6}\s+(.+)$/)
-    if(heading){
-      const key=heading[1].trim().toLowerCase(),rule=Object.entries(policies).find(([field])=>key.includes(field.toLowerCase()))
-      blockedHeading=Boolean(rule&&!visibleUnderBehavior(rule[1],behaviorLens,'generic'))
-      if(blockedHeading)restrictions.push({source,reason:`field ${rule?.[0]||'compensation'} excluded by ${lens} lens`})
-      return !blockedHeading
-    }
-    if(blockedHeading)return false
-    const field=line.match(/^\s*[-*]?\s*([^:]{2,40}):\s*(.+)$/),rule=field&&Object.entries(policies).find(([name])=>field[1].trim().toLowerCase()===name.toLowerCase())
-    if(rule&&!visibleUnderBehavior(rule[1],behaviorLens,'generic')){
-      restrictions.push({source,reason:`field ${rule[0]} excluded by ${lens} lens`})
-      return false
-    }
-    return true
-  }).join('\n')
 }
 function sourceRecords(root,kind,lens,task,adapter,link=null,registry=null,resolution=null,selectionOptions={},identityKind='owner:direct',subject=null){
   const records=[]; const restrictions=[],warnings=[]
@@ -806,13 +333,6 @@ function deduplicateCandidates(cands, localSpaceId){
   })
 }
 function getEligibleFederatedSpaces(){return []}
-function linkedLensAuthority(project,link,lens){
- const entry=readRegistry(link.path).links.find(entry=>entry.project_id===canonicalSpaceId(project)||entry.project_path===canonicalProjectPath(project))
- if(!entry||entry.status!=='active'||!link.binding_salt||entry.binding_salt!==link.binding_salt){const error=new Error(`Link not attested in self registry or binding_salt mismatch: ${project}. Run holoself link approve --project <dir> from self root to activate.`);error.code='LENS_NOT_GRANTED';throw error}
- const allowed=new Set([link.default_lens,...link.secondary_lenses].filter(id=>id!=='private'&&(entry.allowed_lenses||[]).includes(id)))
- if(!allowed.has(lens)){const error=new Error(`unknown lens or lens is not granted by this project link: ${lens}`);error.code='LENS_NOT_GRANTED';throw error}
- return allowed
-}
 function contextData(o){
   if(o.identity!==undefined){const err=new Error('identity not accepted from caller');err.code='IDENTITY_NOT_ACCEPTED_FROM_CALLER';throw err}
   const surface=o.surface||(o.project?'cli-linked':'cli-direct')
@@ -1524,14 +1044,6 @@ function safeTarget(self,target){
 }
 function catalogRoot(project){return assertContainedPath(project,join(project,'.holoself','catalog'),'catalog directory')}
 function catalogFilePath(project){return join(catalogRoot(project),'catalog.json')}
-function privacyMetadata(metadata,registry=null){
-  const rawSensitivity=typeof metadata.sensitivity==='string'?metadata.sensitivity:null,sensitivity=SENSITIVITIES.includes(rawSensitivity)?rawSensitivity:(rawSensitivity?'restricted':'personal'),known=x=>registry?registry.byId.has(x):LENSES.includes(x)
-  const read_scope=['shared','local','restricted'].includes(metadata.read_scope)?metadata.read_scope:(visibility(metadata)==='private'?'restricted':'shared')
-  const result={access_lenses:accessLenses(metadata).filter(known),disclosure:disclosure(metadata),sensitivity,document_role:documentRole(metadata),publication_allowed:publicationAllowed({...metadata,sensitivity}),task_include:Array.isArray(metadata.task_include)?metadata.task_include:[],task_exclude:Array.isArray(metadata.task_exclude)?metadata.task_exclude:[],visibility:visibility(metadata),read_scope,public_safe:Object.hasOwn(metadata,'public_safe')?metadata.public_safe:null,confidence:typeof metadata.confidence==='string'?metadata.confidence:null,exclude_lenses:Array.isArray(metadata.exclude_lenses)?metadata.exclude_lenses.filter(known):[],field_visibility:{},knowledge_status:KNOWLEDGE_STATUSES.includes(metadata.knowledge_status)?metadata.knowledge_status:'current',temporal_scope:TEMPORAL_SCOPES.includes(metadata.temporal_scope)?metadata.temporal_scope:'current',valid_from:typeof metadata.valid_from==='string'?metadata.valid_from:null,valid_until:typeof metadata.valid_until==='string'?metadata.valid_until:null,valid_until_epoch_ms:null,review_after:typeof metadata.review_after==='string'?metadata.review_after:null,supersedes:Array.isArray(metadata.supersedes)?metadata.supersedes:[],superseded_by:typeof metadata.superseded_by==='string'?metadata.superseded_by:null}
-  if(metadata.field_visibility&&typeof metadata.field_visibility==='object'&&!Array.isArray(metadata.field_visibility))for(const [key,value] of Object.entries(metadata.field_visibility))result.field_visibility[key]=VISIBILITIES.includes(value)?value:'private'
-  if(result.valid_until)result.valid_until_epoch_ms=dateValue(result.valid_until,true)
-  return result
-}
 function privacySections(body,policy){
   const chunks=[],claimPattern=/<!-- holoself-claim visibility=([a-z-]+) -->([\s\S]*?)<!-- \/holoself-claim -->/g
   const ordinary=body.replace(claimPattern,(_,claimVisibility,claimBody)=>{const v=VISIBILITIES.includes(claimVisibility)?claimVisibility:'private';for(const section of sections(claimBody))chunks.push({...section,visibility:v,claim:true,disclosure:v==='public-safe'?'publish-approved':'review-required'});return ''})
