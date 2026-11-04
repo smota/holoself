@@ -3,7 +3,17 @@ import { randomBytes } from 'node:crypto'
 import { join, resolve, relative, dirname, basename } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
-import { catalogBuildWarnings, ecosystemValidationErrors, policyProvenanceSummary, runEcosystem } from './ecosystem.mjs'
+import {
+  applyValidateFixPlan,
+  buildValidateFixPlan,
+  catalogBuildWarnings,
+  ecosystemValidationErrors,
+  excludedCanonicalDocuments,
+  excludedIncompleteMetadataNotice,
+  formatValidateFixPlanText,
+  policyProvenanceSummary,
+  runEcosystem
+} from './ecosystem.mjs'
 import { seedLensDefinitions } from './lenses.mjs'
 import { ensureHoloselfGitignore } from './link/config.mjs'
 import { VERSION } from './version.mjs'
@@ -129,7 +139,7 @@ function isHoloselfLink(p, root) {
 function help() {
   console.log(
     `Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init ` +
-      `| doctor | validate | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] ` +
+      `| doctor | validate [--fix [--with-policy-files] [--out <plan>] | --fix --apply --digest <sha256> --yes] | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] ` +
       `[--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root ` +
       `junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  skill ` +
       `status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens ` +
@@ -416,10 +426,43 @@ export async function run(argv) {
     checks.forEach(([n, ok]) => console.log(`${ok ? '[ok]' : '[!!]'} ${n}`))
     const warnings = checks.every(([, ok]) => ok) ? catalogBuildWarnings(root) : []
     for (const w of warnings) console.log(`[warn] ${w}`)
+    if (checks.every(([, ok]) => ok)) {
+      const excludedCount = excludedCanonicalDocuments(root).length
+      if (excludedCount > 0) console.log(excludedIncompleteMetadataNotice(excludedCount))
+    }
     if (checks.some(([, ok]) => !ok)) process.exitCode = 1
     return
   }
   if (o.command === 'validate') {
+    if (!o.fix && (o.apply || o.output || o.digest || o.withPolicyFiles)) {
+      throw new Error('validate repair options (--apply, --out, --digest, --with-policy-files) require --fix')
+    }
+    if (o.fix) {
+      if (!existsSync(root)) throw new Error('data root does not exist')
+      if (o.apply) {
+        if (!o.digest) throw new Error('validate --fix --apply requires --digest <sha256>')
+        if (!(await confirm(o, `Apply validate --fix plan (${o.digest}) to ${root}?`))) {
+          console.log('Cancelled.')
+          return
+        }
+        const explicitPlan = typeof o.apply === 'string' ? JSON.parse(readFileSync(resolve(o.apply), 'utf8')) : null
+        const result = applyValidateFixPlan(root, explicitPlan, {
+          expectedDigest: o.digest,
+          withPolicyFiles: Boolean(o.withPolicyFiles)
+        })
+        if (o.json) console.log(JSON.stringify(result, null, 2))
+        else
+          console.log(
+            `[ok] applied validate --fix plan (${result.operations.length} operation(s), mode=${result.mode}, digest=${result.plan_digest})\nReceipt: ${result.receipt_path}`
+          )
+        return
+      }
+      const plan = buildValidateFixPlan(root, { withPolicyFiles: Boolean(o.withPolicyFiles) })
+      if (o.output) atomicWrite(o.output, JSON.stringify(plan, null, 2) + '\n', { mode: 0o666 })
+      if (o.json) console.log(JSON.stringify(plan, null, 2))
+      else console.log(formatValidateFixPlanText(plan, { outputPath: o.output || null }))
+      return
+    }
     const errors = []
     if (!existsSync(root)) errors.push('data root does not exist')
     const c = readConfig(root)
@@ -448,6 +491,8 @@ export async function run(argv) {
     }
     const warnings = existsSync(root) ? catalogBuildWarnings(root, o.project) : []
     for (const w of warnings) console.log(`[warn] ${w}`)
+    const excludedCount = existsSync(root) ? excludedCanonicalDocuments(root).length : 0
+    if (excludedCount > 0) console.log(excludedIncompleteMetadataNotice(excludedCount))
     errors.push(...ecosystemValidationErrors(root, o.project))
     for (const e of [...new Set(errors)]) console.error(`[!!] ${e}`)
     if (errors.length) {

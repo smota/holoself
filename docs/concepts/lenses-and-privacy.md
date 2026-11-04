@@ -88,3 +88,25 @@ Resolution and rules:
 - **No restricted widening**: Neither a `_policy.yaml` file nor effective document metadata may combine `sensitivity: restricted` or `read_scope: restricted` with any lens other than `private`, or combine `disclosure: publish-approved` with a confidential or restricted sensitivity.
 - **Fail-closed validation**: If any `_policy.yaml` in a document's ancestor chain is unreadable, malformed, symlinked, or contains unknown or invalid keys, no defaults are applied to documents under that directory. Those documents keep only their own frontmatter (so files lacking complete frontmatter are excluded as missing metadata), and `holoself validate` reports the relative `_policy.yaml` path.
 - **Provenance and catalog freshness**: Each effective field records its source (`frontmatter` or `policy:<relative-path>`) in `catalog.json` (`policy_sources`), `holoself validate`, the Workbench document editor, and owner-direct `context_receipt.policy_sources`. Linked callers never receive `policy_sources`. Adding, editing, or removing a `_policy.yaml` file automatically invalidates affected catalog entries, and `_policy.yaml` itself is never indexed or delivered as content.
+
+### Fixing excluded documents (`holoself validate --fix`)
+
+Canonical Markdown documents under `profile/`, `context/`, `topics/`, and `history/` that lack complete or valid privacy metadata (`access_lenses`, `disclosure`, `sensitivity`, `document_role`) after `_policy.yaml` inheritance fail closed and are excluded from context.
+
+Exclusions are surfaced on owner-facing surfaces only:
+
+- `holoself doctor` and `holoself validate` print `"N canonical documents are excluded from context because their privacy metadata is incomplete — run "` followed by `` `holoself validate --fix` ``.
+- Owner-direct `holoself context` includes `context_receipt.excluded_incomplete_metadata`. Linked callers and MCP responses never receive this field.
+- The Workbench Overview (`GET /api/overview`) displays the count with a link to Knowledge.
+
+To repair excluded documents conservatively without widening existing access:
+
+1. **Preview the repair plan**: Run `holoself validate --fix` (or `holoself validate --fix --json --out plan.json`). For each excluded document, Holoself proposes the most conservative defaults:
+   - `access_lenses: [private]`
+   - `disclosure: internal-only`
+   - `sensitivity: personal` (or keeps the existing valid `sensitivity`)
+   - `document_role: content` (or keeps the existing valid `document_role`)
+   - **Never widen**: Any field that is already present and valid is kept unchanged. Any field that is present and invalid is replaced with its conservative default and reported in the plan reasons and per-file `frontmatter_diff`.
+   - **Directory `_policy.yaml` suggestions**: When two or more files in the same directory are excluded for shared missing fields and no `_policy.yaml` exists in that directory yet, the plan also includes a `policy_suggestions` entry for `<dir>/_policy.yaml` as an optional alternative.
+2. **Apply the digest-bound plan**: Run `holoself validate --fix --apply --digest <sha256> --yes` (or confirm interactively in a TTY). Apply verifies every file's `before_sha256` against disk and refuses with `PLAN_CHANGED` if any file changed since planning, rolls back all writes on any error, and writes an immutable receipt under `.holoself/validate-fix-receipts/<digest>.json`.
+3. **Apply directory `_policy.yaml` suggestions (optional)**: Pass `--with-policy-files` (`holoself validate --fix --with-policy-files` and `holoself validate --fix --apply --with-policy-files --digest <sha256> --yes`) to create `<dir>/_policy.yaml` instead of editing per-file frontmatter in eligible directories. Existing `_policy.yaml` files are never overwritten.

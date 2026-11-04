@@ -35,7 +35,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `data-root` | `--root`, `--data-root`, `--data-dir` |
 | `init` | `--root`, `--data-root`, `--data-dir`, `--contribs`, `--exclude-contrib` |
 | `doctor` | `--root`, `--data-root`, `--data-dir` |
-| `validate` | `--root`, `--data-root`, `--data-dir`, `--project` |
+| `validate` | `--root`, `--data-root`, `--data-dir`, `--project`, `--fix`, `--out`, `--output`, `--with-policy-files`, `--dry-run`, `--apply`, `--digest`, `--preview-hash`, `--yes`, `--confirm`, `--json` |
 | `migrate` | `--root`, `--data-root`, `--data-dir`, `--from`, `--force`, `--dry-run`, `--yes`, `--confirm` |
 | `export` | `--root`, `--data-root`, `--data-dir`, `--target`, `--packet-only`, `--root-setup`, `--dry-run`, `--yes`, `--confirm` |
 | `link` | `--root`, `--data-root`, `--data-dir`, `--target`, `--root-setup`, `--force`, `--dry-run`, `--yes`, `--confirm` |
@@ -108,6 +108,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `init` | Create private data root and starter files |
 | `doctor` | Check runtime and required layout |
 | `validate` | Validate root, links, proposals, visibility, provenance, references, and markers |
+| `validate --fix` | Build or apply (`--apply --digest <sha256> --yes`, optional `--with-policy-files`, `--out <plan>`, `--json`) a digest-bound conservative privacy metadata repair plan for excluded canonical documents |
 | `migrate --from <dir>` | Copy supported PersonalOS data after confirmation |
 | `export --target <dir>` | Create reviewable project packet snapshot |
 | `upgrade` | Refresh selected public contrib availability; method files remain package-owned |
