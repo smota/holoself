@@ -1,22 +1,52 @@
 import { existsSync, lstatSync, statSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { DISCLOSURES } from './annotations.mjs'
 import { canonicalJson } from './catalog.mjs'
 import { HASH_RE } from './catalog/schema.mjs'
-import { DEFAULT_LENS_IDS } from './lenses.mjs'
-import { frontmatter } from './policy/privacy-fields.mjs'
+import { CUSTOM_SENSITIVITY_CATEGORIES, DEFAULT_LENSES, DEFAULT_LENS_IDS, lensIdStructurallyValid, loadLensRegistry } from './lenses.mjs'
+import { allowedDocument, publicationAllowed } from './policy/access.mjs'
+import { frontmatter, privacyMetadataErrors, restrictPrivacyMetadata } from './policy/privacy-fields.mjs'
 import { atomicWrite, hash, slash } from './shared/fs.mjs'
 
-export function computeMeetMetadata(meta, kind = 'self') {
-  const result = { ...meta }
-  const vis = meta.visibility || 'private'
+function normalizeMigrationMetadata(input, registry = null, tolerant = true) {
+  if (typeof input === 'string') {
+    return frontmatter(input, { tolerant, registry }).metadata
+  }
+  if (!input || typeof input !== 'object') return {}
+  const defined = {}
+  for (const [k, v] of Object.entries(input)) {
+    if (v !== undefined) defined[k] = Array.isArray(v) ? [...v] : v
+  }
+  const errors = privacyMetadataErrors(defined, registry)
+  if (errors.length > 0) {
+    if (!tolerant) throw new Error(errors.join('; '))
+    return restrictPrivacyMetadata({ ...defined })
+  }
+  return defined
+}
+
+export function computeMeetMetadata(meta, kind = 'self', registry = null) {
+  const raw = meta && typeof meta === 'object' ? meta : {}
+  const defined = {}
+  for (const [k, v] of Object.entries(raw)) {
+    if (v !== undefined) defined[k] = Array.isArray(v) ? [...v] : v
+  }
+
+  const errors = privacyMetadataErrors(defined, registry)
+  if (errors.length > 0) {
+    return restrictPrivacyMetadata({ ...defined })
+  }
+
+  const result = { ...defined }
+  const vis = defined.visibility || 'private'
 
   // read_scope
-  if (!['shared', 'local', 'restricted'].includes(meta.read_scope)) {
+  if (!['shared', 'local', 'restricted'].includes(defined.read_scope)) {
     result.read_scope = vis === 'private' ? 'restricted' : 'shared'
   }
 
   // access_lenses
-  if (!Array.isArray(meta.access_lenses) || !meta.access_lenses.length) {
+  if (!Array.isArray(defined.access_lenses)) {
     if (kind === 'self') {
       if (vis === 'private') {
         result.access_lenses = ['private']
@@ -43,17 +73,20 @@ export function computeMeetMetadata(meta, kind = 'self') {
   }
 
   // disclosure
-  if (!meta.disclosure) {
-    result.disclosure = meta.publication_allowed ? 'publish-approved' : 'internal-only'
+  if (defined.public_safe === false) {
+    result.disclosure = defined.disclosure === 'internal-only' ? 'internal-only' : 'review-required'
+  } else if (!DISCLOSURES.includes(defined.disclosure)) {
+    result.disclosure =
+      defined.public_safe === true || vis === 'public-safe' || defined.publication_allowed ? 'publish-approved' : 'internal-only'
   }
 
   // sensitivity
-  if (!meta.sensitivity) {
+  if (!defined.sensitivity) {
     result.sensitivity = 'personal'
   }
 
   // document_role
-  if (!meta.document_role) {
+  if (!defined.document_role) {
     result.document_role = 'content'
   }
 
@@ -69,10 +102,11 @@ export function applyFrontmatterModifications(text, changes) {
   const endIdx = text.indexOf(`${nl}---`, 3)
   if (endIdx < 0) return text
 
-  const frontmatterContent = text.slice(3 + nl.length, endIdx)
+  const openLen = 3 + nl.length
+  const frontmatterContent = endIdx > openLen ? text.slice(openLen, endIdx) : ''
   const bodyContent = text.slice(endIdx)
 
-  const lines = frontmatterContent.split(/\r?\n/)
+  const lines = frontmatterContent ? frontmatterContent.split(/\r?\n/) : []
   for (const [key, value] of Object.entries(changes)) {
     const keyRegex = new RegExp(`^(\\s*)${key}\\s*:`, 'i')
     const existingLineIdx = lines.findIndex(l => keyRegex.test(l))
@@ -85,7 +119,20 @@ export function applyFrontmatterModifications(text, changes) {
 
     if (existingLineIdx >= 0) {
       const match = lines[existingLineIdx].match(keyRegex)
-      lines[existingLineIdx] = `${match[1]}${key}: ${formattedVal}`
+      const baseIndent = match[1].length
+      let removeCount = 1
+      while (existingLineIdx + removeCount < lines.length) {
+        const nextLine = lines[existingLineIdx + removeCount]
+        const trimmed = nextLine.trim()
+        if (!trimmed || trimmed.startsWith('#')) break
+        const nextIndent = nextLine.length - nextLine.trimStart().length
+        if (nextIndent > baseIndent && trimmed.startsWith('-')) {
+          removeCount++
+        } else {
+          break
+        }
+      }
+      lines.splice(existingLineIdx, removeCount, `${match[1]}${key}: ${formattedVal}`)
     } else {
       lines.push(`${key}: ${formattedVal}`)
     }
@@ -94,103 +141,119 @@ export function applyFrontmatterModifications(text, changes) {
   return `---${nl}${lines.join(nl)}${bodyContent}`
 }
 
-function evaluateAllowed(meta, lens, adapter, subjectKind) {
-  const readScope = ['shared', 'local', 'restricted'].includes(meta.read_scope) ? meta.read_scope : meta.visibility === 'private' ? 'restricted' : 'shared'
+function collectMigrationLenses(registry, beforeMeta, afterMeta) {
+  const byId = new Map()
+  for (const lens of DEFAULT_LENSES) {
+    byId.set(lens.id, lens)
+  }
+  if (registry?.lenses) {
+    for (const lens of registry.lenses) {
+      if (lens && typeof lens.id === 'string') byId.set(lens.id, lens)
+    }
+  } else if (registry?.byId instanceof Map) {
+    for (const [id, lens] of registry.byId.entries()) {
+      byId.set(id, lens)
+    }
+  }
+  for (const meta of [beforeMeta, afterMeta]) {
+    for (const key of ['access_lenses', 'exclude_lenses']) {
+      if (Array.isArray(meta?.[key])) {
+        for (const id of meta[key]) {
+          if (typeof id === 'string' && lensIdStructurallyValid(id) && !byId.has(id)) {
+            byId.set(id, { id, sensitivity_access: [] })
+          }
+        }
+      }
+    }
+  }
+  return [...byId.values()]
+}
 
-  // Phase 1
-  if (readScope === 'restricted') {
-    if (!(subjectKind === 'owner:direct' && lens === 'private')) {
-      return false
+function loadMigrationRegistry(selfRoot) {
+  if (!selfRoot || !existsSync(selfRoot)) return null
+  try {
+    return loadLensRegistry(selfRoot)
+  } catch {
+    return null
+  }
+}
+
+export function verifyNonAmplification(beforeInput, afterInput, options = {}) {
+  const registry = options.registry || (options.selfRoot ? loadMigrationRegistry(options.selfRoot) : null)
+  const tolerant = options.tolerant ?? true
+  const sourceSpaceId = options.sourceSpaceId || 'self'
+
+  const beforeMeta = normalizeMigrationMetadata(beforeInput, registry, tolerant)
+  const afterMeta = normalizeMigrationMetadata(afterInput, registry, tolerant)
+
+  const lenses = collectMigrationLenses(registry, beforeMeta, afterMeta)
+  const allLensIds = new Set(lenses.map(l => l.id))
+  const accessibleSpaces = sourceSpaceId === 'self' ? ['self', 'contrib'] : ['self', 'contrib', sourceSpaceId]
+  const subjects = [
+    { kind: 'owner:direct', accessible_spaces: accessibleSpaces },
+    { kind: 'client:linked', accessible_spaces: accessibleSpaces, effective_allowed_lenses: allLensIds },
+    ...(sourceSpaceId !== 'self'
+      ? [
+          { kind: 'owner:direct', accessible_spaces: ['self', 'contrib'] },
+          { kind: 'client:linked', accessible_spaces: ['self', 'contrib'], effective_allowed_lenses: allLensIds }
+        ]
+      : [])
+  ]
+  const adapters = ['generic', 'public', 'obsidian-public', 'restricted-host']
+  const tasks = [
+    null,
+    ...(Array.isArray(beforeMeta.task_include) ? beforeMeta.task_include : []),
+    ...(Array.isArray(afterMeta.task_include) ? afterMeta.task_include : []),
+    ...(Array.isArray(beforeMeta.task_exclude) ? beforeMeta.task_exclude : []),
+    ...(Array.isArray(afterMeta.task_exclude) ? afterMeta.task_exclude : [])
+  ]
+  const coverageLoss = {}
+
+  for (const lensObj of lenses) {
+    const lens = lensObj.id
+    const defaultSens = Array.isArray(lensObj.sensitivity_access) ? lensObj.sensitivity_access : []
+    const resolutions = [
+      { sensitivity_access: defaultSens },
+      { sensitivity_access: [] },
+      { sensitivity_access: CUSTOM_SENSITIVITY_CATEGORIES }
+    ]
+
+    for (const a of adapters) {
+      let narrowedForAdapter = false
+      for (const s of subjects) {
+        for (const res of resolutions) {
+          for (const task of tasks) {
+            const allowedBefore = allowedDocument(beforeMeta, lens, a, task, res, s, sourceSpaceId).allowed
+            const allowedAfter = allowedDocument(afterMeta, lens, a, task, res, s, sourceSpaceId).allowed
+
+            // Non-amplification: allowedAfter => allowedBefore
+            if (allowedAfter && !allowedBefore) {
+              return {
+                valid: false,
+                violation: `Cell (${lens}, ${s.kind}, ${a}) transited DENY -> ALLOW`,
+                coverageLoss
+              }
+            }
+
+            if (allowedBefore && !allowedAfter && s.kind === 'owner:direct') {
+              narrowedForAdapter = true
+            }
+          }
+        }
+      }
+      if (narrowedForAdapter) {
+        coverageLoss[lens] = (coverageLoss[lens] || 0) + 1
+      }
     }
   }
 
-  // Phase 2
-  if (subjectKind === 'client:linked') {
-    if (lens === 'private') return false
-  }
-
-  // Phase 3 & 4
-  const accessLenses =
-    Array.isArray(meta.access_lenses) && meta.access_lenses.length
-      ? meta.access_lenses
-      : meta.visibility === 'private'
-        ? ['private']
-        : meta.visibility === 'professional'
-          ? ['general', 'professional', 'interview', 'private']
-          : meta.visibility === 'public-voice'
-            ? ['general', 'public-voice', 'private']
-            : DEFAULT_LENS_IDS
-  if (!accessLenses.includes(lens)) return false
-  if (Array.isArray(meta.exclude_lenses) && meta.exclude_lenses.includes(lens)) return false
-
-  // Phase 6
-  const sensitivity = meta.sensitivity || ''
-  if (sensitivity === 'restricted') {
-    if (!(subjectKind === 'owner:direct' && lens === 'private')) return false
-  }
-
-  // Phase 7
-  if (['public', 'obsidian-public', 'restricted-host'].includes(adapter)) {
-    if (!meta.publication_allowed && meta.visibility !== 'public-safe') return false
-  }
-
-  return true
-}
-
-function evaluateAllowedV1(meta, lens, adapter, subjectKind) {
-  if (subjectKind === 'client:linked' && lens === 'private') {
-    return false
-  }
-
-  const accessLenses =
-    Array.isArray(meta.access_lenses) && meta.access_lenses.length
-      ? meta.access_lenses
-      : meta.visibility === 'private'
-        ? ['private']
-        : meta.visibility === 'professional'
-          ? ['general', 'professional', 'interview', 'private']
-          : meta.visibility === 'public-voice'
-            ? ['general', 'public-voice', 'private']
-            : DEFAULT_LENS_IDS
-  if (!accessLenses.includes(lens)) return false
-  if (Array.isArray(meta.exclude_lenses) && meta.exclude_lenses.includes(lens)) return false
-
-  const sensitivity = meta.sensitivity || ''
-  if (sensitivity === 'restricted') {
-    if (!(subjectKind === 'owner:direct' && lens === 'private')) return false
-  }
-
-  if (['public', 'obsidian-public', 'restricted-host'].includes(adapter)) {
-    if (!meta.publication_allowed && meta.visibility !== 'public-safe') return false
-  }
-
-  return true
-}
-
-export function verifyNonAmplification(beforeMeta, afterMeta) {
-  const subjects = ['owner:direct', 'client:linked']
-  const adapters = ['generic', 'public']
-  const coverageLoss = {}
-
-  for (const lens of DEFAULT_LENS_IDS) {
-    for (const s of subjects) {
-      for (const a of adapters) {
-        const allowedBefore = evaluateAllowedV1(beforeMeta, lens, a, s)
-        const allowedAfter = evaluateAllowed(afterMeta, lens, a, s)
-
-        // Non-amplification: allowedAfter => allowedBefore
-        if (allowedAfter && !allowedBefore) {
-          return {
-            valid: false,
-            violation: `Cell (${lens}, ${s}, ${a}) transited DENY -> ALLOW`,
-            coverageLoss
-          }
-        }
-
-        if (allowedBefore && !allowedAfter && s === 'owner:direct') {
-          coverageLoss[lens] = (coverageLoss[lens] || 0) + 1
-        }
-      }
+  const pubBefore = publicationAllowed(beforeMeta)
+  const pubAfter = publicationAllowed(afterMeta)
+  if (pubAfter && !pubBefore) {
+    return {
+      valid: false,
+      violation: 'Publication gate transited DENY -> ALLOW',
+      coverageLoss
     }
   }
 
@@ -272,6 +335,7 @@ export function planPolicyMigration(selfRoot, options = {}) {
     }
   }
 
+  const registry = options.registry || loadMigrationRegistry(selfRoot)
   const entries = []
   const coverageLossSummary = {}
   let totalScanned = 0
@@ -282,14 +346,24 @@ export function planPolicyMigration(selfRoot, options = {}) {
     const text = readFileSync(item.absPath, 'utf8')
     if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) continue
 
-    const parsed = frontmatter(text, { tolerant: true, validatePrivacy: false })
-    const meetMeta = computeMeetMetadata(parsed.metadata, item.kind)
+    const rawParsed = frontmatter(text, { tolerant: true, validatePrivacy: false, registry })
+    const rawMeta = rawParsed.metadata
+    const parsed = frontmatter(text, { tolerant: true, registry })
+    const wasRestricted = parsed.warnings.some(w => w.includes('restricted')) || privacyMetadataErrors(rawMeta, registry).length > 0
+    const meetMeta = computeMeetMetadata(parsed.metadata, item.kind, registry)
 
     const changes = {}
-    if (parsed.metadata.read_scope !== meetMeta.read_scope) changes.read_scope = meetMeta.read_scope
-    const beforeAccess = Array.isArray(parsed.metadata.access_lenses) ? parsed.metadata.access_lenses : []
-    if (JSON.stringify(beforeAccess) !== JSON.stringify(meetMeta.access_lenses)) {
+    if (rawMeta.read_scope !== meetMeta.read_scope) changes.read_scope = meetMeta.read_scope
+    const beforeAccess = Array.isArray(rawMeta.access_lenses) ? rawMeta.access_lenses : null
+    if (!beforeAccess || JSON.stringify(beforeAccess) !== JSON.stringify(meetMeta.access_lenses)) {
       changes.access_lenses = meetMeta.access_lenses
+    }
+    if (wasRestricted) {
+      if (rawMeta.visibility !== undefined && rawMeta.visibility !== meetMeta.visibility) changes.visibility = meetMeta.visibility
+      if (rawMeta.disclosure !== undefined && rawMeta.disclosure !== meetMeta.disclosure) changes.disclosure = meetMeta.disclosure
+      if (rawMeta.public_safe !== undefined && rawMeta.public_safe !== meetMeta.public_safe) changes.public_safe = meetMeta.public_safe
+      if (rawMeta.sensitivity !== undefined && rawMeta.sensitivity !== meetMeta.sensitivity) changes.sensitivity = meetMeta.sensitivity
+      if (rawMeta.document_role !== undefined && rawMeta.document_role !== meetMeta.document_role) changes.document_role = meetMeta.document_role
     }
 
     const beforeSha256 = hash(text)
@@ -300,8 +374,12 @@ export function planPolicyMigration(selfRoot, options = {}) {
     if (needsMigration) {
       afterText = applyFrontmatterModifications(text, changes)
       afterSha256 = hash(afterText)
+      const afterParsed = frontmatter(afterText, { tolerant: true, registry })
 
-      const nonAmp = verifyNonAmplification(parsed.metadata, meetMeta)
+      const nonAmp = verifyNonAmplification(parsed.metadata, afterParsed.metadata, {
+        registry,
+        sourceSpaceId: item.spaceId
+      })
       if (!nonAmp.valid) {
         const err = new Error(`Non-amplification gate failed for ${item.relPath}: ${nonAmp.violation}`)
         err.code = 'NON_AMPLIFICATION_VIOLATION'
