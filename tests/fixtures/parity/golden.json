@@ -13779,7 +13779,8 @@
                 "document_role": "frontmatter",
                 "sensitivity": "frontmatter"
               }
-            }
+            },
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {
@@ -15308,7 +15309,8 @@
                 "document_role": "frontmatter",
                 "sensitivity": "frontmatter"
               }
-            }
+            },
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {
@@ -17510,7 +17512,8 @@
                 "document_role": "frontmatter",
                 "sensitivity": "frontmatter"
               }
-            }
+            },
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {
@@ -17782,7 +17785,8 @@
               "hit": false,
               "persistent": false
             },
-            "policy_sources": {}
+            "policy_sources": {},
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {

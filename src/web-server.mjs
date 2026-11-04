@@ -16,6 +16,7 @@ import { mcpClientOverview } from './mcp-config.mjs'
 import { contextData } from './retrieval/context.mjs'
 import { canonicalPath, samePath } from './path-guard.mjs'
 import { resolveDocumentPolicy } from './policy/policy-defaults.mjs'
+import { excludedCanonicalDocuments } from './policy/validate-fix.mjs'
 import {
   CONFLICT_CODES,
   HttpError,
@@ -109,8 +110,18 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
       if (url.pathname === '/api/overview') {
         const catalog = reconcileCatalog(root),
           spaces = await Promise.all(catalog.spaces.map(status)),
-          h = detectHarnesses()
-        return send(res, 200, { ok: true, data: { root, spaces, harnesses: h, documents: existsSync(root) ? listDocuments(root).length : 0 } })
+          h = detectHarnesses(),
+          excludedIncompleteMetadata = existsSync(root) ? excludedCanonicalDocuments(root).length : 0
+        return send(res, 200, {
+          ok: true,
+          data: {
+            root,
+            spaces,
+            harnesses: h,
+            documents: existsSync(root) ? listDocuments(root).length : 0,
+            excluded_incomplete_metadata: excludedIncompleteMetadata
+          }
+        })
       }
       if (url.pathname === '/api/filesystem/roots' && req.method === 'GET')
         return send(res, 200, {

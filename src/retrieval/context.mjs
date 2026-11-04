@@ -7,6 +7,7 @@ import { ensureCatalog } from '../catalog/partitions.mjs'
 import { cachedSelection } from '../context-selection.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { canonicalPath, samePath } from '../path-guard.mjs'
+import { countCatalogExcludedIncompleteMetadata } from '../policy/validate-fix.mjs'
 import { listProposalData } from '../proposals/store.mjs'
 import { hash, safeRealpath, slash } from '../shared/fs.mjs'
 import { PACKAGE_ROOT } from '../shared/package-root.mjs'
@@ -195,7 +196,12 @@ function assembleResult(
       ...selected.receipt,
       status: queryStatus,
       cache: selected.cache,
-      ...(!isLinked && !isMcp ? { policy_sources: buildReceiptPolicySources(records) } : {})
+      ...(!isLinked && !isMcp
+        ? {
+            policy_sources: buildReceiptPolicySources(records),
+            excluded_incomplete_metadata: countCatalogExcludedIncompleteMetadata(catResult.self)
+          }
+        : {})
     },
     proposals: isLinked && project ? withoutPrivatePaths(listProposalData(project).filter(p => p.status === 'pending')) : [],
     cache: selected.cache,
