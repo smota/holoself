@@ -24,7 +24,7 @@ holoself <command> [options]
 <!-- generated:start -->
 Generated from `holoself capabilities --json` (product `holoself`, version `0.10.1`, context schema `v1`, index schema `v5`, proposal schemas `v1, v2`) and the CLI flag contract:
 
-- Capability command groups (12): `doctor`, `context`, `ledger`, `search`, `propose`, `proposals`, `instructions`, `knowledge`, `link`, `skill`, `mcp`, `coaching`
+- Capability command groups (13): `doctor`, `context`, `ledger`, `search`, `propose`, `proposals`, `instructions`, `knowledge`, `link`, `skill`, `mcp`, `client`, `coaching`
 - Coaching subcommands (7): `coaching start`, `coaching note`, `coaching action`, `coaching choose`, `coaching review`, `coaching material`, `coaching resume`
 - Context features: `need-gate`, `budgets`, `manifest`, `source-handles`, `lifecycle`, `receipts`, `task-contrib-routing`
 - MCP tools (7): `holoself_status`, `holoself_context`, `holoself_context_manifest`, `holoself_context_get`, `holoself_search`, `holoself_proposal_create`, `holoself_proposal_preview`
@@ -42,9 +42,13 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `unlink` | `--root`, `--data-root`, `--data-dir`, `--target`, `--dry-run`, `--yes`, `--confirm` |
 | `upgrade` | `--root`, `--data-root`, `--data-dir`, `--contribs`, `--exclude-contrib`, `--dry-run` |
 | `web` | `--root`, `--data-root`, `--data-dir`, `--project`, `--port`, `--no-open` |
-| `mcp` | `--project`, `--claude-project-dir` |
-| `mcp status` | `--project`, `--platform`, `--json` |
-| `mcp configure` | `--project`, `--platform`, `--all-detected`, `--force-replace`, `--dry-run`, `--yes`, `--confirm`, `--json` |
+| `mcp` | `--project`, `--claude-project-dir`, `--client`, `--root`, `--data-root`, `--data-dir` |
+| `mcp status` | `--project`, `--platform`, `--client`, `--root`, `--data-root`, `--data-dir`, `--json` |
+| `mcp configure` | `--project`, `--platform`, `--all-detected`, `--force-replace`, `--dry-run`, `--client`, `--apply`, `--remove`, `--root`, `--data-root`, `--data-dir`, `--yes`, `--confirm`, `--json` |
+| `client add` | `--root`, `--data-root`, `--data-dir`, `--name`, `--lens`, `--proposals`, `--json` |
+| `client list` | `--root`, `--data-root`, `--data-dir`, `--json` |
+| `client revoke` | `--root`, `--data-root`, `--data-dir`, `--json` |
+| `client remove` | `--root`, `--data-root`, `--data-dir`, `--json` |
 | `coaching` | _(none)_ |
 | `coaching start` | `--root`, `--data-root`, `--data-dir`, `--question`, `--json` |
 | `coaching note` | `--root`, `--data-root`, `--data-dir`, `--expected-revision`, `--kind`, `--text`, `--json` |
@@ -86,17 +90,17 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `analyze stale` | `--project`, `--target`, `--json` |
 | `analyze all` | `--project`, `--target`, `--json` |
 | `propose` | `--project`, `--target`, `--claim`, `--op`, `--claim-id`, `--reason`, `--source-file`, `--target-file`, `--proposal-type`, `--type`, `--evidence`, `--confidence`, `--visibility`, `--json` |
-| `proposals list` | `--project`, `--target`, `--json` |
-| `proposals audit` | `--project`, `--target`, `--json` |
-| `proposals show` | `--project`, `--target` |
-| `proposals approve` | `--project`, `--target`, `--json`, `--digest`, `--preview-hash`, `--yes`, `--confirm` |
-| `proposals reject` | `--project`, `--target`, `--yes`, `--confirm` |
-| `proposals defer` | `--project`, `--target`, `--yes`, `--confirm` |
-| `proposals supersede` | `--project`, `--target`, `--yes`, `--confirm` |
+| `proposals list` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--json` |
+| `proposals audit` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--json` |
+| `proposals show` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox` |
+| `proposals approve` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--allow-revoked`, `--json`, `--digest`, `--preview-hash`, `--yes`, `--confirm` |
+| `proposals reject` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--yes`, `--confirm` |
+| `proposals defer` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--yes`, `--confirm` |
+| `proposals supersede` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--yes`, `--confirm` |
 | `index` | `--project`, `--target`, `--changed`, `--json` |
 | `index status` | `--project`, `--target`, `--json` |
 | `index rebuild` | `--project`, `--target`, `--json` |
-| `ledger` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--since`, `--lens`, `--surface`, `--limit`, `--json` |
+| `ledger` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--since`, `--lens`, `--surface`, `--client`, `--limit`, `--json` |
 | `search` | `--project`, `--target`, `--lens`, `--temporal`, `--federated`, `--spaces`, `--json` |
 <!-- generated:end -->
 
@@ -157,12 +161,22 @@ propose --project <dir> [--claim <text>] [--evidence <text>]
         [--source-file <relative-path>] [--target-file <relative-path>]
         [--proposal-type <type>] [--confidence <value>] [--visibility <value>]
 proposals list|audit --project <dir>
-proposals show|approve|reject|defer|supersede <id> --project <dir> [--yes]
+proposals show|supersede <id> --project <dir> [--yes]
+proposals approve|reject|defer <id> [<id> ...] --project <dir> [--yes]
+proposals list|audit --inbox --root <self-root>
+proposals show|approve|reject|defer|supersede <id> --inbox --root <self-root> [--yes]
 index [status|rebuild] --project <dir> [--changed]
 search <query> --project <dir> [--lens <lens>]
 mcp configure --project <dir> [--platform codex|agy|claude | --all-detected] [--force-replace] [--dry-run] [--yes]
 mcp status --project <dir> [--platform codex|agy|claude]
 mcp [--project <dir>]
+mcp --client <client-id> [--root <self-root>]
+mcp configure --client <client-id|name> --platform claude-desktop|generic [--apply|--remove] [--force-replace] [--dry-run] [--yes] [--root <self-root>]
+mcp status --client <client-id|name> [--root <self-root>]
+client add --name <name> --lens <id> [--proposals disabled|inbox] [--root <self-root>] [--json]
+client list [--root <self-root>] [--json]
+client revoke|remove <client-id|name> [--root <self-root>] [--json]
+ledger --root <self-root> --client <client-id|name> [--json]
 instructions render|audit --project <dir> [--adapter generic] [--harvest [--focus <text>]] [--json]
 knowledge migrate-lenses --root <self-root> [--output <plan.json>]
 knowledge transform --root <self-root> --replacements <changes.json> [--output <plan.json>]
@@ -174,6 +188,8 @@ knowledge cleanup [--root <self-root>] --apply <plan.json> --digest <sha256> --y
 `context` defaults to packet output unless `--json` is supplied. Every context packet stays within twice its budget (`selection.total_bytes`, `envelope_cap_bytes`). A packet that had to shrink lists dropped sources in `selection.envelope_dropped`, groups `restrictions` by reason (adding `count` and `sources`) and reduces `proposals` to ids. `--session-start` loads only the lens `session_start_sources`; see [context efficiency](../concepts/context-efficiency.md). Context and search index self only; `--self-only` remains a compatible explicit spelling, while `--federated` and `--no-cache` remain accepted as deprecated no-ops for one release and emit a stderr warning. Missing bindings fail closed. `--snapshot --yes` writes a reviewed project-only fallback; `--restricted-host` applies publication-safe filtering and adds default 24-hour expiry metadata. `--expires-hours` accepts values above 0 through 720. Link setup supports `--project-include`, `--project-exclude`, `--project-assert-include`, and `--project-assert-exclude`. `index` without subcommand builds/updates index; `index rebuild` also removes any legacy decision-cache files on disk. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation. Global skill installation is separately confirmed; project migration validates the global copy before removing managed local copies.
 
 `mcp configure` first prints exact project-local file actions and expected hashes. Without `--dry-run`, it requires confirmation or `--yes`. Existing divergent `holoself` server entries and malformed markers fail closed; `--force-replace` with confirmation replaces a divergent entry. `--all-detected` selects every client whose executable is on PATH or whose configuration exists in the project, applies all changes or none, and refuses when the files changed after the preview. Link activation (`link setup|add|activate|repair`) configures MCP by default for verified hosts; `--mcp`/`--no-mcp` and opt-in `--approve-read-tools` control it. Bare `mcp` uses explicit `--project`, trusted `CLAUDE_PROJECT_DIR`, or unambiguous cwd and requires a safe `.holoself/link.yaml`; tools cannot supply paths. See [MCP tools](mcp-tools.md).
+
+`client add` creates a desktop MCP client grant in `<self>/.holoself/clients.json` (one lens, never `private` and never one granting `restricted`; proposals `disabled` by default) and prints its `client_id`. The lens and proposal mode cannot be edited; `client revoke` stops the grant on the next tool call, and `client remove` refuses an active client. `mcp --client` starts a self-only server for that grant and refuses `--project`, `--claude-project-dir` or `CLAUDE_PROJECT_DIR` (`CLIENT_BINDING_CONFLICT`). `mcp configure --client` prints the host snippet and writes nothing; `--apply` and `--remove` edit only the host's documented user-level file for a natively verified platform, after a preview and confirmation. `proposals ... --inbox --root <self-root>` reviews proposals from clients created with `--proposals inbox`. See the [local MCP guide](../guides/local-mcp.md#desktop-clients-without-a-project).
 
 ## Legacy live mount
 

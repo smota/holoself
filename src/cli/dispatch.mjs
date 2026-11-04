@@ -13,6 +13,7 @@ import { runProposals } from './commands/proposals.mjs'
 import { runIndex } from './commands/index.mjs'
 import { runLedger } from './commands/ledger.mjs'
 import { runSearch } from './commands/search.mjs'
+import { runClient } from './commands/client.mjs'
 
 // Entries are tried in the original order; an entry matches its command and, when listed, one of
 // its subcommands. A handler returns true when it handled the command; a handler that completes
@@ -35,7 +36,8 @@ export const COMMANDS = [
   { command: 'proposals', run: runProposals },
   { command: 'index', run: runIndex },
   { command: 'ledger', run: runLedger },
-  { command: 'search', run: runSearch }
+  { command: 'search', run: runSearch },
+  { command: 'client', subcommands: ['add', 'list', 'revoke', 'remove'], run: runClient }
 ]
 
 export async function runEcosystem(o) {

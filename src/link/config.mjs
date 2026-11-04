@@ -273,7 +273,9 @@ export const HOLOSELF_GITIGNORE_PATTERNS = [
   'runtime*',
   'conversations/',
   'reports/',
-  'links.json*'
+  'links.json*',
+  'clients.json*',
+  'client-inbox.lock'
 ]
 export function managedGitignore() {
   return (

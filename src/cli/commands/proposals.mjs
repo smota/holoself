@@ -1,7 +1,9 @@
 // holoself proposals command (moved verbatim from runEcosystem).
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { ecosystemValidationErrors } from '../../catalog/validation.mjs'
+import { findClient, readClientRegistry } from '../../clients/registry.mjs'
+import { findInboxProposal, inboxPreviewData, listInboxProposals, scanInbox } from '../../proposals/client-inbox.mjs'
 import { applyInboxBatch } from '../../proposals/inbox.mjs'
 import {
   findProposal,
@@ -10,10 +12,13 @@ import {
   proposalPreviewData,
   proposalText,
   scanProposalStore,
-  stateProposal
+  stateProposal,
+  stateProposalInSelf
 } from '../../proposals/store.mjs'
-import { hash } from '../../shared/fs.mjs'
+import { withRegistryLock } from '../../link/registry.mjs'
+import { atomicWrite, hash } from '../../shared/fs.mjs'
 import { askConfirm, projectPath } from '../link-helpers.mjs'
+import { clientSelfRoot } from './client.mjs'
 
 // One readable line per change for `proposals show`, emitted as YAML comments above the record.
 function changeSummary(change) {
@@ -38,13 +43,175 @@ function formatPreviewText(prepared) {
       .join('\n')}`
   )
 }
+// The queue under review: a linked project's proposals (default) or, with --inbox, the self-root client inbox. Both
+// use the same preview hash, transactional apply, archive states and receipts.
+function proposalQueue(o) {
+  if (o.inbox) {
+    if (o.project || o.target) throw new Error('--inbox reviews the self-root client inbox; it cannot be combined with --project')
+    const self = clientSelfRoot(o)
+    const clients = () => {
+      try {
+        return readClientRegistry(self).clients
+      } catch {
+        return []
+      }
+    }
+    return {
+      self,
+      project: null,
+      list: () => listInboxProposals(self),
+      scan: () => scanInbox(self),
+      find: id => findInboxProposal(self, id),
+      preview: id => inboxPreviewData(self, id),
+      state: (p, state, details) => stateProposalInSelf(self, p, state, details),
+      // Review shows the client's name and current status; a removed client is reported as removed.
+      describe: p => {
+        const entry = findClient(clients(), p.origin?.client_id, { idOnly: true })
+        return { client: entry ? { name: entry.name, status: entry.status, lens: entry.lens } : { name: null, status: 'removed' } }
+      }
+    }
+  }
+  const project = projectPath(o)
+  return {
+    self: null,
+    project,
+    list: () => listProposalData(project),
+    scan: () => scanProposalStore(project),
+    find: id => findProposal(project, id),
+    preview: id => proposalPreviewData(project, id),
+    state: (p, state, details) => stateProposal(project, p, state, details),
+    describe: () => ({})
+  }
+}
+// The self-root client inbox (#99) is reviewed one proposal at a time: approval re-plans against the self root and
+// gates revoked or removed clients behind --allow-revoked. Multi-id batches use the project review core (#71) only.
+async function reviewClientInbox(o, queue, action, ids) {
+  const project = queue.project
+  if (ids.length > 1) {
+    const error = new Error(`proposals ${action} --inbox accepts a single <id>; multi-id batches apply to project proposals only`)
+    error.code = 'INVALID_INPUT'
+    throw error
+  }
+  const p = queue.find(ids[0])
+  if (action === 'show') {
+    const changes = proposalChanges(p),
+      summary = changes.some(x => (x.operation || 'append_claim') !== 'append_claim')
+        ? changes.map(x => `# ${x.change_id}: ${changeSummary(x)}`).join('\n') + '\n'
+        : '',
+      described = queue.describe(p).client,
+      origin = described ? `# client: ${described.name || p.origin.client_id} (${described.status})\n` : ''
+    console.log(origin + summary + proposalText(Object.fromEntries(Object.entries(p).filter(([k]) => k !== '_path'))))
+    return true
+  }
+  if (!['approve', 'reject', 'defer', 'supersede'].includes(action))
+    throw new Error('proposals requires list, audit, show, approve, reject, defer, or supersede')
+  if (p.status !== 'pending') throw new Error(`proposal is ${p.status}, expected pending`)
+  if (action === 'approve') {
+    const prepared = queue.preview(p.proposal_id),
+      { grouped } = prepared,
+      link = { path: queue.self },
+      changes = proposalChanges(p),
+      archive = join(link.path, 'proposals', 'approved', `${p.proposal_id}.yaml`)
+    if (existsSync(archive)) throw new Error(`proposal archive collision: ${archive}`)
+    const preErrors = ecosystemValidationErrors(link.path, project)
+    if (preErrors.length) throw new Error(`pre-approval validation failed: ${preErrors.join('; ')}`)
+    const previews = prepared.changes,
+      previewHash = prepared.preview_hash,
+      described = queue.describe(p),
+      client = described.client,
+      clientName = client?.name || p.origin?.client_id,
+      inactiveNotice = client && client.status !== 'active' ? `client ${clientName} is ${client.status.toUpperCase()}` : null
+    console.log(
+      o.json
+        ? JSON.stringify({ proposal_id: p.proposal_id, ...described, changes: previews, preview_hash: previewHash }, null, 2)
+        : (inactiveNotice ? `Client status: ${inactiveNotice}\n` : client ? `Client: ${clientName} (${client.status})\n` : '') +
+            formatPreviewText(prepared)
+    )
+    if (o.digest && o.digest !== previewHash) {
+      const error = new Error('proposal preview is stale')
+      error.code = 'STALE_PREVIEW'
+      throw error
+    }
+    const prompt = inactiveNotice
+      ? `Approve proposal (${inactiveNotice}) and apply grouped canonical self changes?`
+      : 'Approve proposal and apply grouped canonical self changes?'
+    if (inactiveNotice && !o.allowRevoked && (!process.stdin.isTTY || !process.stdout.isTTY || o.yes)) {
+      const error = new Error(`${prompt} Pass --allow-revoked to approve a proposal from a ${client.status} client.`)
+      error.code = 'CLIENT_REVOKED'
+      throw error
+    }
+    if (!(await askConfirm(inactiveNotice && !o.allowRevoked ? { ...o, yes: false } : o, prompt))) {
+      console.log('Cancelled.')
+      return true
+    }
+    const proposalBefore = readFileSync(p._path),
+      receipt = join(link.path, 'proposals', 'receipts', `${p.proposal_id}-approved.json`),
+      commitTime = new Date().toISOString(),
+      token = prepared.commit_time_token,
+      stamp = text => text.replaceAll(token, commitTime),
+      appliedChanges = previews.map((item, i) => ({
+        ...item,
+        before_sha256: hash(stamp(prepared.steps[i].before)),
+        after_sha256: hash(stamp(prepared.steps[i].after))
+      }))
+    // The stale check, writes, archive and validation run under the self root's registry lock, so two approvals
+    // (or an approval and a Workbench registry change) cannot interleave between the check and the write.
+    await withRegistryLock(link.path, async () => {
+      // A target edited after the preview was computed (for example while confirmation was pending) is stale.
+      for (const item of grouped.values()) {
+        const current = existsSync(item.target) ? readFileSync(item.target, 'utf8') : null
+        if (item.existed ? current !== item.before : current !== null) {
+          const error = new Error(`proposal preview is stale: ${item.target} changed after preview`)
+          error.code = 'STALE_PREVIEW'
+          throw error
+        }
+      }
+      try {
+        for (const item of grouped.values()) atomicWrite(item.target, stamp(item.after))
+        queue.state(p, 'approved', {
+          preview_sha256: previewHash,
+          applied_changes: appliedChanges.map(({ change_id, operation, target, claim_id, before_sha256, after_sha256 }) => ({
+            change_id,
+            operation,
+            target,
+            claim_id,
+            before_sha256,
+            after_sha256
+          }))
+        })
+        const errors = ecosystemValidationErrors(link.path, project)
+        if (errors.length) throw new Error(`post-approval validation failed: ${errors.join('; ')}`)
+      } catch (error) {
+        for (const item of grouped.values()) {
+          if (item.existed) atomicWrite(item.target, item.before)
+          else if (existsSync(item.target)) rmSync(item.target)
+        }
+        atomicWrite(p._path, proposalBefore)
+        if (existsSync(archive)) rmSync(archive, { force: true })
+        if (existsSync(receipt)) rmSync(receipt, { force: true })
+        throw error
+      }
+    })
+    console.log(`[ok] approved ${p.proposal_id}; ${changes.length} change(s), validation passed`)
+    return true
+  }
+  if (!(await askConfirm(o, `${action === 'reject' ? 'Reject' : action === 'supersede' ? 'Supersede' : 'Defer'} proposal ${p.proposal_id}?`))) {
+    console.log('Cancelled.')
+    return true
+  }
+  const state = action === 'reject' ? 'rejected' : action === 'supersede' ? 'superseded' : 'deferred'
+  queue.state(p, state)
+  console.log(`[ok] ${state} ${p.proposal_id}`)
+  return true
+}
 export async function runProposals(o, sub) {
-  const project = projectPath(o),
+  const queue = proposalQueue(o),
+    project = queue.project,
     action = sub
   if (action === 'list') {
     console.log(
       JSON.stringify(
-        listProposalData(project).map(({ _path, ...p }) => p),
+        queue.list().map(({ _path, ...p }) => ({ ...p, ...queue.describe(p) })),
         null,
         2
       )
@@ -52,13 +219,14 @@ export async function runProposals(o, sub) {
     return true
   }
   if (action === 'audit') {
-    const scan = scanProposalStore(project)
+    const scan = queue.scan()
     console.log(JSON.stringify({ managed: scan.managed.map(({ _path, ...p }) => p), diagnostics: scan.diagnostics }, null, 2))
     if (scan.diagnostics.some(x => x.severity === 'error')) process.exitCode = 1
     return true
   }
   const ids = o.args.slice(1)
   if (!ids.length) throw new Error(`proposals ${action} requires <id>`)
+  if (queue.self) return reviewClientInbox(o, queue, action, ids)
   if (action === 'show') {
     if (ids.length > 1) throw new Error('proposals show accepts a single <id>')
     const p = findProposal(project, ids[0]),
@@ -156,7 +324,7 @@ export async function runProposals(o, sub) {
     return true
   }
   const state = action === 'reject' ? 'rejected' : 'deferred'
-  await applyInboxBatch( null, {
+  await applyInboxBatch(null, {
     action,
     items: proposals.map(p => ({ id: p.proposal_id, space: project })),
     spaces: [{ id: 'cli', name: basename(project), path: project }]
