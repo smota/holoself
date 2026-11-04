@@ -62,11 +62,34 @@ Document, claim and field access rules apply to every lens. Documents tagged wit
 | `public-voice` | all five |
 | `private` | all five plus `restricted` |
 
-`public-voice` has no extra publication filter: a document that grants `public-voice` access is returned even if it holds compensation details or unapproved evidence. Narrow it by editing the lens's `sensitivity_access` or the document's visibility. `disclosure` is descriptive on standard adapters; public and restricted-host adapters additionally require `disclosure: publish-approved` and a non-confidential sensitivity. On those adapters claims and `field_visibility` fields are delivered only when marked `public-safe`. Reading context never authorizes external actions.
+`public-voice` has no extra publication filter: a document that grants `public-voice` access is returned even if it holds compensation details or unapproved evidence. Narrow it by editing the lens's `sensitivity_access` or the document's `access_lenses`. `disclosure` is descriptive on standard adapters; public and restricted-host adapters additionally require `disclosure: publish-approved` and a non-confidential sensitivity (`publicationAllowed`; the Workbench "derived public-safe" status is the same decision). On those adapters claims and `field_visibility` fields are delivered only when marked `public-safe`. Ordinary sections without a field rule follow the document: wherever the document is delivered, so are its ordinary sections, including on publication adapters when the document is approved for publication. Reading context never authorizes external actions.
 
 Legacy `visibility`, `public_safe`, `exclude_lenses`, and `field_visibility` remain readable. Canonical documents need modern controls or valid legacy visibility. `knowledge migrate-lenses` previews exact conversion from `career` to `professional` and `publishing` to `public-voice`, including claim markers. Ordinary prose and proposal archives remain intact. See [CLI](../reference/cli.md) and [migration](../guides/migration.md).
 
-> 2026-11-04: `visibility`, `public_safe` and `field_visibility` are deprecated in favour of `access_lenses`, `read_scope`, `disclosure` and lens-based field and claim rules, with an exact non-widening mapping. See [privacy fields and the legacy live mount](../decisions/privacy-fields-and-legacy-mount.md).
+### Deprecated privacy fields
+
+`visibility`, `public_safe`, `field_visibility` and the claim-marker `visibility=` attribute are deprecated in favour of `access_lenses`, `read_scope`, `disclosure` and lens-based field and claim rules ([decision](../decisions/privacy-fields-and-legacy-mount.md)). They keep working until they are rejected.
+
+| Version | Change |
+|---|---|
+| 0.11.0 | `holoself validate` prints one `[warn] deprecated …` line on stderr per document and deprecated field (claim markers are counted per document), with root-relative paths. `holoself migrate policy` rewrites `visibility` and `public_safe` with the exact mapping below and removes them. |
+| 0.12.0 | `migrate policy` also rewrites `field_visibility` (to `field_access`) and claim markers (to `access_lenses=` / `disclosure=`); approved proposals write the new claim marker. |
+| 0.13.0 | Deprecated fields are rejected: a canonical document carrying them is excluded with a validation error; a project or contrib document is restricted to `private`. |
+| 0.14.0 | They are removed from the schemas. |
+
+`holoself migrate policy --dry-run` shows the plan. The mapping keeps every valid explicit field and writes only what the legacy runtime filled implicitly, always materializing `access_lenses`, `read_scope`, `disclosure`, `sensitivity` and `document_role` so an inherited `_policy.yaml` default cannot fill a gap later:
+
+| Legacy value | `access_lenses` (if missing) | `read_scope` (if missing) | `disclosure` |
+|---|---|---|---|
+| `visibility: private` | `[private]` | `restricted` | missing: `internal-only` |
+| `visibility: linked-projects`, or none | the seven seeded lenses | `shared` | missing: `internal-only` |
+| `visibility: professional` | `[general, professional, interview, private]` | `shared` | missing: `internal-only` |
+| `visibility: public-voice` | `[general, public-voice, private]` | `shared` | missing: `internal-only` |
+| `visibility: public-safe` | the seven seeded lenses | `shared` | missing: `publish-approved` (unless `public_safe: false`) |
+| `public_safe: true` | — | — | missing: `publish-approved` |
+| `public_safe: false` | — | — | `review-required`, overriding `publish-approved`; an explicit `internal-only` is kept |
+
+A missing `sensitivity` becomes `personal` and a missing `document_role` becomes `content` (the runtime defaults). A restricted `read_scope` or `sensitivity` keeps only the `private` lens, which is the only one it ever admitted. Invalid legacy values are written as the restricted metadata the runtime already applies. The mapping is exact: a synthetic proof over every combination of the legacy and modern fields shows no access or publication decision changes, for every lens (including custom), caller and adapter. Coverage loss, and with it `--confirm-narrowing`, appears only when removing the legacy field lets a `_policy.yaml` default such as `exclude_lenses` narrow the document. A canonical document the catalog currently excludes (for example `visibility: public-safe` with `public_safe: false`) is an activation: it is listed under the plan's `activations`, skipped unless `--confirm-activation` is given, and mapped with the narrower rules (conflicting or restricted metadata becomes fully restricted, a missing `visibility` counts as `private`).
 
 ### Directory policy defaults (`_policy.yaml`)
 

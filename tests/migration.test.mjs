@@ -58,20 +58,29 @@ test('verifyNonAmplification gate detects illegal permission expansion', () => {
   assert.match(amplified.violation, /DENY -> ALLOW/)
 })
 
-test('computeMeetMetadata derives minimal-privilege meet for self and project', () => {
+test('computeMeetMetadata maps legacy visibility to the exact runtime fields for every document kind', () => {
   const selfPrivate = computeMeetMetadata({ visibility: 'private' }, 'self')
   assert.equal(selfPrivate.read_scope, 'restricted')
   assert.deepEqual(selfPrivate.access_lenses, ['private'])
+  assert.equal(selfPrivate.disclosure, 'internal-only')
+  assert.equal(Object.hasOwn(selfPrivate, 'visibility'), false)
 
-  const selfLinked = computeMeetMetadata({ visibility: 'linked-projects' }, 'self')
-  assert.equal(selfLinked.read_scope, 'shared')
-  assert.ok(selfLinked.access_lenses.includes('general'))
-  assert.ok(selfLinked.access_lenses.includes('technical'))
-  assert.ok(selfLinked.access_lenses.includes('private'))
-
-  const projLinked = computeMeetMetadata({ visibility: 'linked-projects' }, 'project')
-  assert.equal(projLinked.read_scope, 'shared')
-  assert.deepEqual(projLinked.access_lenses, ['general', 'technical'])
+  for (const kind of ['self', 'project']) {
+    const linked = computeMeetMetadata({ visibility: 'linked-projects' }, kind)
+    assert.equal(linked.read_scope, 'shared')
+    assert.deepEqual(linked.access_lenses, DEFAULT_LENS_IDS)
+    assert.equal(linked.sensitivity, 'personal')
+    assert.equal(linked.document_role, 'content')
+    const publicSafe = computeMeetMetadata({ visibility: 'public-safe', public_safe: true }, kind)
+    assert.deepEqual(publicSafe.access_lenses, DEFAULT_LENS_IDS)
+    assert.equal(publicSafe.disclosure, 'publish-approved')
+    assert.equal(Object.hasOwn(publicSafe, 'public_safe'), false)
+  }
+  assert.deepEqual(computeMeetMetadata({ visibility: 'professional' }).access_lenses, ['general', 'professional', 'interview', 'private'])
+  assert.deepEqual(computeMeetMetadata({ visibility: 'public-voice' }).access_lenses, ['general', 'public-voice', 'private'])
+  // public_safe: false overrides publish-approved; an explicit internal-only is kept.
+  assert.equal(computeMeetMetadata({ disclosure: 'publish-approved', public_safe: false }).disclosure, 'review-required')
+  assert.equal(computeMeetMetadata({ disclosure: 'internal-only', public_safe: false }).disclosure, 'internal-only')
 })
 
 test('migrate policy saves a plan without mutating source documents', async () => {
@@ -104,30 +113,29 @@ test('migrate policy requires --confirm-narrowing when coverage loss occurs', as
   const self = await temp()
   await run(['init', '--root', self])
 
-  // Create a document with visibility: professional
+  // visibility: professional maps exactly: no coverage loss, applies without --confirm-narrowing.
   await writeFile(join(self, 'context', 'career-guide.md'), '---\nvisibility: professional\n---\n# Career\nCareer details.\n')
-
-  const planOutput = await capture(() => run(['migrate', 'policy', '--root', self]))
-  const plan = JSON.parse(planOutput)
-  assert.ok(plan.plan_id)
-
-  // Attempt to apply without --confirm-narrowing
-  await assert.rejects(
-    run(['migrate', 'policy', '--root', self, '--apply', plan.plan_id]),
-    /confirm-narrowing|NARROWING_CONFIRMATION_REQUIRED/
-  )
-
-  // Apply with --confirm-narrowing succeeds
-  const applyOutput = await capture(() => run(['migrate', 'policy', '--root', self, '--apply', plan.plan_id, '--confirm-narrowing']))
-  const receipt = JSON.parse(applyOutput)
-  assert.equal(receipt.status, 'applied')
-  assert.equal(receipt.narrowing_confirmed, true)
-
-  // Verify file on disk now has read_scope and access_lenses
+  const exact = JSON.parse(await capture(() => run(['migrate', 'policy', '--root', self])))
+  assert.deepEqual(exact.summary.coverage_loss, {})
+  const exactReceipt = JSON.parse(await capture(() => run(['migrate', 'policy', '--root', self, '--apply', exact.plan_id])))
+  assert.equal(exactReceipt.narrowing_confirmed, false)
   const updated = await readFile(join(self, 'context', 'career-guide.md'), 'utf8')
   assert.match(updated, /read_scope:\s*shared/)
-  assert.match(updated, /access_lenses:\s*\[.+\]/)
+  assert.match(updated, /access_lenses:\s*\[general, professional, interview, private\]/)
+  assert.doesNotMatch(updated, /^visibility:/m)
   assert.match(updated, /# Career\nCareer details\./)
+
+  // Removing legacy visibility turns _policy.yaml inheritance on: an inherited exclude_lenses narrows the document,
+  // which is coverage loss and needs --confirm-narrowing.
+  await mkdir(join(self, 'topics', 'narrow'), { recursive: true })
+  await writeFile(join(self, 'topics', 'narrow', '_policy.yaml'), 'exclude_lenses: [technical]\n')
+  await writeFile(join(self, 'topics', 'narrow', 'note.md'), '---\nvisibility: linked-projects\n---\n# Note\n')
+  const plan = JSON.parse(await capture(() => run(['migrate', 'policy', '--root', self])))
+  assert.ok(plan.summary.coverage_loss.technical > 0)
+  await assert.rejects(run(['migrate', 'policy', '--root', self, '--apply', plan.plan_id]), /confirm-narrowing|NARROWING_CONFIRMATION_REQUIRED/)
+  const receipt = JSON.parse(await capture(() => run(['migrate', 'policy', '--root', self, '--apply', plan.plan_id, '--confirm-narrowing'])))
+  assert.equal(receipt.status, 'applied')
+  assert.equal(receipt.narrowing_confirmed, true)
 })
 
 test('migrate policy revert restores exact original file contents and marks receipt', async () => {
@@ -675,8 +683,8 @@ test('regression (e): applyFrontmatterModifications anchors keys at column 0 to 
   )
   assert.match(updated, /field_visibility:\r?\n  visibility: public-safe/)
 
-  // Assert top-level key is the one migrated
-  assert.match(updated, /^visibility:\s*private/m)
+  // Assert the deprecated top-level key is removed, not the nested one
+  assert.doesNotMatch(updated, /^visibility:/m)
   assert.match(updated, /^read_scope:\s*restricted/m)
   assert.match(updated, /^access_lenses:\s*\[private\]/m)
 

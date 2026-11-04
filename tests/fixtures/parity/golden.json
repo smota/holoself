@@ -18402,7 +18402,7 @@
       ],
       "status": 1,
       "stdout": "",
-      "stderr": "[!!] project uses a legacy filesystem junction mount: <ROOT>/legacy-project; run holoself link setup to migrate to a bounded link\n"
+      "stderr": "[!!] project uses a legacy filesystem junction mount: <ROOT>/legacy-project; run holoself link setup to migrate to a bounded link; the legacy live mount (link --target, unlink --target) is deprecated and will be removed in 0.13.0; use holoself link setup --project <dir> --self <path>\n"
     },
     {
       "name": "context not-needed task",
@@ -24688,7 +24688,7 @@
       "stdout": {
         "json": {
           "status": "planned",
-          "plan_id": "09f0592a896d4a63895e3a133d632abbcf988eb36d5de3a8b065a5e629c8b0d6",
+          "plan_id": "ec3270e6b277372eb865189f107c92d2f2b08ce02e36c88c6cba4d561f95f18c",
           "generated_at": "<TIME>",
           "self_root": "<ROOT>/self",
           "include_linked": false,
@@ -24696,14 +24696,7 @@
             "total_scanned": 32,
             "modified_files": 32,
             "unmodified_files": 0,
-            "coverage_loss": {
-              "general": 31,
-              "professional": 13,
-              "public-voice": 10,
-              "technical": 8,
-              "leadership": 12,
-              "interview": 9
-            },
+            "coverage_loss": {},
             "non_amplification_verified": true
           },
           "plan_file": null
@@ -24746,7 +24739,7 @@
           "status": "ready",
           "fresh": true,
           "path": "<ROOT>/project/.holoself/catalog/catalog.json",
-          "schema_version": 2,
+          "schema_version": 3,
           "privacy_policy_version": 4,
           "lens_registry_hash": "07c92f4fc4342fd9fe7b7a956eb990ed92dc4eb11feabdb8e36c691f51232127",
           "engine": "deterministic-json",
@@ -24819,7 +24812,7 @@
           "status": "ready",
           "fresh": true,
           "path": "<ROOT>/project/.holoself/catalog/catalog.json",
-          "schema_version": 2,
+          "schema_version": 3,
           "privacy_policy_version": 4,
           "lens_registry_hash": "07c92f4fc4342fd9fe7b7a956eb990ed92dc4eb11feabdb8e36c691f51232127",
           "engine": "deterministic-json",
@@ -26600,7 +26593,7 @@
       ],
       "status": 0,
       "stdout": "[ok] <ROOT>/self is valid\n",
-      "stderr": ""
+      "stderr": "[warn] deprecated claim marker attribute visibility= in context/claims.md (1 marker): maps to access_lenses and disclosure marker attributes; rejected in 0.13.0; holoself migrate policy rewrites them from 0.12.0\n"
     }
   ]
 }
