@@ -1,6 +1,8 @@
 # MCP tool reference
 
-All tools are bound to one linked project at server startup. No tool accepts a project path, self root, or arbitrary filesystem root. Inputs reject unknown properties.
+All tools are bound to one linked project at server startup. No tool accepts a project path, self root, client identity, or arbitrary filesystem root. Inputs reject unknown properties.
+
+A desktop client started with `holoself mcp --client <client-id> --root <self-root>` is bound instead to one owner-created client grant with one lens ([local MCP guide](../guides/local-mcp.md#desktop-clients-without-a-project)). It lists the five read tools with self-only scope. The two proposal tools are listed only when the client's proposal mode is `inbox`; there `holoself_proposal_create` takes `claim` and `evidence` (both required) plus optional `target`, `proposal_type`, `confidence` and `visibility`, appends to an existing lens-visible document, and writes to `<self>/proposals/inbox/`. The table below shows the linked-project schemas.
 
 <!-- generated:start -->
 | Tool | Mode | Required inputs | Optional inputs | Description |

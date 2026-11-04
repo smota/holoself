@@ -50,6 +50,53 @@ export function catalogBuildWarnings(root, project = null) {
   }
   return [...new Set(warnings)]
 }
+// Deprecated privacy fields (docs/decisions/privacy-fields-and-legacy-mount.md). 0.11.0 warns, 0.13.0 rejects them.
+export const DEPRECATED_FIELDS_REJECTED_IN = '0.13.0'
+const MIGRATE_NOW = 'run holoself migrate policy --dry-run'
+const MIGRATE_LATER = 'holoself migrate policy rewrites it from 0.12.0'
+const DEPRECATED_FIELD_TARGETS = Object.freeze({
+  visibility: ['access_lenses, read_scope and disclosure', MIGRATE_NOW],
+  public_safe: ['disclosure', MIGRATE_NOW],
+  field_visibility: ['field_access', MIGRATE_LATER]
+})
+function deprecatedDocumentWarnings(file, rel) {
+  let text
+  try {
+    text = readFileSync(file, 'utf8')
+  } catch {
+    return []
+  }
+  const warnings = [],
+    rejected = `rejected in ${DEPRECATED_FIELDS_REJECTED_IN}`
+  let parsed = null
+  try {
+    parsed = frontmatter(text, { tolerant: true, validatePrivacy: false })
+  } catch {}
+  const metadata = parsed?.metadata || {}
+  for (const [field, [target, action]] of Object.entries(DEPRECATED_FIELD_TARGETS))
+    if (Object.hasOwn(metadata, field)) warnings.push(`deprecated field ${field} in ${rel}: maps to ${target}; ${rejected}; ${action}`)
+  const markers = parseClaimBlocks(parsed?.body ?? text).filter(block => block.attrs.visibility !== undefined).length
+  if (markers)
+    warnings.push(
+      `deprecated claim marker attribute visibility= in ${rel} (${markers} marker${markers === 1 ? '' : 's'}): maps to access_lenses and disclosure marker attributes; ${rejected}; ${MIGRATE_LATER.replace(' it ', ' them ')}`
+    )
+  return warnings
+}
+// One warning per document and deprecated field: canonical documents (every file migrate policy scans) and, with a
+// linked project, its context files. Paths are relative to their own root.
+export function deprecatedFieldWarnings(root, project = null) {
+  const warnings = []
+  if (existsSync(root))
+    for (const file of ['profile', 'context', 'history', 'topics'].flatMap(dir => markdownFiles(join(root, dir))).sort())
+      warnings.push(...deprecatedDocumentWarnings(file, slash(relative(root, file))))
+  if (project && existsSync(project) && !samePath(canonicalPath(project), canonicalPath(root))) {
+    try {
+      const link = readLink(project, { tolerant: true })
+      for (const file of projectMarkdownFiles(project, link)) warnings.push(...deprecatedDocumentWarnings(file, slash(relative(project, file))))
+    } catch {}
+  }
+  return warnings
+}
 export function ecosystemValidationErrors(root, project = null) {
   const errors = []
   let rootRegistry = null
@@ -150,6 +197,8 @@ export function ecosystemValidationErrors(root, project = null) {
     }
     proposalRoots.push(join(project, '.holoself', 'proposals'))
   }
+  const selfProposals = join(root, 'proposals'),
+    inboxRoot = join(selfProposals, 'inbox')
   for (const base of proposalRoots) {
     if (!existsSync(base)) continue
     const walk = dir => {
@@ -158,7 +207,8 @@ export function ecosystemValidationErrors(root, project = null) {
         if (entry.isDirectory()) walk(path)
         else if (entry.name.endsWith('.yaml')) {
           try {
-            readProposal(path)
+            // Client inbox records validate as inbox records; self-root archives hold either shape.
+            readProposal(path, { inbox: dir === inboxRoot ? true : base === selfProposals ? 'auto' : false })
           } catch (error) {
             errors.push(`${slash(relative(base, path))}: ${error.message}`)
           }

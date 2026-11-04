@@ -11,12 +11,14 @@
   lenses/<id>.json         # uniform self-side definitions
   lenses/bindings.json     # normalized project choices
   .holoself/links.json     # attestation salts and grants
+  .holoself/clients.json   # unlinked desktop MCP client grants (one lens each), mode 0600
   .holoself/maintenance-receipts/ # immutable digest receipts
   topics/
   reference/
   me/
   contribs/local/        # private extensions; public defaults remain in the product package
   proposals/{pending,approved,rejected,deferred,superseded,receipts}/
+  proposals/inbox/         # pending proposals from desktop clients with proposals: inbox
   history/
   exports/
 ```

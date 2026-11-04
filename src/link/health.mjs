@@ -2,6 +2,7 @@
 import { existsSync, lstatSync } from 'node:fs'
 import { join } from 'node:path'
 import { activationStatus } from '../adapters.mjs'
+import { LEGACY_MOUNT_DEPRECATION } from './config.mjs'
 
 export function healthStatus(project, link, o = {}) {
   const holoselfDir = join(project, '.holoself')
@@ -11,7 +12,7 @@ export function healthStatus(project, link, o = {}) {
     snapshot = existsSync(join(project, '.holoself', 'runtime', 'context-packet.md')),
     skillPolicy = activation.runtime?.skillInstallPolicy || 'auto',
     errors = []
-  if (isLegacyMount) errors.push('legacy filesystem junction mount detected; run holoself link setup to migrate to a bounded link')
+  if (isLegacyMount) errors.push(`legacy filesystem junction mount detected; run holoself link setup to migrate to a bounded link; ${LEGACY_MOUNT_DEPRECATION}`)
   if (!selfExists) errors.push('self path missing')
   if (link._bindingError) errors.push(link._bindingError)
   if (!activation.bootstrap && !snapshot) errors.push('bootstrap missing')

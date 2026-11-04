@@ -59,6 +59,14 @@ export function buildIndex(project, changed = false, options = {}) {
     sources: entries
   }
 }
+// Self-only index for an unlinked client: the self partition alone, with no project entries and no project path.
+export function readSelfIndex(selfRoot, registry = loadLensRegistry(selfRoot)) {
+  const result = ensureCatalog(selfRoot, null, null, registry, { rebuild: false })
+  const entries = (result.self?.sources || [])
+    .map(s => ({ ...s, source_kind: 'canonical', source_project: 'self', space_id: 'self' }))
+    .sort((a, b) => canonicalSort(a.file, b.file))
+  return { schema_version: 1, privacy_policy_version: 4, lens_registry_hash: registry.registry_hash, project: null, entries, sources: entries }
+}
 export function readIndex(project) {
   return buildIndex(project, true)
 }
@@ -76,7 +84,9 @@ export function searchIndex(index, query, lens = 'general', registry = null, res
   const consumerSpaceId = index.project ? canonicalSpaceId(index.project) : null
   for (const entry of entries) {
     const entrySpaceId = entry.space_id || (entry.source_kind === 'canonical' ? 'self' : consumerSpaceId || 'project')
-    const subj = consumerSpaceId
+    const subj = options.subject
+      ? options.subject
+      : consumerSpaceId
       ? {
           kind: 'client:linked',
           space_id: consumerSpaceId,

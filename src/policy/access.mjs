@@ -1,5 +1,5 @@
 // Document access policy: lens, visibility, disclosure, sensitivity and task gates.
-import { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES } from '../annotations.mjs'
+import { DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES, effectiveDisclosure, publicationAllowed } from '../annotations.mjs'
 import { KNOWLEDGE_STATUSES, TEMPORAL_SCOPES, dateValue } from '../context-selection.mjs'
 import { DEFAULT_LENS_IDS } from '../lenses.mjs'
 import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
@@ -27,22 +27,12 @@ export function accessLenses(meta) {
   return Array.isArray(meta.access_lenses) ? meta.access_lenses : legacyAccessLenses(meta)
 }
 export function disclosure(meta) {
-  if (meta.public_safe === false) return 'review-required'
-  if (DISCLOSURES.includes(meta.disclosure)) return meta.disclosure
-  if (meta.public_safe === true || visibility(meta) === 'public-safe') return 'publish-approved'
-  return 'internal-only'
+  return effectiveDisclosure(meta)
 }
 export function documentRole(meta) {
   return DOCUMENT_ROLES.includes(meta.document_role) ? meta.document_role : 'content'
 }
-export function publicationAllowed(meta) {
-  return (
-    disclosure(meta) === 'publish-approved' &&
-    !['compensation-confidential', 'third-party-personal', 'recruiter-confidential', 'employer-confidential', 'application-private', 'restricted'].includes(
-      meta.sensitivity || ''
-    )
-  )
-}
+export { publicationAllowed }
 export function taskAllowed(meta, task) {
   const include = Array.isArray(meta.task_include) ? meta.task_include : [],
     exclude = Array.isArray(meta.task_exclude) ? meta.task_exclude : [],
@@ -62,6 +52,32 @@ export function visibleUnderBehavior(visibility, behaviorLens, adapter = 'generi
   if (v === 'linked-projects' || v === 'public-safe') return true
   return legacyAccessLenses({ visibility: v }).includes(behaviorLens)
 }
+// The narrowest single visibility admitted wherever both a and b are (an element governed by two rules, such as a
+// field line inside a claim block). public-safe adds only publication to linked-projects (every lens). The one
+// intersection with no exact name, professional with public-voice ({general, private}), fails closed to private.
+export function intersectVisibility(a, b) {
+  const x = VISIBILITIES.includes(a) ? a : 'private',
+    y = VISIBILITIES.includes(b) ? b : 'private'
+  if (x === y) return x
+  if (x === 'public-safe') return y
+  if (y === 'public-safe') return x
+  if (x === 'linked-projects') return y
+  if (y === 'linked-projects') return x
+  return 'private'
+}
+// The rule filterFieldVisibility applies to one line: `Field: value` lines whose field name equals a rule.
+export function fieldLineRule(line, fieldVisibility = {}) {
+  const field = String(line).match(/^\s*[-*]?\s*([^:]{2,40}):\s*(.+)$/)
+  if (!field) return null
+  const rule = Object.entries(fieldVisibility || {}).find(([name]) => field[1].trim().toLowerCase() === name.toLowerCase())
+  return rule ? rule[1] : null
+}
+// The rule filterFieldVisibility applies to a whole section through its heading.
+export function fieldHeadingRule(heading, fieldVisibility = {}) {
+  const key = String(heading).trim().toLowerCase()
+  const rule = Object.entries(fieldVisibility || {}).find(([name]) => key.includes(name.toLowerCase()))
+  return rule ? rule[1] : null
+}
 export function allowedDocument(meta, lens, adapter = 'generic', task = null, resolution = null, subject = null, sourceSpaceId = null) {
   const subj = subject || { kind: 'owner:direct', accessible_spaces: ['self', 'contrib'] }
   const srcSpace = sourceSpaceId || 'self'
@@ -77,8 +93,8 @@ export function allowedDocument(meta, lens, adapter = 'generic', task = null, re
       return { allowed: false, reason: `local read_scope not accessible from space ${srcSpace}`, phase: 1 }
     }
   }
-  if (subj.kind === 'client:linked') {
-    if (lens === 'private') return { allowed: false, reason: 'private lens not granted to linked client', phase: 2 }
+  if (subj.kind === 'client:linked' || subj.kind === 'client:unlinked') {
+    if (lens === 'private') return { allowed: false, reason: `private lens not granted to ${subj.kind === 'client:linked' ? 'linked' : 'unlinked'} client`, phase: 2 }
     if (subj.effective_allowed_lenses && !subj.effective_allowed_lenses.has(lens)) {
       return { allowed: false, reason: `lens ${lens} not in effective allowed lenses`, phase: 2 }
     }

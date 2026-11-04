@@ -901,9 +901,11 @@ test('migrate policy judges AFTER with inherited _policy.yaml defaults: removing
     access_lenses: ['private'],
     disclosure: 'internal-only',
     sensitivity: 'personal',
-    document_role: 'content'
+    document_role: 'content',
+    visibility: null
   });
   assert.deepEqual(entry.after_metadata.access_lenses, ['private']);
+  assert.ok(!entry.after_text.includes('visibility:'), 'the plan removes the deprecated field');
   const withoutVisibility = entry.after_text.replace(/^visibility: private\r?\n/m, '');
   assert.ok(!withoutVisibility.includes('visibility:'));
   const effective = resolveDocumentPolicy(docRel, root, parseFrontmatter(withoutVisibility, { tolerant: true }).metadata).effectiveMetadata;

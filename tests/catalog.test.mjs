@@ -486,7 +486,7 @@ test('ensureContribPartition caches on-disk at selfRoot/.holoself/catalog/contri
 
   assert.equal(existsSync(contribPath), true)
   const onDisk = JSON.parse(readFileSync(contribPath, 'utf8'))
-  assert.equal(onDisk.schema_version, 2)
+  assert.equal(onDisk.schema_version, 3)
   assert.equal(onDisk.space_id, 'contrib')
   assert.ok(onDisk.sources.length > 0)
 })

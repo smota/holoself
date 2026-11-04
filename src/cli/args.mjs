@@ -1,6 +1,6 @@
 // Command-line argument parsing and the per-command flag contracts.
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 
 export function defaultRoot() {
   return process.env.HOLOSELF_HOME || join(homedir(), '.holoself')
@@ -89,9 +89,25 @@ export const COMMAND_FLAGS = {
   unlink: [...ROOT_FLAGS, '--target', '--dry-run', ...CONFIRM_FLAGS],
   upgrade: [...ROOT_FLAGS, '--contribs', '--exclude-contrib', '--dry-run'],
   web: [...ROOT_FLAGS, '--project', '--port', '--no-open'],
-  mcp: ['--project', '--claude-project-dir'],
-  'mcp status': ['--project', '--platform', ...JSON_FLAGS],
-  'mcp configure': ['--project', '--platform', '--all-detected', '--force-replace', '--dry-run', ...CONFIRM_FLAGS, ...JSON_FLAGS],
+  mcp: ['--project', '--claude-project-dir', '--client', ...ROOT_FLAGS],
+  'mcp status': ['--project', '--platform', '--client', ...ROOT_FLAGS, ...JSON_FLAGS],
+  'mcp configure': [
+    '--project',
+    '--platform',
+    '--all-detected',
+    '--force-replace',
+    '--dry-run',
+    '--client',
+    '--apply',
+    '--remove',
+    ...ROOT_FLAGS,
+    ...CONFIRM_FLAGS,
+    ...JSON_FLAGS
+  ],
+  'client add': [...ROOT_FLAGS, '--name', '--lens', '--proposals', ...JSON_FLAGS],
+  'client list': [...ROOT_FLAGS, ...JSON_FLAGS],
+  'client revoke': [...ROOT_FLAGS, ...JSON_FLAGS],
+  'client remove': [...ROOT_FLAGS, ...JSON_FLAGS],
   coaching: [],
   'coaching start': [...ROOT_FLAGS, '--question', ...JSON_FLAGS],
   'coaching note': [...ROOT_FLAGS, '--expected-revision', '--kind', '--text', ...JSON_FLAGS],
@@ -157,7 +173,18 @@ export const COMMAND_FLAGS = {
   'link backfill': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--all', '--lenses'],
   'link prune': [...ROOT_FLAGS, '--self'],
   'link skill migrate-global': [...PROJECT_FLAGS, '--platform', '--instructions', '--skill-home', '--force', '--dry-run', ...CONFIRM_FLAGS],
-  'migrate policy': [...ROOT_FLAGS, '--self', '--apply', '--revert', '--confirm-narrowing', '--allow-partial', '--include-linked', '--dry-run', ...JSON_FLAGS],
+  'migrate policy': [
+    ...ROOT_FLAGS,
+    '--self',
+    '--apply',
+    '--revert',
+    '--confirm-narrowing',
+    '--confirm-activation',
+    '--allow-partial',
+    '--include-linked',
+    '--dry-run',
+    ...JSON_FLAGS
+  ],
   context: CONTEXT_FLAGS,
   ...Object.fromEntries(['overlap', 'conflicts', 'stale', 'all'].map(sub => ['analyze ' + sub, [...PROJECT_FLAGS, ...JSON_FLAGS]])),
   propose: [
@@ -175,19 +202,21 @@ export const COMMAND_FLAGS = {
     '--visibility',
     ...JSON_FLAGS
   ],
-  ...Object.fromEntries(['list', 'audit'].map(sub => ['proposals ' + sub, [...PROJECT_FLAGS, ...JSON_FLAGS]])),
-  'proposals show': PROJECT_FLAGS,
-  'proposals approve': [...PROJECT_FLAGS, '--json', '--digest', '--preview-hash', ...CONFIRM_FLAGS],
-  ...Object.fromEntries(['reject', 'defer', 'supersede'].map(sub => ['proposals ' + sub, [...PROJECT_FLAGS, ...CONFIRM_FLAGS]])),
+  ...Object.fromEntries(['list', 'audit'].map(sub => ['proposals ' + sub, [...PROJECT_FLAGS, ...ROOT_FLAGS, '--inbox', ...JSON_FLAGS]])),
+  'proposals show': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--inbox'],
+  'proposals approve': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--inbox', '--allow-revoked', '--json', '--digest', '--preview-hash', ...CONFIRM_FLAGS],
+  ...Object.fromEntries(
+    ['reject', 'defer', 'supersede'].map(sub => ['proposals ' + sub, [...PROJECT_FLAGS, ...ROOT_FLAGS, '--inbox', ...CONFIRM_FLAGS]])
+  ),
   index: [...PROJECT_FLAGS, '--changed', ...JSON_FLAGS],
   'index status': [...PROJECT_FLAGS, ...JSON_FLAGS],
   'index rebuild': [...PROJECT_FLAGS, ...JSON_FLAGS],
-  ledger: [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--since', '--lens', '--surface', '--limit', ...JSON_FLAGS],
+  ledger: [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--since', '--lens', '--surface', '--client', '--limit', ...JSON_FLAGS],
   search: [...PROJECT_FLAGS, '--lens', '--temporal', '--federated', '--spaces', ...JSON_FLAGS]
 }
 export function commandKey(o) {
   if (o.command === 'link' && o.args[0] === 'skill') return ['link', ...o.args.slice(0, 2)].join(' ')
-  if (['link', 'migrate', 'mcp', 'coaching', 'knowledge', 'instructions', 'skill', 'lens', 'analyze', 'proposals', 'index'].includes(o.command) && o.args[0])
+  if (['link', 'migrate', 'mcp', 'coaching', 'knowledge', 'instructions', 'skill', 'lens', 'analyze', 'proposals', 'index', 'client'].includes(o.command) && o.args[0])
     return `${o.command} ${o.args[0]}`
   return o.command || ''
 }
@@ -225,6 +254,11 @@ export function validateFlags(o) {
     error.code = 'INVALID_ARGUMENT'
     throw error
   }
+  if (o.client !== undefined && o.rootExplicit && !isAbsolute(o.rawRoot) && o.rawRoot !== 'example') {
+    const error = new Error('client mode requires an absolute self root (--root <absolute-self-root>)')
+    error.code = 'CLIENT_ROOT_NOT_ABSOLUTE'
+    throw error
+  }
   return o
 }
 export function parseArguments(args) {
@@ -238,7 +272,8 @@ export function parse(args) {
     if (a.startsWith('-')) o._flags.push(a)
     if (a === '--adapters') o.adapters = requiredValue(args, i++, a)
     else if (a === '--root' || a === '--data-root' || a === '--data-dir') {
-      o.root = resolve(requiredValue(args, i++, a))
+      o.rawRoot = requiredValue(args, i++, a)
+      o.root = resolve(o.rawRoot)
       o.rootExplicit = true
     } else if (a === '--target') o.target = resolve(requiredValue(args, i++, a))
     else if (a === '--project') {
@@ -311,10 +346,18 @@ export function parse(args) {
     else if (a === '--binding-hash') o.bindingHash = requiredValue(args, i++, a)
     else if (a === '--replacements') o.replacements = requiredValue(args, i++, a)
     else if (a === '--plan') o.plan = requiredValue(args, i++, a)
+    // `mcp configure --client ... --apply` is a switch; `validate --apply` may be a switch; other --apply takes a plan file.
+    else if (a === '--apply' && positional[0] === 'mcp') o.applyHost = true
     else if (a === '--apply') {
       if (args.includes('validate') && (!args[i + 1] || args[i + 1].startsWith('-'))) o.apply = true
       else o.apply = requiredValue(args, i++, a)
     }
+    else if (a === '--remove') o.remove = true
+    else if (a === '--client') o.client = requiredValue(args, i++, a)
+    else if (a === '--name') o.name = requiredValue(args, i++, a)
+    else if (a === '--proposals') o.proposals = requiredValue(args, i++, a)
+    else if (a === '--inbox') o.inbox = true
+    else if (a === '--allow-revoked') o.allowRevoked = true
     else if (a === '--revert') o.revert = requiredValue(args, i++, a)
     else if (a === '--digest' || a === '--preview-hash') o.digest = requiredValue(args, i++, a)
     else if (a === '--adapter') o.adapter = requiredValue(args, i++, a)
@@ -397,6 +440,7 @@ export function parse(args) {
     else if (a === '--all') o.all = true
     else if (a === '--revoke') o.revoke = true
     else if (a === '--confirm-narrowing') o.confirmNarrowing = true
+    else if (a === '--confirm-activation') o.confirmActivation = true
     else if (a === '--allow-partial') o.allowPartial = true
     else if (a === '--include-linked') o.includeLinked = true
     else if (a === '--fix') o.fix = true
@@ -418,6 +462,7 @@ export function parse(args) {
     else if (a.startsWith('-')) throw new Error(`unknown option: ${a}`)
     else positional.push(a)
   }
+  if (o.client !== undefined && o.rootExplicit) o.root = o.rawRoot
   o.root = o.root || defaultRoot()
   o.command = positional[0]
   o.args = positional.slice(1)

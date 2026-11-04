@@ -1,7 +1,7 @@
 // holoself link status subcommand (moved verbatim from runEcosystem).
 import { existsSync, lstatSync } from 'node:fs'
 import { join } from 'node:path'
-import { readLink } from '../../../link/config.mjs'
+import { LEGACY_MOUNT_DEPRECATION, readLink } from '../../../link/config.mjs'
 import { healthStatus } from '../../../link/health.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry } from '../../../link/registry.mjs'
 import { scanProposalStore } from '../../../proposals/store.mjs'
@@ -18,7 +18,8 @@ export async function linkStatus(o, sub, project) {
           state: 'legacy-mount',
           mode: 'legacy-mount',
           isLegacyMount: true,
-          errors: ['legacy filesystem junction mount detected; run holoself link setup to migrate to a bounded link']
+          errors: [`legacy filesystem junction mount detected; run holoself link setup to migrate to a bounded link; ${LEGACY_MOUNT_DEPRECATION}`],
+          deprecation: LEGACY_MOUNT_DEPRECATION
         },
         null,
         2

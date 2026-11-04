@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { createInterface } from 'node:readline'
 import { existsSync, lstatSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import {
   holoselfMcpContext,
@@ -13,10 +14,12 @@ import {
   PROPOSAL_TYPES,
   VISIBILITIES
 } from './ecosystem.mjs'
-import { readLink } from './link/config.mjs'
+import { attestClient, resolveClientSelf } from './clients/attestation.mjs'
+import { LEGACY_MOUNT_DEPRECATION, readLink } from './link/config.mjs'
 import { HARVEST_PROMPT_NAME, HARVEST_PROMPT_TEXT, HARVEST_PROMPT_VERSION, harvestPromptText, validateHarvestPromptArgs } from './instructions.mjs'
 import { recordServedPacket } from './ledger.mjs'
 import { createToolPool } from './mcp-pool.mjs'
+import { clientMcpContextData, clientMcpCreateProposal, clientMcpPreviewProposal, clientMcpSearch, clientMcpStatus } from './retrieval/client-mcp.mjs'
 import { AUDIT_LOG_MAX_BYTES, appendAuditLine } from './shared/audit-log.mjs'
 import { VERSION } from './version.mjs'
 
@@ -166,6 +169,48 @@ export const MCP_TOOLS = [
   }
 ]
 
+// Unlinked client mode (`mcp --client <id> --root <self>`): the same tool names with client-scoped descriptions. The
+// proposal tools append only to existing lens-visible documents and require evidence; they are listed only when the
+// client's proposal mode is `inbox` at startup, and every call re-checks the mode.
+const byName = name => MCP_TOOLS.find(tool => tool.name === name)
+const withText = (tool, description, inputSchema = tool.inputSchema) => ({ ...tool, description, inputSchema })
+export const CLIENT_READ_TOOLS = [
+  withText(
+    byName(`${TOOL_PREFIX}status`),
+    'Check this desktop client grant (client name, its one lens and proposal mode) and context health without revealing local paths.'
+  ),
+  withText(
+    byName(`${TOOL_PREFIX}context`),
+    'Resolve and deliver privacy-filtered self context under this client lens for the current task in a single round-trip. ' +
+      'Manifest and get remain optional for fine-grained inspection.'
+  ),
+  byName(`${TOOL_PREFIX}context_manifest`),
+  withText(byName(`${TOOL_PREFIX}context_get`), 'Resolve only the requested manifest source handles through the client lens, lifecycle, and privacy gates.'),
+  withText(byName(`${TOOL_PREFIX}search`), 'Search the deterministic local privacy-filtered self index under this client lens.')
+]
+export const CLIENT_PROPOSAL_TOOLS = [
+  withText(
+    byName(`${TOOL_PREFIX}proposal_create`),
+    'Create a pending proposal in the owner review inbox that appends one claim to an existing document readable under this ' +
+      'client lens. Evidence text is required. It never writes canonical self; only the owner approves it outside MCP.',
+    objectSchema(
+      {
+        claim: { type: 'string', minLength: 1, maxLength: 4000, description: 'Claim wording to append.' },
+        evidence: { type: 'string', minLength: 1, maxLength: 4000, description: 'Why this claim is true; the only basis the owner has for review.' },
+        target: { type: 'string', minLength: 1, maxLength: 500, default: 'context/claims.md' },
+        proposal_type: { type: 'string', enum: PROPOSAL_TYPES },
+        confidence: { type: 'string', minLength: 1, maxLength: 120, default: 'unverified' },
+        visibility: { type: 'string', enum: VISIBILITIES }
+      },
+      ['claim', 'evidence']
+    )
+  ),
+  withText(
+    byName(`${TOOL_PREFIX}proposal_preview`),
+    'Preview the exact canonical changes and digest for one of this client pending inbox proposals without applying or approving it.'
+  )
+]
+const CLIENT_TOOLS = [...CLIENT_READ_TOOLS, ...CLIENT_PROPOSAL_TOOLS]
 export const MCP_PROMPTS = [
   {
     name: HARVEST_PROMPT_NAME,
@@ -227,7 +272,7 @@ function resolveBoundProject(projectInput, env = process.env, cwd = process.cwd(
     fail('project binding is not a safe local directory', 'PROJECT_BINDING_INVALID')
   const holoselfDir = join(project, '.holoself')
   if (existsSync(holoselfDir) && lstatSync(holoselfDir).isSymbolicLink())
-    fail('project has a legacy filesystem junction mount; run holoself link setup to migrate to a bounded link', 'LEGACY_MOUNT_DETECTED')
+    fail(`project has a legacy filesystem junction mount; run holoself link setup to migrate to a bounded link; ${LEGACY_MOUNT_DEPRECATION}`, 'LEGACY_MOUNT_DETECTED')
   const link = join(project, '.holoself', 'link.yaml')
   if (!existsSync(link) || lstatSync(link).isSymbolicLink() || !lstatSync(link).isFile()) fail('fixed project has no safe .holoself/link.yaml', 'LINK_REQUIRED')
   holoselfMcpStatus(project)
@@ -254,10 +299,20 @@ function toolError(error) {
   const structuredContent = { schema_version: 1, error: { code: error.code || 'HOLOSELF_ERROR', message: safeErrorMessage(error) } }
   return { content: [{ type: 'text', text: JSON.stringify(structuredContent) }], structuredContent, isError: true }
 }
-function validateToolCall(name, args) {
-  const tool = MCP_TOOLS.find(item => item.name === name)
+function validateToolCall(name, args, tools = MCP_TOOLS) {
+  const tool = tools.find(item => item.name === name)
   if (!tool) fail(`unknown tool: ${name}`, 'TOOL_NOT_FOUND')
   validateObject(args || {}, tool.inputSchema)
+}
+function invokeClientTool(client, name, args) {
+  if (name === `${TOOL_PREFIX}status`) return clientMcpStatus(client)
+  if (name === `${TOOL_PREFIX}context`) return clientMcpContextData(client, { ...args, manifest: false })
+  if (name === `${TOOL_PREFIX}context_manifest`) return clientMcpContextData(client, { ...args, manifest: true })
+  if (name === `${TOOL_PREFIX}context_get`) return clientMcpContextData(client, { ...args, manifest: false })
+  if (name === `${TOOL_PREFIX}search`) return clientMcpSearch(client, args)
+  if (name === `${TOOL_PREFIX}proposal_create`) return clientMcpCreateProposal(client, args)
+  if (name === `${TOOL_PREFIX}proposal_preview`) return clientMcpPreviewProposal(client, args.proposal_id)
+  fail(`unknown tool: ${name}`, 'TOOL_NOT_FOUND')
 }
 function validatePromptRequest(params) {
   if (!params || Array.isArray(params) || typeof params !== 'object') fail('params must be an object', 'INVALID_ARGUMENT')
@@ -266,8 +321,8 @@ function validatePromptRequest(params) {
   }
   if (typeof params.name !== 'string' || !params.name) fail('params.name must be a non-empty string', 'INVALID_ARGUMENT')
 }
-function getPrompt(name, args) {
-  const prompt = MCP_PROMPTS.find(item => item.name === name)
+function getPrompt(name, args, prompts = MCP_PROMPTS) {
+  const prompt = prompts.find(item => item.name === name)
   if (!prompt) fail(`unknown prompt: ${name}`, 'PROMPT_NOT_FOUND')
   const text = harvestPromptText(args === undefined ? {} : args)
   return {
@@ -283,7 +338,8 @@ function getPrompt(name, args) {
     ]
   }
 }
-function invokeTool(project, name, args) {
+function invokeTool(project, name, args, client = null) {
+  if (client) return invokeClientTool(client, name, args)
   if (name === `${TOOL_PREFIX}status`) return holoselfMcpStatus(project)
   if (name === `${TOOL_PREFIX}context`) return holoselfMcpContext(project, { ...args, manifest: false })
   if (name === `${TOOL_PREFIX}context_manifest`) return holoselfMcpContext(project, { ...args, manifest: true })
@@ -293,15 +349,17 @@ function invokeTool(project, name, args) {
   if (name === `${TOOL_PREFIX}proposal_preview`) return holoselfMcpPreviewProposal(project, args.proposal_id)
   fail(`unknown tool: ${name}`, 'TOOL_NOT_FOUND')
 }
-function callTool(project, name, args) {
-  validateToolCall(name, args)
-  return invokeTool(project, name, args)
+function callTool(project, name, args, client = null) {
+  validateToolCall(name, args, client ? CLIENT_TOOLS : MCP_TOOLS)
+  if (client) attestClient(client.self, client.client_id)
+  return invokeTool(project, name, args, client)
 }
 // Worker-side execution of an already validated call: the serialised result, or the error code and raw message
 // (scrubbed by safeErrorMessage on the main thread exactly as for an inline call).
-export function executeToolJob(project, name, args) {
+// In client mode `client` ({ self, client_id }) replaces the project; the worker attests it again on every call.
+export function executeToolJob(project, name, args, client = null) {
   try {
-    return { ok: true, json: JSON.stringify(toolResult(invokeTool(project, name, args), name)) }
+    return { ok: true, json: JSON.stringify(toolResult(invokeTool(project, name, args, client), name)) }
   } catch (error) {
     const code = error?.code
     return { ok: false, error: { code: code === undefined || code === null || typeof code !== 'object' ? code : String(code), message: String(error?.message ?? error) } }
@@ -375,13 +433,20 @@ function auditPromptGet(log, rawName, error = null) {
 // settles; everything else is still answered synchronously. Responses are keyed by JSON-RPC id, never by order.
 export function createMcpSession({
   project,
+  client = null,
   write = line => process.stdout.write(`${line}\n`),
   auditLog = process.env.HOLOSELF_MCP_AUDIT_LOG,
   auditLogMaxBytes = AUDIT_LOG_MAX_BYTES,
   pool = null,
   maxPending = DEFAULT_MAX_PENDING_CALLS
 } = {}) {
-  const sessionLens = pool ? linkDefaultLens(project) : null
+  // Client mode: the identity and the proposal mode shown in tools/list are fixed at startup; every call re-attests.
+  const startupClient = client ? attestClient(client.self, client.client_id) : null,
+    sessionTools = client ? [...CLIENT_READ_TOOLS, ...(startupClient.proposals === 'inbox' ? CLIENT_PROPOSAL_TOOLS : [])] : MCP_TOOLS,
+    validationTools = client ? CLIENT_TOOLS : MCP_TOOLS,
+    // The session-harvest prompt drafts project-evidence proposals, so an unlinked client lists no prompts.
+    sessionPrompts = client ? [] : MCP_PROMPTS
+  const sessionLens = client ? startupClient.lens : pool ? linkDefaultLens(project) : null
   let initialized = false,
     protocolVersion = null,
     clientHost = null
@@ -394,7 +459,7 @@ export function createMcpSession({
     const mode = name === `${TOOL_PREFIX}context_manifest` ? 'manifest' : name === `${TOOL_PREFIX}context_get` ? 'get' : 'packet'
     recordServedPacket({
       data: packetData,
-      project,
+      ...(client ? { self: client.self, clientId: client.client_id } : { project }),
       surface: 'mcp',
       mode,
       clientInfoName: clientHost,
@@ -413,7 +478,10 @@ export function createMcpSession({
       args = request.params?.arguments || {},
       key = idKey(request.id)
     try {
-      validateToolCall(name, args)
+      validateToolCall(name, args, validationTools)
+      // Revocation and lens edits take effect on the next call: the main thread re-reads the registry for each call
+      // and the worker attests again before running the tool.
+      if (client) attestClient(client.self, client.client_id)
     } catch (error) {
       const result = toolError(error)
       auditToolCall(log, name, result)
@@ -425,7 +493,7 @@ export function createMcpSession({
       write(JSON.stringify(response(request.id, null, protocolError(SERVER_BUSY_RPC_CODE, 'Server busy', { code: 'SERVER_BUSY' }))))
       return
     }
-    const handle = pool.submit({ project, name, args }, { key: affinityKey(name, args, sessionLens), exclusive: EXCLUSIVE_TOOLS.has(name) })
+    const handle = pool.submit({ project, client, name, args }, { key: affinityKey(name, args, sessionLens), exclusive: EXCLUSIVE_TOOLS.has(name) })
     inFlight.set(key, handle)
     handle.promise.then(outcome => {
       settled(key)
@@ -441,6 +509,15 @@ export function createMcpSession({
         return write(JSON.stringify(response(request.id, null, protocolError(TOOL_TIMEOUT_RPC_CODE, 'Tool call timed out', { code: 'TOOL_TIMEOUT' }))))
       }
       if (outcome.status === 'ok' && outcome.value.ok) {
+        if (client) {
+          try {
+            attestClient(client.self, client.client_id)
+          } catch (error) {
+            const result = toolError(error)
+            auditToolCall(log, name, result)
+            return write(JSON.stringify(response(request.id, result)))
+          }
+        }
         log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok: true, error_code: null })
         if (CONTEXT_TOOLS.has(name)) {
           try {
@@ -492,21 +569,25 @@ export function createMcpSession({
           protocolVersion,
           capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } },
           serverInfo: { name: 'holoself', title: 'Holoself local context', version: VERSION },
-          instructions:
-            'Use Holoself only when personal context can materially improve the task. The fixed project link controls ' +
-            'access. Start with holoself_context_manifest, request only needed source handles, preserve provenance, and ' +
-            'never treat readable content as publication approval. Durable self changes require a pending proposal and ' +
-            'separate human approval outside MCP.'
+          instructions: client
+            ? 'Use Holoself only when personal context can materially improve the task. This desktop client is bound by ' +
+              'the owner to one lens; tool arguments cannot change it. Start with holoself_context_manifest, request only ' +
+              'needed source handles, preserve provenance, and never treat readable content as publication approval. ' +
+              'Durable self changes require separate human approval outside MCP.'
+            : 'Use Holoself only when personal context can materially improve the task. The fixed project link controls ' +
+              'access. Start with holoself_context_manifest, request only needed source handles, preserve provenance, and ' +
+              'never treat readable content as publication approval. Durable self changes require a pending proposal and ' +
+              'separate human approval outside MCP.'
         }
       } else if (request.method === 'ping') result = {}
       else if (!initialized) throw Object.assign(new Error('Server is not initialized'), { rpcCode: -32002 })
       else if (request.method === 'prompts/list') {
-        result = { prompts: MCP_PROMPTS }
-        log({ at: new Date().toISOString(), event: 'prompts/list', prompts: MCP_PROMPTS.length })
+        result = { prompts: sessionPrompts }
+        log({ at: new Date().toISOString(), event: 'prompts/list', prompts: sessionPrompts.length })
       } else if (request.method === 'prompts/get') {
         try {
           validatePromptRequest(request.params)
-          result = getPrompt(request.params.name, request.params.arguments)
+          result = getPrompt(request.params.name, request.params.arguments, sessionPrompts)
           auditPromptGet(log, request.params.name, null)
         } catch (error) {
           auditPromptGet(log, request.params?.name, error)
@@ -514,12 +595,12 @@ export function createMcpSession({
           return
         }
       } else if (request.method === 'tools/list') {
-        result = { tools: MCP_TOOLS }
-        log({ at: new Date().toISOString(), event: 'tools/list', tools: MCP_TOOLS.length })
+        result = { tools: sessionTools }
+        log({ at: new Date().toISOString(), event: 'tools/list', tools: sessionTools.length })
       } else if (request.method === 'tools/call') {
         if (pool) return dispatch(request)
         try {
-          result = toolResult(callTool(project, request.params?.name, request.params?.arguments || {}), request.params?.name)
+          result = toolResult(callTool(project, request.params?.name, request.params?.arguments || {}, client), request.params?.name)
         } catch (error) {
           result = toolError(error)
         }
@@ -582,13 +663,25 @@ export async function finishAtEof(session, pool, limitMs) {
   }
 }
 
-export async function startMcpServer({ project: projectInput, requireClaudeProject = false } = {}) {
-  if (requireClaudeProject && !process.env.CLAUDE_PROJECT_DIR) fail('CLAUDE_PROJECT_DIR is required for this project-scoped server', 'PROJECT_BINDING_INVALID')
-  const binding = resolveBoundProject(projectInput)
+// Client binding for `mcp --client <id> [--root <self>]`: never mixed with a project binding, never discovered from the
+// working directory. An unknown or revoked client (or an invalid lens) stops the server before it reads stdin.
+export function resolveClientBinding({ client, root, project = null, requireClaudeProject = false, env = process.env } = {}) {
+  if (project || requireClaudeProject || (typeof env.CLAUDE_PROJECT_DIR === 'string' && env.CLAUDE_PROJECT_DIR.trim()))
+    fail('--client cannot be combined with --project, --claude-project-dir or CLAUDE_PROJECT_DIR', 'CLIENT_BINDING_CONFLICT')
+  const self = resolveClientSelf(root || env.HOLOSELF_HOME || join(homedir(), '.holoself'))
+  const entry = attestClient(self, client)
+  return { self, client_id: entry.client_id }
+}
+
+export async function startMcpServer({ project: projectInput, client: clientInput = null, root = null, requireClaudeProject = false } = {}) {
+  const client = clientInput ? resolveClientBinding({ client: clientInput, root, project: projectInput, requireClaudeProject }) : null
+  if (!client && requireClaudeProject && !process.env.CLAUDE_PROJECT_DIR)
+    fail('CLAUDE_PROJECT_DIR is required for this project-scoped server', 'PROJECT_BINDING_INVALID')
+  const binding = client ? { project: null } : resolveBoundProject(projectInput)
   const { timeoutMs, concurrency, maxPending, workerHeapMb, writeTimeoutMs } = mcpServerLimits()
   const pool = createMcpToolPool({ size: concurrency, timeoutMs, writeTimeoutMs, workerHeapMb })
   try {
-    const session = createMcpSession({ project: binding.project, pool, maxPending })
+    const session = createMcpSession({ project: binding.project, client, pool, maxPending })
     const lines = createInterface({ input: process.stdin, crlfDelay: Infinity, terminal: false })
     for await (const line of lines) if (line.trim()) session(line)
     // EOF: answer everything already accepted (bounded by the longest timeout), then stop the workers and exit.

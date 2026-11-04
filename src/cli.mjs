@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, readlinkSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
-import { join, resolve, relative, dirname, basename } from 'node:path'
+import { join, resolve, relative, dirname, basename, isAbsolute } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { ftsSupport, indexEngine } from './catalog/fts.mjs'
@@ -8,6 +8,7 @@ import {
   applyValidateFixPlan,
   buildValidateFixPlan,
   catalogBuildWarnings,
+  deprecatedFieldWarnings,
   ecosystemValidationErrors,
   excludedCanonicalDocuments,
   excludedIncompleteMetadataNotice,
@@ -16,7 +17,7 @@ import {
   runEcosystem
 } from './ecosystem.mjs'
 import { seedLensDefinitions } from './lenses.mjs'
-import { ensureHoloselfGitignore } from './link/config.mjs'
+import { LEGACY_MOUNT_DEPRECATION, ensureHoloselfGitignore } from './link/config.mjs'
 import { VERSION } from './version.mjs'
 import { mcpPlatformSupport } from './mcp-verification.mjs'
 import { buildLensMigrationPlan, buildTransformationPlan, applyTransformationPlan } from './maintenance.mjs'
@@ -141,8 +142,8 @@ function help() {
   console.log(
     `Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init ` +
       `| doctor | validate [--fix [--with-policy-files] [--allow-publish-approved] [--out <plan>] | --fix --apply --digest <sha256> --yes] | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] ` +
-      `[--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root ` +
-      `junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  skill ` +
+      `[--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Deprecated (removed in 0.13.0): legacy live ` +
+      `data-root junction\n  unlink --target <dir>     Deprecated (removed in 0.13.0): remove legacy managed junction\n\nLinked ecosystem:\n  skill ` +
       `status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens ` +
       `list|show|validate|bind|unbind|bindings [id] [--root <self-root>]\n  link ` +
       `add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  link deactivate ` +
@@ -169,8 +170,41 @@ Efficiency: context supports --budget small|standard|deep|unbounded, --manifest,
         `--temporal current|historical|superseded|all.\nInstruction consolidation: instructions render|audit --project ` +
         `<dir>.\nSafety confirmations: --yes. Packet adapters: --adapter ` +
         `pi|claude|codex|generic|obsidian|restricted-host.\nMCP: mcp [--project <linked-project>] | mcp ` +
-        `configure|status --project <dir> [--platform codex|agy|claude | --all-detected] [--force-replace].\n`)
+        `configure|status --project <dir> [--platform codex|agy|claude | --all-detected] [--force-replace].\n` +
+        `Desktop MCP clients: client add --name <name> --lens <id> [--proposals inbox] | client list [--json] | ` +
+        `client revoke|remove <id|name>; mcp --client <id> --root <self>; mcp configure --client <id> --platform ` +
+        `claude-desktop|generic [--apply|--remove] [--yes] [--force-replace]; proposals list|show|approve|reject --inbox --root <self>.\n`)
   )
+}
+// `mcp configure|status --client <id>`: print the host snippet (default), or edit the host's user-level file with --apply.
+async function runClientMcpConfiguration(o, action, root) {
+  if (o.project || o.allDetected) throw Object.assign(new Error('--client cannot be combined with --project or --all-detected'), { code: 'CLIENT_BINDING_CONFLICT' })
+  const { clientSelfRoot } = await import('./cli/commands/client.mjs')
+  const config = await import('./mcp-client-config.mjs'),
+    self = clientSelfRoot({ root })
+  if (action === 'status') {
+    console.log(JSON.stringify(config.clientHostStatus(self, o.client, o.platforms?.length ? { platforms: o.platforms } : {}), null, 2))
+    return
+  }
+  if (action !== 'configure') throw new Error('mcp requires no subcommand, status, or configure')
+  if (o.platforms?.length !== 1) throw new Error('mcp configure --client requires exactly one --platform claude-desktop|generic')
+  const platform = o.platforms[0]
+  if (!o.applyHost && !o.remove) {
+    if (o.forceReplace) throw new Error('--force-replace applies only with --apply')
+    const snippet = config.clientConfigSnippet(self, o.client, { platform })
+    console.log(JSON.stringify(snippet, null, 2))
+    return
+  }
+  config.assertApplyPlatform(platform)
+  const options = { platform, remove: o.remove === true, forceReplace: o.forceReplace === true },
+    plan = config.clientHostPlan(self, o.client, options)
+  console.log(JSON.stringify({ host_configuration_plan: { ...plan, _write: undefined } }, null, 2))
+  if (o.dryRun || plan.preview.action === 'unchanged') return
+  const question =
+    `${o.remove ? 'Remove the holoself entry from' : 'Write the holoself entry to'} ${plan.preview.path}` +
+    `${plan.preview.action === 'replace' ? ', replacing a different holoself server' : ''}?`
+  if (!(await confirm(o, question))) return
+  console.log(JSON.stringify(config.applyClientHostConfig(self, o.client, { ...options, expectedPlanHash: plan.plan_sha256 }), null, 2))
 }
 async function confirm(o, message) {
   if (o.yes) return true
@@ -187,6 +221,11 @@ export async function run(argv, options = {}) {
   const o = parse(argv)
   if (process.env.NODE_TEST_CONTEXT && options?.afterConfigure) o.afterConfigure = options.afterConfigure
   validateFlags(o)
+  if (o.client !== undefined && o.rootExplicit && !isAbsolute(o.rawRoot)) {
+    const error = new Error('client mode requires an absolute self root (--root <absolute-self-root>)')
+    error.code = 'CLIENT_ROOT_NOT_ABSOLUTE'
+    throw error
+  }
   if (o.version) {
     console.log(o.json ? JSON.stringify({ schemaVersion: 1, product: 'holoself', version: VERSION }) : `Holoself ${VERSION}`)
     return
@@ -200,7 +239,7 @@ export async function run(argv, options = {}) {
           version: VERSION,
           interface: 'local-cli',
           contextSchemaVersion: 1,
-          commands: ['doctor', 'context', 'ledger', 'search', 'propose', 'proposals', 'instructions', 'knowledge', 'link', 'skill', 'mcp', 'coaching'],
+          commands: ['doctor', 'context', 'ledger', 'search', 'propose', 'proposals', 'instructions', 'knowledge', 'link', 'skill', 'mcp', 'client', 'coaching'],
           coaching: {
             storage: 'self-root/coaching/sessions',
             commands: ['start', 'note', 'action', 'choose', 'review', 'material', 'resume'],
@@ -217,6 +256,7 @@ export async function run(argv, options = {}) {
             transport: 'stdio',
             projectBound: true,
             linkAuthority: true,
+            unlinkedClients: { identity: 'client:unlinked', launch: 'mcp --client <client_id> --root <self>', proposals: ['disabled', 'inbox'] },
             tools: [
               'holoself_status',
               'holoself_context',
@@ -298,9 +338,14 @@ export async function run(argv, options = {}) {
   }
   if (o.command === 'mcp') {
     const action = o.args[0]
+    if (!o.client && (o.rootExplicit || o.applyHost || o.remove)) throw new Error('--root, --apply and --remove apply to client mode; add --client <id>')
     if (!action) {
       const { startMcpServer } = await import('./mcp-server.mjs')
-      await startMcpServer({ project: o.project, requireClaudeProject: o.claudeProjectDir })
+      await startMcpServer({ project: o.project, client: o.client || null, root: o.client ? root : null, requireClaudeProject: o.claudeProjectDir })
+      return
+    }
+    if (o.client) {
+      await runClientMcpConfiguration(o, action, root)
       return
     }
     if (!o.project) throw new Error(`mcp ${action} requires --project <linked-project>`)
@@ -502,6 +547,8 @@ export async function run(argv, options = {}) {
     }
     const warnings = existsSync(root) ? catalogBuildWarnings(root, o.project) : []
     for (const w of warnings) console.log(`[warn] ${w}`)
+    // Deprecation notices go to stderr so scripted consumers of stdout are unaffected.
+    for (const w of existsSync(root) ? deprecatedFieldWarnings(root, o.project) : []) console.error(`[warn] ${w}`)
     const excludedCount = existsSync(root) ? excludedCanonicalDocuments(root).length : 0
     if (excludedCount > 0) console.log(excludedIncompleteMetadataNotice(excludedCount))
     errors.push(...ecosystemValidationErrors(root, o.project))
@@ -570,6 +617,7 @@ export async function run(argv, options = {}) {
   }
   if (o.command === 'link') {
     if (!o.target) throw new Error('link requires --target <project>')
+    console.error(`[warn] ${LEGACY_MOUNT_DEPRECATION}`)
     if (!existsSync(root)) throw new Error('data root missing; run init first')
     // Validate every instruction file before changing the link, so malformed or
     // unsafe project files cannot leave a partially-applied root setup.
@@ -594,6 +642,7 @@ export async function run(argv, options = {}) {
   }
   if (o.command === 'unlink') {
     if (!o.target) throw new Error('unlink requires --target <project>')
+    console.error(`[warn] ${LEGACY_MOUNT_DEPRECATION}`)
     const p = join(o.target, '.holoself')
     if (!pathExists(p)) {
       console.log('[ok] no link found')
