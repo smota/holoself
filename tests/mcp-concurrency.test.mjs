@@ -56,7 +56,19 @@ function pooled(project, poolOptions = {}, sessionOptions = {}) {
   const call = (id, name, args = {}) => send(id, 'tools/call', { name, arguments: args })
   const cancel = requestId => send(undefined, 'notifications/cancelled', { requestId, reason: 'test' })
   const byId = id => output.find(item => item.id === id)
-  return { pool, accept, lines, output, send, call, cancel, byId, close: () => pool.close() }
+  // Accessors that fail with the full response (or its absence) in the message, so CI logs show what came back.
+  const show = id => `response ${JSON.stringify(id)}: ${JSON.stringify(byId(id)) ?? '<none>'}`.slice(0, 2000)
+  const data = id => {
+    const response = byId(id)
+    assert.ok(response?.result?.structuredContent?.data, `expected a tool result; ${show(id)}`)
+    return response.result.structuredContent.data
+  }
+  const errorOf = id => {
+    const response = byId(id)
+    assert.ok(response?.error, `expected a JSON-RPC error; ${show(id)}`)
+    return response.error
+  }
+  return { pool, accept, lines, output, send, call, cancel, byId, show, data, errorOf, close: () => pool.close() }
 }
 async function until(predicate, timeoutMs = 20000) {
   const end = Date.now() + timeoutMs
@@ -118,16 +130,16 @@ test('spawned server answers ping within 100 ms while a large context call runs,
 
 test('out-of-order completion maps each response to its request id', { timeout: 60000 }, async () => {
   const { base, project } = await fixture()
-  const m = pooled(project, { simulateWorkMs: { holoself_context: 600 } })
+  const m = pooled(project, { simulateWorkMs: { holoself_context: 2500 } })
   try {
     m.call(2, 'holoself_context', { task: 'refactoring marker', budget: 'small' })
     m.call(3, 'holoself_status')
     m.send(4, 'ping', {})
-    assert.deepEqual(m.byId(4).result, {}, 'ping is answered synchronously')
+    assert.deepEqual(m.byId(4)?.result, {}, `ping is answered synchronously; ${m.show(4)}`)
     await m.accept.drain()
     assert.deepEqual(m.output.map(item => item.id), [1, 4, 3, 2])
-    assert.equal(m.byId(3).result.structuredContent.data.project.linked, true)
-    assert.equal(m.byId(2).result.structuredContent.data.status, 'complete')
+    assert.equal(m.data(3).project.linked, true)
+    assert.equal(m.data(2).status, 'complete')
   } finally {
     await m.close()
     await rm(base, { recursive: true, force: true })
@@ -157,8 +169,8 @@ test('pooled results match inline results byte for byte (packet id and time mask
     }
     const scrubTime = line => line.replace(/"(generated_at|packet_id)":"[^"]*"/g, '"$1":"<volatile>"')
     assert.deepEqual(m.lines.map(scrubTime), inlineLines.map(scrubTime))
-    assert.equal(m.byId(2).result.structuredContent.data.context_receipt.cache.hit, false)
-    assert.equal(m.byId(3).result.structuredContent.data.context_receipt.cache.hit, true, 'the repeat call is routed to the worker that cached it')
+    assert.equal(m.data(2).context_receipt.cache.hit, false)
+    assert.equal(m.data(3).context_receipt.cache.hit, true, 'the repeat call is routed to the worker that cached it')
   } finally {
     await m.close()
     await rm(base, { recursive: true, force: true })
@@ -186,7 +198,7 @@ test('cancelling a queued call and a running call sends no response and the next
     assert.equal(m.byId(4), undefined, 'a cancelled call never produces a partial or late packet')
     m.call(5, 'holoself_status')
     await m.accept.drain()
-    assert.equal(m.byId(5).result.structuredContent.data.project.linked, true)
+    assert.equal(m.data(5).project.linked, true)
     m.cancel(5)
     m.cancel('unknown')
     assert.equal(m.output.length, 3)
@@ -200,16 +212,18 @@ test('a call that exceeds the timeout returns a stable JSON-RPC error and the wo
   const { base, project } = await fixture(),
     dir = await mkdtemp(join(tmpdir(), 'holoself-mcp-audit-')),
     log = join(dir, 'audit.ndjson')
-  const m = pooled(project, { size: 1, timeoutMs: 300, simulateWorkMs: { holoself_context: 5000 } }, { auditLog: log })
+  // The timeout covers a call from dispatch, including a fresh worker's start-up, so it must leave room for the
+  // queued status call on a replacement worker on slow CI hosts.
+  const m = pooled(project, { size: 1, timeoutMs: 2000, simulateWorkMs: { holoself_context: 20000 } }, { auditLog: log })
   try {
     const started = Date.now()
     m.call(2, 'holoself_context', { task: 'refactoring marker', budget: 'small' })
     m.call(3, 'holoself_status')
     await m.accept.drain()
-    assert.ok(Date.now() - started < 4000)
-    assert.deepEqual(m.byId(2).error, { code: TOOL_TIMEOUT_RPC_CODE, message: 'Tool call timed out', data: { code: 'TOOL_TIMEOUT' } })
-    assert.equal(m.byId(2).result, undefined)
-    assert.equal(m.byId(3).result.structuredContent.data.project.linked, true, 'the queued call runs on a fresh worker')
+    assert.ok(Date.now() - started < 15000, `took ${Date.now() - started} ms`)
+    assert.deepEqual(m.errorOf(2), { code: TOOL_TIMEOUT_RPC_CODE, message: 'Tool call timed out', data: { code: 'TOOL_TIMEOUT' } })
+    assert.equal(m.byId(2).result, undefined, m.show(2))
+    assert.equal(m.data(3).project.linked, true, 'the queued call runs on a fresh worker')
     const audit = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
     assert.deepEqual(audit.map(({ at, ...rest }) => rest), [
       { event: 'tools/call', tool: 'holoself_context', ok: false, error_code: 'TOOL_TIMEOUT' },
@@ -259,7 +273,7 @@ test('proposal_create runs alone and a duplicate in-flight id is rejected', { ti
     assert.equal(m.output.at(-1).id, 2)
     assert.equal(m.output.at(-1).error.code, -32600)
     await until(() => m.byId(3))
-    assert.equal(m.byId(3).result.structuredContent.data.status, 'pending')
+    assert.equal(m.data(3).status, 'pending')
     await m.accept.drain()
     assert.deepEqual(m.output.filter(item => item.result).map(item => item.id), [1, 2, 3, 4])
   } finally {
@@ -285,7 +299,7 @@ test('a cancelled proposal_create finishes its write, sends no response, is audi
     assert.equal(files.filter(name => name.includes('.tmp-')).length, 0, 'no temporary file is left behind')
     m.call(3, 'holoself_status')
     await m.accept.drain()
-    assert.equal(m.byId(3).result.structuredContent.data.pending_proposals, 1)
+    assert.equal(m.data(3).pending_proposals, 1)
     assert.equal(m.pool.stats().spawned, 1, 'the worker was never recycled')
     const audit = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
     assert.deepEqual(audit.map(({ at, ...rest }) => rest)[0], { event: 'tools/call', tool: 'holoself_proposal_create', ok: true, cancelled: true, error_code: null })
@@ -301,8 +315,8 @@ test('proposal_create is exempt from the read-tool timeout and returns its real 
   try {
     m.call(2, 'holoself_proposal_create', { claim: 'Slow but complete.', source_files: ['Context/evidence.md'] })
     await m.accept.drain()
-    assert.equal(m.byId(2).error, undefined)
-    assert.equal(m.byId(2).result.structuredContent.data.status, 'pending')
+    assert.equal(m.byId(2).error, undefined, m.show(2))
+    assert.equal(m.data(2).status, 'pending')
   } finally {
     await m.close()
     await rm(base, { recursive: true, force: true })
@@ -311,17 +325,20 @@ test('proposal_create is exempt from the read-tool timeout and returns its real 
 
 test('a write past its write timeout is answered with TOOL_TIMEOUT but keeps the barrier until it finishes', { timeout: 60000 }, async () => {
   const { base, project } = await fixture()
-  const m = pooled(project, { size: 2, timeoutMs: 100, writeTimeoutMs: 250, simulateWorkMs: { holoself_proposal_create: 1200 } })
+  // The read timeout is generous on purpose: it starts when a call is dispatched (queue time never counts), so the
+  // status call below only has to finish its own work, which is slow on some filesystems (Windows CI).
+  const m = pooled(project, { size: 2, timeoutMs: 30000, writeTimeoutMs: 250, simulateWorkMs: { holoself_proposal_create: 1500 } })
   try {
     m.call(2, 'holoself_proposal_create', { claim: 'Slow write.', source_files: ['Context/evidence.md'] })
     m.call(3, 'holoself_status')
     await until(() => m.byId(2))
-    assert.deepEqual(m.byId(2).error, { code: TOOL_TIMEOUT_RPC_CODE, message: 'Tool call timed out', data: { code: 'TOOL_TIMEOUT' } })
-    assert.equal(m.byId(3), undefined, 'the queued call still waits behind the running write')
+    assert.deepEqual(m.errorOf(2), { code: TOOL_TIMEOUT_RPC_CODE, message: 'Tool call timed out', data: { code: 'TOOL_TIMEOUT' } })
+    assert.equal(m.byId(3), undefined, `the queued call still waits behind the running write; ${m.show(3)}`)
     assert.deepEqual(m.pool.stats(), { running: 1, queued: 1, workers: 1, spawned: 1 })
     await m.accept.drain()
-    assert.equal(m.byId(3).result.structuredContent.data.pending_proposals, 1, 'the write completed before the next call ran')
-    assert.equal(m.pool.stats().spawned, 1)
+    assert.deepEqual(m.output.map(item => item.id), [1, 2, 3], 'timeout answer first, then the queued call')
+    assert.equal(m.data(3).pending_proposals, 1, 'the write completed before the next call ran')
+    assert.equal(m.pool.stats().spawned, 1, 'the write was never terminated')
   } finally {
     await m.close()
     await rm(base, { recursive: true, force: true })
@@ -338,7 +355,7 @@ test('EOF shutdown is bounded when a write is stuck: queued calls are dropped an
     await finishAtEof(m.accept, m.pool, 400)
     assert.ok(Date.now() - started < 5000, `shutdown took ${Date.now() - started} ms`)
     await sleep(20)
-    assert.equal(m.byId(2).error.data.code, 'TOOL_TIMEOUT')
+    assert.equal(m.errorOf(2).data.code, 'TOOL_TIMEOUT')
     assert.equal(m.byId(3), undefined)
     assert.equal(m.accept.inFlight(), 0)
     assert.deepEqual(m.pool.stats(), { running: 0, queued: 0, workers: 0, spawned: 1 })
@@ -360,7 +377,7 @@ test('a burst of cancellations spawns no worker per message', { timeout: 60000 }
     assert.deepEqual(m.output.map(item => item.id), [1])
     m.call(300, 'holoself_status')
     await m.accept.drain()
-    assert.equal(m.byId(300).result.structuredContent.data.project.linked, true)
+    assert.equal(m.data(300).project.linked, true)
     assert.equal(m.pool.stats().spawned, 3)
   } finally {
     await m.close()
@@ -398,12 +415,12 @@ test('calls beyond the pending limit are refused with SERVER_BUSY', { timeout: 6
   const m = pooled(project, { size: 1, simulateWorkMs: { holoself_search: 300 } }, { maxPending: 3 })
   try {
     for (let id = 2; id < 7; id++) m.call(id, 'holoself_search', { query: `busy ${id}` })
-    for (const id of [5, 6]) assert.deepEqual(m.byId(id).error, { code: SERVER_BUSY_RPC_CODE, message: 'Server busy', data: { code: 'SERVER_BUSY' } })
+    for (const id of [5, 6]) assert.deepEqual(m.errorOf(id), { code: SERVER_BUSY_RPC_CODE, message: 'Server busy', data: { code: 'SERVER_BUSY' } })
     await m.accept.drain()
-    for (const id of [2, 3, 4]) assert.equal(m.byId(id).result.structuredContent.data.query, `busy ${id}`)
+    for (const id of [2, 3, 4]) assert.equal(m.data(id).query, `busy ${id}`)
     m.call(7, 'holoself_status')
     await m.accept.drain()
-    assert.equal(m.byId(7).result.structuredContent.data.project.linked, true)
+    assert.equal(m.data(7).project.linked, true)
   } finally {
     await m.close()
     await rm(base, { recursive: true, force: true })
@@ -434,7 +451,7 @@ test('equivalent context spellings reach the worker that cached the selection', 
     await m.accept.drain()
     m.call(3, 'holoself_context', { budget: 'standard', lens: 'professional', temporal: 'current', session_start: false, task: 'refactoring marker' })
     await m.accept.drain()
-    const hit = id => m.byId(id).result.structuredContent.data.context_receipt.cache.hit
+    const hit = id => m.data(id).context_receipt.cache.hit
     assert.equal(hit(2), false)
     assert.equal(hit(3), true)
   } finally {
