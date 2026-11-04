@@ -17710,9 +17710,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 16384,
-            "total_bytes": "<SIZE>",
-            "estimated_tokens_total": "<SIZE>",
-            "estimated_tokens_total_heuristic": "<SIZE>",
+            "total_bytes": 16262,
+            "estimated_tokens_total": 4066,
+            "estimated_tokens_total_heuristic": 4066,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-fc336fe8bb197b2be558",
@@ -18271,9 +18271,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 49152,
-            "total_bytes": "<SIZE>",
-            "estimated_tokens_total": "<SIZE>",
-            "estimated_tokens_total_heuristic": "<SIZE>"
+            "total_bytes": 18614,
+            "estimated_tokens_total": 4654,
+            "estimated_tokens_total_heuristic": 4654
           },
           "context_receipt": {
             "schema_version": 1,
@@ -18303,7 +18303,6 @@
               "proposal_id": "<UUID:2>",
               "title": "Review reusable context from project",
               "source_project": "project",
-              "source_project_path": "<ROOT>/project",
               "source_files": [
                 "NOTES.md"
               ],
@@ -18323,8 +18322,7 @@
                   "confidence": "unverified",
                   "visibility": "private"
                 }
-              ],
-              "_path": "<ROOT>/project/.holoself/proposals/<UUID:2>.yaml"
+              ]
             }
           ],
           "cache": {
@@ -20460,9 +20458,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 131072,
-            "total_bytes": "<SIZE>",
-            "estimated_tokens_total": "<SIZE>",
-            "estimated_tokens_total_heuristic": "<SIZE>"
+            "total_bytes": 78950,
+            "estimated_tokens_total": 19738,
+            "estimated_tokens_total_heuristic": 19738
           },
           "context_receipt": {
             "schema_version": 1,
@@ -20554,7 +20552,6 @@
               "proposal_id": "<UUID:2>",
               "title": "Review reusable context from project",
               "source_project": "project",
-              "source_project_path": "<ROOT>/project",
               "source_files": [
                 "NOTES.md"
               ],
@@ -20574,8 +20571,7 @@
                   "confidence": "unverified",
                   "visibility": "private"
                 }
-              ],
-              "_path": "<ROOT>/project/.holoself/proposals/<UUID:2>.yaml"
+              ]
             }
           ],
           "cache": {
@@ -21028,9 +21024,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 16384,
-            "total_bytes": "<SIZE>",
-            "estimated_tokens_total": "<SIZE>",
-            "estimated_tokens_total_heuristic": "<SIZE>",
+            "total_bytes": 14361,
+            "estimated_tokens_total": 3591,
+            "estimated_tokens_total_heuristic": 3591,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-27c16fd0b4a8ae63a0ff",
@@ -21526,9 +21522,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 16384,
-            "total_bytes": "<SIZE>",
-            "estimated_tokens_total": "<SIZE>",
-            "estimated_tokens_total_heuristic": "<SIZE>",
+            "total_bytes": 14361,
+            "estimated_tokens_total": 3591,
+            "estimated_tokens_total_heuristic": 3591,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-27c16fd0b4a8ae63a0ff",
@@ -22025,9 +22021,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 0,
             "envelope_cap_bytes": 16384,
-            "total_bytes": "<SIZE>",
-            "estimated_tokens_total": "<SIZE>",
-            "estimated_tokens_total_heuristic": "<SIZE>",
+            "total_bytes": 14361,
+            "estimated_tokens_total": 3591,
+            "estimated_tokens_total_heuristic": 3591,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-27c16fd0b4a8ae63a0ff",
@@ -25291,9 +25287,9 @@
             "reconcile_reads": 0,
             "catalog_reads": 1,
             "envelope_cap_bytes": 49152,
-            "total_bytes": "<SIZE>",
-            "estimated_tokens_total": "<SIZE>",
-            "estimated_tokens_total_heuristic": "<SIZE>",
+            "total_bytes": 47457,
+            "estimated_tokens_total": 11865,
+            "estimated_tokens_total_heuristic": 11865,
             "restrictions_grouped": true,
             "envelope_dropped": [
               "hs-fc336fe8bb197b2be558",

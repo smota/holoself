@@ -134,6 +134,37 @@ test('V-04 Privacy: Denied sources do not leak paths in restrictions or warnings
   assert.doesNotMatch(JSON.stringify(data.self), new RegExp(self.replaceAll('\\', '\\\\'), 'i'))
 })
 
+test('V-04 Privacy: Linked CLI context with a pending proposal strips private paths in JSON and packet formats', async () => {
+  const { self, project } = await setupC01Fixture()
+  await writeFile(join(project, 'NOTES.md'), '# Notes\n\nSynthetic project note for proposal provenance.\n')
+  const { stdout: propOut } = await capture(() =>
+    run(['propose', '--project', project, '--claim', 'Keep linked context packets free of local paths.', '--source-file', 'NOTES.md'])
+  )
+  const created = JSON.parse(propOut)
+  assert.ok(created.proposal_id)
+
+  const { stdout: jsonOut } = await capture(() => run(['context', '--project', project, '--task', 'identity profile', '--json']))
+  const data = JSON.parse(jsonOut)
+  assert.equal(data.proposals.length, 1)
+  assert.equal(data.proposals[0].proposal_id, created.proposal_id)
+  assert.equal(data.proposals[0].title, created.title)
+  assert.equal('source_project_path' in data.proposals[0], false)
+  assert.equal('_path' in data.proposals[0], false)
+
+  const { stdout: packetOut } = await capture(() =>
+    run(['context', '--project', project, '--task', 'identity profile', '--format', 'packet'])
+  )
+  assert.match(packetOut, /^# Holoself context packet/m)
+
+  const roots = [tmpdir(), self, project].flatMap(p => [p, p.replaceAll('\\', '/'), p.replaceAll('/', '\\')])
+  for (const output of [jsonOut, packetOut]) {
+    for (const root of roots) assert.equal(output.includes(root), false, `leaked root ${root}`)
+    assert.doesNotMatch(output, /source_project_path|"_path"|absolute_path/)
+    assert.doesNotMatch(output, /(?:^|[\s"'=(])\/[A-Za-z0-9._-]+/m)
+    assert.doesNotMatch(output, /[A-Za-z]:[\\/]/)
+  }
+})
+
 test('V-05 Custom lens with base general does not fail validation on contribs', async () => {
   const { self } = await setupC01Fixture()
   const projSpiritual = await temp('proj-spiritual-')

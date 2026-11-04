@@ -7,11 +7,11 @@ import { resolvedContextAssertions } from './records.mjs'
 export function fitEnvelope(
   o,
   result,
-  { isMcp, records, projections, budgetName, selected, candidates, link, lens, adapter, resolution, subject, identityId, selfId, cursorSecret }
+  { isMcp, isLinked, records, projections, budgetName, selected, candidates, link, lens, adapter, resolution, subject, identityId, selfId, cursorSecret }
 ) {
-  // MCP strips private paths before measuring so the cap and total_bytes apply to what is actually sent.
+  // Linked callers strip private paths before measuring so the cap and total_bytes apply to what is actually sent.
   const finish = value => {
-    if (!isMcp) return value
+    if (!isLinked && !isMcp) return value
     const clean = withoutPrivatePaths(value)
     clean.self = { documents: clean.self.documents }
     clean.project = { name: value.project.name, documents: clean.project.documents }

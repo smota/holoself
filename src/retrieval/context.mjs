@@ -13,7 +13,7 @@ import { resolveCaller, resolveLensAuthority } from './caller.mjs'
 import { getIdentityId, getOrCreateCursorSecret } from './cursor-identity.mjs'
 import { createRecordDelivery } from './delivery.mjs'
 import { fitEnvelope } from './envelope.mjs'
-import { documentProjection, sourceIndexEntry } from './projection.mjs'
+import { documentProjection, sourceIndexEntry, withoutPrivatePaths } from './projection.mjs'
 import { catalogCandidateRecords, deduplicateCandidates, resolvedContextAssertions } from './records.mjs'
 
 export function contextData(o) {
@@ -189,10 +189,10 @@ function assembleResult(
       status: queryStatus,
       cache: selected.cache
     },
-    proposals: isLinked && project ? listProposalData(project).filter(p => p.status === 'pending') : [],
+    proposals: isLinked && project ? withoutPrivatePaths(listProposalData(project).filter(p => p.status === 'pending')) : [],
     cache: selected.cache,
     ...(!isLinked && unauthorizedSourcesOmitted > 0 ? { unauthorized_sources_omitted: unauthorizedSourcesOmitted } : {})
   }
 
-  return { result, records, projections, isMcp }
+  return { result, records, projections, isMcp, isLinked }
 }
