@@ -110,7 +110,7 @@ export const COMMAND_FLAGS = {
   'knowledge cleanup': [...ROOT_FLAGS, '--output', '--dry-run', '--apply', '--digest', '--preview-hash', ...CONFIRM_FLAGS, ...JSON_FLAGS],
   instructions: [...PROJECT_FLAGS, ...JSON_FLAGS],
   'instructions audit': [...PROJECT_FLAGS, ...JSON_FLAGS],
-  'instructions render': [...PROJECT_FLAGS, '--adapter', '--json'],
+  'instructions render': [...PROJECT_FLAGS, '--adapter', '--harvest', '--focus', '--json'],
   'skill status': ['--scope', '--platform', '--skill-home', ...JSON_FLAGS],
   'skill install': ['--scope', '--platform', '--skill-home', '--force', '--dry-run', ...CONFIRM_FLAGS, ...JSON_FLAGS],
   ...Object.fromEntries(['list', 'show', 'validate', 'bindings'].map(sub => ['lens ' + sub, [...ROOT_FLAGS, ...JSON_FLAGS]])),
@@ -192,6 +192,16 @@ export function validateFlags(o) {
     throw new Error('--dry-run cannot be combined with --apply, --revert or --output')
   if (o.need !== undefined && !['required', 'helpful', 'not-needed'].includes(o.need)) {
     const error = new Error(`invalid context need: ${o.need}; expected required, helpful, or not-needed`)
+    error.code = 'INVALID_ARGUMENT'
+    throw error
+  }
+  if (o.focus !== undefined && !o.harvest) {
+    const error = new Error('--focus requires --harvest')
+    error.code = 'INVALID_ARGUMENT'
+    throw error
+  }
+  if (o.harvest && o.adapter) {
+    const error = new Error('--adapter cannot be combined with --harvest')
     error.code = 'INVALID_ARGUMENT'
     throw error
   }
@@ -281,6 +291,8 @@ export function parse(args) {
     else if (a === '--revert') o.revert = requiredValue(args, i++, a)
     else if (a === '--digest' || a === '--preview-hash') o.digest = requiredValue(args, i++, a)
     else if (a === '--adapter') o.adapter = requiredValue(args, i++, a)
+    else if (a === '--harvest') o.harvest = true
+    else if (a === '--focus') o.focus = requiredValue(args, i++, a)
     else if (a === '--activate') o.activate = requiredValue(args, i++, a)
     else if (a === '--platform') {
       o.platforms = o.platforms || []

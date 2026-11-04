@@ -147,7 +147,7 @@ function help() {
       `--source-file <path> [--claim <text>|--reason <text>]\n` +
       `  proposals list|audit --project <dir>\n  proposals show|approve|reject|defer|supersede <id> --project <dir>\n` +
       `  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir>\n  ` +
-      `instructions render|audit --project <dir> [--json]\n  knowledge migrate-lenses [--output <plan>] | --apply ` +
+      `instructions render|audit --project <dir> [--harvest [--focus <text>]] [--json]\n  knowledge migrate-lenses [--output <plan>] | --apply ` +
       `<plan> --digest <sha256> --yes\n  knowledge transform --replacements <json> [--plan-kind ` +
       `section-replacement|instruction-replacement] [--output <plan>]\n  knowledge cleanup [--output <plan>] | ` +
       `--apply <plan> --digest <sha256> --yes\n\nData root: HOLOSELF_HOME or --data-dir <dir> (argument overrides ` +
@@ -210,6 +210,7 @@ export async function run(argv) {
               'holoself_proposal_create',
               'holoself_proposal_preview'
             ],
+            prompts: ['holoself_session_harvest'],
             platforms: mcpPlatformSupport()
           },
           globalSkillSupported: true

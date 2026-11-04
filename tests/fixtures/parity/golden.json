@@ -8987,6 +8987,9 @@
               "capabilities": {
                 "tools": {
                   "listChanged": false
+                },
+                "prompts": {
+                  "listChanged": false
                 }
               },
               "serverInfo": {
@@ -22639,6 +22642,9 @@
               "protocolVersion": "2025-11-25",
               "capabilities": {
                 "tools": {
+                  "listChanged": false
+                },
+                "prompts": {
                   "listChanged": false
                 }
               },
