@@ -1,6 +1,7 @@
 // MCP-facing facade over context, search, status and proposals for a fixed linked project.
 import { existsSync } from 'node:fs'
 import { basename, relative, resolve } from 'node:path'
+import { indexEngine } from '../catalog/fts.mjs'
 import { readIndex, searchIndex } from '../catalog/index.mjs'
 import { loadLensRegistry, resolveLens } from '../lenses.mjs'
 import { linkedLensAuthority } from '../link/attestation.mjs'
@@ -86,11 +87,13 @@ export function holoselfMcpSearch(project, input) {
     allowedLenses = new Set([link.default_lens, ...(link.secondary_lenses || [])])
   linkedLensAuthority(linked, link, lens)
   const resolution = resolveLens(registry, lens),
-    index = readIndex(linked)
+    index = readIndex(linked),
+    engine = indexEngine()
   const results = searchIndex(index, input.query, lens, registry, resolution, input.temporal || 'current', {
-    effective_allowed_lenses: allowedLenses
+    effective_allowed_lenses: allowedLenses,
+    engine
   })
-  return { query: input.query, lens, federated: false, results: results.slice(0, input.limit || 10) }
+  return { query: input.query, lens, federated: false, engine: results.engine || engine, results: results.slice(0, input.limit || 10) }
 }
 // What this link's own lenses deliver of a self document at any lifecycle status: the delivered texts, and the claim
 // ids in them. Hidden claims never reach delivery, so their ids and wording are never part of this view.

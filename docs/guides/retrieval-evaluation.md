@@ -20,10 +20,18 @@ To write the JSON report to a file while printing the summary table to `stdout`:
 npm run eval:retrieval -- --out /tmp/retrieval-eval.json
 ```
 
-When a ranking or classification change intentionally improves retrieval recall, update the committed baseline:
+The evaluation runs under the default engine (`fts5` when available). Choose one explicitly with `--engine json|fts5|auto`; the report records `engine`:
 
 ```bash
-npm run eval:retrieval -- --update-baseline
+npm run eval:retrieval -- --engine json
+npm run eval:retrieval -- --engine fts5
+```
+
+Each engine has its own baseline: `tests/fixtures/retrieval-eval/baseline.json` for `deterministic-json` and `baseline-fts5.json` for `fts5`. When a ranking or classification change intentionally improves retrieval recall, update the baseline of the engine you ran:
+
+```bash
+npm run eval:retrieval -- --update-baseline --engine json
+npm run eval:retrieval -- --update-baseline --engine fts5
 ```
 
 ## How the harness works
@@ -50,7 +58,7 @@ The golden set (`tests/fixtures/retrieval-eval/cases.json`) covers seven categor
 | `budget` | Under `small` budget pressure (8,000 characters / 16 KiB envelope cap), the highest-scoring task-relevant documents outrank generic baseline documents. |
 | `session-start` | `--session-start` loads the lens `session_start_sources` (default `profile/identity.md`, `profile/preferences.md`, `profile/work-context.md`, or lens-specific overrides) and omits non-policy content documents. |
 
-Cases marked with `"known_gap": true` record the true `expected_source_paths` that *should* be retrieved alongside the current baseline outcome (`recall: 0`), rather than faking empty expectations.
+Cases marked with `"known_gap": true` record the true `expected_source_paths` that *should* be retrieved alongside the current baseline outcome (`recall: 0`), rather than faking empty expectations. `known_gap` may also list the engines for which the case is still a gap, for example `["deterministic-json"]` when only the FTS5 engine meets the expectation.
 
 ## CI regression gate
 
@@ -60,10 +68,12 @@ Cases marked with `"known_gap": true` record the true `expected_source_paths` th
 - Aggregate `mean_recall` drops below `baseline.summary.mean_recall - 0.02`.
 - Any non-`known_gap` case's `recall` drops below its recorded baseline in `tests/fixtures/retrieval-eval/baseline.json`.
 
-Improvements over the baseline pass the gate and print a reminder to run `npm run eval:retrieval -- --update-baseline`.
+- The report ran under a different engine than the baseline it is compared with.
+
+The test runs the golden set twice: forced to the JSON engine against `baseline.json`, and under FTS5 against `baseline-fts5.json` (skipped when `node:sqlite` is unavailable). The FTS5 run must also recall at least as much as the JSON baseline for every case. Improvements over a baseline pass the gate and print a reminder to run `npm run eval:retrieval -- --update-baseline --engine <engine>`.
 
 ## Extending the golden set
 
 1. If you need a new synthetic document, add an entry to `SYNTHETIC_DOCUMENTS` in `tests/fixtures/retrieval-eval/corpus.mjs` with full canonical frontmatter (`access_lenses`, `disclosure`, `sensitivity`, `document_role`) and fictional content.
 2. Add your test case to `tests/fixtures/retrieval-eval/cases.json` with `id`, `category`, `language`, `task`, `lens`, `budget`, `expected_source_paths`, `forbidden_source_paths`, and `notes`.
-3. Run `npm run eval:retrieval -- --update-baseline` and `npm run verify` to record the updated baseline and confirm all checks pass.
+3. Run `npm run eval:retrieval -- --update-baseline --engine json`, then `--engine fts5`, and `npm run verify` to record the updated baselines and confirm all checks pass.
