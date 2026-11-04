@@ -39,8 +39,7 @@ export function mcpContextData(project, options = {}) {
     manifest: Boolean(options.manifest),
     sources: options.source_ids || options.sources || [],
     cursor: options.cursor || null,
-    sessionStart: Boolean(options.session_start),
-    noCache: true
+    sessionStart: Boolean(options.session_start)
   })
   if (options.source_ids?.length) {
     const selected = new Set([...data.sources.map(source => source.source_id), ...(data.selection.envelope_dropped || [])]),
@@ -56,7 +55,7 @@ export function holoselfMcpStatus(projectInput) {
   let context = 'valid',
     contextError = null
   try {
-    contextData({ project, manifest: true, budget: 'small', noCache: true, surface: 'internal-health' })
+    contextData({ project, manifest: true, budget: 'small', surface: 'internal-health' })
   } catch {
     context = 'broken'
     contextError = 'Context validation failed closed; run holoself link doctor locally.'
@@ -83,13 +82,11 @@ export function holoselfMcpSearch(project, input) {
     allowedLenses = new Set([link.default_lens, ...(link.secondary_lenses || [])])
   linkedLensAuthority(linked, link, lens)
   const resolution = resolveLens(registry, lens),
-    index = readIndex(linked, true, false, { federated: Boolean(input.federated), spaces: input.spaces, lens })
-  let results = searchIndex(index, input.query, lens, registry, resolution, input.temporal || 'current', {
-    federated: Boolean(input.federated),
-    spaces: input.spaces,
+    index = readIndex(linked)
+  const results = searchIndex(index, input.query, lens, registry, resolution, input.temporal || 'current', {
     effective_allowed_lenses: allowedLenses
   })
-  return { query: input.query, lens, federated: Boolean(input.federated), results: results.slice(0, input.limit || 10) }
+  return { query: input.query, lens, federated: false, results: results.slice(0, input.limit || 10) }
 }
 export function holoselfMcpCreateProposal(project, input) {
   const p = createProposal(resolve(project), input),

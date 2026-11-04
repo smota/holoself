@@ -50,7 +50,7 @@ Use project-bound search when you need a relevant passage and its source rather 
 
 ```bash
 node bin/holoself.mjs index status --project C:/work/project
-node bin/holoself.mjs search "regulated AI" --project C:/work/project --federated
+node bin/holoself.mjs search "regulated AI" --project C:/work/project
 ```
 
 Indexes are local and rebuildable. Search reapplies privacy and lens rules and returns provenance and freshness; the index is never the source of truth.

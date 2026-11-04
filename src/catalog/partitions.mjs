@@ -1,5 +1,5 @@
-// Catalog partitions (self, project, contrib, federated) and their freshness checks.
-import { existsSync, lstatSync, readFileSync } from 'node:fs'
+// Catalog partitions (self, project, contrib) and their freshness checks.
+import { existsSync, lstatSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import {
   CATALOG_SCHEMA_VERSION,
@@ -369,6 +369,24 @@ export function ensureCatalog(selfRoot, projectDir, link, registry, options = {}
     } catch (err) {
       if (err.code === 'LEGACY_INDEX_PURGE_FAILED') throw err
     }
+    if (options.rebuild) {
+      const catDir = catalogRoot(projectDir)
+      if (existsSync(catDir)) {
+        try {
+          for (const entry of readdirSync(catDir, { withFileTypes: true })) {
+            if (entry.isFile() && /^[0-9a-f]{64}\.json$/i.test(entry.name)) {
+              rmSync(join(catDir, entry.name), { force: true })
+            }
+          }
+        } catch {}
+      }
+      const legacyCacheDir = join(projectDir, '.holoself', 'runtime', 'context-cache')
+      if (existsSync(legacyCacheDir)) {
+        try {
+          rmSync(legacyCacheDir, { recursive: true, force: true })
+        } catch {}
+      }
+    }
   }
   const selfFiles = canonicalFiles(selfRoot, { includeHistory: true })
   const selfResult = ensureCatalogPartition('self', selfRoot, selfFiles, registry, options)
@@ -385,22 +403,15 @@ export function ensureCatalog(selfRoot, projectDir, link, registry, options = {}
   }
   const contribResult = ensureContribPartition(PACKAGE_ROOT, registry, selfRoot)
 
-  const federated = []
-  const unreachable_spaces = []
-  let fedSkippedSecrets = 0,
-    fedCatalogReads = 0
-  let allFresh = selfResult.fresh && (!projectResult || projectResult.fresh) && Boolean(contribResult.fresh)
-  const fedWarnings = []
+  const allFresh = selfResult.fresh && (!projectResult || projectResult.fresh) && Boolean(contribResult.fresh)
 
   return {
     self: selfResult.catalog,
     project: projectResult ? projectResult.catalog : null,
     contrib: contribResult.catalog || contribResult,
-    federated,
-    unreachable_spaces: [...new Set(unreachable_spaces)].sort(),
     fresh: allFresh,
-    skippedSecrets: selfResult.skippedSecrets + (projectResult?.skippedSecrets || 0) + fedSkippedSecrets,
-    warnings: [...selfResult.warnings, ...(projectResult?.warnings || []), ...fedWarnings],
-    catalog_reads: selfResult.catalog_reads + (projectResult?.catalog_reads || 0) + (contribResult?.catalog_reads || 0) + fedCatalogReads
+    skippedSecrets: selfResult.skippedSecrets + (projectResult?.skippedSecrets || 0),
+    warnings: [...selfResult.warnings, ...(projectResult?.warnings || [])],
+    catalog_reads: selfResult.catalog_reads + (projectResult?.catalog_reads || 0) + (contribResult?.catalog_reads || 0)
   }
 }

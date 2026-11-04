@@ -8,7 +8,7 @@ import { createMcpSession } from '../src/mcp-server.mjs'
 import { ENVELOPE_BYTE_CAPS } from '../src/context-selection.mjs'
 
 const temp=()=>mkdtemp(join(tmpdir(),'holoself-budget-'))
-async function capture(fn){const old=console.log;let out='';console.log=(...x)=>{out+=x.join(' ')+'\n'};try{await fn()}finally{console.log=old}return out}
+async function capture(fn){const old=console.log,oldErr=console.error;let out='';console.log=(...x)=>{out+=x.join(' ')+'\n'};console.error=()=>{};try{await fn()}finally{console.log=old;console.error=oldErr}return out}
 const front='---\naccess_lenses: [general, professional]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n'
 // A self root with many large documents, so every budget has to trim.
 async function fixture(count=40){
@@ -22,7 +22,7 @@ function mcp(project){
   accept(JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'test',version:'1'}}}))
   return (id,name,args={})=>{accept(JSON.stringify({jsonrpc:'2.0',id,method:'tools/call',params:{name,arguments:args}}));return output.at(-1).result}
 }
-const documents=data=>[...data.self.documents,...data.project.documents,...data.federated.flatMap(peer=>peer.documents),...data.methods.documents]
+const documents=data=>[...data.self.documents,...data.project.documents,...data.methods.documents]
 
 test('every budget bounds the emitted packet on CLI and MCP, with and without --manifest',async()=>{
   const {project}=await fixture(),call=mcp(project);let id=10
@@ -68,14 +68,14 @@ test('invalid session_start_sources values are rejected by the lens registry',as
   await writeFile(lensFile,JSON.stringify({...base,session_start_sources:['profile/*.md','*.md']}));await capture(()=>run(['lens','validate','--root',self]))
 })
 
-test('cold, in-memory and persistent cache hits select identically and verify cursors',async()=>{
+test('cold and in-memory cache hits select identically and verify cursors',async()=>{
   const {project}=await fixture(15)
   const strip=data=>{const {cache,reconcile_reads,catalog_reads,total_bytes,estimated_tokens_total,estimated_tokens_total_heuristic,...selection}=data.selection;return {selection,hash:data.context_receipt.context_hash}}
   const query=['context','--project',project,'--task','career evidence','--budget','small','--json']
   const cold=JSON.parse(await capture(()=>run([...query,'--no-cache']))),memory=JSON.parse(await capture(()=>run([...query,'--no-cache'])))
-  const persistentCold=JSON.parse(await capture(()=>run(query))),persistentHit=JSON.parse(await capture(()=>run(query)))
-  assert.equal(memory.cache.hit,true);assert.equal(persistentHit.cache.hit,true);assert.equal(persistentHit.cache.persistent,true)
-  for(const other of [memory,persistentCold,persistentHit])assert.deepEqual(strip(other),strip(cold))
+  const plainHit=JSON.parse(await capture(()=>run(query)))
+  assert.equal(memory.cache.hit,true);assert.equal(memory.cache.persistent,false);assert.equal(plainHit.cache.hit,true);assert.equal(plainHit.cache.persistent,false)
+  for(const other of [memory,plainHit])assert.deepEqual(strip(other),strip(cold))
   const manifest=['context','--project',project,'--manifest','--json'],first=JSON.parse(await capture(()=>run(manifest)));await capture(()=>run(manifest))
   const cursor=first.selection.next_cursor;assert.ok(cursor)
   const decoded=JSON.parse(Buffer.from(cursor,'base64url').toString('utf8'));decoded.p.offset=1

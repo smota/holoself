@@ -37,8 +37,32 @@
         "binding_salt": {
           "type": "string",
           "pattern": "^[0-9a-f]{32}$"
+        },
+        "cache_limit_entries": {
+          "type": "integer",
+          "minimum": 1,
+          "deprecated": true,
+          "description": "Deprecated and ignored; the on-disk decision cache has been removed."
+        },
+        "cache_limit_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "deprecated": true,
+          "description": "Deprecated and ignored; the on-disk decision cache has been removed."
         }
       }
+    },
+    "cache_limit_entries": {
+      "type": "integer",
+      "minimum": 1,
+      "deprecated": true,
+      "description": "Deprecated and ignored; the on-disk decision cache has been removed."
+    },
+    "cache_limit_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "deprecated": true,
+      "description": "Deprecated and ignored; the on-disk decision cache has been removed."
     },
     "project_context": {
       "type": "object",

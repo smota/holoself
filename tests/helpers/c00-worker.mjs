@@ -94,7 +94,7 @@ async function benchmark() {
       if (n !== 1) throw new Error('cold samples require a new process each time')
       clearCache(); operation = () => cli(contextArgs()); break
     case 'context-disk-warm':
-      if (n !== 1 || !fs.existsSync(cacheDir)) throw new Error('disk-warm needs prior persistent priming and one sample per process')
+      if (n !== 1 || !fs.existsSync(join(fixture.project, '.holoself', 'catalog', 'catalog.json'))) throw new Error('disk-warm needs prior persistent priming and one sample per process')
       operation = () => cli(contextArgs()); break
     case 'mcp-memory-warm': {
       clearCache(); const call = mcpSession()

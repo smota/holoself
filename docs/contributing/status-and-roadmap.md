@@ -9,7 +9,7 @@ Current version: 0.8.0. Install the npm package as `holoself-ai`, or run the pro
 - Whole-person lenses and privacy filtering
 - JSON and packet adapters
 - Proposal approval/reject/defer lifecycle
-- Deterministic local index and federated search
+- Deterministic local index and search
 - Non-mutating overlap/conflict/stale reports
 - Migration, packet export, and legacy live mount
 - Project-bound local STDIO MCP with six bounded tools and collision-aware client configuration

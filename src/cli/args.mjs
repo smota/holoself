@@ -41,6 +41,8 @@ export const CONTEXT_FLAGS = [
   '--manifest',
   '--cursor',
   '--no-cache',
+  '--federated',
+  '--spaces',
   '--adapter',
   '--restricted-host',
   '--expires-hours',

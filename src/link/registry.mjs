@@ -1,7 +1,7 @@
 // Canonical space identity and the self-owned links registry with its lock file.
 import { closeSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { atomicWriteFile, canonicalJson, canonicalSort } from '../catalog.mjs'
+import { atomicWriteFile, canonicalSort } from '../catalog.mjs'
 import { ensureDir, hash, pathExists, safeRealpath, slash } from '../shared/fs.mjs'
 
 export function canonicalSpaceId(projectDir) {
@@ -123,11 +123,4 @@ export function writeRegistry(selfRoot, linksOrFn, baseHash) {
   ensureDir(dirname(path))
   atomicWriteFile(path, JSON.stringify(payload, null, 2) + '\n')
   return hash(JSON.stringify(payload, null, 2) + '\n')
-}
-export function computeLinksRegisterHash(links) {
-  if (!links || !links.length) return hash('[]')
-  const normalized = links
-    .map(l => ({ project_id: l.project_id, binding_salt: l.binding_salt, allowed_lenses: [...l.allowed_lenses].sort(canonicalSort), status: l.status }))
-    .sort((a, b) => canonicalSort(a.project_id, b.project_id))
-  return hash(canonicalJson(normalized))
 }

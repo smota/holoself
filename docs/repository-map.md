@@ -46,7 +46,7 @@ Of the 51 JSON schemas in `schemas/`, these 15 belong to the Holoself product (d
 - `schemas/adapter-capability.schema.json` — startup adapter capability evidence
 - `schemas/catalog.schema.json` — deterministic incremental catalog
 - `schemas/coaching-v1.schema.json` — local coaching cycle contract (`tests/evidence-contract.test.mjs`)
-- `schemas/context-decision-cache.schema.json` — content-free context decision cache
+- `schemas/context-decision-cache.schema.json` — content-free context decision cache (deprecated)
 - `schemas/context.schema.json` — resolved runtime context packet
 - `schemas/document-metadata.schema.json` — canonical Markdown frontmatter
 - `schemas/evidence-v1.schema.json` — evidence ownership and revision contract (`tests/evidence-contract.test.mjs`)

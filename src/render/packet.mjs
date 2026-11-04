@@ -2,12 +2,7 @@
 
 // MCP context results carry the packet once, in structuredContent; the text part is a short summary.
 export function mcpContextSummary(data) {
-  const docs = [
-    ...(data.self?.documents || []),
-    ...(data.project?.documents || []),
-    ...(data.federated || []).flatMap(peer => peer.documents),
-    ...(data.methods?.documents || [])
-  ]
+  const docs = [...(data.self?.documents || []), ...(data.project?.documents || []), ...(data.methods?.documents || [])]
   return (
     `Holoself context (${data.lens}, ${data.status}): ${docs.length} document(s) in structuredContent.data; ` +
     `${data.selection?.total_bytes ?? '?'} bytes; receipt ${data.context_receipt?.context_hash}.\n` +
@@ -29,11 +24,9 @@ export function packetFormat(data, adapter = 'generic') {
   }
   const title = labels[adapter] || labels.generic,
     metadata = data.packet_metadata
-  const fedDocs = (data.federated || []).flatMap(f => f.documents.map(x => ({ ...x, owner: f.name || f.space_id })))
   const docs = [
     ...data.self.documents.map(x => ({ ...x, owner: 'self' })),
     ...data.project.documents.map(x => ({ ...x, owner: 'project' })),
-    ...fedDocs,
     ...(data.methods?.documents || []).map(x => ({ ...x, owner: 'method' }))
   ]
   const receipt =

@@ -56,11 +56,10 @@ export function fitEnvelope(
     result.restrictions.push({ source: removed.path, reason: `packet envelope cap ${budgetName} exceeded` })
     if (compacted) result.restrictions = groupRestrictions(result.restrictions)
     const next = projections(records),
-      cleanNext = finish({ self: next.self, project: next.project, federated: next.federated, methods: next.methods, sources: next.sources })
+      cleanNext = finish({ self: next.self, project: next.project, methods: next.methods, sources: next.sources })
     Object.assign(result, {
       self: cleanNext.self,
       project: cleanNext.project,
-      federated: cleanNext.federated,
       methods: cleanNext.methods,
       sources: cleanNext.sources
     })

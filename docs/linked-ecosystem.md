@@ -21,7 +21,7 @@ Legacy `default_lens` and `secondary_lenses` in link.yaml are diagnostic and exp
 
 ## Self context only
 
-`project_context.include: []` is recommended; a missing include defaults to `[]`. Legacy includes and federation flags do not enable domain indexing. Context/index refresh discards stale domain catalog entries. Explicit analysis may inspect configured project documents to recommend reusable knowledge; reports remain project-owned.
+`project_context.include: []` is recommended; a missing include defaults to `[]`. Legacy includes and deprecated federation flags do not enable domain indexing, and deprecated `cache_limit_entries` / `cache_limit_bytes` fields in `link.yaml` are accepted and ignored. Context/index refresh discards stale domain catalog entries, and `index rebuild` cleans up legacy on-disk decision-cache files. Explicit analysis may inspect configured project documents to recommend reusable knowledge; reports remain project-owned.
 
 Lenses are uniform definitions in the self root, seeded by init or reviewed migration. `professional` and `public-voice` replace old IDs. Public voice has no special compensation or publication-allowed filter. Explicit document, claim and field access still apply. Reading does not authorize external action.
 
@@ -33,6 +33,6 @@ Lenses are uniform definitions in the self root, seeded by init or reviewed migr
 
 Workbench discovers and prunes its disposable catalog from bindings. It does not use `context/linked-projects.md` as a registry. Spaces edits project choices; Lenses edits definitions. MCP shares CLI authority and self-only retrieval. See [MCP integration](guides/local-mcp.md) and [Workbench](workbench/index.md).
 
-Markdown and evidence remain authoritative. Indexes and decision caches are local, disposable acceleration. Retrieval preserves provenance and excludes recognized secret-like inputs. Pattern matching is a limited safeguard; data stays private and user review governs durable changes.
+Markdown and evidence remain authoritative. Indexes and catalogs are local, disposable acceleration. Retrieval preserves provenance and excludes recognized secret-like inputs. Pattern matching is a limited safeguard; data stays private and user review governs durable changes.
 
 The local search index uses schema v5/privacy-policy v4. Registry, policy, and source changes invalidate cached content before retrieval.

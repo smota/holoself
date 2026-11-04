@@ -104,7 +104,7 @@ export function updateLinkBindingSaltInPlace(projectDir, salt) {
 }
 export function linkSchemaErrors(link, registry = null) {
   const errors = [],
-    allowedKeys = new Set(['path', 'access', 'proposals', 'index', 'default_lens', 'secondary_lenses', 'binding_salt']),
+    allowedKeys = new Set(['path', 'access', 'proposals', 'index', 'default_lens', 'secondary_lenses', 'binding_salt', 'cache_limit_entries', 'cache_limit_bytes']),
     known = id => (registry ? registry.byId.has(id) : lensIdStructurallyValid(id))
   if (!link || Array.isArray(link) || typeof link !== 'object') return ['self_context must be a mapping']
   for (const key of Object.keys(link)) if (!allowedKeys.has(key)) errors.push(`unknown self_context field: ${key}`)
@@ -155,7 +155,8 @@ export function readLink(project, { tolerant = false } = {}) {
   }
   if (!Object.hasOwn(parsed, 'self_context')) throw new Error(`malformed link configuration ${path}: self_context mapping missing`)
   for (const key of Object.keys(parsed))
-    if (!['self_context', 'project_context'].includes(key)) throw new Error(`malformed link configuration ${path}: unknown root field ${key}`)
+    if (!['self_context', 'project_context', 'cache_limit_entries', 'cache_limit_bytes'].includes(key))
+      throw new Error(`malformed link configuration ${path}: unknown root field ${key}`)
   const structuralErrors = [...linkSchemaErrors(parsed.self_context), ...projectContextErrors(parsed.project_context)]
   if (structuralErrors.length && !tolerant) throw new Error(`invalid link configuration ${path}: ${structuralErrors.join('; ')}`)
   const selfPath = resolve(project, parsed.self_context.path)
@@ -175,8 +176,9 @@ export function readLink(project, { tolerant = false } = {}) {
     if (!tolerant) throw error
     bindingError = error.message
   }
+  const { cache_limit_entries: _cle, cache_limit_bytes: _clb, ...selfContextFields } = parsed.self_context
   return {
-    ...parsed.self_context,
+    ...selfContextFields,
     ...(binding || {}),
     path: selfPath,
     secondary_lenses: [...(binding?.secondary_lenses || [])],
