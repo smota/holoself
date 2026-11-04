@@ -28,8 +28,10 @@ export function assertClientLens(selfRoot, lensId) {
 }
 // The self root named in a client launch command: absolute, not a symlink, with the canonical layout.
 export function resolveClientSelf(rootInput) {
-  if (typeof rootInput !== 'string' || !rootInput || !isAbsolute(rootInput))
+  if (typeof rootInput !== 'string' || !rootInput)
     throw clientError('client mode requires an absolute self root (--root <absolute-self-root>)', 'CLIENT_ROOT_INVALID')
+  if (!isAbsolute(rootInput))
+    throw clientError('client mode requires an absolute self root (--root <absolute-self-root>)', 'CLIENT_ROOT_NOT_ABSOLUTE')
   const root = resolve(rootInput),
     info = lstatSync(root, { throwIfNoEntry: false })
   if (!info || info.isSymbolicLink() || !info.isDirectory() || !isCanonicalSelf(root))

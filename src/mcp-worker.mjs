@@ -11,10 +11,11 @@ const { executeToolJob } = await import('./mcp-server.mjs')
 const simulateWorkMs = workerData?.simulateWorkMs || {}
 
 parentPort.on('message', ({ jobId, project, client, name, args }) => {
+  const result = executeToolJob(project, name, args, client || null)
   const busy = simulateWorkMs[name]
   if (busy > 0) {
     const end = Date.now() + busy
     while (Date.now() < end);
   }
-  parentPort.postMessage({ jobId, ...executeToolJob(project, name, args, client || null) })
+  parentPort.postMessage({ jobId, ...result })
 })

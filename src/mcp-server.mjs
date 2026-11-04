@@ -509,6 +509,15 @@ export function createMcpSession({
         return write(JSON.stringify(response(request.id, null, protocolError(TOOL_TIMEOUT_RPC_CODE, 'Tool call timed out', { code: 'TOOL_TIMEOUT' }))))
       }
       if (outcome.status === 'ok' && outcome.value.ok) {
+        if (client) {
+          try {
+            attestClient(client.self, client.client_id)
+          } catch (error) {
+            const result = toolError(error)
+            auditToolCall(log, name, result)
+            return write(JSON.stringify(response(request.id, result)))
+          }
+        }
         log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok: true, error_code: null })
         if (CONTEXT_TOOLS.has(name)) {
           try {

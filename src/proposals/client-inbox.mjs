@@ -2,7 +2,7 @@
 // owner enabled `proposals: inbox`. Records carry `origin: { kind: client, client_id }` and provenance
 // `client:<client_id>`; they are approved only by the owner through the CLI or Workbench.
 import { randomUUID } from 'node:crypto'
-import { closeSync, constants as fsConstants, lstatSync, openSync, readFileSync, rmSync, writeSync } from 'node:fs'
+import { closeSync, constants as fsConstants, lstatSync, openSync, readFileSync, renameSync, rmSync, writeSync } from 'node:fs'
 import { isPidAlive } from '../link/registry.mjs'
 import { SECRET_RE } from '../policy/secrets.mjs'
 import { ensureDir, hash, sleepSync } from '../shared/fs.mjs'
@@ -18,18 +18,59 @@ export const CLIENT_INBOX_LOCK_STALE_MS = 10000
 export function clientInboxLockPath(self) {
   return join(self, '.holoself', 'client-inbox.lock')
 }
+function sameStaleLock(raw, held, staleRaw) {
+  if (held) {
+    try {
+      const current = JSON.parse(raw)
+      return current.pid === held.pid && current.timestamp === held.timestamp
+    } catch {
+      return false
+    }
+  }
+  return staleRaw !== null && raw === staleRaw
+}
+function breakStaleLock(lockPath, held, staleRaw) {
+  const breakGuard = `${lockPath}.break`
+  try {
+    closeSync(openSync(breakGuard, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | (fsConstants.O_NOFOLLOW || 0), 0o600))
+  } catch (error) {
+    if (error.code === 'EEXIST') {
+      const info = lstatSync(breakGuard, { throwIfNoEntry: false })
+      if (info && Date.now() - info.mtimeMs > 2000) rmSync(breakGuard, { force: true })
+    }
+    return
+  }
+  const tempPath = `${lockPath}.stale-${process.pid}-${randomUUID()}`
+  try {
+    if (!sameStaleLock(readFileSync(lockPath, 'utf8'), held, staleRaw)) return
+    renameSync(lockPath, tempPath)
+    if (!sameStaleLock(readFileSync(tempPath, 'utf8'), held, staleRaw)) {
+      try {
+        renameSync(tempPath, lockPath)
+      } catch {}
+      return
+    }
+    rmSync(tempPath, { force: true })
+  } catch {
+  } finally {
+    rmSync(tempPath, { force: true })
+    rmSync(breakGuard, { force: true })
+  }
+}
 // Synchronous exclusive lock for the cap check and the write (tool calls run synchronously on a worker thread, and
 // several server processes may serve clients of one self root). A lock older than the stale limit or held by a dead
-// process is broken; a symlinked lock path is refused.
+// process is broken safely via rename+verify; a symlinked lock path is refused.
 export function withClientInboxLock(self, fn, { timeoutMs = 15000 } = {}) {
   const lockPath = clientInboxLockPath(self)
   ensureDir(join(self, '.holoself'))
   const deadline = Date.now() + timeoutMs
+  let ourToken = null
   for (let attempt = 0; ; attempt++) {
     try {
       const fd = openSync(lockPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | (fsConstants.O_NOFOLLOW || 0), 0o600)
       try {
-        writeSync(fd, JSON.stringify({ pid: process.pid, timestamp: Date.now() }) + '\n')
+        ourToken = JSON.stringify({ pid: process.pid, timestamp: Date.now(), token: randomUUID() }) + '\n'
+        writeSync(fd, ourToken)
       } finally {
         closeSync(fd)
       }
@@ -38,15 +79,19 @@ export function withClientInboxLock(self, fn, { timeoutMs = 15000 } = {}) {
       if (error.code !== 'EEXIST') throw error
       const info = lstatSync(lockPath, { throwIfNoEntry: false })
       if (info?.isSymbolicLink()) throw inboxError('client inbox lock is a symlink; refusing', 'CLIENT_INBOX_LOCK_UNSAFE')
-      let stale = false
+      let stale = false,
+        held = null,
+        staleRaw = null
       try {
-        const held = JSON.parse(readFileSync(lockPath, 'utf8'))
+        staleRaw = readFileSync(lockPath, 'utf8')
+        const parsed = JSON.parse(staleRaw)
+        held = { pid: parsed.pid, timestamp: parsed.timestamp }
         stale = Date.now() - Number(held.timestamp || 0) > CLIENT_INBOX_LOCK_STALE_MS || (Number.isInteger(held.pid) && !isPidAlive(held.pid))
       } catch {
         stale = info ? Date.now() - info.mtimeMs > 2000 : false
       }
       if (stale) {
-        rmSync(lockPath, { force: true })
+        breakStaleLock(lockPath, held, staleRaw)
         continue
       }
       if (Date.now() > deadline) throw inboxError('timed out waiting for the client inbox lock', 'CLIENT_INBOX_LOCK_TIMEOUT')
@@ -56,7 +101,9 @@ export function withClientInboxLock(self, fn, { timeoutMs = 15000 } = {}) {
   try {
     return fn()
   } finally {
-    rmSync(lockPath, { force: true })
+    try {
+      if (ourToken && readFileSync(lockPath, 'utf8') === ourToken) rmSync(lockPath, { force: true })
+    } catch {}
   }
 }
 export function listInboxProposals(self) {

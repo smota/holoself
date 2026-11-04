@@ -113,11 +113,16 @@ export async function runProposals(o, sub) {
     const preErrors = ecosystemValidationErrors(link.path, project)
     if (preErrors.length) throw new Error(`pre-approval validation failed: ${preErrors.join('; ')}`)
     const previews = prepared.changes,
-      previewHash = prepared.preview_hash
+      previewHash = prepared.preview_hash,
+      described = queue.describe(p),
+      client = described.client,
+      clientName = client?.name || p.origin?.client_id,
+      inactiveNotice = client && client.status !== 'active' ? `client ${clientName} is ${client.status.toUpperCase()}` : null
     console.log(
       o.json
-        ? JSON.stringify({ proposal_id: p.proposal_id, ...queue.describe(p), changes: previews, preview_hash: previewHash }, null, 2)
-        : `Affected files: ${[...grouped.keys()].join(', ')}\nPreview hash: ${previewHash}\n--- proposed diff ---\n` +
+        ? JSON.stringify({ proposal_id: p.proposal_id, ...described, changes: previews, preview_hash: previewHash }, null, 2)
+        : (inactiveNotice ? `Client status: ${inactiveNotice}\n` : client ? `Client: ${clientName} (${client.status})\n` : '') +
+            `Affected files: ${[...grouped.keys()].join(', ')}\nPreview hash: ${previewHash}\n--- proposed diff ---\n` +
             `${previews
               .map(x =>
                 x.operation === 'append_claim'
@@ -133,7 +138,15 @@ export async function runProposals(o, sub) {
       error.code = 'STALE_PREVIEW'
       throw error
     }
-    if (!(await askConfirm(o, 'Approve proposal and apply grouped canonical self changes?'))) {
+    const prompt = inactiveNotice
+      ? `Approve proposal (${inactiveNotice}) and apply grouped canonical self changes?`
+      : 'Approve proposal and apply grouped canonical self changes?'
+    if (inactiveNotice && !o.allowRevoked && (!process.stdin.isTTY || !process.stdout.isTTY || o.yes)) {
+      const error = new Error(`${prompt} Pass --allow-revoked to approve a proposal from a ${client.status} client.`)
+      error.code = 'CLIENT_REVOKED'
+      throw error
+    }
+    if (!(await askConfirm(inactiveNotice && !o.allowRevoked ? { ...o, yes: false } : o, prompt))) {
       console.log('Cancelled.')
       return true
     }

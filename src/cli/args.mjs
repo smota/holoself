@@ -1,6 +1,6 @@
 // Command-line argument parsing and the per-command flag contracts.
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 
 export function defaultRoot() {
   return process.env.HOLOSELF_HOME || join(homedir(), '.holoself')
@@ -192,7 +192,7 @@ export const COMMAND_FLAGS = {
   ],
   ...Object.fromEntries(['list', 'audit'].map(sub => ['proposals ' + sub, [...PROJECT_FLAGS, ...ROOT_FLAGS, '--inbox', ...JSON_FLAGS]])),
   'proposals show': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--inbox'],
-  'proposals approve': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--inbox', '--json', '--digest', '--preview-hash', ...CONFIRM_FLAGS],
+  'proposals approve': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--inbox', '--allow-revoked', '--json', '--digest', '--preview-hash', ...CONFIRM_FLAGS],
   ...Object.fromEntries(
     ['reject', 'defer', 'supersede'].map(sub => ['proposals ' + sub, [...PROJECT_FLAGS, ...ROOT_FLAGS, '--inbox', ...CONFIRM_FLAGS]])
   ),
@@ -237,6 +237,11 @@ export function validateFlags(o) {
     error.code = 'INVALID_ARGUMENT'
     throw error
   }
+  if (o.client !== undefined && o.rootExplicit && !isAbsolute(o.rawRoot) && o.rawRoot !== 'example') {
+    const error = new Error('client mode requires an absolute self root (--root <absolute-self-root>)')
+    error.code = 'CLIENT_ROOT_NOT_ABSOLUTE'
+    throw error
+  }
   return o
 }
 export function parseArguments(args) {
@@ -250,7 +255,8 @@ export function parse(args) {
     if (a.startsWith('-')) o._flags.push(a)
     if (a === '--adapters') o.adapters = requiredValue(args, i++, a)
     else if (a === '--root' || a === '--data-root' || a === '--data-dir') {
-      o.root = resolve(requiredValue(args, i++, a))
+      o.rawRoot = requiredValue(args, i++, a)
+      o.root = resolve(o.rawRoot)
       o.rootExplicit = true
     } else if (a === '--target') o.target = resolve(requiredValue(args, i++, a))
     else if (a === '--project') o.project = resolve(requiredValue(args, i++, a))
@@ -330,6 +336,7 @@ export function parse(args) {
     else if (a === '--name') o.name = requiredValue(args, i++, a)
     else if (a === '--proposals') o.proposals = requiredValue(args, i++, a)
     else if (a === '--inbox') o.inbox = true
+    else if (a === '--allow-revoked') o.allowRevoked = true
     else if (a === '--revert') o.revert = requiredValue(args, i++, a)
     else if (a === '--digest' || a === '--preview-hash') o.digest = requiredValue(args, i++, a)
     else if (a === '--adapter') o.adapter = requiredValue(args, i++, a)
@@ -433,6 +440,7 @@ export function parse(args) {
     else if (a.startsWith('-')) throw new Error(`unknown option: ${a}`)
     else positional.push(a)
   }
+  if (o.client !== undefined && o.rootExplicit) o.root = o.rawRoot
   o.root = o.root || defaultRoot()
   o.command = positional[0]
   o.args = positional.slice(1)

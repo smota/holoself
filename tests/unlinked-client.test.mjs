@@ -9,7 +9,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { run } from '../src/cli.mjs'
+import { parseArguments, run } from '../src/cli.mjs'
 import { assertClientLens, attestClient, clientLensProblem, removeLensUnlessUsed } from '../src/clients/attestation.mjs'
 import { addClient, clientsFilePath, readClientRegistry, writeClientRegistry } from '../src/clients/registry.mjs'
 import { loadLensRegistry } from '../src/lenses.mjs'
@@ -237,6 +237,10 @@ test('mcp --client refuses --project, --claude-project-dir and CLAUDE_PROJECT_DI
   assert.equal(resolveClientBinding({ client: client.client_id, env: { HOLOSELF_HOME: self } }).self, self)
   assert.equal((await refusal(() => resolveClientBinding({ client: '00000000-0000-4000-8000-000000000000', root: self, env: {} }))).code, 'CLIENT_UNKNOWN')
   assert.equal((await refusal(() => resolveClientBinding({ client: 'desk', root: self, env: {} }))).code, 'CLIENT_UNKNOWN')
+  assert.equal((await refusal(() => resolveClientBinding({ client: client.client_id, root: './relative-self', env: {} }))).code, 'CLIENT_ROOT_NOT_ABSOLUTE')
+  assert.equal((await refusal(() => parseArguments(['mcp', '--client', client.client_id, '--root', './relative-self']))).code, 'CLIENT_ROOT_NOT_ABSOLUTE')
+  assert.equal((await refusal(() => run(['mcp', '--client', client.client_id, '--root', './relative-self']))).code, 'CLIENT_ROOT_NOT_ABSOLUTE')
+  assert.equal((await refusal(() => run(['mcp', 'configure', '--client', client.client_id, '--platform', 'generic', '--root', 'relative/self']))).code, 'CLIENT_ROOT_NOT_ABSOLUTE')
   const notSelf = await temp('notself')
   assert.equal((await refusal(() => resolveClientBinding({ client: client.client_id, root: notSelf, env: {} }))).code, 'CLIENT_ROOT_INVALID')
   if (process.platform !== 'win32') {
@@ -357,6 +361,29 @@ test('per-call attestation with the worker pool: revocation mid-session takes ef
   const job = executeToolJob(null, 'holoself_context', { task: 'parity marker' }, client)
   assert.equal(job.ok, false)
   assert.equal(job.error.code, 'CLIENT_REVOKED')
+})
+
+test('per-call attestation with the worker pool: revoking during a slow in-flight call returns CLIENT_REVOKED and writes no ledger entry', async () => {
+  const { self, client } = await fixture()
+  const pool = createMcpToolPool({ size: 1, simulateWorkMs: { holoself_context: 350 } }),
+    output = []
+  try {
+    const accept = createMcpSession({ client, pool, auditLog: undefined, write: line => output.push(JSON.parse(line)) })
+    accept(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', clientInfo: { name: 'Claude Desktop' } } }))
+    accept(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'holoself_context', arguments: { task: 'parity marker' } } }))
+    await new Promise(done => setTimeout(done, 60))
+    assert.equal(accept.inFlight(), 1)
+    assert.equal(output.find(item => item.id === 2), undefined)
+    await capture(() => run(['client', 'revoke', '--root', self, 'desk']))
+    await accept.drain()
+    const reply = output.find(item => item.id === 2)
+    assert.equal(reply.result.isError, true)
+    assert.equal(reply.result.structuredContent.error.code, 'CLIENT_REVOKED')
+    assert.equal(reply.result.structuredContent.data, undefined)
+    assert.deepEqual(ledgerLines(self), [])
+  } finally {
+    await pool.close()
+  }
 })
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -535,10 +562,24 @@ test('proposals inbox: evidence, secrets, caps, provenance and writes only under
   // Duplicate of the visible claim.
   assert.equal(m.call(11, 'holoself_proposal_create', { claim: 'Client parity marker.', evidence: 'chat', target: 'profile/identity.md' }).error.code, 'DUPLICATE_CLAIM')
   // Preview of its own proposal works; status reports the pending count.
-  const preview = m.call(12, 'holoself_proposal_preview', { proposal_id: ok.data.proposal_id }).data
+  // before_sha256 and after_sha256 hash the client-visible view, not hidden private blocks in the file.
+  const identityPath = join(self, 'profile', 'identity.md'),
+    visibleBefore = m.call(12, 'holoself_context', { task: 'parity', budget: 'deep' }).data.self.documents.find(d => d.path === 'profile/identity.md').content
+  writeFileSync(
+    identityPath,
+    readFileSync(identityPath, 'utf8') +
+      '\n<!-- holoself-claim visibility=private id=11111111-1111-4111-8111-111111111111 -->\nHidden private block.\n<!-- /holoself-claim -->\n'
+  )
+  const preview = m.call(13, 'holoself_proposal_preview', { proposal_id: ok.data.proposal_id }).data
   assert.equal(preview.requires_human_approval, true)
   assert.match(preview.preview_hash, /^[0-9a-f]{64}$/)
-  assert.equal(m.call(13, 'holoself_status').data.pending_proposals, 1)
+  assert.equal(preview.changes[0].before_sha256, hash(visibleBefore))
+  assert.notEqual(preview.changes[0].before_sha256, hash(readFileSync(identityPath, 'utf8')))
+  writeFileSync(identityPath, readFileSync(identityPath, 'utf8').replace('Hidden private block.', 'Edited hidden private block.'))
+  const previewAfterHiddenEdit = m.call(14, 'holoself_proposal_preview', { proposal_id: ok.data.proposal_id }).data
+  assert.equal(previewAfterHiddenEdit.changes[0].before_sha256, preview.changes[0].before_sha256)
+  assert.equal(previewAfterHiddenEdit.changes[0].after_sha256, preview.changes[0].after_sha256)
+  assert.equal(m.call(15, 'holoself_status').data.pending_proposals, 1)
   assert.equal(readdirSync(join(self, 'proposals', 'inbox')).length, 1)
 })
 
@@ -593,7 +634,7 @@ test('proposals inbox cap holds under concurrency: two processes creating at 49 
   assert.equal(existsSync(clientInboxLockPath(self)), false)
 })
 
-test('client inbox lock: a live holder blocks until timeout; a dead holder is broken', async () => {
+test('client inbox lock: a live holder blocks until timeout; a dead holder is broken; concurrent stale-lock breakers never exceed the cap', async () => {
   const self = await temp('inboxlock')
   mkdirSync(join(self, '.holoself'), { recursive: true })
   writeFileSync(clientInboxLockPath(self), JSON.stringify({ pid: process.pid, timestamp: Date.now() }))
@@ -601,6 +642,39 @@ test('client inbox lock: a live holder blocks until timeout; a dead holder is br
   writeFileSync(clientInboxLockPath(self), JSON.stringify({ pid: 2147483646, timestamp: Date.now() }))
   assert.equal(withClientInboxLock(self, () => 'ran', { timeoutMs: 100 }), 'ran')
   assert.equal(existsSync(clientInboxLockPath(self)), false)
+  // On release, only delete the lock if it still contains our own token.
+  const foreignToken = JSON.stringify({ pid: 2147483646, timestamp: Date.now(), token: 'foreign' }) + '\n'
+  withClientInboxLock(self, () => {
+    writeFileSync(clientInboxLockPath(self), foreignToken)
+  })
+  assert.equal(readFileSync(clientInboxLockPath(self), 'utf8'), foreignToken)
+  rmSync(clientInboxLockPath(self), { force: true })
+
+  // Concurrent stale-lock breakers at 48 pending never exceed the 50-item cap.
+  const { self: capSelf, entry } = await fixture({ proposals: 'inbox' })
+  for (let i = 0; i < CLIENT_INBOX_LIMIT - 2; i++)
+    createInboxProposal(capSelf, entry, { claim: `Stale race seed ${i}.`, evidence: 'loop', target: 'profile/identity.md' })
+  writeFileSync(clientInboxLockPath(capSelf), JSON.stringify({ pid: 2147483646, timestamp: 1 }) + '\n')
+  const moduleUrl = new URL('../src/proposals/client-inbox.mjs', import.meta.url).href,
+    startAt = Date.now() + 600
+  const script = n =>
+    `const { createInboxProposal } = await import(${JSON.stringify(moduleUrl)});` +
+    `while (Date.now() < ${startAt});` +
+    `try { createInboxProposal(${JSON.stringify(capSelf)}, ${JSON.stringify(entry)}, { claim: 'Stale breaker claim ${n}.', evidence: 'race', target: 'profile/identity.md' }); console.log('ok') }` +
+    `catch (error) { console.log(error.code) }`
+  const runChild = n =>
+    new Promise((done, fail) => {
+      const child = spawn(process.execPath, ['--input-type=module', '-e', script(n)], { windowsHide: true })
+      let out = ''
+      child.stdout.on('data', chunk => (out += chunk))
+      child.on('error', fail)
+      child.on('close', () => done(out.trim()))
+    })
+  const outcomes = (await Promise.all([runChild(1), runChild(2), runChild(3), runChild(4)])).sort()
+  assert.deepEqual(outcomes, ['CLIENT_INBOX_FULL', 'CLIENT_INBOX_FULL', 'ok', 'ok'])
+  const pending = readdirSync(join(capSelf, 'proposals', 'inbox')).filter(name => name.endsWith('.yaml'))
+  assert.equal(pending.length, CLIENT_INBOX_LIMIT)
+  assert.equal(existsSync(clientInboxLockPath(capSelf)), false)
 })
 
 test('inbox and project proposal records never validate in each other\'s store', async () => {
@@ -629,7 +703,8 @@ test('owner approval of inbox proposals via CLI (preview hash, transaction, arch
   assert.match(await capture(() => run(['proposals', 'show', first.proposal_id, '--inbox', '--root', self])), /# client: desk \(active\)/)
   // --inbox cannot be mixed with a project.
   await assert.rejects(() => run(['proposals', 'list', '--inbox', '--root', self, '--project', self]), /cannot be combined/)
-  // The client is revoked after writing; the owner can still review.
+  // The client is revoked after writing; the owner can still review, but plain-text approve warns that
+  // 'client <name> is REVOKED' and requires --allow-revoked in non-TTY (or explicit interactive confirmation).
   await capture(() => run(['client', 'revoke', '--root', self, 'desk']))
   let stale = null
   const printed = await capture(() =>
@@ -640,7 +715,21 @@ test('owner approval of inbox proposals via CLI (preview hash, transaction, arch
   assert.equal(stale?.code, 'STALE_PREVIEW', String(stale?.stack))
   const preview = JSON.parse(printed)
   assert.equal(preview.client.status, 'revoked')
-  await capture(() => run(['proposals', 'approve', first.proposal_id, '--inbox', '--root', self, '--digest', preview.preview_hash, '--yes']))
+  let withoutAllow = null
+  const plainRevokedOut = await capture(() =>
+    run(['proposals', 'approve', first.proposal_id, '--inbox', '--root', self, '--digest', preview.preview_hash, '--yes']).catch(error => {
+      withoutAllow = error
+    })
+  )
+  assert.equal(withoutAllow?.code, 'CLIENT_REVOKED')
+  assert.match(withoutAllow?.message || '', /client desk is REVOKED/)
+  assert.match(withoutAllow?.message || '', /--allow-revoked/)
+  assert.match(plainRevokedOut, /client desk is REVOKED/)
+  assert.doesNotMatch(readFileSync(join(self, 'profile', 'identity.md'), 'utf8'), /Prefers written updates\./)
+  const approvedOut = await capture(() =>
+    run(['proposals', 'approve', first.proposal_id, '--inbox', '--root', self, '--digest', preview.preview_hash, '--allow-revoked', '--yes'])
+  )
+  assert.match(approvedOut, /client desk is REVOKED/)
   const identity = readFileSync(join(self, 'profile', 'identity.md'), 'utf8')
   assert.match(identity, /Prefers written updates\./)
   assert.match(identity, new RegExp(`Provenance: client:${client.client_id}`))
@@ -648,6 +737,16 @@ test('owner approval of inbox proposals via CLI (preview hash, transaction, arch
   const receipt = JSON.parse(readFileSync(join(self, 'proposals', 'receipts', `${first.proposal_id}-approved.json`), 'utf8'))
   assert.equal(receipt.preview_sha256, preview.preview_hash)
   assert.match(readFileSync(join(self, 'proposals', 'inbox', `${first.proposal_id}.yaml`), 'utf8'), /status: "approved"/)
+  // Removed client also shows 'client <id> is REMOVED' and requires --allow-revoked in non-TTY.
+  await capture(() => run(['client', 'remove', '--root', self, 'desk']))
+  let removedRefusal = null
+  const removedOut = await capture(() =>
+    run(['proposals', 'approve', second.proposal_id, '--inbox', '--root', self, '--yes']).catch(error => {
+      removedRefusal = error
+    })
+  )
+  assert.equal(removedRefusal?.code, 'CLIENT_REVOKED')
+  assert.match(removedOut, new RegExp(`client ${client.client_id} is REMOVED`))
   await capture(() => run(['proposals', 'reject', second.proposal_id, '--inbox', '--root', self, '--yes']))
   assert.ok(existsSync(join(self, 'proposals', 'rejected', `${second.proposal_id}.yaml`)))
   assert.doesNotMatch(readFileSync(join(self, 'profile', 'identity.md'), 'utf8'), /surprise meetings/)

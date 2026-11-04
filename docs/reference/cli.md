@@ -93,7 +93,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `proposals list` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--json` |
 | `proposals audit` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--json` |
 | `proposals show` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox` |
-| `proposals approve` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--json`, `--digest`, `--preview-hash`, `--yes`, `--confirm` |
+| `proposals approve` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--allow-revoked`, `--json`, `--digest`, `--preview-hash`, `--yes`, `--confirm` |
 | `proposals reject` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--yes`, `--confirm` |
 | `proposals defer` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--yes`, `--confirm` |
 | `proposals supersede` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--inbox`, `--yes`, `--confirm` |

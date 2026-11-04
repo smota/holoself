@@ -115,7 +115,8 @@ function clientClaimView(client, lens, delivered) {
       const docs = delivered.get(rel) || []
       return !block.malformed && docs.some(content => parseClaimBlocks(content, rel).some(b => b.claim_id === block.claim_id)) && visibleUnderBehavior(block.visibility, lens, 'generic')
     },
-    delivered: rel => delivered.get(rel) || []
+    delivered: rel => delivered.get(rel) || [],
+    baseText: rel => delivered.get(rel)?.[0] ?? null
   }
 }
 function assertInboxMode(entry) {

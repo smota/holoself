@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, readlinkSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
-import { join, resolve, relative, dirname, basename } from 'node:path'
+import { join, resolve, relative, dirname, basename, isAbsolute } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { ftsSupport, indexEngine } from './catalog/fts.mjs'
@@ -220,6 +220,11 @@ export async function run(argv, options = {}) {
   const o = parse(argv)
   if (process.env.NODE_TEST_CONTEXT && options?.afterConfigure) o.afterConfigure = options.afterConfigure
   validateFlags(o)
+  if (o.client !== undefined && o.rootExplicit && !isAbsolute(o.rawRoot)) {
+    const error = new Error('client mode requires an absolute self root (--root <absolute-self-root>)')
+    error.code = 'CLIENT_ROOT_NOT_ABSOLUTE'
+    throw error
+  }
   if (o.version) {
     console.log(o.json ? JSON.stringify({ schemaVersion: 1, product: 'holoself', version: VERSION }) : `Holoself ${VERSION}`)
     return

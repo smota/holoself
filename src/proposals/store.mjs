@@ -456,8 +456,10 @@ export function planProposalChanges(p, self, view = null) {
       before = state?.before ?? (existed ? readFileSync(target, 'utf8') : emptyTarget(self)),
       current = state?.after ?? before
     if (!state && before.includes(time)) throw claimError(`target already contains this proposal's reserved placeholder: ${rel}`, 'INVALID_TARGET')
-    const applied = applyClaimChange(current, rel, { ...change, operation: change.operation || 'append_claim' }, p, view)
-    grouped.set(target, { target, before, after: applied.after, existed })
+    const applied = applyClaimChange(current, rel, { ...change, operation: change.operation || 'append_claim' }, p, view),
+      viewCurrent = state?.viewAfter ?? view?.baseText?.(rel) ?? null,
+      viewAfter = viewCurrent === null ? null : applyClaimChange(viewCurrent, rel, { ...change, operation: change.operation || 'append_claim' }, p, view).after
+    grouped.set(target, { target, before, after: applied.after, existed, viewAfter })
     steps.push({ before: current, after: applied.after })
     previews.push({
       change_id: change.change_id,
@@ -466,8 +468,8 @@ export function planProposalChanges(p, self, view = null) {
       claim_id: applied.claim_id,
       evidence: change.evidence,
       visibility_change: applied.visibility_change,
-      before_sha256: hash(current),
-      after_sha256: hash(applied.after),
+      before_sha256: hash(viewCurrent ?? current),
+      after_sha256: hash(viewAfter ?? applied.after),
       before_block: shown(applied.before_block),
       after_block: shown(applied.after_block),
       preview: shown(applied.preview)
