@@ -67,7 +67,16 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 
 ## Decisions
 
+- [AgentFlow SDLC framework placement](decisions/agentflow-placement.md)
 - [Local MCP architecture](decisions/local-mcp-architecture.md)
+- [External public skill deployments](decisions/external-skill-deployments.md)
+- [Link adapter scope for repair and deactivation](decisions/link-adapter-scope.md)
+- [ADR E01: Evidence ownership, storage and retention](decisions/evidence-01-ownership.md)
+- [ADR E02: Identity, revisions, block coverage and fidelity](decisions/evidence-02-identity-fidelity.md)
+- [ADR E03: Explicit evidence retrieval and revocation](decisions/evidence-03-authorization.md)
+- [ADR E04: Local extraction boundary and D01 decision gate](decisions/evidence-04-extraction.md)
+- [ADR E05: Claim provenance and existing human approval](decisions/evidence-05-proposals.md)
+- [ADR E06: Minimal coaching work and confirmation](decisions/evidence-06-coaching.md)
 
 ## Development specifications
 
@@ -108,6 +117,7 @@ The D00–D03 evidence documents below record earlier research and experiments. 
 
 ## Contributing
 
+- [Repository map](repository-map.md): product sources, product tooling, AgentFlow-managed paths, and owner-local directories ([placement decision](decisions/agentflow-placement.md))
 - [Development](contributing/development.md)
 - [Release process](contributing/releases.md)
 - [Status and roadmap](contributing/status-and-roadmap.md)
