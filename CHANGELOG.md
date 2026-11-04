@@ -4,6 +4,8 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- Holoself now works when the self root or a project sits below a symlinked folder (for example macOS `/var` or a symlinked home); symlinks inside the root are still refused. On case-insensitive filesystems such as macOS, instruction files that differ only by case (`CODEX.md`/`codex.md`) are detected once. Lens bindings fail closed when a bound project path is swapped for a symlink or several stored paths resolve to the same folder. CI now verifies Linux, Windows and macOS on Node 20 and the current LTS, and releases require that matrix.
+
 - Workbench error handling now distinguishes typed client validation errors (400/413) and stale-state conflicts (409) from unexpected internal or CLI subprocess failures (500 `{code:"INTERNAL",message:"internal error"}`), and scrubs absolute local paths from all HTTP error responses (#53).
 
 - Fix `superseded_by` frontmatter validation throwing a `ReferenceError` and silently dropping the document from the catalog; surface per-file catalog build errors as `[warn]` lines in `holoself validate` and `holoself doctor` and under the additive `warnings` key in `holoself link doctor` JSON with root-relative paths (#52).
