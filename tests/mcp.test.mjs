@@ -62,7 +62,29 @@ test('MCP status and context preserve link authority without exposing absolute p
   assert.ok(direct.self.documents.some(doc=>doc.content.includes('MCP parity marker')))
   const mechanical=m.call(6,'holoself_context',{task:'format this JSON object: {"x":1}',budget:'small'}).result.structuredContent.data
   assert.equal(mechanical.status,'not-needed')
-  assert.equal(mechanical.self.documents.length,0)
+  assert.equal(mechanical.selection.need_reason,'matched:mechanical:format')
+  assert.equal(mechanical.context_receipt.need,'not-needed')
+  assert.equal(mechanical.context_receipt.need_reason,'matched:mechanical:format')
+  assert.ok(mechanical.self.documents.length>0)
+  assert.ok(mechanical.self.documents.every(doc=>doc.path.startsWith('profile/')))
+  const strictNotNeeded=m.call(61,'holoself_context',{task:'format this JSON object: {"x":1}',budget:'small',need:'not-needed'}).result.structuredContent.data
+  assert.equal(strictNotNeeded.status,'not-needed')
+  assert.equal(strictNotNeeded.selection.need_reason,'explicit')
+  assert.equal(strictNotNeeded.context_receipt.need,'not-needed')
+  assert.equal(strictNotNeeded.context_receipt.need_reason,'explicit')
+  assert.equal(strictNotNeeded.self.documents.length,0)
+  const forcedRequired=m.call(62,'holoself_context',{task:'format this JSON object: {"x":1}',budget:'small',need:'required'}).result.structuredContent.data
+  assert.equal(forcedRequired.status,'complete')
+  assert.equal(forcedRequired.selection.context_need,'required')
+  assert.equal(forcedRequired.selection.need_reason,'explicit')
+  assert.equal(forcedRequired.context_receipt.need,'required')
+  const forcedManifest=m.call(63,'holoself_context_manifest',{task:'format this JSON object: {"x":1}',budget:'small',need:'not-needed'}).result.structuredContent.data
+  assert.equal(forcedManifest.selection.context_need,'not-needed')
+  assert.equal(forcedManifest.selection.need_reason,'explicit')
+  assert.equal(forcedManifest.self.documents.length,0)
+  const badNeed=m.call(64,'holoself_context',{task:'format this JSON object: {"x":1}',need:'bogus'}).result
+  assert.equal(badNeed.isError,true)
+  assert.equal(badNeed.structuredContent.error.code,'INVALID_ARGUMENT')
   const escalated=m.call(7,'holoself_context_manifest',{lens:'private'}).result;assert.equal(escalated.isError,true);assert.match(escalated.structuredContent.error.message,/not granted/)
   for(const lens of ['/srv/private/self','\\\\server\\share\\private']){const shaped=m.call(8,'holoself_context_manifest',{lens}).result;assert.equal(shaped.isError,true);assert.doesNotMatch(shaped.structuredContent.error.message,/srv|server|share/)}
 })

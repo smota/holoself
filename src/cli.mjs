@@ -135,7 +135,7 @@ function help() {
       `list|show|validate|bind|unbind|bindings [id] [--root <self-root>]\n  link ` +
       `add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  link deactivate ` +
       `--project <dir> [--adapters all|<list>] [--dry-run|--yes]\n  link skill migrate-global --project <dir> ` +
-      `[--skill-home <dir>] [--dry-run|--yes]\n  context [--project <dir>] [--lens <lens>] [--task <text>] ` +
+      `[--skill-home <dir>] [--dry-run|--yes]\n  context [--project <dir>] [--lens <lens>] [--task <text>] [--need required|helpful|not-needed] ` +
       `[--session-start] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  analyze ` +
       `overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n` +
       `  proposals list|audit --project <dir>\n  proposals show|approve|reject|defer|supersede <id> --project <dir>\n` +

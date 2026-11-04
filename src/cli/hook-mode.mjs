@@ -30,7 +30,7 @@ export function hookContext(o, env = process.env) {
   if (o.hook !== HOOK_ID) throw refuse('HOOK_ID_UNKNOWN', `unknown hook id: ${o.hook}`)
   const project = hookProject(o, env)
   if (!project) throw refuse('HOOK_PROJECT_REQUIRED', 'hook mode requires --project or an absolute CLAUDE_PROJECT_DIR')
-  if (o.output || o.snapshot || o.json || o.task || o.manifest || o.cursor || o.sources?.length || o.restrictedHost)
+  if (o.output || o.snapshot || o.json || o.task || o.need || o.manifest || o.cursor || o.sources?.length || o.restrictedHost)
     throw refuse('HOOK_OPTION_REFUSED', 'hook mode emits only the live session-start packet')
   if (o.format && o.format !== 'packet') throw refuse('HOOK_OPTION_REFUSED', 'hook mode emits only the packet format')
   const options = { ...o, project, sessionStart: true, envelopeCapBytes: HOOK_PACKET_MAX_BYTES },
