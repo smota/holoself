@@ -35,7 +35,10 @@ const bin = join(repo, 'bin', 'holoself.mjs')
 const meta = (lenses, extra = '') => `---\naccess_lenses: [${lenses.join(', ')}]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n${extra}---\n`
 
 export async function buildParityFixture({ baseDir = tmpdir() } = {}) {
-  const root = await mkdtemp(join(baseDir, 'holoself-parity-'))
+  // Canonical (realpath) spelling: child processes report process.cwd() resolved, so a symlinked
+  // TMPDIR (macOS /var -> /private/var) would otherwise make --root and cwd spell the self root
+  // differently and change owner-direct output (the "No project link found" warning).
+  const root = realpathSync(await mkdtemp(join(baseDir, 'holoself-parity-')))
   const self = join(root, 'self'), project = join(root, 'project'), home = join(root, 'home')
   await Promise.all([self, project, home].map(path => mkdir(path)))
   const env = cleanEnv(home)
