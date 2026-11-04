@@ -2,7 +2,7 @@
 import { ENVELOPE_BYTE_CAPS, buildCursor, contradictionDigest, estimateTokens, selectionReceipt } from '../context-selection.mjs'
 import { mcpToolEnvelope, packetFormat } from '../render/packet.mjs'
 import { groupRestrictions, withoutPrivatePaths } from './projection.mjs'
-import { resolvedContextAssertions } from './records.mjs'
+import { buildReceiptPolicySources, resolvedContextAssertions } from './records.mjs'
 
 export function fitEnvelope(
   o,
@@ -78,7 +78,8 @@ export function fitEnvelope(
       ...result.context_receipt,
       context_hash: receipt.context_hash,
       source_ids: receipt.source_ids,
-      source_hashes: receipt.source_hashes
+      source_hashes: receipt.source_hashes,
+      ...(!isLinked && !isMcp ? { policy_sources: buildReceiptPolicySources(records) } : {})
     }
     const chars = records.reduce((sum, r) => sum + (r.content?.length || 0), 0)
     Object.assign(result.selection, {

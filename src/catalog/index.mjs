@@ -28,7 +28,8 @@ export function buildIndex(project, changed = false) {
   const input_state_hash = hash(
     canonicalJson({
       self: result.self.sources.map(s => [s.file, s.source_text_hash]),
-      project: (result.project?.sources || []).map(s => [s.file, s.source_text_hash])
+      project: (result.project?.sources || []).map(s => [s.file, s.source_text_hash]),
+      ...(result.self.policy_files?.length ? { policy_files: result.self.policy_files.map(p => [p.file, p.sha256]) } : {})
     })
   )
   return {

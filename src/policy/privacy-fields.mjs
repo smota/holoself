@@ -82,6 +82,12 @@ export function canonicalPrivacyMetadataErrors(metadata, registry = null) {
     if (from > until) errors.push('valid_from must not be after valid_until')
   }
   if (metadata.knowledge_status === 'superseded' && !metadata.superseded_by) errors.push('superseded knowledge must name superseded_by')
+  if (
+    (metadata.sensitivity === 'restricted' || metadata.read_scope === 'restricted') &&
+    Array.isArray(metadata.access_lenses) &&
+    metadata.access_lenses.some(lens => lens !== 'private')
+  )
+    errors.push('restricted sensitivity or read_scope cannot grant access_lenses beyond private')
   return [...new Set(errors)]
 }
 export function restrictPrivacyMetadata(metadata) {

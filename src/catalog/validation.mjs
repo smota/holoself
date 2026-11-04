@@ -8,6 +8,7 @@ import { canonicalFiles, markdownFiles, projectMarkdownFiles } from '../markdown
 import { CLAIM_MARKER_RE, claimMarkerProblems, normalize, parseClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { canonicalClaims } from '../markdown/text.mjs'
 import { canonicalPath, samePath } from '../path-guard.mjs'
+import { discoverPolicyFiles, resolveDocumentPolicy } from '../policy/policy-defaults.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
 import { readProposal } from '../proposals/store.mjs'
 import { slash } from '../shared/fs.mjs'
@@ -34,7 +35,12 @@ export function catalogBuildWarnings(root, project = null) {
       if (built?.error) warnings.push(redactRootPaths(built.error, [base, root, project]))
     }
   }
-  if (existsSync(root) && rootRegistry) scanFiles(root, canonicalFiles(root, { includeHistory: true }), 'canonical', rootRegistry, false)
+  if (existsSync(root) && rootRegistry) {
+    for (const p of discoverPolicyFiles(root, rootRegistry)) {
+      if (!p.valid && p.error) warnings.push(redactRootPaths(p.error, [root, project]))
+    }
+    scanFiles(root, canonicalFiles(root, { includeHistory: true }), 'canonical', rootRegistry, false)
+  }
   if (project && existsSync(project) && !samePath(canonicalPath(project), canonicalPath(root))) {
     try {
       const link = readLink(project, { tolerant: true }),
@@ -64,9 +70,19 @@ export function ecosystemValidationErrors(root, project = null) {
       } catch (error) {
         errors.push(`${error.message}: ${rel}`)
       }
+      const isCanonicalPolicyDir = /^(?:profile|context|topics|history|reference)\//.test(rel)
+      const resolved = isCanonicalPolicyDir ? resolveDocumentPolicy(path, base, metadata, registry) : null
+      if (resolved?.policyErrors?.length) {
+        for (const pErr of resolved.policyErrors) {
+          const redacted = redactRootPaths(pErr, [base, root, project])
+          if (!errors.includes(redacted)) errors.push(redacted)
+        }
+      }
+      const effectiveMetadata = resolved ? resolved.effectiveMetadata : metadata
       const canonicalContent = /^(?:profile|context|topics)\//.test(rel)
-      if (canonicalContent) for (const error of canonicalPrivacyMetadataErrors(metadata, registry)) errors.push(`${error}: ${rel}`)
-      if (metadata.visibility && !VISIBILITIES.includes(metadata.visibility)) errors.push(`invalid visibility ${metadata.visibility}: ${rel}`)
+      if (canonicalContent) for (const error of canonicalPrivacyMetadataErrors(effectiveMetadata, registry)) errors.push(`${error}: ${rel}`)
+      if (effectiveMetadata.visibility && !VISIBILITIES.includes(effectiveMetadata.visibility))
+        errors.push(`invalid visibility ${effectiveMetadata.visibility}: ${rel}`)
       if (metadata.field_visibility !== undefined && (typeof metadata.field_visibility !== 'object' || Array.isArray(metadata.field_visibility)))
         errors.push(`field_visibility must be a mapping: ${rel}`)
       else
@@ -101,7 +117,12 @@ export function ecosystemValidationErrors(root, project = null) {
       }
     }
   }
-  if (existsSync(root) && rootRegistry) checkMarkdown(root)
+  if (existsSync(root) && rootRegistry) {
+    for (const p of discoverPolicyFiles(root, rootRegistry)) {
+      if (!p.valid && p.error) errors.push(redactRootPaths(p.error, [root, project]))
+    }
+    checkMarkdown(root)
+  }
   const proposalRoots = [join(root, 'proposals')]
   if (project) {
     try {
@@ -147,4 +168,33 @@ export function ecosystemValidationErrors(root, project = null) {
     walk(base)
   }
   return errors
+}
+export function policyProvenanceSummary(root) {
+  if (!root || !existsSync(root)) return []
+  let registry = null
+  try {
+    registry = loadLensRegistry(root)
+  } catch {
+    return []
+  }
+  const policies = discoverPolicyFiles(root, registry)
+  if (policies.length === 0) return []
+  const lines = []
+  for (const path of markdownFiles(root)) {
+    const rel = slash(relative(root, path))
+    if (!/^(?:profile|context|topics|history|reference)\//.test(rel)) continue
+    let metadata = {}
+    try {
+      metadata = frontmatter(readFileSync(path, 'utf8'), { registry }).metadata
+    } catch {
+      continue
+    }
+    const resolved = resolveDocumentPolicy(path, root, metadata, registry)
+    const entries = Object.entries(resolved.policySources || {})
+    if (entries.some(([field, src]) => src.startsWith('policy:') || field === 'policy_skipped')) {
+      const formatted = entries.map(([field, src]) => `${field}=${src}`).join(', ')
+      lines.push(`[policy] ${rel}: ${formatted}`)
+    }
+  }
+  return lines
 }

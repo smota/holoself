@@ -67,3 +67,24 @@ Document, claim and field access rules apply to every lens. Documents tagged wit
 Legacy `visibility`, `public_safe`, `exclude_lenses`, and `field_visibility` remain readable. Canonical documents need modern controls or valid legacy visibility. `knowledge migrate-lenses` previews exact conversion from `career` to `professional` and `publishing` to `public-voice`, including claim markers. Ordinary prose and proposal archives remain intact. See [CLI](../reference/cli.md) and [migration](../guides/migration.md).
 
 > 2026-11-04: `visibility`, `public_safe` and `field_visibility` are deprecated in favour of `access_lenses`, `read_scope`, `disclosure` and lens-based field and claim rules, with an exact non-widening mapping. See [privacy fields and the legacy live mount](../decisions/privacy-fields-and-legacy-mount.md).
+
+### Directory policy defaults (`_policy.yaml`)
+
+You can place a `_policy.yaml` file in the self root or any canonical directory (`profile/`, `context/`, `history/`, `topics/`, `reference/`, and their subdirectories) so every Markdown document in that subtree inherits privacy and lifecycle defaults without repeating frontmatter on each file:
+
+```yaml
+access_lenses: [professional, technical, private]
+disclosure: review-required
+sensitivity: personal
+document_role: content
+read_scope: shared
+```
+
+Resolution and rules:
+
+- **Nearest-first inheritance with field replacement**: Holoself walks from the self root down to the document's directory (never above the self root). A nested `_policy.yaml` replaces—rather than merges—individual fields from ancestor `_policy.yaml` files while keeping any ancestor fields it does not set. The document's own YAML frontmatter overrides inherited policy defaults field by field, allowing explicit per-file narrowing or widening (for example, setting `exclude_lenses: []` in a document's frontmatter clears an inherited policy exclusion).
+- **Legacy visibility opt-out**: When a document's own frontmatter declares legacy `visibility` or `public_safe` fields, Holoself applies no directory policy defaults to that document at all (matching `holoself migrate policy`) so legacy visibility scopes cannot be widened by directory defaults. Owner-facing provenance outputs record `policy_skipped: legacy-visibility`. A document that sets only `public_safe` therefore gets no defaults and stays excluded until it declares the required fields itself; remove the legacy field to inherit the directory policy. `holoself migrate policy` evaluates its non-amplification gate on this effective metadata before and after the edit, and writes all four required fields plus `read_scope` into every document it migrates, so removing legacy `visibility` later cannot widen a migrated document through inherited defaults.
+- **Allowed default keys**: `access_lenses`, `exclude_lenses`, `disclosure`, `sensitivity`, `document_role`, `read_scope`, `task_include`, `task_exclude`, `confidence`, `knowledge_status` (`current` or `historical`), and `temporal_scope`. Document-specific fields (`superseded_by`, `supersedes`, `valid_from`, `valid_until`, `review_after`, `field_visibility`) and legacy fields (`visibility`, `public_safe`) are rejected in `_policy.yaml`. See [`schemas/policy-defaults.schema.json`](../../schemas/policy-defaults.schema.json).
+- **No restricted widening**: Neither a `_policy.yaml` file nor effective document metadata may combine `sensitivity: restricted` or `read_scope: restricted` with any lens other than `private`, or combine `disclosure: publish-approved` with a confidential or restricted sensitivity.
+- **Fail-closed validation**: If any `_policy.yaml` in a document's ancestor chain is unreadable, malformed, symlinked, or contains unknown or invalid keys, no defaults are applied to documents under that directory. Those documents keep only their own frontmatter (so files lacking complete frontmatter are excluded as missing metadata), and `holoself validate` reports the relative `_policy.yaml` path.
+- **Provenance and catalog freshness**: Each effective field records its source (`frontmatter` or `policy:<relative-path>`) in `catalog.json` (`policy_sources`), `holoself validate`, the Workbench document editor, and owner-direct `context_receipt.policy_sources`. Linked callers never receive `policy_sources`. Adding, editing, or removing a `_policy.yaml` file automatically invalidates affected catalog entries, and `_policy.yaml` itself is never indexed or delivered as content.
