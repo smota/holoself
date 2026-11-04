@@ -1,7 +1,20 @@
 import { existsSync, lstatSync, readFileSync, rmSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { VERSION } from './version.mjs'
-import { LINK_START, LINK_END, auditInstructions, bootstrapText, canonicalSection, instructionEvidence, overlaySection } from './instructions.mjs'
+import {
+  HARVEST_PROMPT_NAME,
+  HARVEST_PROMPT_TEXT,
+  HARVEST_PROMPT_VERSION,
+  LINK_START,
+  LINK_END,
+  auditInstructions,
+  bootstrapText,
+  canonicalSection,
+  harvestPromptText,
+  instructionEvidence,
+  overlaySection,
+  validateHarvestPromptArgs
+} from './instructions.mjs'
 import {
   HISTORICAL_LINKED_PREFIX,
   HISTORICAL_PUBLIC_FRONTMATTER,
@@ -45,7 +58,17 @@ export { globalSkillStatus, installGlobalSkills } from './adapters/global-skills
 export { injectMarker, managedMarkerState, removeMarker } from './adapters/markers.mjs'
 export { detectAdapters, safeProjectFile } from './adapters/registry.mjs'
 
-export { LINK_START, LINK_END, auditInstructions, bootstrapText }
+export {
+  HARVEST_PROMPT_NAME,
+  HARVEST_PROMPT_TEXT,
+  HARVEST_PROMPT_VERSION,
+  LINK_START,
+  LINK_END,
+  auditInstructions,
+  bootstrapText,
+  harvestPromptText,
+  validateHarvestPromptArgs
+}
 if (!PUBLIC_SKILL.startsWith('---\n') || frontmatterEnd < 6) throw new Error('public Holoself skill has invalid frontmatter')
 export function activationPlan(project, options = {}) {
   if (options.installSkill && !['auto', 'project', 'global', 'none'].includes(options.installSkill))

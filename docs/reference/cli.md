@@ -58,7 +58,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `knowledge cleanup` | `--root`, `--data-root`, `--data-dir`, `--output`, `--dry-run`, `--apply`, `--digest`, `--preview-hash`, `--yes`, `--confirm`, `--json` |
 | `instructions` | `--project`, `--target`, `--json` |
 | `instructions audit` | `--project`, `--target`, `--json` |
-| `instructions render` | `--project`, `--target`, `--adapter`, `--json` |
+| `instructions render` | `--project`, `--target`, `--adapter`, `--harvest`, `--focus`, `--json` |
 | `skill status` | `--scope`, `--platform`, `--skill-home`, `--json` |
 | `skill install` | `--scope`, `--platform`, `--skill-home`, `--force`, `--dry-run`, `--yes`, `--confirm`, `--json` |
 | `lens list` | `--root`, `--data-root`, `--data-dir`, `--json` |
@@ -162,7 +162,7 @@ search <query> --project <dir> [--lens <lens>]
 mcp configure --project <dir> [--platform codex|agy|claude | --all-detected] [--force-replace] [--dry-run] [--yes]
 mcp status --project <dir> [--platform codex|agy|claude]
 mcp [--project <dir>]
-instructions render|audit --project <dir> [--adapter generic] [--json]
+instructions render|audit --project <dir> [--adapter generic] [--harvest [--focus <text>]] [--json]
 knowledge migrate-lenses --root <self-root> [--output <plan.json>]
 knowledge transform --root <self-root> --replacements <changes.json> [--output <plan.json>]
 knowledge migrate-lenses|transform --root <self-root> --apply <plan.json> --digest <sha256> --yes

@@ -14,6 +14,7 @@ import {
   VISIBILITIES
 } from './ecosystem.mjs'
 import { readLink } from './link/config.mjs'
+import { HARVEST_PROMPT_NAME, HARVEST_PROMPT_TEXT, HARVEST_PROMPT_VERSION, harvestPromptText, validateHarvestPromptArgs } from './instructions.mjs'
 import { recordServedPacket } from './ledger.mjs'
 import { createToolPool } from './mcp-pool.mjs'
 import { AUDIT_LOG_MAX_BYTES, appendAuditLine } from './shared/audit-log.mjs'
@@ -165,6 +166,21 @@ export const MCP_TOOLS = [
   }
 ]
 
+export const MCP_PROMPTS = [
+  {
+    name: HARVEST_PROMPT_NAME,
+    title: 'Holoself session harvest',
+    description: 'Review the session and draft 0–3 evidence-backed pending proposals without writing canonical self.',
+    arguments: [
+      {
+        name: 'focus',
+        description: 'Optional topic or area to focus on when reviewing the session (at most 200 characters).',
+        required: false
+      }
+    ]
+  }
+]
+
 function fail(message, code = 'INVALID_ARGUMENT') {
   const error = new Error(message)
   error.code = code
@@ -242,6 +258,30 @@ function validateToolCall(name, args) {
   const tool = MCP_TOOLS.find(item => item.name === name)
   if (!tool) fail(`unknown tool: ${name}`, 'TOOL_NOT_FOUND')
   validateObject(args || {}, tool.inputSchema)
+}
+function validatePromptRequest(params) {
+  if (!params || Array.isArray(params) || typeof params !== 'object') fail('params must be an object', 'INVALID_ARGUMENT')
+  for (const key of Object.keys(params)) {
+    if (!['name', 'arguments', '_meta'].includes(key)) fail(`params.${key} is not allowed`, 'INVALID_ARGUMENT')
+  }
+  if (typeof params.name !== 'string' || !params.name) fail('params.name must be a non-empty string', 'INVALID_ARGUMENT')
+}
+function getPrompt(name, args) {
+  const prompt = MCP_PROMPTS.find(item => item.name === name)
+  if (!prompt) fail(`unknown prompt: ${name}`, 'PROMPT_NOT_FOUND')
+  const text = harvestPromptText(args === undefined ? {} : args)
+  return {
+    description: prompt.description,
+    messages: [
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text
+        }
+      }
+    ]
+  }
 }
 function invokeTool(project, name, args) {
   if (name === `${TOOL_PREFIX}status`) return holoselfMcpStatus(project)
@@ -323,6 +363,11 @@ function auditToolCall(log, name, result) {
   const tool = MCP_TOOLS.some(item => item.name === name) ? name : 'unknown',
     error_code = result.isError ? result.structuredContent?.error?.code || 'HOLOSELF_ERROR' : null
   log({ at: new Date().toISOString(), event: 'tools/call', tool, ok: !result.isError, error_code })
+}
+function auditPromptGet(log, rawName, error = null) {
+  const prompt = MCP_PROMPTS.some(item => item.name === rawName) ? rawName : 'unknown',
+    error_code = error ? error.code || 'HOLOSELF_ERROR' : null
+  log({ at: new Date().toISOString(), event: 'prompts/get', prompt, name: prompt, ok: !error, error_code })
 }
 
 // Without `pool`, tool calls run inline and each response is written before accept() returns (library and test
@@ -445,7 +490,7 @@ export function createMcpSession({
         initialized = true
         result = {
           protocolVersion,
-          capabilities: { tools: { listChanged: false } },
+          capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } },
           serverInfo: { name: 'holoself', title: 'Holoself local context', version: VERSION },
           instructions:
             'Use Holoself only when personal context can materially improve the task. The fixed project link controls ' +
@@ -455,7 +500,20 @@ export function createMcpSession({
         }
       } else if (request.method === 'ping') result = {}
       else if (!initialized) throw Object.assign(new Error('Server is not initialized'), { rpcCode: -32002 })
-      else if (request.method === 'tools/list') {
+      else if (request.method === 'prompts/list') {
+        result = { prompts: MCP_PROMPTS }
+        log({ at: new Date().toISOString(), event: 'prompts/list', prompts: MCP_PROMPTS.length })
+      } else if (request.method === 'prompts/get') {
+        try {
+          validatePromptRequest(request.params)
+          result = getPrompt(request.params.name, request.params.arguments)
+          auditPromptGet(log, request.params.name, null)
+        } catch (error) {
+          auditPromptGet(log, request.params?.name, error)
+          write(JSON.stringify(response(request.id, null, protocolError(-32602, safeErrorMessage(error), { code: error.code || 'INVALID_ARGUMENT' }))))
+          return
+        }
+      } else if (request.method === 'tools/list') {
         result = { tools: MCP_TOOLS }
         log({ at: new Date().toISOString(), event: 'tools/list', tools: MCP_TOOLS.length })
       } else if (request.method === 'tools/call') {
@@ -540,4 +598,4 @@ export async function startMcpServer({ project: projectInput, requireClaudeProje
   }
 }
 
-export { resolveBoundProject }
+export { HARVEST_PROMPT_NAME, HARVEST_PROMPT_TEXT, HARVEST_PROMPT_VERSION, harvestPromptText, resolveBoundProject, validateHarvestPromptArgs }
