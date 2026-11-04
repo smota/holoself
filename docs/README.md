@@ -74,6 +74,7 @@ Install `holoself-ai` from npm to use the `holoself` package bin on `PATH`. `nod
 - [Unlinked client identity for MCP clients without a project](decisions/unlinked-client-identity.md)
 - [External public skill deployments](decisions/external-skill-deployments.md)
 - [Link adapter scope for repair and deactivation](decisions/link-adapter-scope.md)
+- [Privacy fields consolidation and legacy live mount retirement](decisions/privacy-fields-and-legacy-mount.md)
 - [ADR E01: Evidence ownership, storage and retention](decisions/evidence-01-ownership.md)
 - [ADR E02: Identity, revisions, block coverage and fidelity](decisions/evidence-02-identity-fidelity.md)
 - [ADR E03: Explicit evidence retrieval and revocation](decisions/evidence-03-authorization.md)

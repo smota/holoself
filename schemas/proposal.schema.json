@@ -119,22 +119,28 @@
           "target",
           "operation",
           "proposal_type",
-          "claim",
-          "evidence",
-          "confidence",
-          "visibility"
+          "evidence"
         ],
         "properties": {
           "change_id": {
             "type": "string",
-            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*$"
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
           },
           "target": {
             "type": "string",
             "pattern": "^(?:profile|context|reference|contribs|topics)/.+\\.md$"
           },
           "operation": {
-            "const": "append_claim"
+            "enum": [
+              "append_claim",
+              "replace_claim",
+              "supersede_claim",
+              "retire_claim"
+            ]
+          },
+          "claim_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
           },
           "proposal_type": {
             "enum": [
@@ -152,6 +158,11 @@
           "claim": {
             "type": "string",
             "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\r\\n]+$"
           },
           "evidence": {
             "type": "string",
@@ -172,7 +183,85 @@
               "publishing"
             ]
           }
-        }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "operation": {
+                "const": "append_claim"
+              }
+            },
+            "required": [
+              "claim",
+              "confidence",
+              "visibility"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "claim_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "reason"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "operation": {
+                "enum": [
+                  "replace_claim",
+                  "supersede_claim"
+                ]
+              }
+            },
+            "required": [
+              "claim_id",
+              "claim",
+              "confidence"
+            ],
+            "not": {
+              "required": [
+                "reason"
+              ]
+            }
+          },
+          {
+            "properties": {
+              "operation": {
+                "const": "retire_claim"
+              }
+            },
+            "required": [
+              "claim_id",
+              "reason"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "claim"
+                  ]
+                },
+                {
+                  "required": [
+                    "confidence"
+                  ]
+                },
+                {
+                  "required": [
+                    "visibility"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
       }
     }
   },

@@ -34,8 +34,8 @@ export const ALLOWED_SOURCE_KEYS = new Set([
   'estimated_tokens'
 ])
 export const ALLOWED_SOURCE_REF_KEYS = new Set(['space_id', 'source_id', 'revision', 'section_id'])
-export const ALLOWED_SECTION_KEYS = new Set(['section_id', 'heading', 'visibility', 'disclosure', 'claim', 'snippet'])
-export const ALLOWED_CLAIM_KEYS = new Set(['text', 'visibility'])
+export const ALLOWED_SECTION_KEYS = new Set(['section_id', 'heading', 'visibility', 'disclosure', 'claim', 'claim_status', 'snippet'])
+export const ALLOWED_CLAIM_KEYS = new Set(['text', 'visibility', 'claim_status'])
 export const ALLOWED_TAG_KEYS = new Set(['value', 'visibility'])
 export const ALLOWED_LINK_KEYS = new Set(['value', 'visibility'])
 export const ALLOWED_FRONTMATTER_KEYS = new Set([
@@ -168,6 +168,8 @@ export function validateCatalogSchema(catalog) {
           if (typeof sec.disclosure !== 'string' || !DISCLOSURES.includes(sec.disclosure))
             errors.push(`${sp}.disclosure must be one of: ${DISCLOSURES.join(', ')}`)
           if (typeof sec.claim !== 'boolean') errors.push(`${sp}.claim must be a boolean`)
+          if (sec.claim_status !== undefined && !['superseded', 'historical'].includes(sec.claim_status))
+            errors.push(`${sp}.claim_status must be one of: superseded, historical`)
           if (typeof sec.snippet !== 'string') errors.push(`${sp}.snippet must be a string`)
         }
       }
@@ -185,6 +187,8 @@ export function validateCatalogSchema(catalog) {
             if (!ALLOWED_CLAIM_KEYS.has(k)) errors.push(`${cp} unknown property: ${k}`)
           }
           if (typeof cl.text !== 'string') errors.push(`${cp}.text must be a string`)
+          if (cl.claim_status !== undefined && !['superseded', 'historical'].includes(cl.claim_status))
+            errors.push(`${cp}.claim_status must be one of: superseded, historical`)
           if (typeof cl.visibility !== 'string' || !VISIBILITIES.includes(cl.visibility))
             errors.push(`${cp}.visibility must be one of: ${VISIBILITIES.join(', ')}`)
         }

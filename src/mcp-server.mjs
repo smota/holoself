@@ -9,6 +9,7 @@ import {
   holoselfMcpSearch,
   holoselfMcpStatus,
   mcpToolEnvelope,
+  PROPOSAL_OPERATIONS,
   PROPOSAL_TYPES,
   VISIBILITIES
 } from './ecosystem.mjs'
@@ -123,18 +124,33 @@ export const MCP_TOOLS = [
   {
     name: `${TOOL_PREFIX}proposal_create`,
     title: 'Create Holoself proposal',
-    description: 'Create a project-local pending proposal backed by contained project evidence. It never writes canonical self.',
+    description:
+      'Create a project-local pending proposal backed by contained project evidence. It never writes canonical self. ' +
+      'operation append_claim (default) adds a claim; replace_claim, supersede_claim and retire_claim target an existing ' +
+      'claim by the claim_id shown in delivered context and require evidence.',
     inputSchema: objectSchema(
       {
-        claim: { type: 'string', minLength: 1, maxLength: 4000 },
+        operation: {
+          type: 'string',
+          enum: PROPOSAL_OPERATIONS,
+          default: 'append_claim',
+          description: 'append_claim and the claim operations replace_claim, supersede_claim (keeps the old claim as history) and retire_claim (marks it historical).'
+        },
+        claim: { type: 'string', minLength: 1, maxLength: 4000, description: 'Claim wording; required except for retire_claim.' },
+        claim_id: {
+          type: 'string',
+          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          description: 'Id of the existing claim (the id= attribute of a holoself-claim block in delivered context); required for replace_claim, supersede_claim and retire_claim.'
+        },
+        reason: { type: 'string', minLength: 1, maxLength: 500, pattern: '^[^\\r\\n]+$', description: 'Single-line retirement reason; required for retire_claim.' },
         evidence: { type: 'string', minLength: 1, maxLength: 4000 },
         source_files: { type: 'array', minItems: 1, maxItems: 8, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 500 } },
         target: { type: 'string', minLength: 1, maxLength: 500, default: 'context/claims.md' },
-        proposal_type: { type: 'string', enum: PROPOSAL_TYPES, default: 'new_fact' },
+        proposal_type: { type: 'string', enum: PROPOSAL_TYPES },
         confidence: { type: 'string', minLength: 1, maxLength: 120, default: 'unverified' },
-        visibility: { type: 'string', enum: VISIBILITIES, default: 'private' }
+        visibility: { type: 'string', enum: VISIBILITIES }
       },
-      ['claim', 'source_files']
+      ['source_files']
     ),
     outputSchema: resultSchema,
     annotations: { title: 'Create Holoself proposal', readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }

@@ -66,6 +66,8 @@ Document, claim and field access rules apply to every lens. Documents tagged wit
 
 Legacy `visibility`, `public_safe`, `exclude_lenses`, and `field_visibility` remain readable. Canonical documents need modern controls or valid legacy visibility. `knowledge migrate-lenses` previews exact conversion from `career` to `professional` and `publishing` to `public-voice`, including claim markers. Ordinary prose and proposal archives remain intact. See [CLI](../reference/cli.md) and [migration](../guides/migration.md).
 
+> 2026-11-04: `visibility`, `public_safe` and `field_visibility` are deprecated in favour of `access_lenses`, `read_scope`, `disclosure` and lens-based field and claim rules, with an exact non-widening mapping. See [privacy fields and the legacy live mount](../decisions/privacy-fields-and-legacy-mount.md).
+
 ### Directory policy defaults (`_policy.yaml`)
 
 You can place a `_policy.yaml` file in the self root or any canonical directory (`profile/`, `context/`, `history/`, `topics/`, `reference/`, and their subdirectories) so every Markdown document in that subtree inherits privacy and lifecycle defaults without repeating frontmatter on each file:
