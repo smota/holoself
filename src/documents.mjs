@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { validateAnnotationMetadata } from './annotations.mjs'
+import { assertNoLinkBelow } from './path-guard.mjs'
 
 const ROOTS = new Set(['profile','context','topics','reference','me','contribs','history'])
 const hash = value => createHash('sha256').update(value).digest('hex')
@@ -14,8 +15,7 @@ function safe(root, name, { missing=false }={}) {
   if (typeof name !== 'string' || !name.endsWith('.md')) throw new Error('document path must be a Markdown file')
   const base=resolve(root), path=resolve(base,name), rel=relative(base,path)
   if (!rel || rel.startsWith('..'+sep) || rel==='..' || !ROOTS.has(rel.split(sep)[0]) || (rel.split(sep)[0]==='contribs'&&rel.split(sep)[1]!=='local')) throw new Error('document path escapes editable knowledge')
-  let cursor=base
-  for(const part of rel.split(sep)){ cursor=join(cursor,part); if(existsSync(cursor)&&lstatSync(cursor).isSymbolicLink()) throw new Error('document path contains a symlink') }
+  assertNoLinkBelow(base,path,()=>new Error('document path contains a symlink'))
   if(!missing && (!existsSync(path)||!lstatSync(path).isFile())) throw new Error('document not found')
   return {path,relative:rel.replaceAll('\\','/')}
 }

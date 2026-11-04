@@ -2,6 +2,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 import { holoselfMcpStatus } from './ecosystem.mjs'
+import { assertNoLinkBelow } from './path-guard.mjs'
 
 const PLATFORMS=['codex','agy','claude']
 const START='# holoself-mcp-managed-start'
@@ -14,7 +15,7 @@ function safeConfigPath(project,path){
   const boundary=resolve(project),target=resolve(path),rel=relative(boundary,target)
   if(!existsSync(boundary)||lstatSync(boundary).isSymbolicLink()||!lstatSync(boundary).isDirectory())throw new Error('MCP project must be a safe local directory')
   if(rel.startsWith('..')||isAbsolute(rel))throw new Error('MCP configuration path escapes project')
-  let current=target;while(current!==boundary){if(existsSync(current)&&lstatSync(current).isSymbolicLink())throw new Error(`MCP configuration path traverses a symlink: ${current}`);current=dirname(current)}
+  assertNoLinkBelow(boundary,target,link=>new Error(`MCP configuration path traverses a symlink: ${link}`))
   return target
 }
 function safeFile(path){if(!existsSync(path))return '';if(lstatSync(path).isSymbolicLink()||!lstatSync(path).isFile())throw new Error(`${path} is not a safe regular file`);return readFileSync(path,'utf8')}

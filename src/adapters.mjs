@@ -1,9 +1,10 @@
 import { inspectSkillFile } from './skill-paths.mjs'
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { VERSION } from './version.mjs'
+import { assertNoLinkBelow } from './path-guard.mjs'
 import { LINK_START, LINK_END, auditInstructions, bootstrapText, canonicalSection, instructionEvidence, instructionHash, instructionHashMatches, overlaySection } from './instructions.mjs'
 
 export { LINK_START, LINK_END, auditInstructions, bootstrapText }
@@ -76,7 +77,8 @@ export function safeProjectFile(project,rel,label='managed path'){
   const lexicalRoot=resolve(project),target=resolve(lexicalRoot,rel);if(!contained(lexicalRoot,target))throw new Error(`${label} escapes project: ${rel}`)
   const rootReal=realpathSync(lexicalRoot);let current=target
   const chain=[];while(current!==lexicalRoot){chain.push(current);current=dirname(current)}
-  for(const item of chain.reverse()){if(!pathExists(item))continue;const stat=lstatSync(item);if(stat.isSymbolicLink())throw new Error(`${label} traverses symlink: ${item}`);const actual=realpathSync(item);if(!contained(rootReal,actual))throw new Error(`${label} escapes real project root: ${item}`)}
+  assertNoLinkBelow(lexicalRoot,target,link=>new Error(`${label} traverses symlink: ${link}`))
+  for(const item of chain.reverse()){if(!pathExists(item))continue;const actual=realpathSync(item);if(!contained(rootReal,actual))throw new Error(`${label} escapes real project root: ${item}`)}
   return target
 }
 function evidence(project,adapter){return adapter.files.some(f=>existsSync(safeProjectFile(project,f,'adapter evidence')))||adapter.dirs.some(d=>existsSync(safeProjectFile(project,d,'adapter evidence')))}
@@ -87,8 +89,7 @@ function skillHome(options={}){return resolve(options.skillHome||process.env.HOL
 function safeUserSkillFile(home,rel,label='user skill path'){
   if(typeof rel!=='string'||!rel.trim()||isAbsolute(rel))throw new Error(`${label} must be relative to the user skill home: ${rel}`)
   const root=resolve(home),target=resolve(root,rel);if(!contained(root,target))throw new Error(`${label} escapes user skill home: ${rel}`)
-  let current=target;const chain=[];while(current!==root){chain.push(current);current=dirname(current)}
-  for(const item of chain.reverse()){if(!pathExists(item))continue;const stat=lstatSync(item);if(stat.isSymbolicLink())throw new Error(`${label} traverses symlink: ${item}`)}
+  assertNoLinkBelow(root,target,link=>new Error(`${label} traverses symlink: ${link}`))
   return target
 }
 function userSkillTargets(ids,options={}){
@@ -97,7 +98,9 @@ function userSkillTargets(ids,options={}){
   for(const adapter of REGISTRY.filter(a=>wanted.has(a.id)))for(const dir of adapter.userSkillDirs||[])targets.push({id:adapter.id,file:slash(join(dir,'SKILL.md')),path:resolve(home,dir,'SKILL.md')})
   return targets
 }
-function instructionIdentity(project,rel){let path;try{path=safeProjectFile(project,rel,'instruction identity')}catch{const unsafe=resolve(project,rel);return `unsafe:${process.platform==='win32'?unsafe.toLowerCase():unsafe}`}const identity=existsSync(path)?realpathSync(path):resolve(path);return process.platform==='win32'?identity.toLowerCase():identity}
+// Existing files are identified by device and inode, so case aliases on a
+// case-insensitive filesystem (macOS APFS) or hard links collapse to one file.
+function instructionIdentity(project,rel){let path;try{path=safeProjectFile(project,rel,'instruction identity')}catch{const unsafe=resolve(project,rel);return `unsafe:${process.platform==='win32'?unsafe.toLowerCase():unsafe}`}if(process.platform!=='win32'&&existsSync(path)){const info=statSync(path,{bigint:true});return `inode:${info.dev}:${info.ino}`}const identity=existsSync(path)?realpathSync(path):resolve(path);return process.platform==='win32'?identity.toLowerCase():identity}
 function uniqueInstructionFiles(project,items){const seen=new Set(),result=[];for(const item of items){const identity=instructionIdentity(project,item);if(seen.has(identity))continue;seen.add(identity);result.push(item)}return result}
 export function activationPlan(project,options={}){
   if(options.installSkill&&!['auto','project','global','none'].includes(options.installSkill))throw new Error(`invalid --install-skill value: ${options.installSkill}`)
@@ -196,7 +199,7 @@ function deactivateAdapters(project,ids,options={}){
   if(!remaining.length)return [...deactivateProject(project,{...options,adapters:null}),...ids.filter(id=>!active.includes(id)).map(adapter=>({adapter,file:null,result:'not-active'}))]
   if(selected.includes('agents'))throw new Error(`deactivation preflight failed: agents is required by ${remaining.join(', ')}; deactivate them too or use --adapters all`)
   const recorded=runtime?.activatedAdapters||[],installations=runtime?.skillInstallations||runtime?.skillShims||[]
-  const instructionFiles=selected.flatMap(adapter=>{const file=recorded.find(x=>x.id===adapter)?.file;return (file?[file]:REGISTRY.find(a=>a.id===adapter).files.filter(item=>{try{return managedMarkerState(safeProjectFile(project,item,'scoped deactivation discovery'))==='active'}catch{return false}})).map(item=>({adapter,file:item}))})
+  const instructionFiles=selected.flatMap(adapter=>{const file=recorded.find(x=>x.id===adapter)?.file;return (file?[file]:uniqueInstructionFiles(project,REGISTRY.find(a=>a.id===adapter).files).filter(item=>{try{return managedMarkerState(safeProjectFile(project,item,'scoped deactivation discovery'))==='active'}catch{return false}})).map(item=>({adapter,file:item}))})
   const skillFiles=selected.flatMap(adapter=>{const tracked=installations.filter(x=>x.id===adapter).map(x=>x.file);return (tracked.length?tracked:REGISTRY.find(a=>a.id===adapter).skillDirs.map(dir=>slash(join(dir,'SKILL.md')))).map(file=>({adapter,file}))})
   for(const {file} of instructionFiles){const state=managedMarkerState(safeProjectFile(project,file,'deactivation preflight'));if(['unsafe','malformed'].includes(state))throw new Error(`deactivation preflight failed: ${file}: ${state}`)}
   for(const {file} of skillFiles){const state=skillState(safeProjectFile(project,file,'skill deactivation preflight'));if(['unsafe','malformed'].includes(state))throw new Error(`deactivation preflight failed: ${file}: ${state}`)}

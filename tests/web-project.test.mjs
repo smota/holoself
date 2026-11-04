@@ -1,5 +1,5 @@
 import { planSpaceAction, applySpaceAction } from '../src/space-actions.mjs'
-import { readdirSync, lstatSync, readFileSync, readlinkSync, mkdirSync, writeFileSync, unlinkSync, symlinkSync } from 'node:fs'
+import { readdirSync, lstatSync, readFileSync, readlinkSync, realpathSync, mkdirSync, writeFileSync, unlinkSync, symlinkSync } from 'node:fs'
 import { normalizeProjectPath, writeBinding } from '../src/bindings.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -28,8 +28,8 @@ test('Workbench can derive root and lens from optional linked project',async()=>
   try{
     const session=await (await fetch(`${app.url}/api/session`)).json()
     assert.equal(session.data.mode,'linked-project')
-    assert.equal(session.data.project,resolve(project))
-    assert.equal(session.data.root,resolve(self))
+    assert.equal(realpathSync(session.data.project),realpathSync(project))
+    assert.equal(realpathSync(session.data.root),realpathSync(self))
     assert.equal(session.data.lens,'professional')
   }finally{await new Promise(resolveClose=>app.server.close(resolveClose))}
 })
@@ -178,7 +178,7 @@ test('space actions apply matching plans',async()=>{
   for(const file of ['README.md','proposals/preserved.md','reports/preserved.md','index/preserved.md'])assert.deepEqual(tree(f.project)['/.holoself/'+file],before['/.holoself/'+file])
   assert.equal(readFileSync(join(metadata,'link.yaml'),'utf8'),originalLink)
   const after=tree(f.project),rootAfter=tree(f.self),listed=new Set(p.plan.files.map(x=>normalizeProjectPath(resolve(x.path))))
-  for(const [base,old,next] of [[f.project,before,after],[f.self,rootBefore,rootAfter]])for(const key of new Set([...Object.keys(old),...Object.keys(next)]))if(JSON.stringify(old[key])!==JSON.stringify(next[key]))assert.ok(listed.has(normalizeProjectPath(resolve(base+key))),`unlisted mutation: ${base}${key}`)
+  for(const [base,old,next] of [[f.project,before,after],[f.self,rootBefore,rootAfter]])for(const key of new Set([...Object.keys(old),...Object.keys(next)]))if(JSON.stringify(old[key])!==JSON.stringify(next[key]))assert.ok(listed.has(normalizeProjectPath(resolve(realpathSync(base)+key))),`unlisted mutation: ${base}${key}`)
   if(action==='deactivate')assert.ok(!after['/.holoself/runtime.json']);else{const runtime=JSON.parse(readFileSync(join(metadata,'runtime.json')));assert.deepEqual(runtime.activatedAdapters.map(x=>x.id),['agents']);assert.equal(runtime.skillInstallPolicy,'none')}
  }finally{await f.close()}
  }

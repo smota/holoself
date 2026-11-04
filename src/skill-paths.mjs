@@ -1,5 +1,6 @@
 import { lstatSync, readlinkSync, realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { assertNoLinkBelow } from './path-guard.mjs'
 
 function stat(path) {
   try { return lstatSync(path) }
@@ -9,19 +10,10 @@ function contained(root, path) {
   const rel = relative(root, path)
   return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`))
 }
-function ancestors(path) {
-  const chain = []
-  for (let current = path;; current = dirname(current)) {
-    chain.push(current)
-    if (dirname(current) === current) break
-  }
-  return chain.reverse()
-}
+// The path itself is the trust boundary: it must not be a link, while links in
+// its ancestors belong to the user's environment (for example macOS /var).
 function plainPath(path) {
-  for (const item of ancestors(path)) {
-    const entry = stat(item)
-    if (entry?.isSymbolicLink()) throw new Error(`symlink in deployment target: ${item}`)
-  }
+  assertNoLinkBelow(path, path, item => new Error(`symlink in deployment target: ${item}`), { includeRoot: true })
 }
 
 // Diagnostics stop at local links. A global terminal directory link has a

@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import { syncBuiltinESMExports } from 'node:module'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, symlinkSync, rmSync, existsSync, lstatSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, symlinkSync, rmSync, existsSync, lstatSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { run } from '../src/cli.mjs'
@@ -43,7 +43,7 @@ test('Pi global discovery uses agent/skills and never the old project-style glob
 
 test('permission-denied inspection stays unreadable and force does not bypass it',()=>{
  const home=temp(),target=library();deployment(home,'.codex/skills/holoself',target);const options={skillHome:home,platforms:['codex']},original=fs.readFileSync
- fs.readFileSync=(path,...args)=>{if(path===join(target,'SKILL.md')){const error=new Error('simulated permission denied');error.code='EACCES';throw error}return original(path,...args)};syncBuiltinESMExports()
+ fs.readFileSync=(path,...args)=>{if(path===join(target,'SKILL.md')||path===join(realpathSync(target),'SKILL.md')){const error=new Error('simulated permission denied');error.code='EACCES';throw error}return original(path,...args)};syncBuiltinESMExports()
  try{const item=globalSkillStatus(options).installations[0];assert.equal(item.status,'unreadable');assert.equal(item.installed,false);assert.throws(()=>installGlobalSkills({...options,force:true}),/repair/)}finally{fs.readFileSync=original;syncBuiltinESMExports()}
  assert.equal(readFileSync(join(target,'SKILL.md'),'utf8'),publicSkill)
 })

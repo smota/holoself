@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { assertNoLinkBelow } from './path-guard.mjs'
 
 export const LENS_ID_PATTERN=/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 export const CUSTOM_SENSITIVITY_CATEGORIES=['compensation-confidential','third-party-personal','recruiter-confidential','employer-confidential','application-private']
@@ -46,7 +47,7 @@ function validateDefinition(value,file){
 
 export function loadLensRegistry(selfRoot){
   if(typeof selfRoot!=='string'||!selfRoot.trim())throw new Error('lens registry requires a self root')
-  const root=resolve(selfRoot);let ancestor=root;while(true){if(existsSync(ancestor)&&lstatSync(ancestor).isSymbolicLink())throw new Error(`unsafe lens root: ${ancestor}`);const parent=resolve(ancestor,'..');if(parent===ancestor)break;ancestor=parent}
+  const root=resolve(selfRoot);assertNoLinkBelow(root,root,link=>new Error(`unsafe lens root: ${link}`),{includeRoot:true})
   const registryPath=join(root,'lenses'),records=[]
   if(existsSync(registryPath)){
     const stat=lstatSync(registryPath)

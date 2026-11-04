@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { access, mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { linkSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { run } from '../src/cli.mjs'
@@ -30,7 +31,7 @@ test('linked configuration is project-local metadata and never copies self',asyn
   for(const dir of ['catalog','proposals','reports'])assert.equal((await stat(join(project,'.holoself',dir))).isDirectory(),true)
   await assert.rejects(access(join(project,'.holoself','profile')))
   const status=JSON.parse(await capture(()=>run(['link','status','--project',project])))
-  assert.equal(status.self_context.path.replaceAll('\\','/'),self.replaceAll('\\','/'));assert.equal(status.self_exists,true)
+  assert.equal(realpathSync(status.self_context.path),realpathSync(self));assert.equal(status.self_exists,true)
 })
 
 test('context resolves lens, task, provenance, privacy, and adapters',async()=>{
@@ -211,9 +212,23 @@ test('runtime hashes only managed blocks and reports actual managed drift',async
 })
 
 test('instruction discovery deduplicates Windows case aliases but preserves distinct case-sensitive files',async()=>{
-  const self=await temp(),project=await temp();await run(['init','--root',self]);await run(['link','add','--project',project,'--self',self,'--platform','codex','--yes']);const managed=await readFile(join(project,'CODEX.md'),'utf8');await writeFile(join(project,'codex.md'),managed)
+  const self=await temp(),project=await temp();await run(['init','--root',self]);await run(['link','add','--project',project,'--self',self,'--platform','codex','--yes']);const managed=await readFile(join(project,'CODEX.md'),'utf8'),caseInsensitive=await access(join(project,'codex.md')).then(()=>true,()=>false);await writeFile(join(project,'codex.md'),managed)
   const status=JSON.parse(await capture(()=>run(['link','status','--project',project]))),aliases=status.activated_adapters.filter(x=>x.file.toLowerCase()==='codex.md')
-  if(process.platform==='win32'){assert.equal(status.state,'activated');assert.equal(aliases.length,1);assert.ok(!status.errors.some(x=>x.includes('codex.md: managed block drift')))}else{assert.equal(status.state,'degraded');assert.equal(aliases.length,2);assert.ok(aliases.some(x=>x.file==='codex.md'&&x.status==='untracked'))}process.exitCode=0
+  if(process.platform==='win32'||caseInsensitive){assert.equal(status.state,'activated');assert.equal(aliases.length,1);assert.ok(!status.errors.some(x=>x.includes('codex.md: managed block drift')))}else{assert.equal(status.state,'degraded');assert.equal(aliases.length,2);assert.ok(aliases.some(x=>x.file==='codex.md'&&x.status==='untracked'))}process.exitCode=0
+})
+
+test('instruction discovery collapses aliases of one file by identity (case-insensitive filesystems)',async()=>{
+  // A hard link shares an inode, as CODEX.md and codex.md do on macOS APFS.
+  const self=await temp(),project=await temp();await run(['init','--root',self]);await run(['link','add','--project',project,'--self',self,'--activate','agents,codex','--install-skill','none','--yes'])
+  const caseInsensitive=await access(join(project,'codex.md')).then(()=>true,()=>false)
+  if(!caseInsensitive){try{linkSync(join(project,'CODEX.md'),join(project,'codex.md'))}catch(error){if(['EPERM','ENOTSUP'].includes(error.code))return;throw error}}
+  const status=JSON.parse(await capture(()=>run(['link','status','--project',project]))),aliases=status.activated_adapters.filter(x=>x.file.toLowerCase()==='codex.md')
+  assert.equal(status.state,'activated');assert.equal(aliases.length,1);assert.equal(aliases[0].file,'CODEX.md')
+  const scoped=await capture(()=>run(['link','deactivate','--project',project,'--adapters','codex','--dry-run','--yes']))
+  assert.match(scoped,/CODEX\.md: removed/);assert.doesNotMatch(scoped,/codex\.md: removed/)
+  const full=await capture(()=>run(['link','deactivate','--project',project,'--dry-run','--yes']))
+  assert.equal((full.match(/codex\.md: removed/gi)||[]).length,1)
+  process.exitCode=0
 })
 
 test('deactivate discovers registry markers when runtime is narrow or corrupt',async()=>{
