@@ -8,6 +8,7 @@ import { linkedLensAuthority } from '../link/attestation.mjs'
 import { readLink } from '../link/config.mjs'
 import { healthStatus } from '../link/health.mjs'
 import { parseClaimBlocks } from '../markdown/claim-blocks.mjs'
+import { canonicalPath } from '../path-guard.mjs'
 import { visibleUnderBehavior } from '../policy/access.mjs'
 import { createProposal, findProposal, listProposalData, proposalChanges, proposalPreviewData, safeTarget } from '../proposals/store.mjs'
 import { slash } from '../shared/fs.mjs'
@@ -134,7 +135,7 @@ function mcpClaimView(project) {
   }
 }
 function assertMcpClaimTargets(project, changes, view) {
-  const self = readLink(project).path
+  const self = canonicalPath(readLink(project).path)
   for (const change of changes) {
     if ((change.operation || 'append_claim') === 'append_claim') continue
     const target = slash(relative(self, safeTarget(self, change.target || 'context/claims.md')))

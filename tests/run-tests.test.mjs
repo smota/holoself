@@ -129,6 +129,24 @@ test('run-tests.mjs isolates TMPDIR/TMP/TEMP per run, removes the run root after
       assert.equal(symlinkResult.status, 0, symlinkResult.stderr || symlinkResult.stdout)
       assert.deepEqual(readdirSync(realTmp), [])
     }
+
+    const slowFixture = join(fixturesDir, 'slow.fixture.mjs')
+    writeFileSync(
+      slowFixture,
+      [
+        "import test from 'node:test'",
+        "test('slow fixture exceeds overridden timeout', async () => {",
+        '  await new Promise(resolve => setTimeout(resolve, 400))',
+        '})'
+      ].join('\n') + '\n'
+    )
+    const timeoutResult = spawnSync(process.execPath, [runner, slowFixture], {
+      cwd: root,
+      env: { ...baseEnv, HOLOSELF_TEST_TIMEOUT_MS: '50' },
+      encoding: 'utf8',
+      windowsHide: true
+    })
+    assert.notEqual(timeoutResult.status, 0, 'expected HOLOSELF_TEST_TIMEOUT_MS override to time out slow fixture')
   } finally {
     rmSync(sandbox, { recursive: true, force: true })
   }

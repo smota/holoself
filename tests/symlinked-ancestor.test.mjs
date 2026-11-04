@@ -9,6 +9,7 @@ import { normalizeProjectPath, readBindings, resolveBinding, writeBinding } from
 import { readDocument } from '../src/documents.mjs'
 import { buildTransformationPlan } from '../src/maintenance.mjs'
 import { canonicalPath, linkBelow } from '../src/path-guard.mjs'
+import { clientMcpCreateProposal, clientMcpPreviewProposal } from '../src/retrieval/client-mcp.mjs'
 
 // Reproduces macOS, where os.tmpdir() lives under /var -> /private/var: the
 // self root and project sit below a symlinked ancestor the user did not choose.
@@ -43,6 +44,9 @@ test('self root and linked project below a symlinked ancestor work end to end',a
   const listed=await capture(()=>run(['proposals','list','--project',project]));assert.match(listed,new RegExp(made.proposal_id))
   await capture(()=>run(['proposals','approve',made.proposal_id,'--project',project,'--yes']))
   assert.match(readFileSync(join(env.real,'self','context','claims.md'),'utf8'),/Prefers evidence-first writing/)
+  const clientAdded=JSON.parse(await capture(()=>run(['client','add','--root',self,'--name','desk','--lens','professional','--proposals','inbox','--json'])))
+  const clientCreated=clientMcpCreateProposal({self,client_id:clientAdded.client.client_id},{claim:'Client inbox claim under symlinked ancestor.',evidence:'chat',target:'context/career.md'})
+  assert.equal(clientMcpPreviewProposal({self,client_id:clientAdded.client.client_id},clientCreated.proposal_id).proposal_id,clientCreated.proposal_id)
   assert.match(readDocument(self,'context/career.md').content,/Led 20 engineers/)
   assert.ok(buildTransformationPlan(self,[{path:'context/career.md',after:'# Career\n\nUpdated.\n'}]))
   rmSync(env.base,{recursive:true,force:true})
