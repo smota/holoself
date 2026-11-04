@@ -4,12 +4,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { chmod, lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { chmod, link as hardlink, lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { run } from '../src/cli.mjs'
-import { createMcpSession, createMcpToolPool, mcpServerLimits, TOOL_TIMEOUT_RPC_CODE } from '../src/mcp-server.mjs'
+import { createMcpSession, createMcpToolPool, finishAtEof, mcpServerLimits, SERVER_BUSY_RPC_CODE, TOOL_TIMEOUT_RPC_CODE } from '../src/mcp-server.mjs'
 
 const bin = fileURLToPath(new URL('../bin/holoself.mjs', import.meta.url))
 const sleep = ms => new Promise(done => setTimeout(done, ms))
@@ -67,9 +67,13 @@ async function until(predicate, timeoutMs = 20000) {
 }
 
 test('server limits default to 60 s and two workers and ignore invalid overrides', () => {
-  assert.deepEqual(mcpServerLimits({}), { timeoutMs: 60000, concurrency: 2 })
-  assert.deepEqual(mcpServerLimits({ HOLOSELF_MCP_TOOL_TIMEOUT_MS: '5000', HOLOSELF_MCP_CONCURRENCY: '3' }), { timeoutMs: 5000, concurrency: 3 })
-  assert.deepEqual(mcpServerLimits({ HOLOSELF_MCP_TOOL_TIMEOUT_MS: 'soon', HOLOSELF_MCP_CONCURRENCY: '99' }), { timeoutMs: 60000, concurrency: 2 })
+  const defaults = { timeoutMs: 60000, concurrency: 2, maxPending: 256, workerHeapMb: 512, writeTimeoutMs: 600000 }
+  assert.deepEqual(mcpServerLimits({}), defaults)
+  assert.deepEqual(
+    mcpServerLimits({ HOLOSELF_MCP_TOOL_TIMEOUT_MS: '5000', HOLOSELF_MCP_CONCURRENCY: '3', HOLOSELF_MCP_MAX_PENDING: '32', HOLOSELF_MCP_WORKER_HEAP_MB: '1024', HOLOSELF_MCP_WRITE_TIMEOUT_MS: '1500' }),
+    { timeoutMs: 5000, concurrency: 3, maxPending: 32, workerHeapMb: 1024, writeTimeoutMs: 1500 }
+  )
+  assert.deepEqual(mcpServerLimits({ HOLOSELF_MCP_TOOL_TIMEOUT_MS: 'soon', HOLOSELF_MCP_CONCURRENCY: '99', HOLOSELF_MCP_MAX_PENDING: '0', HOLOSELF_MCP_WORKER_HEAP_MB: '1', HOLOSELF_MCP_WRITE_TIMEOUT_MS: '-5' }), defaults)
 })
 
 test('spawned server answers ping within 100 ms while a large context call runs, then drains at EOF', { timeout: 120000 }, async () => {
@@ -167,7 +171,7 @@ test('cancelling a queued call and a running call sends no response and the next
   try {
     m.call(2, 'holoself_context', { task: 'refactoring marker', budget: 'small' })
     m.call(3, 'holoself_search', { query: 'marker' })
-    assert.deepEqual(m.pool.stats(), { running: 1, queued: 1, workers: 1 })
+    assert.deepEqual(m.pool.stats(), { running: 1, queued: 1, workers: 1, spawned: 1 })
     m.cancel(3)
     assert.equal(m.pool.stats().queued, 0)
     await m.accept.drain()
@@ -176,7 +180,7 @@ test('cancelling a queued call and a running call sends no response and the next
     m.call(4, 'holoself_context', { task: 'another refactoring marker', budget: 'small' })
     await sleep(100)
     m.cancel(4)
-    assert.deepEqual(m.pool.stats(), { running: 0, queued: 0, workers: 0 }, 'the running worker is terminated')
+    assert.deepEqual(m.pool.stats(), { running: 0, queued: 0, workers: 0, spawned: 1 }, 'the running worker is terminated')
     await m.accept.drain()
     await sleep(900)
     assert.equal(m.byId(4), undefined, 'a cancelled call never produces a partial or late packet')
@@ -250,7 +254,7 @@ test('proposal_create runs alone and a duplicate in-flight id is rejected', { ti
     m.call(2, 'holoself_context', { task: 'refactoring marker', budget: 'small' })
     m.call(3, 'holoself_proposal_create', { claim: 'Review the marker.', source_files: ['Context/evidence.md'] })
     m.call(4, 'holoself_status')
-    assert.deepEqual(m.pool.stats(), { running: 1, queued: 2, workers: 1 }, 'the writer waits and later calls do not overtake it')
+    assert.deepEqual(m.pool.stats(), { running: 1, queued: 2, workers: 1, spawned: 1 }, 'the writer waits and later calls do not overtake it')
     m.call(2, 'holoself_status')
     assert.equal(m.output.at(-1).id, 2)
     assert.equal(m.output.at(-1).error.code, -32600)
@@ -264,7 +268,182 @@ test('proposal_create runs alone and a duplicate in-flight id is rejected', { ti
   }
 })
 
-test('audit log refuses symlinks, enforces 0600 and stops at its size cap', { timeout: 60000 }, async () => {
+test('a cancelled proposal_create finishes its write, sends no response, is audited as committed and keeps its worker', { timeout: 60000 }, async () => {
+  const { base, project } = await fixture(),
+    log = join(base, 'audit.ndjson')
+  const m = pooled(project, { size: 1, simulateWorkMs: { holoself_proposal_create: 600 } }, { auditLog: log })
+  try {
+    m.call(2, 'holoself_proposal_create', { claim: 'Cancelled but complete.', source_files: ['Context/evidence.md'] })
+    await sleep(100)
+    m.cancel(2)
+    assert.equal(m.pool.stats().running, 1, 'the write is not terminated')
+    await m.accept.drain()
+    assert.equal(m.byId(2), undefined)
+    const dir = join(project, '.holoself', 'proposals'),
+      files = await readdir(dir)
+    assert.equal(files.filter(name => name.endsWith('.yaml')).length, 1, 'the proposal was written completely')
+    assert.equal(files.filter(name => name.includes('.tmp-')).length, 0, 'no temporary file is left behind')
+    m.call(3, 'holoself_status')
+    await m.accept.drain()
+    assert.equal(m.byId(3).result.structuredContent.data.pending_proposals, 1)
+    assert.equal(m.pool.stats().spawned, 1, 'the worker was never recycled')
+    const audit = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+    assert.deepEqual(audit.map(({ at, ...rest }) => rest)[0], { event: 'tools/call', tool: 'holoself_proposal_create', ok: true, cancelled: true, error_code: null })
+  } finally {
+    await m.close()
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('proposal_create is exempt from the read-tool timeout and returns its real result', { timeout: 60000 }, async () => {
+  const { base, project } = await fixture()
+  const m = pooled(project, { size: 1, timeoutMs: 200, simulateWorkMs: { holoself_proposal_create: 700 } })
+  try {
+    m.call(2, 'holoself_proposal_create', { claim: 'Slow but complete.', source_files: ['Context/evidence.md'] })
+    await m.accept.drain()
+    assert.equal(m.byId(2).error, undefined)
+    assert.equal(m.byId(2).result.structuredContent.data.status, 'pending')
+  } finally {
+    await m.close()
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('a write past its write timeout is answered with TOOL_TIMEOUT but keeps the barrier until it finishes', { timeout: 60000 }, async () => {
+  const { base, project } = await fixture()
+  const m = pooled(project, { size: 2, timeoutMs: 100, writeTimeoutMs: 250, simulateWorkMs: { holoself_proposal_create: 1200 } })
+  try {
+    m.call(2, 'holoself_proposal_create', { claim: 'Slow write.', source_files: ['Context/evidence.md'] })
+    m.call(3, 'holoself_status')
+    await until(() => m.byId(2))
+    assert.deepEqual(m.byId(2).error, { code: TOOL_TIMEOUT_RPC_CODE, message: 'Tool call timed out', data: { code: 'TOOL_TIMEOUT' } })
+    assert.equal(m.byId(3), undefined, 'the queued call still waits behind the running write')
+    assert.deepEqual(m.pool.stats(), { running: 1, queued: 1, workers: 1, spawned: 1 })
+    await m.accept.drain()
+    assert.equal(m.byId(3).result.structuredContent.data.pending_proposals, 1, 'the write completed before the next call ran')
+    assert.equal(m.pool.stats().spawned, 1)
+  } finally {
+    await m.close()
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('EOF shutdown is bounded when a write is stuck: queued calls are dropped and workers stopped', { timeout: 60000 }, async () => {
+  const { base, project } = await fixture()
+  const m = pooled(project, { size: 1, writeTimeoutMs: 200, simulateWorkMs: { holoself_proposal_create: 30000 } })
+  try {
+    m.call(2, 'holoself_proposal_create', { claim: 'Stuck write.', source_files: ['Context/evidence.md'] })
+    m.call(3, 'holoself_status')
+    const started = Date.now()
+    await finishAtEof(m.accept, m.pool, 400)
+    assert.ok(Date.now() - started < 5000, `shutdown took ${Date.now() - started} ms`)
+    await sleep(20)
+    assert.equal(m.byId(2).error.data.code, 'TOOL_TIMEOUT')
+    assert.equal(m.byId(3), undefined)
+    assert.equal(m.accept.inFlight(), 0)
+    assert.deepEqual(m.pool.stats(), { running: 0, queued: 0, workers: 0, spawned: 1 })
+  } finally {
+    await m.close()
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('a burst of cancellations spawns no worker per message', { timeout: 60000 }, async () => {
+  const { base, project } = await fixture()
+  const m = pooled(project, { simulateWorkMs: { holoself_search: 300 } }, { maxPending: 1000 })
+  try {
+    for (let id = 2; id < 202; id++) m.call(id, 'holoself_search', { query: `burst ${id}` })
+    for (let id = 2; id < 202; id++) m.cancel(id)
+    await m.accept.drain()
+    await sleep(50)
+    assert.deepEqual(m.pool.stats(), { running: 0, queued: 0, workers: 0, spawned: 2 })
+    assert.deepEqual(m.output.map(item => item.id), [1])
+    m.call(300, 'holoself_status')
+    await m.accept.drain()
+    assert.equal(m.byId(300).result.structuredContent.data.project.linked, true)
+    assert.equal(m.pool.stats().spawned, 3)
+  } finally {
+    await m.close()
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('spawned server exits promptly after a burst of calls and cancellations', { timeout: 60000 }, async () => {
+  const { base, project } = await fixture()
+  try {
+    const lines = [{ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25' } }]
+    for (let id = 2; id < 202; id++) lines.push({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'holoself_search', arguments: { query: `burst ${id}` } } })
+    for (let id = 2; id < 202; id++) lines.push({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: id } })
+    const started = Date.now()
+    const child = spawn(process.execPath, [bin, 'mcp', '--project', project], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
+    let stdout = '',
+      stderr = ''
+    child.stdout.on('data', chunk => (stdout += chunk))
+    child.stderr.on('data', chunk => (stderr += chunk))
+    const exited = new Promise(done => child.on('close', code => done(code)))
+    child.stdin.end(lines.map(line => JSON.stringify(line)).join('\n') + '\n')
+    assert.equal(await exited, 0)
+    assert.ok(Date.now() - started < 20000, `exit took ${Date.now() - started} ms`)
+    assert.equal(stderr, '')
+    const out = stdout.trim().split('\n').map(line => JSON.parse(line))
+    assert.equal(out[0].id, 1)
+    assert.ok(out.every(line => line.jsonrpc === '2.0' && (line.id === 1 || line.result?.structuredContent)))
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('calls beyond the pending limit are refused with SERVER_BUSY', { timeout: 60000 }, async () => {
+  const { base, project } = await fixture()
+  const m = pooled(project, { size: 1, simulateWorkMs: { holoself_search: 300 } }, { maxPending: 3 })
+  try {
+    for (let id = 2; id < 7; id++) m.call(id, 'holoself_search', { query: `busy ${id}` })
+    for (const id of [5, 6]) assert.deepEqual(m.byId(id).error, { code: SERVER_BUSY_RPC_CODE, message: 'Server busy', data: { code: 'SERVER_BUSY' } })
+    await m.accept.drain()
+    for (const id of [2, 3, 4]) assert.equal(m.byId(id).result.structuredContent.data.query, `busy ${id}`)
+    m.call(7, 'holoself_status')
+    await m.accept.drain()
+    assert.equal(m.byId(7).result.structuredContent.data.project.linked, true)
+  } finally {
+    await m.close()
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('any request reusing the id of an unanswered call is rejected', { timeout: 60000 }, async () => {
+  const { base, project } = await fixture()
+  const m = pooled(project, { simulateWorkMs: { holoself_search: 300 } })
+  try {
+    m.call(2, 'holoself_search', { query: 'marker' })
+    m.send(2, 'ping', {})
+    assert.deepEqual(m.output.at(-1), { jsonrpc: '2.0', id: 2, error: { code: -32600, message: 'Request id is already in progress' } })
+    await m.accept.drain()
+    m.send(2, 'ping', {})
+    assert.deepEqual(m.output.at(-1), { jsonrpc: '2.0', id: 2, result: {} })
+  } finally {
+    await m.close()
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('equivalent context spellings reach the worker that cached the selection', { timeout: 60000 }, async () => {
+  const { base, project } = await fixture()
+  const m = pooled(project)
+  try {
+    m.call(2, 'holoself_context', { task: 'refactoring marker' })
+    await m.accept.drain()
+    m.call(3, 'holoself_context', { budget: 'standard', lens: 'professional', temporal: 'current', session_start: false, task: 'refactoring marker' })
+    await m.accept.drain()
+    const hit = id => m.byId(id).result.structuredContent.data.context_receipt.cache.hit
+    assert.equal(hit(2), false)
+    assert.equal(hit(3), true)
+  } finally {
+    await m.close()
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('audit log refuses symlinks and hard links, enforces 0600 and stops at its size cap', { timeout: 60000 }, async () => {
   const { base, project } = await fixture(),
     dir = await mkdtemp(join(tmpdir(), 'holoself-mcp-audit-'))
   try {
@@ -294,6 +473,15 @@ test('audit log refuses symlinks, enforces 0600 and stops at its size cap', { ti
       await chmod(existing, 0o644)
       run(existing)()
       assert.equal((await stat(existing)).mode & 0o777, 0o600)
+    }
+
+    if (process.platform !== 'win32') {
+      const original = join(dir, 'original.ndjson'),
+        second = join(dir, 'hardlinked.ndjson')
+      await writeFile(original, '')
+      await hardlink(original, second)
+      run(second)()
+      assert.equal(await readFile(original, 'utf8'), '', 'a hard-linked log is refused')
     }
 
     const capped = join(dir, 'capped.ndjson'),

@@ -12,6 +12,7 @@ import {
   PROPOSAL_TYPES,
   VISIBILITIES
 } from './ecosystem.mjs'
+import { readLink } from './link/config.mjs'
 import { createToolPool } from './mcp-pool.mjs'
 import { VERSION } from './version.mjs'
 
@@ -24,6 +25,11 @@ const BUDGETS = ['small', 'standard', 'deep']
 const AUDIT_LOG_MAX_BYTES = 10 * 1024 * 1024
 export const DEFAULT_TOOL_TIMEOUT_MS = 60000
 export const DEFAULT_TOOL_CONCURRENCY = 2
+export const DEFAULT_MAX_PENDING_CALLS = 256
+export const DEFAULT_WORKER_HEAP_MB = 512
+export const DEFAULT_WRITE_TIMEOUT_MS = 10 * 60 * 1000
+// JSON-RPC error code for a tool call refused because too many calls are already pending.
+export const SERVER_BUSY_RPC_CODE = -32000
 // JSON-RPC error code for a tool call that exceeded the per-call timeout (same value the MCP SDKs use).
 export const TOOL_TIMEOUT_RPC_CODE = -32001
 
@@ -242,15 +248,41 @@ function errorFromJob(error) {
 }
 // Tools that write project state run alone in the pool; every other tool is read-only and may run in parallel.
 const EXCLUSIVE_TOOLS = new Set([`${TOOL_PREFIX}proposal_create`])
-const CACHE_EQUIVALENT = { [`${TOOL_PREFIX}context_get`]: `${TOOL_PREFIX}context` }
+const CONTEXT_MANIFEST = { [`${TOOL_PREFIX}context`]: false, [`${TOOL_PREFIX}context_get`]: false, [`${TOOL_PREFIX}context_manifest`]: true }
 function canonicalArgs(value) {
   if (Array.isArray(value)) return value.map(canonicalArgs)
   if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonicalArgs(value[key])]))
   return value
 }
-function affinityKey(name, args) {
-  return JSON.stringify([CACHE_EQUIVALENT[name] || name, canonicalArgs(args || {})])
+function linkDefaultLens(project) {
+  try {
+    return readLink(project).default_lens || null
+  } catch {
+    return null
+  }
 }
+// Context calls are keyed by the options the selection cache key is built from (after mcpContextData applies its
+// defaults), so equivalent spellings - omitted vs explicit defaults, context vs context_get - reach the same worker.
+// `defaultLens` is read once when the session starts (the project is bound at startup); a link edited later only
+// changes which worker a call is routed to, never what it returns.
+function affinityKey(name, args = {}, defaultLens = null) {
+  if (name in CONTEXT_MANIFEST)
+    return JSON.stringify([
+      'context',
+      {
+        task: args.task || '',
+        lens: args.lens || defaultLens,
+        budget: args.budget || 'standard',
+        temporal: args.temporal || 'current',
+        manifest: CONTEXT_MANIFEST[name],
+        sources: args.source_ids || [],
+        cursor: args.cursor || null,
+        session_start: Boolean(args.session_start)
+      }
+    ])
+  return JSON.stringify([name, canonicalArgs(args)])
+}
+
 function protocolError(code, message, data) {
   return { code, message, ...(data === undefined ? {} : { data }) }
 }
@@ -278,7 +310,8 @@ function audit(logPath, entry, maxBytes = AUDIT_LOG_MAX_BYTES) {
     // O_RDWR (not O_WRONLY) so the tail can be checked for an existing cap marker.
     fd = openSync(logPath, fsConstants.O_APPEND | fsConstants.O_CREAT | fsConstants.O_RDWR | noFollow, 0o600)
     const stat = fstatSync(fd)
-    if (!stat.isFile()) return
+    // A hard-linked log could append into another file the server has no business writing.
+    if (!stat.isFile() || stat.nlink > 1) return
     if (process.platform !== 'win32')
       try {
         fchmodSync(fd, 0o600)
@@ -316,8 +349,10 @@ export function createMcpSession({
   write = line => process.stdout.write(`${line}\n`),
   auditLog = process.env.HOLOSELF_MCP_AUDIT_LOG,
   auditLogMaxBytes = AUDIT_LOG_MAX_BYTES,
-  pool = null
+  pool = null,
+  maxPending = DEFAULT_MAX_PENDING_CALLS
 } = {}) {
+  const sessionLens = pool ? linkDefaultLens(project) : null
   let initialized = false,
     protocolVersion = null
   const log = entry => audit(auditLog, entry, auditLogMaxBytes),
@@ -335,10 +370,6 @@ export function createMcpSession({
     const name = request.params?.name,
       args = request.params?.arguments || {},
       key = idKey(request.id)
-    if (inFlight.has(key)) {
-      write(JSON.stringify(response(request.id, null, protocolError(-32600, 'Request id is already in progress'))))
-      return
-    }
     try {
       validateToolCall(name, args)
     } catch (error) {
@@ -347,12 +378,22 @@ export function createMcpSession({
       write(JSON.stringify(response(request.id, result)))
       return
     }
-    const handle = pool.submit({ project, name, args }, { key: affinityKey(name, args), exclusive: EXCLUSIVE_TOOLS.has(name) })
+    if (inFlight.size >= maxPending) {
+      log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok: false, error_code: 'SERVER_BUSY' })
+      write(JSON.stringify(response(request.id, null, protocolError(SERVER_BUSY_RPC_CODE, 'Server busy', { code: 'SERVER_BUSY' }))))
+      return
+    }
+    const handle = pool.submit({ project, name, args }, { key: affinityKey(name, args, sessionLens), exclusive: EXCLUSIVE_TOOLS.has(name) })
     inFlight.set(key, handle)
     handle.promise.then(outcome => {
       settled(key)
       // A cancelled request gets no response (MCP cancellation) and never a partial packet.
       if (outcome.status === 'cancelled') return log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok: false, error_code: 'CANCELLED' })
+      // A cancelled write that had already started ran to completion: record what it did, still send nothing.
+      if (outcome.status === 'dropped') {
+        const ok = Boolean(outcome.value?.ok)
+        return log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok, cancelled: true, error_code: ok ? null : outcome.value?.error?.code || 'HOLOSELF_ERROR' })
+      }
       if (outcome.status === 'timeout') {
         log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok: false, error_code: 'TOOL_TIMEOUT' })
         return write(JSON.stringify(response(request.id, null, protocolError(TOOL_TIMEOUT_RPC_CODE, 'Tool call timed out', { code: 'TOOL_TIMEOUT' }))))
@@ -386,6 +427,11 @@ export function createMcpSession({
     if (request.id === undefined) {
       if (request.method === 'notifications/cancelled' && request.params?.requestId !== undefined)
         inFlight.get(idKey(request.params.requestId))?.cancel()
+      return
+    }
+    // Ids identify responses, so no request may reuse the id of a call that has not been answered yet.
+    if (inFlight.has(idKey(request.id))) {
+      write(JSON.stringify(response(request.id, null, protocolError(-32600, 'Request id is already in progress'))))
       return
     }
     try {
@@ -436,25 +482,55 @@ function boundedInteger(value, fallback, min, max) {
 export function mcpServerLimits(env = process.env) {
   return {
     timeoutMs: boundedInteger(env.HOLOSELF_MCP_TOOL_TIMEOUT_MS, DEFAULT_TOOL_TIMEOUT_MS, 100, 3600000),
-    concurrency: boundedInteger(env.HOLOSELF_MCP_CONCURRENCY, DEFAULT_TOOL_CONCURRENCY, 1, 8)
+    concurrency: boundedInteger(env.HOLOSELF_MCP_CONCURRENCY, DEFAULT_TOOL_CONCURRENCY, 1, 8),
+    maxPending: boundedInteger(env.HOLOSELF_MCP_MAX_PENDING, DEFAULT_MAX_PENDING_CALLS, 1, 65536),
+    workerHeapMb: boundedInteger(env.HOLOSELF_MCP_WORKER_HEAP_MB, DEFAULT_WORKER_HEAP_MB, 64, 16384),
+    writeTimeoutMs: boundedInteger(env.HOLOSELF_MCP_WRITE_TIMEOUT_MS, DEFAULT_WRITE_TIMEOUT_MS, 100, 86400000)
   }
 }
-export function createMcpToolPool({ size = DEFAULT_TOOL_CONCURRENCY, timeoutMs = DEFAULT_TOOL_TIMEOUT_MS, simulateWorkMs } = {}) {
+export function createMcpToolPool({
+  size = DEFAULT_TOOL_CONCURRENCY,
+  timeoutMs = DEFAULT_TOOL_TIMEOUT_MS,
+  writeTimeoutMs = DEFAULT_WRITE_TIMEOUT_MS,
+  workerHeapMb = DEFAULT_WORKER_HEAP_MB,
+  simulateWorkMs
+} = {}) {
   if (!globalThis.__HOLOSELF_CURSOR_KEY__) globalThis.__HOLOSELF_CURSOR_KEY__ = randomBytes(32)
-  return createToolPool({ size, timeoutMs, workerData: { cursorKey: new Uint8Array(globalThis.__HOLOSELF_CURSOR_KEY__), ...(simulateWorkMs ? { simulateWorkMs } : {}) } })
+  return createToolPool({
+    size,
+    timeoutMs,
+    writeTimeoutMs,
+    maxOldGenerationSizeMb: workerHeapMb,
+    workerData: { cursorKey: new Uint8Array(globalThis.__HOLOSELF_CURSOR_KEY__), ...(simulateWorkMs ? { simulateWorkMs } : {}) }
+  })
+}
+
+// EOF shutdown: answer every accepted call, but never wait longer than `limitMs`. Past it (for example a write stuck
+// behind the exclusive barrier), queued calls are cancelled without a response and the remaining workers are stopped.
+export async function finishAtEof(session, pool, limitMs) {
+  let timer
+  const expired = new Promise(done => {
+    timer = setTimeout(done, limitMs)
+  })
+  try {
+    await Promise.race([session.drain(), expired])
+  } finally {
+    clearTimeout(timer)
+    await pool.close()
+  }
 }
 
 export async function startMcpServer({ project: projectInput, requireClaudeProject = false } = {}) {
   if (requireClaudeProject && !process.env.CLAUDE_PROJECT_DIR) fail('CLAUDE_PROJECT_DIR is required for this project-scoped server', 'PROJECT_BINDING_INVALID')
   const binding = resolveBoundProject(projectInput)
-  const { timeoutMs, concurrency } = mcpServerLimits()
-  const pool = createMcpToolPool({ size: concurrency, timeoutMs })
+  const { timeoutMs, concurrency, maxPending, workerHeapMb, writeTimeoutMs } = mcpServerLimits()
+  const pool = createMcpToolPool({ size: concurrency, timeoutMs, writeTimeoutMs, workerHeapMb })
   try {
-    const session = createMcpSession({ project: binding.project, pool })
+    const session = createMcpSession({ project: binding.project, pool, maxPending })
     const lines = createInterface({ input: process.stdin, crlfDelay: Infinity, terminal: false })
     for await (const line of lines) if (line.trim()) session(line)
-    // EOF: answer everything already accepted, then stop the workers so the process exits.
-    await session.drain()
+    // EOF: answer everything already accepted (bounded by the longest timeout), then stop the workers and exit.
+    await finishAtEof(session, pool, Math.max(timeoutMs, writeTimeoutMs))
   } finally {
     await pool.close()
   }
