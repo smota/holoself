@@ -6,7 +6,8 @@ import { loadLensRegistry, resolveLens } from '../lenses.mjs'
 import { linkedLensAuthority } from '../link/attestation.mjs'
 import { findLinkUpwards, isCanonicalSelf, linkPath, readLink } from '../link/config.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
-import { assertContainedPath, pathExists, safeRealpath, slash } from '../shared/fs.mjs'
+import { canonicalPath, samePath } from '../path-guard.mjs'
+import { assertContainedPath, pathExists } from '../shared/fs.mjs'
 
 // Resolves who is asking: a linked project (explicit --project or found upwards from cwd) or the direct owner.
 export function resolveCaller(o) {
@@ -49,9 +50,7 @@ export function resolveCaller(o) {
     }
     if (o.self || o.rootExplicit) {
       const callerSelf = resolve(o.self || o.root)
-      const cmpCaller = process.platform === 'win32' ? slash(safeRealpath(callerSelf)).toLowerCase() : slash(safeRealpath(callerSelf))
-      const cmpLink = process.platform === 'win32' ? slash(safeRealpath(link.path)).toLowerCase() : slash(safeRealpath(link.path))
-      if (cmpCaller !== cmpLink) {
+      if (!samePath(canonicalPath(callerSelf), canonicalPath(link.path))) {
         const err = new Error('supplied self root does not match canonical link root')
         err.code = 'SELF_ROOT_NOT_CANONICAL'
         throw err
@@ -88,9 +87,7 @@ export function resolveCaller(o) {
       }
       if (o.self || o.rootExplicit) {
         const callerSelf = resolve(o.self || o.root)
-        const cmpCaller = process.platform === 'win32' ? slash(safeRealpath(callerSelf)).toLowerCase() : slash(safeRealpath(callerSelf))
-        const cmpLink = process.platform === 'win32' ? slash(safeRealpath(link.path)).toLowerCase() : slash(safeRealpath(link.path))
-        if (cmpCaller !== cmpLink) {
+        if (!samePath(canonicalPath(callerSelf), canonicalPath(link.path))) {
           const err = new Error('supplied self root does not match canonical link root')
           err.code = 'SELF_ROOT_NOT_CANONICAL'
           throw err

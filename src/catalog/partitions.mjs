@@ -16,7 +16,7 @@ import { canonicalSpaceId } from '../link/registry.mjs'
 import { canonicalFiles, globRegex, matchesAny } from '../markdown/files.mjs'
 import { sections } from '../markdown/text.mjs'
 import { SECRET_RE } from '../policy/secrets.mjs'
-import { linkBelow, locateBelow, lstat } from '../path-guard.mjs'
+import { canonicalPath, linkBelow, locateBelow, lstat, samePath } from '../path-guard.mjs'
 import { ensureDir, hash, slash } from '../shared/fs.mjs'
 import { PACKAGE_ROOT } from '../shared/package-root.mjs'
 import { redactRootPaths } from '../shared/redact.mjs'
@@ -426,7 +426,7 @@ export function ensureCatalog(selfRoot, projectDir, link, registry, options = {}
   const selfResult = ensureCatalogPartition('self', selfRoot, selfFiles, registry, options)
 
   let projectResult = null
-  if (projectDir && existsSync(projectDir) && resolve(projectDir) !== resolve(selfRoot)) {
+  if (projectDir && existsSync(projectDir) && !samePath(canonicalPath(projectDir), canonicalPath(selfRoot))) {
     const projectFiles = [] // Domain indexing belongs to the domain project.
     const expectedProjectContextHash = link?.project_context ? hash(canonicalJson(link.project_context)) : null
     projectResult = ensureCatalogPartition(canonicalSpaceId(projectDir), projectDir, projectFiles, registry, {

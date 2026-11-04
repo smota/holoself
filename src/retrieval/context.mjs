@@ -6,6 +6,7 @@ import { canonicalSort } from '../catalog.mjs'
 import { ensureCatalog } from '../catalog/partitions.mjs'
 import { cachedSelection } from '../context-selection.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
+import { canonicalPath, samePath } from '../path-guard.mjs'
 import { listProposalData } from '../proposals/store.mjs'
 import { hash, safeRealpath, slash } from '../shared/fs.mjs'
 import { PACKAGE_ROOT } from '../shared/package-root.mjs'
@@ -42,7 +43,7 @@ function gatherCandidates(o, { project, link, self, identity, registry, lens, re
     identity.project !== null &&
     !o.selfOnly &&
     existsSync(project) &&
-    resolve(project) !== resolve(self) &&
+    !samePath(canonicalPath(project), canonicalPath(self)) &&
     catResult.project
       ? catalogCandidateRecords(catResult.project, project, 'project', lens, o.task, adapter, registry, resolution, o, identity.kind, subject)
       : { records: [], restrictions: [], unauthorized_sources_omitted: 0 }
@@ -126,7 +127,8 @@ function assembleResult(
 ) {
   const records = [...selected.records]
   const warnings = [...(catResult.warnings || []), ...(identity.kind === 'owner:direct' ? [...(selfData.warnings || []), ...(local.warnings || [])] : [])]
-  if (!link && !o.self && resolve(self) !== resolve(project)) warnings.push('No project link found; resolved explicit/default self root.')
+  if (!link && !o.self && !samePath(canonicalPath(self), canonicalPath(project)))
+    warnings.push('No project link found; resolved explicit/default self root.')
   if (selected.selection.session_start_unmatched?.length)
     warnings.push(`session_start_sources matched no source: ${selected.selection.session_start_unmatched.join(', ')}`)
   const generatedAt = new Date().toISOString(),
