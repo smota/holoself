@@ -1,14 +1,11 @@
-import { createHash, randomBytes } from 'node:crypto'
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } from 'node:fs'
+import { join } from 'node:path'
 import { HASH_RE, SOURCE_ID_RE } from './catalog/schema.mjs'
+import { atomicWrite as atomicWriteFile, hash as sha256, slash, sleepSync } from './shared/fs.mjs'
 export { CATALOG_SCHEMA_VERSION, SOURCE_ID_RE, validateCatalogSchema } from './catalog/schema.mjs'
+export { atomicWriteFile, sha256, slash, sleepSync }
 
 export const CACHE_SCHEMA_VERSION = 4
-
-export function sha256(data) {
-  return createHash('sha256').update(data).digest('hex')
-}
 
 export function canonicalSort(a, b) {
   return a < b ? -1 : a > b ? 1 : 0
@@ -39,19 +36,6 @@ export function canonicalJson(val) {
   return JSON.stringify(val)
 }
 
-export function sleepSync(ms) {
-  try {
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
-  } catch {
-    const end = Date.now() + ms
-    while (Date.now() < end) {}
-  }
-}
-
-export function slash(p) {
-  return String(p).replaceAll('\\', '/')
-}
-
 export function sourceRef(spaceId, relPath, contentHash, sectionId = null) {
   const normalized = slash(relPath).normalize('NFC')
   const canonicalPath = process.platform === 'win32' ? normalized.toLowerCase() : normalized
@@ -61,45 +45,6 @@ export function sourceRef(spaceId, relPath, contentHash, sectionId = null) {
     source_id: sourceId,
     revision: contentHash,
     section_id: sectionId
-  }
-}
-
-export function atomicWriteFile(targetPath, content, { mode = 0o600 } = {}) {
-  const targetDir = dirname(targetPath)
-  if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
-  const tmpPath = `${targetPath}.tmp-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}`
-  const fd = openSync(tmpPath, 'w', mode)
-  try {
-    const buf = Buffer.from(content, 'utf8')
-    let written = 0
-    while (written < buf.length) {
-      written += writeSync(fd, buf, written, buf.length - written)
-    }
-    fsyncSync(fd)
-  } finally {
-    closeSync(fd)
-  }
-  const backoffs = [20, 50, 100]
-  let lastErr = null
-  for (let attempt = 0; attempt <= backoffs.length; attempt++) {
-    try {
-      renameSync(tmpPath, targetPath)
-      lastErr = null
-      break
-    } catch (err) {
-      lastErr = err
-      if ((err.code === 'EPERM' || err.code === 'EBUSY' || err.code === 'EACCES') && attempt < backoffs.length) {
-        sleepSync(backoffs[attempt])
-      } else {
-        break
-      }
-    }
-  }
-  if (lastErr) {
-    try {
-      rmSync(tmpPath, { force: true })
-    } catch {}
-    throw lastErr
   }
 }
 

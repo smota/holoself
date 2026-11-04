@@ -21,8 +21,8 @@ export const CONFIDENTIAL_SENSITIVITIES = [
   'employer-confidential',
   'restricted'
 ]
-export const KNOWLEDGE_STATUSES = ['current', 'historical', 'superseded']
-export const TEMPORAL_SCOPES = ['current', 'time-bounded', 'historical', 'timeless']
+export const KNOWLEDGE_STATUSES = Object.freeze(['current', 'historical', 'superseded'])
+export const TEMPORAL_SCOPES = Object.freeze(['current', 'time-bounded', 'historical', 'timeless'])
 
 export function derivedPublicSafe(metadata = {}) {
   return metadata.disclosure === 'publish-approved' && !CONFIDENTIAL_SENSITIVITIES.includes(metadata.sensitivity)

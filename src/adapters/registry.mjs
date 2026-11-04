@@ -1,8 +1,11 @@
 // Adapter registry and shared helpers: the public skill text, supported adapters, and safe project/user paths.
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { assertNoLinkBelow } from '../path-guard.mjs'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { assertNoLinkBelow, contained } from '../path-guard.mjs'
+import { atomicWrite, ensureDir, pathExists, slash } from '../shared/fs.mjs'
+export { contained } from '../path-guard.mjs'
+export { atomicWrite, ensureDir, pathExists, slash } from '../shared/fs.mjs'
 
 export const SKILL_START = '<!-- holoself-skill-start schema=1 -->'
 export const SKILL_END = '<!-- holoself-skill-end -->'
@@ -172,35 +175,6 @@ export const REGISTRY = [
     ...capability('file', 'configured', 'Windsurf', 'Known project rule path is generated; product-level loading must be smoke tested.')
   }
 ]
-export function slash(p) {
-  return p.replaceAll('\\', '/')
-}
-export function ensureDir(p) {
-  mkdirSync(p, { recursive: true })
-}
-export function atomicWrite(p, content) {
-  ensureDir(dirname(p))
-  const t = `${p}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`
-  try {
-    writeFileSync(t, content, 'utf8')
-    renameSync(t, p)
-  } finally {
-    if (existsSync(t)) rmSync(t, { force: true })
-  }
-}
-export function pathExists(path) {
-  try {
-    lstatSync(path)
-    return true
-  } catch (error) {
-    if (['ENOENT', 'ENOTDIR'].includes(error.code)) return false
-    throw error
-  }
-}
-export function contained(root, path) {
-  const rel = relative(root, path)
-  return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel))
-}
 export function safeProjectFile(project, rel, label = 'managed path') {
   if (typeof rel !== 'string' || !rel.trim() || isAbsolute(rel)) throw new Error(`${label} must be a project-relative path: ${rel}`)
   const lexicalRoot = resolve(project),

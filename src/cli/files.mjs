@@ -1,25 +1,14 @@
 // Filesystem helpers for the data-root commands (init, export, migrate): atomic writes, copies, backups.
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { existsSync, lstatSync, readFileSync, readdirSync, renameSync } from 'node:fs'
+import { join } from 'node:path'
+import { atomicWrite, ensureDir, pathExists } from '../shared/fs.mjs'
 import { CONTEXT_FILES, PROFILE_FILES } from './templates.mjs'
+export { atomicWrite, ensureDir, pathExists } from '../shared/fs.mjs'
 
-export function ensureDir(p) {
-  mkdirSync(p, { recursive: true })
-}
 let tempCounter = 0
 // Shared with run() for export staging names; returns the counter value, then increments it.
 export function nextTempCounter() {
   return tempCounter++
-}
-export function atomicWrite(p, content) {
-  ensureDir(dirname(p))
-  const tmp = `${p}.holoself-tmp-${process.pid}-${tempCounter++}`
-  try {
-    writeFileSync(tmp, content, 'utf8')
-    renameSync(tmp, p)
-  } finally {
-    if (existsSync(tmp)) unlinkSync(tmp)
-  }
 }
 export function json(p, v) {
   atomicWrite(p, JSON.stringify(v, null, 2) + '\n')
@@ -50,14 +39,6 @@ export function copyMarkdownTree(source, dest) {
   if (stat.isFile() && source.endsWith('.md')) {
     if (existsSync(dest) && lstatSync(dest).isSymbolicLink()) throw new Error(`refusing symlink destination: ${dest}`)
     atomicWrite(dest, readFileSync(source))
-  }
-}
-export function pathExists(p) {
-  try {
-    lstatSync(p)
-    return true
-  } catch {
-    return false
   }
 }
 export function isEcosystemMetadata(out) {

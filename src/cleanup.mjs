@@ -1,27 +1,25 @@
-import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, openSync, closeSync, rmdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { parseAnnotatedMarkdown } from './documents.mjs'
 import { safeMaintenancePath } from './maintenance.mjs'
+import { markdownFiles } from './markdown/files.mjs'
+import { hash as digest, slash } from './shared/fs.mjs'
 
-const digest = value => createHash('sha256').update(value).digest('hex')
-const slash = value => value.replaceAll('\\', '/')
-
-function markdownFiles(root) {
+function cleanupMarkdownFiles(root) {
   const out = []
   for (const top of ['profile', 'context', 'topics', 'reference', 'me']) {
     const base = join(root, top)
     if (!existsSync(base)) continue
     safeMaintenancePath(root, `${top}/.probe`)
-    const walk = dir => {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        const path = join(dir, entry.name)
-        if (entry.isSymbolicLink()) throw new Error(`unsafe cleanup entry: ${path}`)
-        if (entry.isDirectory()) walk(path)
-        else if (entry.isFile() && entry.name.endsWith('.md')) out.push(path)
-      }
-    }
-    walk(base)
+    out.push(
+      ...markdownFiles(base, {
+        includeHoloself: true,
+        skipDirs: new Set(),
+        onSymlink: path => {
+          throw new Error(`unsafe cleanup entry: ${path}`)
+        }
+      })
+    )
   }
   return out.sort()
 }
@@ -29,7 +27,7 @@ export function buildCleanupPlan(root, { now = new Date().toISOString() } = {}) 
   root = resolve(root)
   const operations = [],
     review = []
-  for (const path of markdownFiles(root)) {
+  for (const path of cleanupMarkdownFiles(root)) {
     safeMaintenancePath(root, slash(relative(root, path)))
     const content = readFileSync(path, 'utf8'),
       metadata = parseAnnotatedMarkdown(content).metadata,

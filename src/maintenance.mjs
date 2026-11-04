@@ -1,22 +1,11 @@
-import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, openSync, closeSync, rmdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { DEFAULT_LENSES, loadLensRegistry } from './lenses.mjs'
 import { normalizeProjectPath, readBindings } from './bindings.mjs'
 import { assertNoLinkBelow, linkBelow } from './path-guard.mjs'
+import { hash as sha, pathExists, slash } from './shared/fs.mjs'
 
-const sha = value => createHash('sha256').update(value).digest('hex')
-const slash = value => value.replaceAll('\\', '/')
 export const renamedLens = id => ({ career: 'professional', publishing: 'public-voice' })[id] || id
-function pathExists(path) {
-  try {
-    lstatSync(path)
-    return true
-  } catch (error) {
-    if (['ENOENT', 'ENOTDIR'].includes(error.code)) return false
-    throw error
-  }
-}
 function safePath(root, rel) {
   if (typeof rel !== 'string' || !rel || isAbsolute(rel) || rel.includes('\\') || rel.split('/').some(part => ['', '..', '.'].includes(part)))
     throw new Error(`invalid maintenance path: ${rel}`)

@@ -1,6 +1,5 @@
 // Privacy frontmatter fields: validation, conservative salvage and restriction.
-import { DISCLOSURES, DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES } from '../annotations.mjs'
-import { KNOWLEDGE_STATUSES, TEMPORAL_SCOPES } from '../context-selection.mjs'
+import { DISCLOSURES, DOCUMENT_ROLES, KNOWLEDGE_STATUSES, SENSITIVITIES, TEMPORAL_SCOPES, VISIBILITIES } from '../annotations.mjs'
 import { lensIdStructurallyValid } from '../lenses.mjs'
 import { parseScalar, parseYaml } from '../shared/yaml.mjs'
 
@@ -177,33 +176,53 @@ export function salvagePrivacyFrontmatter(raw, { forcePrivate = false, registry 
   if (forcePrivate || malformed || privacyMetadataErrors(metadata, registry).length) restrictPrivacyMetadata(metadata)
   return metadata
 }
-export function frontmatter(text, { tolerant = false, registry = null } = {}) {
-  if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) return { metadata: {}, body: text, warnings: [] }
-  const end = text.indexOf('\n---', 4)
+export function frontmatter(text, { tolerant = false, registry = null, validatePrivacy = true } = {}) {
+  if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) return { metadata: {}, body: text, raw: '', hasFrontmatter: false, warnings: [] }
+  const openLen = text.startsWith('---\r\n') ? 5 : 4
+  const end = text.indexOf('\n---', 3)
   if (end < 0) {
     if (!tolerant) throw new Error('unclosed frontmatter')
+    if (!validatePrivacy) return { metadata: {}, body: text, raw: '', hasFrontmatter: false, warnings: [] }
     return {
       metadata: salvagePrivacyFrontmatter(text.slice(4), { forcePrivate: true, registry }),
       body: text.slice(4),
+      raw: text.slice(4),
+      hasFrontmatter: true,
       warnings: ['unclosed project frontmatter restricted to private']
     }
   }
-  const raw = text.slice(4, end),
+  const raw = text.slice(openLen, Math.max(openLen, end)).replace(/\r$/, ''),
     body = text.slice(end + 4).replace(/^\r?\n/, '')
   let metadata
   try {
     metadata = parseYaml(raw)
   } catch (error) {
     if (!tolerant) throw error
+    if (!validatePrivacy) {
+      metadata = {}
+      for (const line of raw.split(/\r?\n/)) {
+        const match = line.match(/^([a-zA-Z0-9_-]+):\s*(.*)$/)
+        if (!match) continue
+        try {
+          metadata[match[1]] = parseScalar(match[2])
+        } catch {
+          metadata[match[1]] = match[2].trim().replace(/^['"]|['"]$/g, '')
+        }
+      }
+      return { metadata, body, raw, hasFrontmatter: true, warnings: [`unsupported frontmatter parsed conservatively: ${error.message}`] }
+    }
     metadata = salvagePrivacyFrontmatter(raw, { registry })
     if (!Object.keys(metadata).length) restrictPrivacyMetadata(metadata)
-    return { metadata, body, warnings: [`unsupported project frontmatter parsed conservatively: ${error.message}`] }
+    return { metadata, body, raw, hasFrontmatter: true, warnings: [`unsupported project frontmatter parsed conservatively: ${error.message}`] }
+  }
+  if (!validatePrivacy) {
+    return { metadata: { ...metadata }, body, raw, hasFrontmatter: true, warnings: [] }
   }
   const privacyErrors = privacyMetadataErrors(metadata, registry)
   if (privacyErrors.length) {
     if (!tolerant) throw new Error(privacyErrors.join('; '))
     restrictPrivacyMetadata(metadata)
-    return { metadata, body, warnings: [`invalid project privacy metadata restricted: ${privacyErrors.join(', ')}`] }
+    return { metadata, body, raw, hasFrontmatter: true, warnings: [`invalid project privacy metadata restricted: ${privacyErrors.join(', ')}`] }
   }
-  return { metadata, body, warnings: [] }
+  return { metadata, body, raw, hasFrontmatter: true, warnings: [] }
 }

@@ -1,19 +1,7 @@
-import { lstatSync, readlinkSync, realpathSync } from 'node:fs'
-import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
-import { assertNoLinkBelow } from './path-guard.mjs'
+import { readlinkSync, realpathSync } from 'node:fs'
+import { basename, dirname, isAbsolute, resolve } from 'node:path'
+import { assertNoLinkBelow, contained, lstat as stat } from './path-guard.mjs'
 
-function stat(path) {
-  try {
-    return lstatSync(path)
-  } catch (error) {
-    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null
-    throw error
-  }
-}
-function contained(root, path) {
-  const rel = relative(root, path)
-  return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`))
-}
 // The path itself is the trust boundary: it must not be a link, while links in
 // its ancestors belong to the user's environment (for example macOS /var).
 function plainPath(path) {

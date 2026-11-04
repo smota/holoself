@@ -1,17 +1,11 @@
 // Filesystem and path helpers shared by the ecosystem modules (moved verbatim from ecosystem.mjs).
-import { createHash } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, realpathSync } from 'node:fs'
-import { join, resolve } from 'node:path'
-import { atomicWriteFile } from '../catalog.mjs'
-import { assertNoLinkBelow, canonicalPath, isWithin, locateBelow } from '../path-guard.mjs'
+import { createHash, randomBytes } from 'node:crypto'
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, realpathSync, renameSync, rmSync, writeSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { assertNoLinkBelow, canonicalPath, isWithin, locateBelow, lstat } from '../path-guard.mjs'
 
 export function pathExists(path) {
-  try {
-    lstatSync(path)
-    return true
-  } catch {
-    return false
-  }
+  return lstat(path) !== null
 }
 export function safeRealpath(p) {
   try {
@@ -23,11 +17,55 @@ export function safeRealpath(p) {
 export function ensureDir(path) {
   mkdirSync(path, { recursive: true })
 }
-export function atomicWrite(path, content) {
-  atomicWriteFile(path, content)
+export function sleepSync(ms) {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+  } catch {
+    const end = Date.now() + ms
+    while (Date.now() < end) {}
+  }
+}
+export function atomicWrite(targetPath, content, options = {}) {
+  const mode = typeof options === 'number' ? options : (options?.mode ?? 0o600)
+  const targetDir = dirname(targetPath)
+  if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
+  const tmpPath = `${targetPath}.tmp-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}`
+  const fd = openSync(tmpPath, 'w', mode)
+  try {
+    const buf = Buffer.isBuffer(content) ? content : Buffer.from(String(content), 'utf8')
+    let written = 0
+    while (written < buf.length) {
+      written += writeSync(fd, buf, written, buf.length - written)
+    }
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+  const backoffs = [20, 50, 100]
+  let lastErr = null
+  for (let attempt = 0; attempt <= backoffs.length; attempt++) {
+    try {
+      renameSync(tmpPath, targetPath)
+      lastErr = null
+      break
+    } catch (err) {
+      lastErr = err
+      if ((err.code === 'EPERM' || err.code === 'EBUSY' || err.code === 'EACCES') && attempt < backoffs.length) {
+        sleepSync(backoffs[attempt])
+      } else {
+        break
+      }
+    }
+  }
+  if (lastErr) {
+    try {
+      rmSync(tmpPath, { force: true })
+    } catch {}
+    throw lastErr
+  }
 }
 export function slash(path) {
-  return path.replaceAll('\\', '/')
+  return String(path).replaceAll('\\', '/')
 }
 export function hash(text) {
   return createHash('sha256').update(text).digest('hex')

@@ -1,25 +1,10 @@
-import { existsSync, lstatSync, statSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, unlinkSync } from 'node:fs'
-import { join, resolve, relative, dirname } from 'node:path'
-import { createHash } from 'node:crypto'
+import { existsSync, lstatSync, statSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs'
+import { join, relative } from 'node:path'
+import { canonicalJson } from './catalog.mjs'
+import { HASH_RE } from './catalog/schema.mjs'
 import { DEFAULT_LENS_IDS } from './lenses.mjs'
-
-const ALL_LENSES = DEFAULT_LENS_IDS
-const HASH_RE = /^[0-9a-f]{64}$/
-
-function hash(text) {
-  return createHash('sha256').update(text).digest('hex')
-}
-
-function canonicalJson(obj) {
-  if (obj === null || typeof obj !== 'object') return JSON.stringify(obj)
-  if (Array.isArray(obj)) return `[${obj.map(canonicalJson).join(',')}]`
-  const sortedKeys = Object.keys(obj).sort()
-  return `{${sortedKeys.map(k => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(',')}}`
-}
-
-function slash(p) {
-  return p.replaceAll('\\', '/')
-}
+import { frontmatter } from './policy/privacy-fields.mjs'
+import { atomicWrite, hash, slash } from './shared/fs.mjs'
 
 export function computeMeetMetadata(meta, kind = 'self') {
   const result = { ...meta }
@@ -134,7 +119,7 @@ function evaluateAllowed(meta, lens, adapter, subjectKind) {
           ? ['general', 'professional', 'interview', 'private']
           : meta.visibility === 'public-voice'
             ? ['general', 'public-voice', 'private']
-            : ALL_LENSES
+            : DEFAULT_LENS_IDS
   if (!accessLenses.includes(lens)) return false
   if (Array.isArray(meta.exclude_lenses) && meta.exclude_lenses.includes(lens)) return false
 
@@ -166,7 +151,7 @@ function evaluateAllowedV1(meta, lens, adapter, subjectKind) {
           ? ['general', 'professional', 'interview', 'private']
           : meta.visibility === 'public-voice'
             ? ['general', 'public-voice', 'private']
-            : ALL_LENSES
+            : DEFAULT_LENS_IDS
   if (!accessLenses.includes(lens)) return false
   if (Array.isArray(meta.exclude_lenses) && meta.exclude_lenses.includes(lens)) return false
 
@@ -187,7 +172,7 @@ export function verifyNonAmplification(beforeMeta, afterMeta) {
   const adapters = ['generic', 'public']
   const coverageLoss = {}
 
-  for (const lens of ALL_LENSES) {
+  for (const lens of DEFAULT_LENS_IDS) {
     for (const s of subjects) {
       for (const a of adapters) {
         const allowedBefore = evaluateAllowedV1(beforeMeta, lens, a, s)
@@ -235,53 +220,6 @@ export function validateMigrationReceiptSchema(receipt) {
   if (typeof receipt.applied_at !== 'string') errors.push('applied_at must be string')
   if (!Array.isArray(receipt.entries)) errors.push('entries must be an array')
   return { valid: errors.length === 0, errors }
-}
-
-function parseSimpleFrontmatter(text) {
-  if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) return { metadata: {}, body: text }
-  const nl = text.includes('\r\n') ? '\r\n' : '\n'
-  const endIdx = text.indexOf(`${nl}---`, 3)
-  if (endIdx < 0) return { metadata: {}, body: text }
-  const raw = text.slice(3 + nl.length, endIdx)
-  const body = text.slice(endIdx + 3 + nl.length).replace(/^\r?\n/, '')
-  const metadata = {}
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const colonIdx = trimmed.indexOf(':')
-    if (colonIdx < 0) continue
-    const key = trimmed.slice(0, colonIdx).trim()
-    let valStr = trimmed.slice(colonIdx + 1).trim()
-    if (valStr.startsWith('[') && valStr.endsWith(']')) {
-      metadata[key] = valStr
-        .slice(1, -1)
-        .split(',')
-        .map(s => s.trim().replace(/^['"]|['"]$/g, ''))
-        .filter(Boolean)
-    } else {
-      valStr = valStr.replace(/^['"]|['"]$/g, '')
-      if (valStr === 'true') metadata[key] = true
-      else if (valStr === 'false') metadata[key] = false
-      else metadata[key] = valStr
-    }
-  }
-  return { metadata, body }
-}
-
-function atomicWriteFile(target, content, mode = 0o600) {
-  const dir = dirname(target)
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  const tmp = `${target}.tmp-${process.pid}-${Date.now()}`
-  try {
-    writeFileSync(tmp, content, { encoding: 'utf8', mode })
-    renameSync(tmp, target)
-  } finally {
-    if (existsSync(tmp)) {
-      try {
-        unlinkSync(tmp)
-      } catch {}
-    }
-  }
 }
 
 export function planPolicyMigration(selfRoot, options = {}) {
@@ -344,7 +282,7 @@ export function planPolicyMigration(selfRoot, options = {}) {
     const text = readFileSync(item.absPath, 'utf8')
     if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) continue
 
-    const parsed = parseSimpleFrontmatter(text)
+    const parsed = frontmatter(text, { tolerant: true, validatePrivacy: false })
     const meetMeta = computeMeetMetadata(parsed.metadata, item.kind)
 
     const changes = {}
@@ -485,7 +423,7 @@ export function applyPolicyMigration(selfRoot, planInput, options = {}) {
       throw new Error(`Digest mismatch after frontmatter modification for ${entry.path}`)
     }
 
-    atomicWriteFile(absPath, modifiedText, 0o600)
+    atomicWrite(absPath, modifiedText, 0o600)
 
     receiptEntries.push({
       path: entry.path,
@@ -511,7 +449,7 @@ export function applyPolicyMigration(selfRoot, planInput, options = {}) {
   }
 
   const receiptPath = join(migrationsDir, `receipt-${plan.plan_id}.json`)
-  atomicWriteFile(receiptPath, JSON.stringify(receipt, null, 2) + '\n', 0o600)
+  atomicWrite(receiptPath, JSON.stringify(receipt, null, 2) + '\n', 0o600)
 
   return receipt
 }
@@ -581,7 +519,7 @@ export function revertPolicyMigration(selfRoot, receiptInput, options = {}) {
     }
 
     if (entry.before_text) {
-      atomicWriteFile(absPath, entry.before_text, 0o600)
+      atomicWrite(absPath, entry.before_text, 0o600)
       entry.status = 'reverted'
       revertedCount++
     }
@@ -590,7 +528,7 @@ export function revertPolicyMigration(selfRoot, receiptInput, options = {}) {
   receipt.status = skippedCount > 0 ? (revertedCount > 0 ? 'partially-reverted' : 'applied') : 'reverted'
   receipt.reverted_at = new Date().toISOString()
 
-  atomicWriteFile(receiptPath, JSON.stringify(receipt, null, 2) + '\n', 0o600)
+  atomicWrite(receiptPath, JSON.stringify(receipt, null, 2) + '\n', 0o600)
 
   return receipt
 }

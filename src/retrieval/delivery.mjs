@@ -1,9 +1,8 @@
 // Context delivery: re-reads each selected source, reconciles it with its catalog revision and re-applies policy.
 import { VISIBILITIES } from '../annotations.mjs'
-import { canonicalSort, readSourceWithStat, slugHeading } from '../catalog.mjs'
-import { privacySections } from '../catalog/source.mjs'
+import { readSourceWithStat } from '../catalog.mjs'
+import { buildCatalogSections, extractSectionAnnotations, privacySections } from '../catalog/source.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
-import { claims, links, tags } from '../markdown/text.mjs'
 import { allowed, filterClaimVisibility, filterFieldVisibility, privacyMetadata, visibleUnderBehavior } from '../policy/access.mjs'
 import { frontmatter } from '../policy/privacy-fields.mjs'
 import { hash } from '../shared/fs.mjs'
@@ -78,15 +77,7 @@ export function createRecordDelivery(o, { project, identity, registry, lens, res
       estimatedTokens = Math.ceil(read.text.length / 4)
       const safeMeta = privacyMetadata(metadata, registry)
       const rawSecs = privacySections(body, safeMeta)
-      const seenSlugs = new Map()
-      const catSecs = rawSecs.map(sec => {
-        const baseSlug = slugHeading(sec.heading)
-        const count = (seenSlugs.get(baseSlug) || 0) + 1
-        seenSlugs.set(baseSlug, count)
-        const section_id = count === 1 ? baseSlug : `${baseSlug}-${count}`
-        const snippet = (sec.content.length > 360 ? sec.content.slice(0, 357) + '...' : sec.content).trim()
-        return { section_id, heading: sec.heading, visibility: sec.visibility, disclosure: sec.disclosure, claim: Boolean(sec.claim), snippet }
-      })
+      const catSecs = buildCatalogSections(rawSecs)
       sectionsList = catSecs
         .filter(sec => {
           const secVis = VISIBILITIES.includes(sec.visibility) ? sec.visibility : 'private'
@@ -104,12 +95,7 @@ export function createRecordDelivery(o, { project, identity, registry, lens, res
           )
           return { ...sec, snippet: filtered }
         })
-      const annotatedClaims = rawSecs.flatMap(sec => claims(sec.content).map(text => ({ text, visibility: sec.visibility })))
-      const annotatedLinks = rawSecs.flatMap(sec => links(sec.content).map(value => ({ value, visibility: sec.visibility })))
-      const annotatedTags = rawSecs.flatMap(sec => tags(sec.content).map(value => ({ value, visibility: sec.visibility })))
-      annotatedClaims.sort((a, b) => canonicalSort(a.text, b.text))
-      annotatedLinks.sort((a, b) => canonicalSort(a.value, b.value))
-      annotatedTags.sort((a, b) => canonicalSort(a.value, b.value))
+      const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSecs)
       claimsList = annotatedClaims.filter(c => visibleUnderBehavior(c.visibility, behaviorLens, adapter))
       tagsList = annotatedTags.filter(t => visibleUnderBehavior(t.visibility, behaviorLens, adapter))
       linksList = annotatedLinks.filter(l => visibleUnderBehavior(l.visibility, behaviorLens, adapter))

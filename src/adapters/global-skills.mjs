@@ -1,6 +1,6 @@
 // User-level (global) public skill installations: inspection, status and transactional install.
-import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, readFileSync, rmSync } from 'node:fs'
+import { hash as contentHash } from '../shared/fs.mjs'
 import { inspectSkillFile } from '../skill-paths.mjs'
 import { markerInfo } from './markers.mjs'
 import {
@@ -15,12 +15,10 @@ import {
   slash,
   userSkillTargets
 } from './registry.mjs'
+export { hash as contentHash } from '../shared/fs.mjs'
 
 export function normalizedSkill(text) {
   return text.replaceAll('\r\n', '\n').trim()
-}
-export function contentHash(text) {
-  return createHash('sha256').update(text).digest('hex')
 }
 export function inspectGlobalSkillPath(target, options = {}) {
   const location = inspectSkillFile(skillHome(options), target.file, { allowDirectoryLink: true }),

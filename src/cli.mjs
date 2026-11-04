@@ -1,7 +1,6 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, readlinkSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { join, resolve, relative, dirname, basename } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { catalogBuildWarnings, ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
@@ -20,14 +19,14 @@ import {
   migrationPlan,
   printMigrationReport
 } from './cli/data-root-migration.mjs'
+import { PACKAGE_ROOT } from './shared/package-root.mjs'
 export { COMMAND_FLAGS, commandKey, parseArguments, validateFlags } from './cli/args.mjs'
 
 export { VERSION } from './version.mjs'
-const START = '<!-- holoself-export-start -->'
-const END = '<!-- holoself-export-end -->'
+const EXPORT_START = '<!-- holoself-export-start -->'
+const EXPORT_END = '<!-- holoself-export-end -->'
 const ROOT_START = '<!-- holoself-root-start -->'
 const ROOT_END = '<!-- holoself-root-end -->'
-const PACKAGE_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 function configPath(root) {
   return join(root, 'config.json')
 }
@@ -60,7 +59,7 @@ function readConfig(root) {
     return null
   }
 }
-function markerError(p, start = START, end = END) {
+function markerError(p, start = EXPORT_START, end = EXPORT_END) {
   if (!existsSync(p)) return null
   if (lstatSync(p).isSymbolicLink() || !lstatSync(p).isFile()) return `${basename(p)} is not a regular file`
   const text = readFileSync(p, 'utf8')
@@ -96,13 +95,13 @@ function rootSection() {
 }
 function projectSection(packetOnly = false) {
   return packetOnly
-    ? `${START}\n## Holoself context\n\nLoad .holoself/context-packet.md first. This packet is self-contained.\nDo ` +
-        `not write durable context silently: propose changes and ask approval.\n${END}\n`
-    : `${START}\n## Holoself context\n\nLoad .holoself/context-packet.md first.\nIf needed, read relevant files ` +
+    ? `${EXPORT_START}\n## Holoself context\n\nLoad .holoself/context-packet.md first. This packet is self-contained.\nDo ` +
+        `not write durable context silently: propose changes and ask approval.\n${EXPORT_END}\n`
+    : `${EXPORT_START}\n## Holoself context\n\nLoad .holoself/context-packet.md first.\nIf needed, read relevant files ` +
         `under .holoself/profile/ and .holoself/context/.\nDo not write durable context silently: propose changes and ` +
-        `ask approval.\n${END}\n`
+        `ask approval.\n${EXPORT_END}\n`
 }
-function inject(target, file, dryRun, section, start = START, end = END) {
+function inject(target, file, dryRun, section, start = EXPORT_START, end = EXPORT_END) {
   const p = join(target, file)
   const existed = pathExists(p)
   if (existed && lstatSync(p).isSymbolicLink()) throw new Error(`${p} is a symlink; refusing to modify`)

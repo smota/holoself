@@ -33,6 +33,33 @@ export function privacySections(body, policy) {
   }
   return chunks
 }
+export function buildCatalogSections(rawSections, defaults = {}) {
+  const seenSlugs = new Map()
+  return rawSections.map(sec => {
+    const baseSlug = slugHeading(sec.heading)
+    const count = (seenSlugs.get(baseSlug) || 0) + 1
+    seenSlugs.set(baseSlug, count)
+    const section_id = count === 1 ? baseSlug : `${baseSlug}-${count}`
+    const snippet = (sec.content.length > 360 ? sec.content.slice(0, 357) + '...' : sec.content).trim()
+    return {
+      section_id,
+      heading: sec.heading,
+      visibility: sec.visibility ?? defaults.visibility,
+      disclosure: sec.disclosure ?? defaults.disclosure,
+      claim: Boolean(sec.claim ?? defaults.claim),
+      snippet
+    }
+  })
+}
+export function extractSectionAnnotations(rawSections) {
+  const annotatedClaims = rawSections.flatMap(sec => claims(sec.content).map(text => ({ text, visibility: sec.visibility })))
+  const annotatedLinks = rawSections.flatMap(sec => links(sec.content).map(value => ({ value, visibility: sec.visibility })))
+  const annotatedTags = rawSections.flatMap(sec => tags(sec.content).map(value => ({ value, visibility: sec.visibility })))
+  annotatedClaims.sort((a, b) => canonicalSort(a.text, b.text))
+  annotatedLinks.sort((a, b) => canonicalSort(a.value, b.value))
+  annotatedTags.sort((a, b) => canonicalSort(a.value, b.value))
+  return { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags }
+}
 export function buildCatalogSource(file, sourceKind, root, registry, tolerant = false) {
   const rel = slash(relative(root, file))
   if (!existsSync(file)) return null
@@ -57,22 +84,8 @@ export function buildCatalogSource(file, sourceKind, root, registry, tolerant = 
 
   const policy = privacyMetadata(metadata, registry)
   const rawSections = privacySections(body, policy)
-  const seenSlugs = new Map()
-  const catalogSections = rawSections.map(sec => {
-    const baseSlug = slugHeading(sec.heading)
-    const count = (seenSlugs.get(baseSlug) || 0) + 1
-    seenSlugs.set(baseSlug, count)
-    const section_id = count === 1 ? baseSlug : `${baseSlug}-${count}`
-    const snippet = (sec.content.length > 360 ? sec.content.slice(0, 357) + '...' : sec.content).trim()
-    return { section_id, heading: sec.heading, visibility: sec.visibility, disclosure: sec.disclosure, claim: Boolean(sec.claim), snippet }
-  })
-
-  const annotatedClaims = rawSections.flatMap(sec => claims(sec.content).map(text => ({ text, visibility: sec.visibility })))
-  const annotatedLinks = rawSections.flatMap(sec => links(sec.content).map(value => ({ value, visibility: sec.visibility })))
-  const annotatedTags = rawSections.flatMap(sec => tags(sec.content).map(value => ({ value, visibility: sec.visibility })))
-  annotatedClaims.sort((a, b) => canonicalSort(a.text, b.text))
-  annotatedLinks.sort((a, b) => canonicalSort(a.value, b.value))
-  annotatedTags.sort((a, b) => canonicalSort(a.value, b.value))
+  const catalogSections = buildCatalogSections(rawSections)
+  const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSections)
 
   const sourceTextHash = hash(text)
   const spaceId = sourceKind === 'canonical' ? 'self' : sourceKind === 'project' ? canonicalSpaceId(root) : 'contrib'

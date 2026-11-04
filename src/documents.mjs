@@ -1,11 +1,11 @@
-import { createHash } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, relative, resolve, sep } from 'node:path'
+import { existsSync, lstatSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { join, relative, resolve, sep } from 'node:path'
 import { validateAnnotationMetadata } from './annotations.mjs'
 import { assertNoLinkBelow } from './path-guard.mjs'
+import { frontmatter } from './policy/privacy-fields.mjs'
+import { atomicWrite, hash, slash } from './shared/fs.mjs'
 
 const ROOTS = new Set(['profile', 'context', 'topics', 'reference', 'me', 'contribs', 'history'])
-const hash = value => createHash('sha256').update(value).digest('hex')
 export const ANNOTATION_FIELDS = {
   schema_version: 'number',
   access_lenses: 'array',
@@ -23,18 +23,6 @@ export const ANNOTATION_FIELDS = {
   supersedes: 'array',
   superseded_by: 'string'
 }
-function parseValue(value) {
-  const text = value.trim()
-  if (/^\[.*\]$/.test(text))
-    return text
-      .slice(1, -1)
-      .split(',')
-      .map(item => item.trim())
-      .filter(Boolean)
-  if (text === 'true' || text === 'false') return text === 'true'
-  if (/^\d+$/.test(text)) return Number(text)
-  return text.replace(/^['"]|['"]$/g, '')
-}
 function formatValue(value) {
   if (Array.isArray(value)) return `[${value.join(', ')}]`
   if (typeof value === 'boolean') return String(value)
@@ -42,19 +30,33 @@ function formatValue(value) {
 }
 export function parseAnnotatedMarkdown(content) {
   const normalized = content.replaceAll('\r\n', '\n'),
-    match = normalized.match(/^---\n([\s\S]*?)\n---\n?/),
-    frontmatter = match ? match[1].split('\n') : [],
-    body = match ? normalized.slice(match[0].length) : normalized,
+    parsed = frontmatter(normalized, { tolerant: true, validatePrivacy: false }),
+    rawLines = parsed.hasFrontmatter && parsed.raw ? parsed.raw.split('\n') : [],
+    body = parsed.body,
     metadata = {},
     unknown = []
-  for (const line of frontmatter) {
+  for (const [key, expectedType] of Object.entries(ANNOTATION_FIELDS)) {
+    if (!Object.hasOwn(parsed.metadata, key) || parsed.metadata[key] === null || parsed.metadata[key] === undefined) continue
+    const val = parsed.metadata[key]
+    if (expectedType === 'array') metadata[key] = Array.isArray(val) ? val.map(item => String(item).trim()).filter(Boolean) : [String(val).trim()].filter(Boolean)
+    else if (expectedType === 'boolean') metadata[key] = typeof val === 'boolean' ? val : val === 'true' ? true : val === 'false' ? false : val
+    else if (expectedType === 'number') metadata[key] = typeof val === 'number' ? val : Number(val)
+    else metadata[key] = typeof val === 'string' ? val : String(val)
+  }
+  let skippingKnownBlock = false
+  for (const line of rawLines) {
     const found = line.match(/^([a-zA-Z0-9_-]+):\s*(.*)$/)
-    if (!found) {
+    if (found) {
+      if (Object.hasOwn(ANNOTATION_FIELDS, found[1])) {
+        skippingKnownBlock = found[2].trim() === ''
+        if (skippingKnownBlock && !Object.hasOwn(metadata, found[1])) metadata[found[1]] = ANNOTATION_FIELDS[found[1]] === 'array' ? [] : ''
+      } else {
+        skippingKnownBlock = false
+        unknown.push(line)
+      }
+    } else if (!skippingKnownBlock || (!/^\s+/.test(line) && line.trim())) {
       unknown.push(line)
-      continue
     }
-    if (Object.hasOwn(ANNOTATION_FIELDS, found[1])) metadata[found[1]] = parseValue(found[2])
-    else unknown.push(line)
   }
   const markers = [...body.matchAll(/<!--\s*(\/?)os-section(?::\s*([a-zA-Z0-9_-]+))?\s*-->/g)],
     segments = []
@@ -111,7 +113,7 @@ function safe(root, name, { missing = false } = {}) {
     throw new Error('document path escapes editable knowledge')
   assertNoLinkBelow(base, path, () => new Error('document path contains a symlink'))
   if (!missing && (!existsSync(path) || !lstatSync(path).isFile())) throw new Error('document not found')
-  return { path, relative: rel.replaceAll('\\', '/') }
+  return { path, relative: slash(rel) }
 }
 export function listDocuments(root) {
   const out = []
@@ -128,7 +130,7 @@ export function listDocuments(root) {
             s = lstatSync(p),
             metadata = parseAnnotatedMarkdown(text).metadata
           out.push({
-            path: relative(resolve(root), p).replaceAll('\\', '/'),
+            path: slash(relative(resolve(root), p)),
             bytes: s.size,
             modified_at: s.mtime.toISOString(),
             hash: hash(text),
@@ -166,22 +168,16 @@ export async function saveDocument(root, name, content, expectedHash, { validate
     e.current_hash = current
     throw e
   }
-  mkdirSync(dirname(item.path), { recursive: true })
-  const tmp = `${item.path}.tmp-${process.pid}`
   try {
-    writeFileSync(tmp, content, 'utf8')
-    renameSync(tmp, item.path)
+    atomicWrite(item.path, content)
     if (validate) await validate()
   } catch (error) {
     if (existed) {
-      writeFileSync(tmp, before)
-      renameSync(tmp, item.path)
+      atomicWrite(item.path, before)
     } else rmSync(item.path, { force: true })
     const wrapped = new Error(`document validation failed; original content restored: ${error.message}`)
     wrapped.code = 'DOCUMENT_INVALID'
     throw wrapped
-  } finally {
-    if (existsSync(tmp)) rmSync(tmp, { force: true })
   }
   return { ...item, hash: hash(content), bytes: Buffer.byteLength(content) }
 }

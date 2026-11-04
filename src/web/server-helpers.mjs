@@ -1,17 +1,19 @@
 // Workbench server helpers: package paths, error mapping, request bodies, the CLI bridge and catalog state.
 import { spawn } from 'node:child_process'
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
+import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { normalizeProjectPath, readBindings } from '../bindings.mjs'
-import { redactRootPaths } from '../ecosystem.mjs'
+import { PACKAGE_ROOT as BASE } from '../shared/package-root.mjs'
+import { escapeRegExp, redactRootPaths } from '../shared/redact.mjs'
+import { VERSION } from '../version.mjs'
+export { PACKAGE_ROOT as BASE } from '../shared/package-root.mjs'
+export { escapeRegExp } from '../shared/redact.mjs'
+export { VERSION } from '../version.mjs'
 
-export const BASE = resolve(fileURLToPath(new URL('../..', import.meta.url))),
-  WEB = join(BASE, 'web'),
-  BIN = join(BASE, 'bin', 'holoself.mjs'),
-  VERSION = JSON.parse(readFileSync(join(BASE, 'package.json'), 'utf8')).version
+export const WEB = join(BASE, 'web'),
+  BIN = join(BASE, 'bin', 'holoself.mjs')
 export class HttpError extends Error {
   constructor(status, code, message, extra = {}) {
     super(message)
@@ -28,7 +30,6 @@ export const CONFLICT_CODES = new Set([
   'PLAN_CHANGED',
   'REGISTRY_CONCURRENT_MODIFICATION'
 ])
-export const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 export function scrubMessage(message, roots = []) {
   const known = [...roots, homedir(), tmpdir(), process.env.HOLOSELF_HOME, BASE].filter(Boolean)
   let text = String(message || '')
@@ -98,31 +99,6 @@ export function cliFailure(stderr, code) {
     } catch {}
   }
   return new Error(stderr || `command failed (${code})`)
-}
-export const previewHash = value =>
-  createHash('sha256')
-    .update(value.replace(/Approved: \d{4}-\d{2}-\d{2}T[^\n]+/g, 'Approved: <commit-time>'))
-    .digest('hex')
-export function proposalPreviewData(value) {
-  const marker = '--- proposed diff ---',
-    index = value.indexOf(marker),
-    header = index >= 0 ? value.slice(0, index) : value,
-    diff = index >= 0 ? value.slice(index + marker.length).trim() : ''
-  const field = name => header.match(new RegExp(`^${name}:\\s*(.+)$`, 'm'))?.[1]?.trim() || ''
-  return {
-    preview: value,
-    target: field('Target'),
-    affectedFiles: field('Affected files')
-      .split(';')
-      .map(item => item.trim())
-      .filter(Boolean),
-    evidence: field('Evidence'),
-    change: diff
-      .split('\n')
-      .map(line => (line.startsWith('+') ? line.slice(1) : line))
-      .join('\n')
-      .trim()
-  }
 }
 // The repair dry run prints pretty JSON objects (binding_migration, activation_plan) followed by result lines.
 export function repairPlan(stdout) {
