@@ -127,3 +127,33 @@ test('MCP configuration rollback restores an existing file byte-for-byte',async(
   assert.throws(()=>applyMcpConfiguration(project,{platforms:['codex','agy']},{write(target,content){writes++;if(writes===2)throw new Error('injected later failure');mkdirSync(dirname(target),{recursive:true});writeFileSync(target,content,'utf8')}}),/injected later failure/)
   assert.equal(await readFile(path,'utf8'),original);assert.equal(existsSync(join(project,'.agents','mcp_config.json')),false)
 })
+
+test('opt-in MCP audit log records only event, tool name, and outcome',async()=>{
+  const {self,project}=await fixture(),dir=await temp(),log=join(dir,'audit.ndjson'),output=[]
+  const accept=createMcpSession({project,write:line=>output.push(JSON.parse(line)),auditLog:log})
+  const send=(id,method,params)=>accept(JSON.stringify({jsonrpc:'2.0',id,method,params}))
+  send(1,'initialize',{protocolVersion:'2025-11-25'});send(2,'tools/list',{})
+  send(3,'tools/call',{name:'holoself_search',arguments:{query:'secret-argument-marker'}})
+  send(4,'tools/call',{name:'holoself_context_get',arguments:{source_ids:['../../private']}})
+  send(5,'tools/call',{name:'/srv/private/tool-name-marker',arguments:{}})
+  const text=await readFile(join(log),'utf8'),lines=text.trim().split('\n').map(line=>JSON.parse(line))
+  assert.deepEqual(lines.map(({at,...rest})=>rest),[
+    {event:'tools/list',tools:7},
+    {event:'tools/call',tool:'holoself_search',ok:true,error_code:null},
+    {event:'tools/call',tool:'holoself_context_get',ok:false,error_code:'INVALID_ARGUMENT'},
+    {event:'tools/call',tool:'unknown',ok:false,error_code:'TOOL_NOT_FOUND'}
+  ])
+  for(const marker of [self,project,'secret-argument-marker','private','tool-name-marker','MCP parity marker'])assert.ok(!text.includes(marker),`audit log leaked ${marker}`)
+  assert.equal(output.length,5)
+  const silent=[],quiet=createMcpSession({project,write:line=>silent.push(line),auditLog:'relative/audit.ndjson'})
+  quiet(JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{}}));quiet(JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/list',params:{}}))
+  assert.equal(existsSync(join(process.cwd(),'relative')),false)
+})
+
+test('MCP status reports per-platform support from the verification matrix',async()=>{
+  const {project}=await fixture(),{mcpPlatformSupport}=await import('../src/mcp-verification.mjs')
+  const expected=Object.fromEntries(mcpPlatformSupport().map(item=>[item.platform,item]))
+  for(const item of mcpConfigurationStatus(project).platforms){
+    assert.equal(item.support,expected[item.platform].support);assert.equal(item.tested_version,expected[item.platform].tested_version);assert.equal(item.last_verified,expected[item.platform].last_verified)
+  }
+})

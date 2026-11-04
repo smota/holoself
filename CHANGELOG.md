@@ -4,6 +4,9 @@ All notable Holoself releases are documented here.
 
 ## Unreleased
 
+- Existing Codex MCP configurations generated before this release omit `holoself_context` from `enabled_tools`; `mcp status` reports them as `missing-or-drifted` until you re-run `holoself mcp configure --platform codex`.
+- Verify native MCP use in Claude Code 2.1.318, Codex 0.166.0 and AGY 1.5.0 with all seven tools, recorded in `docs/reference/platform-verification.json`. `holoself capabilities --json` (`mcp.platforms`) and `holoself mcp status` now report `verified`, `tested_version` and `last_verified` only from that record; any failed, blocked or missing tool keeps a platform `configured`. The repeatable synthetic-data smoke test is `npm run smoke:mcp` (not part of `npm run verify`). Each host's tool-scoped approval setting is documented. The server accepts an opt-in `HOLOSELF_MCP_AUDIT_LOG` that records only the event, tool name and outcome. Generated Codex configuration now enables `holoself_context`, and context tool text summaries list source handles so text-only hosts can call `holoself_context_get` (#61).
+
 - Compare canonical paths (`canonicalPath` / `samePath`) when checking whether the caller working directory and `--root` or project refer to the same self root or project, avoiding spurious `"No project link found; resolved explicit/default self root."` warnings when `--root` or `TMPDIR` traverses a symlinked ancestor (#85).
 
 - Strip private local filesystem paths (`source_project_path`, `_path`, `absolute_path`) from linked-client CLI `holoself context` output before measuring envelope byte budgets, matching MCP context path stripping and making linked context packet sizes path-independent when pending proposals exist (#84).

@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline'
-import { existsSync, lstatSync } from 'node:fs'
+import { appendFileSync, existsSync, lstatSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import {
   holoselfMcpContext,
@@ -221,7 +221,24 @@ function response(id, result, error) {
   return { jsonrpc: '2.0', id, ...(error ? { error } : { result }) }
 }
 
-export function createMcpSession({ project, write = line => process.stdout.write(`${line}\n`) } = {}) {
+// Opt-in verification audit (HOLOSELF_MCP_AUDIT_LOG, absolute path): one NDJSON line per tools/list and per
+// tools/call with only the event, tool name, outcome, and error code. Arguments, results, and paths are never
+// recorded; unknown tool names are recorded as 'unknown'.
+function audit(logPath, entry) {
+  if (!logPath || !isAbsolute(logPath)) return
+  try {
+    appendFileSync(logPath, `${JSON.stringify(entry)}\n`, { encoding: 'utf8', mode: 0o600 })
+  } catch {
+    // Auditing is diagnostic only; a failed append never changes the protocol response.
+  }
+}
+function auditToolCall(logPath, name, result) {
+  const tool = MCP_TOOLS.some(item => item.name === name) ? name : 'unknown',
+    error_code = result.isError ? result.structuredContent?.error?.code || 'HOLOSELF_ERROR' : null
+  audit(logPath, { at: new Date().toISOString(), event: 'tools/call', tool, ok: !result.isError, error_code })
+}
+
+export function createMcpSession({ project, write = line => process.stdout.write(`${line}\n`), auditLog = process.env.HOLOSELF_MCP_AUDIT_LOG } = {}) {
   let initialized = false,
     protocolVersion = null
   return raw => {
@@ -259,13 +276,17 @@ export function createMcpSession({ project, write = line => process.stdout.write
         }
       } else if (request.method === 'ping') result = {}
       else if (!initialized) throw Object.assign(new Error('Server is not initialized'), { rpcCode: -32002 })
-      else if (request.method === 'tools/list') result = { tools: MCP_TOOLS }
+      else if (request.method === 'tools/list') {
+        result = { tools: MCP_TOOLS }
+        audit(auditLog, { at: new Date().toISOString(), event: 'tools/list', tools: MCP_TOOLS.length })
+      }
       else if (request.method === 'tools/call') {
         try {
           result = toolResult(callTool(project, request.params?.name, request.params?.arguments || {}), request.params?.name)
         } catch (error) {
           result = toolError(error)
         }
+        auditToolCall(auditLog, request.params?.name, result)
       } else throw Object.assign(new Error(`Method not found: ${request.method}`), { rpcCode: -32601 })
       write(JSON.stringify(response(request.id, result)))
     } catch (error) {

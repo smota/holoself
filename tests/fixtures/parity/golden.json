@@ -9480,7 +9480,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "Holoself context (general, complete): 6 document(s) in structuredContent.data; 15762 bytes; receipt 20d9fcf5452c62bcd0bc348a951689f39d645e074001bb028965e7bf522c21ec.\n- context/career-plan.md\n- profile/work-context.md\n- profile/preferences.md\n- profile/thinking.md\n- profile/voice.md\n- contribs/default/ifs.md"
+                  "text": "Holoself context (general, complete): 6 document(s) in structuredContent.data; 15918 bytes; receipt 20d9fcf5452c62bcd0bc348a951689f39d645e074001bb028965e7bf522c21ec.\n- context/career-plan.md [hs-27c16fd0b4a8ae63a0ff]\n- profile/work-context.md [hs-bc1c9a180b028951279e]\n- profile/preferences.md [hs-81e8de61dd564c7c7053]\n- profile/thinking.md [hs-332c212316cf2c1496d6]\n- profile/voice.md [hs-7f4a72353633d9d4e7d3]\n- contribs/default/ifs.md [hs-99a98b2d32ce97a1cab1]"
                 }
               ],
               "structuredContent": {
@@ -9995,9 +9995,9 @@
                     "reconcile_reads": 0,
                     "catalog_reads": 0,
                     "envelope_cap_bytes": 16384,
-                    "total_bytes": 15762,
-                    "estimated_tokens_total": 3941,
-                    "estimated_tokens_total_heuristic": 3941,
+                    "total_bytes": 15918,
+                    "estimated_tokens_total": 3980,
+                    "estimated_tokens_total_heuristic": 3980,
                     "restrictions_grouped": true,
                     "envelope_dropped": [
                       "hs-7a75ce03419faa082bb6",
@@ -10065,7 +10065,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "Holoself context (leadership, complete): 14 document(s) in structuredContent.data; 32892 bytes; receipt f864640dbf07be977064741fc302a94e0c42dabcc00187c6ed0bfdf30cc01ae4.\n- context/career-plan.md\n- profile/thinking.md\n- profile/voice.md\n- profile/preferences.md\n- profile/change.md\n- profile/identity.md\n- profile/work-context.md\n- context/leadership.md\n- context/projects.md\n- context/people.md\n- context/story-bank.md\n- context/decisions.md\n- contribs/default/socratic-inquiry.md\n- contribs/default/ifs.md"
+                  "text": "Holoself context (leadership, complete): 14 document(s) in structuredContent.data; 33256 bytes; receipt f864640dbf07be977064741fc302a94e0c42dabcc00187c6ed0bfdf30cc01ae4.\n- context/career-plan.md [hs-27c16fd0b4a8ae63a0ff]\n- profile/thinking.md [hs-332c212316cf2c1496d6]\n- profile/voice.md [hs-7f4a72353633d9d4e7d3]\n- profile/preferences.md [hs-81e8de61dd564c7c7053]\n- profile/change.md [hs-e24f52d4067dff5ce871]\n- profile/identity.md [hs-ac00c86a1e240a4bb2ce]\n- profile/work-context.md [hs-bc1c9a180b028951279e]\n- context/leadership.md [hs-091cfbf3243c02f5012e]\n- context/projects.md [hs-28fc211f76116fc79a15]\n- context/people.md [hs-6bdf5a62f4667d73ce33]\n- context/story-bank.md [hs-e5056f367e89ba95fef3]\n- context/decisions.md [hs-fc336fe8bb197b2be558]\n- contribs/default/socratic-inquiry.md [hs-5b7af43fcdf99b7c1932]\n- contribs/default/ifs.md [hs-99a98b2d32ce97a1cab1]"
                 }
               ],
               "structuredContent": {
@@ -11184,9 +11184,9 @@
                     "reconcile_reads": 0,
                     "catalog_reads": 0,
                     "envelope_cap_bytes": 49152,
-                    "total_bytes": 32892,
-                    "estimated_tokens_total": 8223,
-                    "estimated_tokens_total_heuristic": 8223
+                    "total_bytes": 33256,
+                    "estimated_tokens_total": 8314,
+                    "estimated_tokens_total_heuristic": 8314
                   },
                   "context_receipt": {
                     "schema_version": 1,

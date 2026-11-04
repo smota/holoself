@@ -1,6 +1,7 @@
 import { existsSync, lstatSync, readFileSync, rmSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { holoselfMcpStatus } from './ecosystem.mjs'
+import { mcpPlatformSupport } from './mcp-verification.mjs'
 import { assertNoLinkBelow } from './path-guard.mjs'
 import { atomicWrite, hash, slash } from './shared/fs.mjs'
 
@@ -9,6 +10,7 @@ const MCP_START = '# holoself-mcp-managed-start'
 const MCP_END = '# holoself-mcp-managed-end'
 const TOOLS = [
   'holoself_status',
+  'holoself_context',
   'holoself_context_manifest',
   'holoself_context_get',
   'holoself_search',
@@ -152,7 +154,8 @@ export function applyMcpConfiguration(projectInput, options = {}, io = {}) {
   }
 }
 export function mcpConfigurationStatus(projectInput, { platforms = PLATFORMS } = {}) {
-  const plan = mcpConfigurationPlan(projectInput, { platforms })
+  const plan = mcpConfigurationPlan(projectInput, { platforms }),
+    support = Object.fromEntries(mcpPlatformSupport().map(item => [item.platform, item]))
   return {
     schema_version: 1,
     project: plan.project,
@@ -163,7 +166,10 @@ export function mcpConfigurationStatus(projectInput, { platforms = PLATFORMS } =
       platform: change.platform,
       file: change.relative,
       state: change.action === 'unchanged' ? 'configured' : 'missing-or-drifted',
-      expected_sha256: change.sha256
+      expected_sha256: change.sha256,
+      support: support[change.platform]?.support || 'configured',
+      tested_version: support[change.platform]?.tested_version ?? null,
+      last_verified: support[change.platform]?.last_verified ?? null
     }))
   }
 }
