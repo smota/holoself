@@ -71,8 +71,10 @@ try {
   }
   delete childEnv.NODE_TEST_CONTEXT
   const runnerFlags = ['--test']
+  const parsedTimeout = Number.parseInt(process.env.HOLOSELF_TEST_TIMEOUT_MS ?? '', 10)
+  const testTimeoutMs = Number.isInteger(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 600000
   if (supportsNodeTestTimeout() && !testArgs.some(arg => arg.startsWith('--test-timeout'))) {
-    runnerFlags.push('--test-timeout=120000')
+    runnerFlags.push(`--test-timeout=${testTimeoutMs}`)
   }
   ;({ code, signal } = await new Promise((resolve, reject) => {
     child = spawn(process.execPath, [...runnerFlags, ...testArgs], {
