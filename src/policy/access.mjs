@@ -77,8 +77,8 @@ export function allowedDocument(meta, lens, adapter = 'generic', task = null, re
       return { allowed: false, reason: `local read_scope not accessible from space ${srcSpace}`, phase: 1 }
     }
   }
-  if (subj.kind === 'client:linked') {
-    if (lens === 'private') return { allowed: false, reason: 'private lens not granted to linked client', phase: 2 }
+  if (subj.kind === 'client:linked' || subj.kind === 'client:unlinked') {
+    if (lens === 'private') return { allowed: false, reason: `private lens not granted to ${subj.kind === 'client:linked' ? 'linked' : 'unlinked'} client`, phase: 2 }
     if (subj.effective_allowed_lenses && !subj.effective_allowed_lenses.has(lens)) {
       return { allowed: false, reason: `lens ${lens} not in effective allowed lenses`, phase: 2 }
     }

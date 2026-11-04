@@ -270,7 +270,7 @@ function inferLedgerMode(data, requestedMode) {
 
 export function buildLedgerEntry(
   data,
-  { surface = 'cli', mode = null, host = null, ledgerKey = null, recordTaskText = false, servedAt = null } = {}
+  { surface = 'cli', mode = null, host = null, ledgerKey = null, recordTaskText = false, servedAt = null, clientId = null } = {}
 ) {
   if (!LEDGER_SURFACES.has(surface)) {
     const err = new Error(`unsupported ledger surface: ${surface}`)
@@ -323,7 +323,9 @@ export function buildLedgerEntry(
     packet_id: typeof data?.packet_metadata?.packet_id === 'string' ? data.packet_metadata.packet_id : null,
     source_ids: sourceIds,
     counts,
-    total_bytes: Number.isInteger(data?.selection?.total_bytes) ? data.selection.total_bytes : 0
+    total_bytes: Number.isInteger(data?.selection?.total_bytes) ? data.selection.total_bytes : 0,
+    // Unlinked MCP clients (`mcp --client`) are attributed per grant so the owner can audit each desktop host.
+    ...(typeof clientId === 'string' && /^[0-9a-f-]{36}$/.test(clientId) ? { client_id: clientId } : {})
   }
 }
 
@@ -620,6 +622,7 @@ export function recordServedPacket({
   mode = null,
   host = null,
   clientInfoName = null,
+  clientId = null,
   env = process.env,
   maxBytes = LEDGER_MAX_BYTES,
   keep = LEDGER_ROTATE_KEEP,
@@ -638,7 +641,8 @@ export function recordServedPacket({
       mode,
       host: resolvedHost,
       ledgerKey,
-      recordTaskText: cfg.record_task_text
+      recordTaskText: cfg.record_task_text,
+      clientId
     })
     appendLedgerLine(targetDir, entry, { maxBytes, keep })
     return entry
@@ -653,7 +657,7 @@ export function recordServedPacket({
   }
 }
 
-export function readLedgerEntries(baseDir, { since = null, lens = null, surface = null, limit = null, keep = LEDGER_ROTATE_KEEP } = {}) {
+export function readLedgerEntries(baseDir, { since = null, lens = null, surface = null, clientId = null, limit = null, keep = LEDGER_ROTATE_KEEP } = {}) {
   let sinceMs = null
   if (since !== null && since !== undefined && since !== '') {
     const str = String(since).trim()
@@ -712,6 +716,7 @@ export function readLedgerEntries(baseDir, { since = null, lens = null, surface 
       }
       if (lens && parsed.lens !== lens) continue
       if (surface && parsed.surface !== surface) continue
+      if (clientId && parsed.client_id !== clientId) continue
       entries.push(parsed)
     }
   }

@@ -11,7 +11,7 @@ Private profile/context, evidence, third-party data, employer-confidential mater
 - Project `.holoself` metadata
 - Agent-client MCP configuration and the client-launched STDIO subprocess
 - Desktop MCP clients without a project (Claude Desktop and similar apps), bound to one owner-attested client identity at launch ([decision](../decisions/unlinked-client-identity.md))
-- Host user-level MCP configuration files that Holoself edits only with `mcp configure --client --apply`
+- Host user-level MCP configuration files that Holoself edits only with `holoself mcp configure --client <client-id> --platform <platform> --apply`
 - Generated packets and indexes
 - Private sync or Git provider chosen by user
 

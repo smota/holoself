@@ -2,6 +2,7 @@
 import { existsSync, lstatSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { attestClient } from '../clients/attestation.mjs'
 import { loadLensRegistry, resolveLens } from '../lenses.mjs'
 import { linkedLensAuthority } from '../link/attestation.mjs'
 import { findLinkUpwards, isCanonicalSelf, linkPath, readLink } from '../link/config.mjs'
@@ -16,6 +17,9 @@ export function resolveCaller(o) {
     err.code = 'IDENTITY_NOT_ACCEPTED_FROM_CALLER'
     throw err
   }
+  // An unlinked MCP client is bound by the server at launch (`mcp --client`), never by request input. The registry
+  // entry and its lens are attested again on every call.
+  if (o.unlinkedClient !== undefined) return resolveUnlinkedClient(o)
   const surface = o.surface || (o.project ? 'cli-linked' : 'cli-direct')
 
   const cwd = process.cwd()
@@ -133,10 +137,40 @@ export function resolveCaller(o) {
   return { surface, project, link, self, identity }
 }
 
+function resolveUnlinkedClient(o) {
+  const binding = o.unlinkedClient
+  if (o.project || o.self || o.rootExplicit) {
+    const err = new Error('an unlinked client cannot be combined with a project or root selector')
+    err.code = 'CLIENT_BINDING_CONFLICT'
+    throw err
+  }
+  if (!binding || typeof binding.self !== 'string' || typeof binding.client_id !== 'string') {
+    const err = new Error('unlinked client binding is incomplete')
+    err.code = 'CLIENT_UNKNOWN'
+    throw err
+  }
+  const entry = attestClient(binding.self, binding.client_id)
+  return {
+    surface: 'mcp',
+    project: null,
+    link: null,
+    self: binding.self,
+    client: entry,
+    identity: {
+      kind: 'client:unlinked',
+      project: null,
+      self: binding.self,
+      client_id: entry.client_id,
+      lens: entry.lens,
+      allowedLenses: new Set([entry.lens])
+    }
+  }
+}
+
 // Checks the requested lens against the self registry (owner) or the attested link grant (linked client).
 export function resolveLensAuthority(o, { project, link, self, identity }) {
   const registry = loadLensRegistry(self)
-  const lens = o.lens || link?.default_lens || 'general'
+  const lens = o.lens || link?.default_lens || (identity.kind === 'client:unlinked' ? identity.lens : 'general')
 
   switch (identity.kind) {
     case 'owner:direct':
@@ -148,6 +182,15 @@ export function resolveLensAuthority(o, { project, link, self, identity }) {
       break
     case 'client:linked': {
       identity.allowedLenses = linkedLensAuthority(project, link, lens)
+      break
+    }
+    case 'client:unlinked': {
+      // One lens per client grant: any other lens, including private, is refused.
+      if (lens !== identity.lens) {
+        const error = new Error(`lens is not granted to this client: ${lens}`)
+        error.code = 'LENS_NOT_GRANTED'
+        throw error
+      }
       break
     }
     default: {
@@ -164,12 +207,17 @@ export function resolveLensAuthority(o, { project, link, self, identity }) {
     throw error
   }
 
-  const subject = {
-    kind: identity.kind,
-    space_id: identity.kind === 'owner:direct' ? 'self' : canonicalSpaceId(project),
-    accessible_spaces: identity.kind === 'owner:direct' ? ['self', 'contrib'] : [canonicalSpaceId(project)],
-    effective_allowed_lenses: identity.allowedLenses
-  }
+  // An unlinked client reads self content only and reaches no space for `read_scope: local`, exactly as a linked
+  // project sees self documents (no project space, no contrib).
+  const subject =
+    identity.kind === 'client:unlinked'
+      ? { kind: identity.kind, space_id: 'self', accessible_spaces: [], effective_allowed_lenses: identity.allowedLenses }
+      : {
+          kind: identity.kind,
+          space_id: identity.kind === 'owner:direct' ? 'self' : canonicalSpaceId(project),
+          accessible_spaces: identity.kind === 'owner:direct' ? ['self', 'contrib'] : [canonicalSpaceId(project)],
+          effective_allowed_lenses: identity.allowedLenses
+        }
 
   return { registry, lens, resolution, subject }
 }

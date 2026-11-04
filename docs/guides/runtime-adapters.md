@@ -6,6 +6,8 @@ Holoself has three separate integration surfaces.
 
 For Codex, AGY, and Claude Code, `holoself mcp` is a third surface: the client launches a project-bound STDIO subprocess and discovers seven typed tools. It shares the CLI domain core and keeps `.holoself/link.yaml` as authority. Configuration records are not verification; promote a platform only after the native evidence in [platform verification](../reference/platform-verification.md) passes. BOOTSTRAP and skill activation remain the fallback.
 
+Desktop MCP clients without a project (Claude Desktop and similar) use `holoself mcp --client <client-id> --root <self-root>` instead: an owner-created grant with one lens and self-only context. The owner creates it with `holoself client add` and prints the host snippet with `holoself mcp configure --client <client-id> --platform claude-desktop`; see the [local MCP guide](local-mcp.md#desktop-clients-without-a-project). Reviewed snapshots remain the fallback for clients without MCP.
+
 ## Startup adapters
 
 Startup adapters create bounded pointers in project instruction files so a host can discover `.holoself/BOOTSTRAP.md`. Generation proves only that Holoself wrote a valid file. It does not prove a product loaded or obeyed it.

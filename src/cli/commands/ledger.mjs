@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { LEDGER_SCHEMA_VERSION, readLedgerEntries } from '../../ledger.mjs'
 import { findLinkUpwards, isCanonicalSelf, linkPath, readLink } from '../../link/config.mjs'
 import { pathExists } from '../../shared/fs.mjs'
+import { findClient, readClientRegistry } from '../../clients/registry.mjs'
 
 function resolveLedgerScope(o) {
   if (o.project || o.target) {
@@ -55,12 +56,30 @@ function formatLedgerRows(entries) {
   return [header, ...lines].join('\n')
 }
 
+// `--client <id|name>` filters entries served to one unlinked MCP client; its entries live in the self-root ledger.
+function resolveLedgerClient(o, scope, baseDir) {
+  if (!o.client) return null
+  if (scope !== 'owner-direct') {
+    const err = new Error('ledger --client reads the self-root ledger; pass --root <self-root>')
+    err.code = 'INVALID_LEDGER_FILTER'
+    throw err
+  }
+  const entry = findClient(readClientRegistry(baseDir).clients, o.client)
+  if (entry) return entry.client_id
+  // A removed client's entries stay attributable by id.
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(o.client)) return o.client
+  const err = new Error(`unknown client: ${o.client}`)
+  err.code = 'INVALID_LEDGER_FILTER'
+  throw err
+}
+
 export async function runLedger(o) {
   const { baseDir, scope } = resolveLedgerScope(o)
   const entries = readLedgerEntries(baseDir, {
     since: o.since,
     lens: o.lens,
     surface: o.surface,
+    clientId: resolveLedgerClient(o, scope, baseDir),
     limit: o.limit
   })
   if (o.json) {

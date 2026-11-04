@@ -150,6 +150,8 @@ export function ecosystemValidationErrors(root, project = null) {
     }
     proposalRoots.push(join(project, '.holoself', 'proposals'))
   }
+  const selfProposals = join(root, 'proposals'),
+    inboxRoot = join(selfProposals, 'inbox')
   for (const base of proposalRoots) {
     if (!existsSync(base)) continue
     const walk = dir => {
@@ -158,7 +160,8 @@ export function ecosystemValidationErrors(root, project = null) {
         if (entry.isDirectory()) walk(path)
         else if (entry.name.endsWith('.yaml')) {
           try {
-            readProposal(path)
+            // Client inbox records validate as inbox records; self-root archives hold either shape.
+            readProposal(path, { inbox: dir === inboxRoot ? true : base === selfProposals ? 'auto' : false })
           } catch (error) {
             errors.push(`${slash(relative(base, path))}: ${error.message}`)
           }
