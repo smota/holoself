@@ -35,7 +35,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `data-root` | `--root`, `--data-root`, `--data-dir` |
 | `init` | `--root`, `--data-root`, `--data-dir`, `--contribs`, `--exclude-contrib` |
 | `doctor` | `--root`, `--data-root`, `--data-dir` |
-| `validate` | `--root`, `--data-root`, `--data-dir`, `--project` |
+| `validate` | `--root`, `--data-root`, `--data-dir`, `--project`, `--fix`, `--out`, `--output`, `--with-policy-files`, `--allow-publish-approved`, `--dry-run`, `--apply`, `--digest`, `--preview-hash`, `--yes`, `--confirm`, `--json` |
 | `migrate` | `--root`, `--data-root`, `--data-dir`, `--from`, `--force`, `--dry-run`, `--yes`, `--confirm` |
 | `export` | `--root`, `--data-root`, `--data-dir`, `--target`, `--packet-only`, `--root-setup`, `--dry-run`, `--yes`, `--confirm` |
 | `link` | `--root`, `--data-root`, `--data-dir`, `--target`, `--root-setup`, `--force`, `--dry-run`, `--yes`, `--confirm` |
@@ -73,19 +73,19 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `link repair` | `--project`, `--target`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--mcp`, `--no-mcp`, `--approve-read-tools`, `--no-approve-read-tools`, `--force`, `--dry-run`, `--yes`, `--confirm`, `--lens`, `--secondary-lenses` |
 | `link deactivate` | `--project`, `--target`, `--adapters`, `--dry-run`, `--yes`, `--confirm` |
 | `link status` | `--project`, `--target`, `--skill-home`, `--json` |
-| `link doctor` | `--project`, `--target`, `--skill-home`, `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--snapshot` |
+| `link doctor` | `--project`, `--target`, `--skill-home`, `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--need`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--snapshot` |
 | `link remove` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--force`, `--dry-run`, `--yes`, `--confirm` |
 | `link approve` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--revoke`, `--lenses` |
 | `link backfill` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--all`, `--lenses` |
 | `link prune` | `--root`, `--data-root`, `--data-dir`, `--self` |
 | `link skill migrate-global` | `--project`, `--target`, `--platform`, `--instructions`, `--skill-home`, `--force`, `--dry-run`, `--yes`, `--confirm` |
 | `migrate policy` | `--root`, `--data-root`, `--data-dir`, `--self`, `--apply`, `--revert`, `--confirm-narrowing`, `--allow-partial`, `--include-linked`, `--dry-run`, `--json` |
-| `context` | `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--output`, `--snapshot`, `--yes`, `--confirm` |
+| `context` | `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--need`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--output`, `--snapshot`, `--yes`, `--confirm` |
 | `analyze overlap` | `--project`, `--target`, `--json` |
 | `analyze conflicts` | `--project`, `--target`, `--json` |
 | `analyze stale` | `--project`, `--target`, `--json` |
 | `analyze all` | `--project`, `--target`, `--json` |
-| `propose` | `--project`, `--target`, `--claim`, `--source-file`, `--target-file`, `--proposal-type`, `--type`, `--evidence`, `--confidence`, `--visibility`, `--json` |
+| `propose` | `--project`, `--target`, `--claim`, `--op`, `--claim-id`, `--reason`, `--source-file`, `--target-file`, `--proposal-type`, `--type`, `--evidence`, `--confidence`, `--visibility`, `--json` |
 | `proposals list` | `--project`, `--target`, `--json` |
 | `proposals audit` | `--project`, `--target`, `--json` |
 | `proposals show` | `--project`, `--target` |
@@ -108,6 +108,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `init` | Create private data root and starter files |
 | `doctor` | Check runtime and required layout |
 | `validate` | Validate root, links, proposals, visibility, provenance, references, and markers |
+| `validate --fix` | Build or apply (`--apply --digest <sha256> --yes`, optional `--with-policy-files`, `--allow-publish-approved`, `--out <plan>`, `--json`) a digest-bound conservative privacy metadata repair plan for excluded canonical documents |
 | `migrate --from <dir>` | Copy supported PersonalOS data after confirmation |
 | `export --target <dir>` | Create reviewable project packet snapshot |
 | `upgrade` | Refresh selected public contrib availability; method files remain package-owned |

@@ -38,6 +38,7 @@ export const CONTEXT_FLAGS = [
   '--self',
   '--lens',
   '--task',
+  '--need',
   '--self-only',
   '--budget',
   '--source',
@@ -66,7 +67,21 @@ export const COMMAND_FLAGS = {
   'data-root': ROOT_FLAGS,
   init: [...ROOT_FLAGS, '--contribs', '--exclude-contrib'],
   doctor: ROOT_FLAGS,
-  validate: [...ROOT_FLAGS, '--project'],
+  validate: [
+    ...ROOT_FLAGS,
+    '--project',
+    '--fix',
+    '--out',
+    '--output',
+    '--with-policy-files',
+    '--allow-publish-approved',
+    '--dry-run',
+    '--apply',
+    '--digest',
+    '--preview-hash',
+    ...CONFIRM_FLAGS,
+    ...JSON_FLAGS
+  ],
   migrate: [...ROOT_FLAGS, '--from', '--force', '--dry-run', ...CONFIRM_FLAGS],
   export: [...ROOT_FLAGS, '--target', '--packet-only', '--root-setup', '--dry-run', ...CONFIRM_FLAGS],
   link: [...ROOT_FLAGS, '--target', '--root-setup', '--force', '--dry-run', ...CONFIRM_FLAGS],
@@ -147,6 +162,9 @@ export const COMMAND_FLAGS = {
   propose: [
     ...PROJECT_FLAGS,
     '--claim',
+    '--op',
+    '--claim-id',
+    '--reason',
     '--source-file',
     '--target-file',
     '--proposal-type',
@@ -184,8 +202,13 @@ export function validateFlags(o) {
       throw error
     }
   }
-  if (o.dryRun && (o.command === 'knowledge' || key === 'migrate policy') && (o.apply || o.revert || o.output))
+  if (o.dryRun && (o.command === 'knowledge' || o.command === 'validate' || key === 'migrate policy') && (o.apply || o.revert || o.output))
     throw new Error('--dry-run cannot be combined with --apply, --revert or --output')
+  if (o.need !== undefined && !['required', 'helpful', 'not-needed'].includes(o.need)) {
+    const error = new Error(`invalid context need: ${o.need}; expected required, helpful, or not-needed`)
+    error.code = 'INVALID_ARGUMENT'
+    throw error
+  }
   return o
 }
 export function parseArguments(args) {
@@ -217,6 +240,7 @@ export function parse(args) {
         .map(x => x.trim())
         .filter(Boolean)
     else if (a === '--task') o.task = requiredValue(args, i++, a)
+    else if (a === '--need') o.need = requiredValue(args, i++, a)
     else if (a === '--question') o.question = requiredValue(args, i++, a)
     else if (a === '--text') o.coachingText = requiredValue(args, i++, a)
     else if (a === '--plan-kind') o.planKind = requiredValue(args, i++, a)
@@ -263,11 +287,14 @@ export function parse(args) {
     else if (a === '--include-history') o.includeHistory = true
     else if (a === '--no-cache') o.noCache = true
     else if (a === '--format') o.format = requiredValue(args, i++, a)
-    else if (a === '--output') o.output = resolve(requiredValue(args, i++, a))
+    else if (a === '--output' || a === '--out') o.output = resolve(requiredValue(args, i++, a))
     else if (a === '--binding-hash') o.bindingHash = requiredValue(args, i++, a)
     else if (a === '--replacements') o.replacements = requiredValue(args, i++, a)
     else if (a === '--plan') o.plan = requiredValue(args, i++, a)
-    else if (a === '--apply') o.apply = requiredValue(args, i++, a)
+    else if (a === '--apply') {
+      if (args.includes('validate') && (!args[i + 1] || args[i + 1].startsWith('-'))) o.apply = true
+      else o.apply = requiredValue(args, i++, a)
+    }
     else if (a === '--revert') o.revert = requiredValue(args, i++, a)
     else if (a === '--digest' || a === '--preview-hash') o.digest = requiredValue(args, i++, a)
     else if (a === '--adapter') o.adapter = requiredValue(args, i++, a)
@@ -314,6 +341,13 @@ export function parse(args) {
     } else if (a === '--restricted-host') o.restrictedHost = true
     else if (a === '--claude-project-dir') o.claudeProjectDir = true
     else if (a === '--claim') o.claim = requiredValue(args, i++, a)
+    else if (a === '--op') {
+      const value = requiredValue(args, i++, a),
+        ops = { append: 'append_claim', replace: 'replace_claim', supersede: 'supersede_claim', retire: 'retire_claim' }
+      if (!ops[value] && !Object.values(ops).includes(value)) throw new Error('--op must be append, replace, supersede, or retire')
+      o.operation = ops[value] || value
+    } else if (a === '--claim-id') o.claimId = requiredValue(args, i++, a)
+    else if (a === '--reason') o.reason = requiredValue(args, i++, a)
     else if (a === '--evidence') o.evidence = requiredValue(args, i++, a)
     else if (a === '--target-file') o.targetFile = requiredValue(args, i++, a)
     else if (a === '--proposal-type' || a === '--type') o.proposalType = requiredValue(args, i++, a)
@@ -343,6 +377,9 @@ export function parse(args) {
     else if (a === '--confirm-narrowing') o.confirmNarrowing = true
     else if (a === '--allow-partial') o.allowPartial = true
     else if (a === '--include-linked') o.includeLinked = true
+    else if (a === '--fix') o.fix = true
+    else if (a === '--with-policy-files') o.withPolicyFiles = true
+    else if (a === '--allow-publish-approved') o.allowPublishApproved = true
     else if (a === '--packet-only') o.packetOnly = true
     else if (a === '--self-only') o.selfOnly = true
     else if (a === '--snapshot') o.snapshot = true

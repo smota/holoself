@@ -3,7 +3,18 @@ import { randomBytes } from 'node:crypto'
 import { join, resolve, relative, dirname, basename } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
-import { catalogBuildWarnings, ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
+import { ftsSupport, indexEngine } from './catalog/fts.mjs'
+import {
+  applyValidateFixPlan,
+  buildValidateFixPlan,
+  catalogBuildWarnings,
+  ecosystemValidationErrors,
+  excludedCanonicalDocuments,
+  excludedIncompleteMetadataNotice,
+  formatValidateFixPlanText,
+  policyProvenanceSummary,
+  runEcosystem
+} from './ecosystem.mjs'
 import { seedLensDefinitions } from './lenses.mjs'
 import { ensureHoloselfGitignore } from './link/config.mjs'
 import { VERSION } from './version.mjs'
@@ -129,17 +140,22 @@ function isHoloselfLink(p, root) {
 function help() {
   console.log(
     `Holoself ${VERSION}\n\nUsage: holoself <command> [options]\n\nCore commands:\n  data-root | init ` +
-      `| doctor | validate | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] ` +
+      `| doctor | validate [--fix [--with-policy-files] [--allow-publish-approved] [--out <plan>] | --fix --apply --digest <sha256> --yes] | migrate | export | upgrade\n  web [--root <self-root>] [--project <linked-project>] ` +
       `[--port <n>] [--no-open]  Optional local Workbench\n  link --target <dir>       Legacy live data-root ` +
       `junction\n  unlink --target <dir>     Remove legacy managed junction\n\nLinked ecosystem:\n  skill ` +
       `status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens ` +
       `list|show|validate|bind|unbind|bindings [id] [--root <self-root>]\n  link ` +
       `add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  link deactivate ` +
       `--project <dir> [--adapters all|<list>] [--dry-run|--yes]\n  link skill migrate-global --project <dir> ` +
-      `[--skill-home <dir>] [--dry-run|--yes]\n  context [--project <dir>] [--lens <lens>] [--task <text>] ` +
-      `[--session-start] [--json] [--snapshot --restricted-host --expires-hours <n>]\n  ledger [--project <dir>] ` +
-      `[--since <date>] [--lens <id>] [--surface <surface>] [--limit <n>] [--json]\n  analyze ` +
+      `[--skill-home <dir>] [--dry-run|--yes]
+  context [--project <dir>] [--lens <lens>] [--task <text>] [--need required|helpful|not-needed] ` +
+      `[--session-start] [--json] [--snapshot --restricted-host --expires-hours <n>]
+  ledger [--project <dir>] ` +
+      `[--since <date>] [--lens <id>] [--surface <surface>] [--limit <n>] [--json]
+  analyze ` +
       `overlap|conflicts|stale|all --project <dir>\n  propose --project <dir> [--claim <text> --source-file <path>]\n` +
+      `  propose --project <dir> --op replace|supersede|retire --claim-id <id> --evidence <text> ` +
+      `--source-file <path> [--claim <text>|--reason <text>]\n` +
       `  proposals list|audit --project <dir>\n  proposals show|approve|reject|defer|supersede <id> --project <dir>\n` +
       `  index [status|rebuild] --project <dir> [--changed]\n  search <query> --project <dir>\n  ` +
       `instructions render|audit --project <dir> [--json]\n  knowledge migrate-lenses [--output <plan>] | --apply ` +
@@ -193,6 +209,10 @@ export async function run(argv, options = {}) {
           contextFeatures: ['need-gate', 'budgets', 'manifest', 'source-handles', 'lifecycle', 'receipts', 'task-contrib-routing'],
           proposalSchemaVersions: [1, 2],
           indexSchemaVersion: 5,
+          index: {
+            // selected: the engine this process ranks with (HOLOSELF_INDEX_ENGINE=json forces deterministic-json).
+            engine: { selected: indexEngine(), available: ftsSupport() ? ['fts5', 'deterministic-json'] : ['deterministic-json'] }
+          },
           mcp: {
             transport: 'stdio',
             projectBound: true,
@@ -412,10 +432,47 @@ export async function run(argv, options = {}) {
     checks.forEach(([n, ok]) => console.log(`${ok ? '[ok]' : '[!!]'} ${n}`))
     const warnings = checks.every(([, ok]) => ok) ? catalogBuildWarnings(root) : []
     for (const w of warnings) console.log(`[warn] ${w}`)
+    if (checks.every(([, ok]) => ok)) {
+      const excludedCount = excludedCanonicalDocuments(root).length
+      if (excludedCount > 0) console.log(excludedIncompleteMetadataNotice(excludedCount))
+    }
     if (checks.some(([, ok]) => !ok)) process.exitCode = 1
     return
   }
   if (o.command === 'validate') {
+    if (!o.fix && (o.apply || o.output || o.digest || o.withPolicyFiles || o.allowPublishApproved)) {
+      throw new Error('validate repair options (--apply, --out, --digest, --with-policy-files, --allow-publish-approved) require --fix')
+    }
+    if (o.fix) {
+      if (!existsSync(root)) throw new Error('data root does not exist')
+      if (o.apply) {
+        if (!o.digest) throw new Error('validate --fix --apply requires --digest <sha256>')
+        if (!(await confirm(o, `Apply validate --fix plan (${o.digest}) to ${root}?`))) {
+          console.log('Cancelled.')
+          return
+        }
+        const explicitPlan = typeof o.apply === 'string' ? JSON.parse(readFileSync(resolve(o.apply), 'utf8')) : null
+        const result = applyValidateFixPlan(root, explicitPlan, {
+          expectedDigest: o.digest,
+          withPolicyFiles: Boolean(o.withPolicyFiles),
+          allowPublishApproved: Boolean(o.allowPublishApproved)
+        })
+        if (o.json) console.log(JSON.stringify(result, null, 2))
+        else
+          console.log(
+            `[ok] applied validate --fix plan (${result.operations.length} operation(s), mode=${result.mode}, digest=${result.plan_digest})\nReceipt: ${result.receipt_path}`
+          )
+        return
+      }
+      const plan = buildValidateFixPlan(root, {
+        withPolicyFiles: Boolean(o.withPolicyFiles),
+        allowPublishApproved: Boolean(o.allowPublishApproved)
+      })
+      if (o.output) atomicWrite(o.output, JSON.stringify(plan, null, 2) + '\n', { mode: 0o600, exactMode: true })
+      if (o.json) console.log(JSON.stringify(plan, null, 2))
+      else console.log(formatValidateFixPlanText(plan, { outputPath: o.output || null }))
+      return
+    }
     const errors = []
     if (!existsSync(root)) errors.push('data root does not exist')
     const c = readConfig(root)
@@ -444,11 +501,16 @@ export async function run(argv, options = {}) {
     }
     const warnings = existsSync(root) ? catalogBuildWarnings(root, o.project) : []
     for (const w of warnings) console.log(`[warn] ${w}`)
+    const excludedCount = existsSync(root) ? excludedCanonicalDocuments(root).length : 0
+    if (excludedCount > 0) console.log(excludedIncompleteMetadataNotice(excludedCount))
     errors.push(...ecosystemValidationErrors(root, o.project))
     for (const e of [...new Set(errors)]) console.error(`[!!] ${e}`)
     if (errors.length) {
       process.exitCode = 1
-    } else console.log(`[ok] ${root} is valid`)
+    } else {
+      for (const line of policyProvenanceSummary(root)) console.log(line)
+      console.log(`[ok] ${root} is valid`)
+    }
     return
   }
   if (o.command === 'migrate') {

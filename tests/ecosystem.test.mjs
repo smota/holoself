@@ -1,3 +1,4 @@
+import { indexEngine } from '../src/catalog/fts.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
@@ -75,7 +76,7 @@ test('terminal legacy proposal records preserve folded text and external evidenc
 
 test('deterministic index supports changed/rebuild/search and skips secrets',async()=>{
   const {self,project}=await fixture();await writeFile(join(self,'context','secret.md'),'# Secret\n\napi_key = abcdefghijklmnop\n')
-  const built=JSON.parse(await capture(()=>run(['index','rebuild','--project',project])));assert.equal(built.engine,'deterministic-json');assert.equal(built.skipped_secret_files,1)
+  const built=JSON.parse(await capture(()=>run(['index','rebuild','--project',project])));assert.equal(built.engine,indexEngine());assert.equal(built.skipped_secret_files,1)
   const raw=await readFile(join(self,'.holoself','catalog','catalog.json'),'utf8');assert.doesNotMatch(raw,/abcdefghijklmnop/);assert.match(raw,/source_text_hash/);assert.match(raw,/sections/)
   const found=JSON.parse(await capture(()=>run(['search','regulated AI','--project',project,'--federated'])));assert.ok(found.results.length>0);assert.ok(found.results.every(x=>x.provenance&&x.visibility&&x.freshness))
   await run(['index','--project',project,'--changed']);const status=JSON.parse(await capture(()=>run(['index','status','--project',project])));assert.equal(status.status,'ready')

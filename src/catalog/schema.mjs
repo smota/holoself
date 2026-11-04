@@ -12,7 +12,8 @@ export const ALLOWED_CATALOG_KEYS = new Set([
   'project_context_hash',
   'generated_at',
   'sources',
-  'ignored_sources'
+  'ignored_sources',
+  'policy_files'
 ])
 export const ALLOWED_SOURCE_KEYS = new Set([
   'source_kind',
@@ -25,6 +26,7 @@ export const ALLOWED_SOURCE_KEYS = new Set([
   'dev',
   'source_text_hash',
   'frontmatter',
+  'policy_sources',
   'sections',
   'claims',
   'tags',
@@ -32,8 +34,8 @@ export const ALLOWED_SOURCE_KEYS = new Set([
   'estimated_tokens'
 ])
 export const ALLOWED_SOURCE_REF_KEYS = new Set(['space_id', 'source_id', 'revision', 'section_id'])
-export const ALLOWED_SECTION_KEYS = new Set(['section_id', 'heading', 'visibility', 'disclosure', 'claim', 'snippet'])
-export const ALLOWED_CLAIM_KEYS = new Set(['text', 'visibility'])
+export const ALLOWED_SECTION_KEYS = new Set(['section_id', 'heading', 'visibility', 'disclosure', 'claim', 'claim_status', 'snippet'])
+export const ALLOWED_CLAIM_KEYS = new Set(['text', 'visibility', 'claim_status'])
 export const ALLOWED_TAG_KEYS = new Set(['value', 'visibility'])
 export const ALLOWED_LINK_KEYS = new Set(['value', 'visibility'])
 export const ALLOWED_FRONTMATTER_KEYS = new Set([
@@ -61,6 +63,7 @@ export const ALLOWED_FRONTMATTER_KEYS = new Set([
   'contrib'
 ])
 export const ALLOWED_IGNORED_KEYS = new Set(['file', 'size', 'modified_ms', 'mtime_ns', 'ino', 'dev', 'reason'])
+export const ALLOWED_POLICY_FILE_KEYS = new Set(['file', 'size', 'modified_ms', 'mtime_ns', 'ino', 'dev', 'sha256'])
 export function validateCatalogSchema(catalog) {
   const errors = []
   if (!catalog || typeof catalog !== 'object') return { valid: false, errors: ['catalog must be an object'] }
@@ -165,6 +168,8 @@ export function validateCatalogSchema(catalog) {
           if (typeof sec.disclosure !== 'string' || !DISCLOSURES.includes(sec.disclosure))
             errors.push(`${sp}.disclosure must be one of: ${DISCLOSURES.join(', ')}`)
           if (typeof sec.claim !== 'boolean') errors.push(`${sp}.claim must be a boolean`)
+          if (sec.claim_status !== undefined && !['superseded', 'historical'].includes(sec.claim_status))
+            errors.push(`${sp}.claim_status must be one of: superseded, historical`)
           if (typeof sec.snippet !== 'string') errors.push(`${sp}.snippet must be a string`)
         }
       }
@@ -182,6 +187,8 @@ export function validateCatalogSchema(catalog) {
             if (!ALLOWED_CLAIM_KEYS.has(k)) errors.push(`${cp} unknown property: ${k}`)
           }
           if (typeof cl.text !== 'string') errors.push(`${cp}.text must be a string`)
+          if (cl.claim_status !== undefined && !['superseded', 'historical'].includes(cl.claim_status))
+            errors.push(`${cp}.claim_status must be one of: superseded, historical`)
           if (typeof cl.visibility !== 'string' || !VISIBILITIES.includes(cl.visibility))
             errors.push(`${cp}.visibility must be one of: ${VISIBILITIES.join(', ')}`)
         }
@@ -223,6 +230,49 @@ export function validateCatalogSchema(catalog) {
         }
       }
       if (typeof s.estimated_tokens !== 'number' || s.estimated_tokens < 0) errors.push(`${prefix}.estimated_tokens must be a non-negative integer`)
+      if (s.policy_sources !== undefined) {
+        if (!s.policy_sources || typeof s.policy_sources !== 'object' || Array.isArray(s.policy_sources)) {
+          errors.push(`${prefix}.policy_sources must be an object`)
+        } else {
+          for (const [pk, pv] of Object.entries(s.policy_sources)) {
+            if (pk === 'policy_skipped') {
+              if (pv !== 'legacy-visibility') {
+                errors.push(`${prefix}.policy_sources.policy_skipped must be "legacy-visibility"`)
+              }
+              continue
+            }
+            if (!ALLOWED_FRONTMATTER_KEYS.has(pk)) errors.push(`${prefix}.policy_sources unknown property: ${pk}`)
+            if (typeof pv !== 'string' || (!pv.startsWith('policy:') && pv !== 'frontmatter')) {
+              errors.push(`${prefix}.policy_sources.${pk} must be "frontmatter" or "policy:<relative-path>"`)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (catalog.policy_files !== undefined) {
+    if (!Array.isArray(catalog.policy_files)) {
+      errors.push('policy_files must be an array')
+    } else {
+      for (let i = 0; i < catalog.policy_files.length; i++) {
+        const pf = catalog.policy_files[i]
+        const prefix = `policy_files[${i}]`
+        if (!pf || typeof pf !== 'object' || Array.isArray(pf)) {
+          errors.push(`${prefix} must be an object`)
+          continue
+        }
+        for (const k of Object.keys(pf)) {
+          if (!ALLOWED_POLICY_FILE_KEYS.has(k)) errors.push(`${prefix} unknown property: ${k}`)
+        }
+        if (typeof pf.file !== 'string' || !pf.file) errors.push(`${prefix}.file must be a non-empty string`)
+        if (typeof pf.size !== 'number' || pf.size < 0) errors.push(`${prefix}.size must be a non-negative integer`)
+        if (typeof pf.modified_ms !== 'number') errors.push(`${prefix}.modified_ms must be a number`)
+        if (typeof pf.mtime_ns !== 'string' || !NUM_RE.test(pf.mtime_ns)) errors.push(`${prefix}.mtime_ns must match ^[0-9]+$`)
+        if (typeof pf.ino !== 'string' || !NUM_RE.test(pf.ino)) errors.push(`${prefix}.ino must match ^[0-9]+$`)
+        if (typeof pf.dev !== 'string' || !NUM_RE.test(pf.dev)) errors.push(`${prefix}.dev must match ^[0-9]+$`)
+        if (typeof pf.sha256 !== 'string' || !HASH_RE.test(pf.sha256)) errors.push(`${prefix}.sha256 must be a 64-hex sha256`)
+      }
     }
   }
 

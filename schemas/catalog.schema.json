@@ -152,6 +152,7 @@
                 "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] },
                 "disclosure": { "type": "string", "enum": ["internal-only", "review-required", "publish-approved"] },
                 "claim": { "type": "boolean" },
+                "claim_status": { "type": "string", "enum": ["superseded", "historical"] },
                 "snippet": { "type": "string" }
               }
             }
@@ -164,7 +165,8 @@
               "additionalProperties": false,
               "properties": {
                 "text": { "type": "string" },
-                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] }
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] },
+                "claim_status": { "type": "string", "enum": ["superseded", "historical"] }
               }
             }
           },
@@ -192,7 +194,37 @@
               }
             }
           },
-          "estimated_tokens": { "type": "integer", "minimum": 0 }
+          "estimated_tokens": { "type": "integer", "minimum": 0 },
+          "policy_sources": {
+            "type": "object",
+            "properties": {
+              "policy_skipped": {
+                "type": "string",
+                "const": "legacy-visibility"
+              }
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^(?:frontmatter|policy:.+)$"
+            }
+          }
+        }
+      }
+    },
+    "policy_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "size", "modified_ms", "mtime_ns", "ino", "dev", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "file": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0 },
+          "modified_ms": { "type": "number" },
+          "mtime_ns": { "type": "string", "pattern": "^[0-9]+$" },
+          "ino": { "type": "string", "pattern": "^[0-9]+$" },
+          "dev": { "type": "string", "pattern": "^[0-9]+$" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
         }
       }
     },

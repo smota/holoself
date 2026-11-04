@@ -1,21 +1,16 @@
 // Project analysis that finds overlap, conflicts and candidates for proposals.
 import { statSync } from 'node:fs'
 import { buildCatalogSource } from '../catalog/source.mjs'
+import { loadLensRegistry } from '../lenses.mjs'
 import { readLink } from '../link/config.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { canonicalFiles, projectMarkdownFiles } from '../markdown/files.mjs'
+import { normalize } from '../markdown/claim-blocks.mjs'
 import { tokenize } from '../markdown/text.mjs'
 import { createRecordDelivery } from '../retrieval/delivery.mjs'
 import { catalogCandidateRecords } from '../retrieval/records.mjs'
 import { slash } from '../shared/fs.mjs'
 
-export function normalize(text) {
-  return text
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/[^\p{L}\p{N} ]/gu, '')
-    .trim()
-}
 export function similarity(a, b) {
   const aa = new Set(tokenize(a, { stopwords: false })),
     bb = new Set(tokenize(b, { stopwords: false }))
@@ -25,23 +20,37 @@ export function similarity(a, b) {
   return both / (aa.size + bb.size - both)
 }
 function loadAnalysisRecords(root, kind, link) {
+  const selfRoot = kind === 'self' ? root : link?.path || null
+  let registry = null
+  if (selfRoot) {
+    try {
+      registry = loadLensRegistry(selfRoot)
+    } catch {}
+  }
   const files = kind === 'self' ? canonicalFiles(root) : projectMarkdownFiles(root, link)
   const sourceKind = kind === 'self' ? 'canonical' : 'project'
   const sources = []
   for (const file of files) {
-    const built = buildCatalogSource(file, sourceKind, root, null, kind === 'project')
+    const built = buildCatalogSource(file, sourceKind, root, registry, kind === 'project')
     if (built?.record) sources.push(built.record)
   }
   const spaceId = kind === 'self' ? 'self' : canonicalSpaceId(root)
-  const { records } = catalogCandidateRecords({ space_id: spaceId, sources }, root, kind, 'private', null, 'generic', null, null)
+  const { records } = catalogCandidateRecords({ space_id: spaceId, sources }, root, kind, 'private', null, 'generic', registry, null)
   const { deliverRecord } = createRecordDelivery(
     { task: null },
-    { project: root, identity: { kind: 'owner:direct' }, registry: null, lens: 'private', resolution: null, subject: null, adapter: 'generic' }
+    { project: root, self: selfRoot, identity: { kind: 'owner:direct' }, registry, lens: 'private', resolution: null, subject: null, adapter: 'generic' }
   )
   const deliveredRecords = []
   for (const cand of records) {
     const delivered = deliverRecord(cand)
-    if (delivered) deliveredRecords.push({ ...cand, content: delivered.content })
+    if (delivered) {
+      deliveredRecords.push({
+        ...cand,
+        content: delivered.content,
+        metadata: delivered.metadata,
+        ...(delivered.policy_sources ? { policy_sources: delivered.policy_sources } : {})
+      })
+    }
   }
   return deliveredRecords
 }

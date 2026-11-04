@@ -3,10 +3,12 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { canonicalSort } from '../catalog.mjs'
+import { indexEngine, lexicalBonuses, lexicalScores } from '../catalog/fts.mjs'
 import { ensureCatalog } from '../catalog/partitions.mjs'
 import { cachedSelection } from '../context-selection.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { canonicalPath, samePath } from '../path-guard.mjs'
+import { countCatalogExcludedIncompleteMetadata } from '../policy/validate-fix.mjs'
 import { listProposalData } from '../proposals/store.mjs'
 import { hash, safeRealpath, slash } from '../shared/fs.mjs'
 import { PACKAGE_ROOT } from '../shared/package-root.mjs'
@@ -15,7 +17,7 @@ import { getIdentityId, getOrCreateCursorSecret } from './cursor-identity.mjs'
 import { createRecordDelivery } from './delivery.mjs'
 import { fitEnvelope } from './envelope.mjs'
 import { documentProjection, sourceIndexEntry, withoutPrivatePaths } from './projection.mjs'
-import { catalogCandidateRecords, deduplicateCandidates, resolvedContextAssertions } from './records.mjs'
+import { buildReceiptPolicySources, catalogCandidateRecords, deduplicateCandidates, resolvedContextAssertions } from './records.mjs'
 
 export function contextData(o) {
   if (o.federated || o.spaces?.length) {
@@ -77,12 +79,36 @@ function gatherCandidates(o, { project, link, self, identity, registry, lens, re
 
   const rawCandidates = [...selfData.records, ...local.records, ...contribCandidates]
   const candidates = deduplicateCandidates(rawCandidates, subject.space_id)
+  const lexical = rankingSignal(o, self, catResult)
 
-  return { adapter, catResult, selfData, local, candidates }
+  return { adapter, catResult, selfData, local, candidates, ...lexical }
+}
+
+// Optional FTS5 BM25 signal (issue #69). The scorer runs inside rankCandidates on the candidates that already passed
+// the privacy gate and the temporal filter, using each section's claim- and field-filtered snippet.
+function rankingSignal(o, self, catResult) {
+  const engine = indexEngine()
+  if (engine === 'deterministic-json' || !o.task) return { engine, lexicalScorer: null, lexicalState: null }
+  const lexicalState = { failed: false }
+  const lexicalScorer = eligible => {
+    const docs = eligible.map(record => ({
+      id: record.source_id,
+      sections: (record.sections || []).map(section => ({
+        source_id: record.source_id,
+        section_id: section.section_id,
+        heading: section.heading,
+        text: section.snippet
+      }))
+    }))
+    const scores = lexicalScores(docs, o.task, { selfRoot: self, partition: catResult.self })
+    if (!scores) lexicalState.failed = true
+    return lexicalBonuses(scores)
+  }
+  return { engine, lexicalScorer, lexicalState }
 }
 
 // Selection over the candidates, delivering each selected record through policy.
-function selectRecords(o, { project, self, identity, registry, lens, resolution, subject, adapter, catResult, candidates }) {
+function selectRecords(o, { project, self, identity, registry, lens, resolution, subject, adapter, catResult, candidates, engine, lexicalScorer, lexicalState }) {
   const cursorSecret = getOrCreateCursorSecret(self)
   const identityId = getIdentityId(identity, cursorSecret)
   const selfId = hash(slash(safeRealpath(self))).slice(0, 16)
@@ -90,11 +116,12 @@ function selectRecords(o, { project, self, identity, registry, lens, resolution,
   const budgetName = o.budget || 'standard'
   const reqSources = o.sources || o.source_ids || []
 
-  const delivery = createRecordDelivery(o, { project, identity, registry, lens, resolution, subject, adapter })
+  const delivery = createRecordDelivery(o, { project, self, identity, registry, lens, resolution, subject, adapter })
   const { deliveryRestrictions, deliverRecord } = delivery
 
   const selectionOptions = {
     task: o.task,
+    need: o.need || null,
     lens,
     budget: budgetName,
     manifest: o.manifest,
@@ -110,20 +137,24 @@ function selectRecords(o, { project, self, identity, registry, lens, resolution,
     deliver: deliverRecord,
     sessionStart: Boolean(o.sessionStart),
     sessionStartSources: resolution.session_start_sources || null,
-    now: o.now
+    now: o.now,
+    engine,
+    lexicalScorer
   }
 
   const selected = cachedSelection(candidates, selectionOptions)
   selected.selection.reconcile_reads = delivery.reconcileReads
   selected.selection.catalog_reads = catResult.catalog_reads || 0
 
-  return { cursorSecret, identityId, selfId, budgetName, selected, deliveryRestrictions }
+  // A failed FTS5 call ranks with the JSON engine and is reported as such.
+  const rankedEngine = lexicalState?.failed ? 'deterministic-json' : engine
+  return { cursorSecret, identityId, selfId, budgetName, selected, deliveryRestrictions, engine: rankedEngine }
 }
 
 // The packet before envelope fitting: documents, provenance index, restrictions, warnings, receipt and proposals.
 function assembleResult(
   o,
-  { surface, project, link, self, identity, registry, lens, resolution, subject, adapter, catResult, selfData, local, selected, deliveryRestrictions }
+  { surface, project, link, self, identity, registry, lens, resolution, subject, adapter, catResult, selfData, local, selected, deliveryRestrictions, engine }
 ) {
   const records = [...selected.records]
   const warnings = [...(catResult.warnings || []), ...(identity.kind === 'owner:direct' ? [...(selfData.warnings || []), ...(local.warnings || [])] : [])]
@@ -182,14 +213,26 @@ function assembleResult(
     restrictions: [...selfData.restrictions, ...local.restrictions, ...deliveryRestrictions, ...selected.omitted, ...selected.temporalExcluded],
     warnings,
     validation,
-    selection: {
-      ...selected.selection,
-      ...(!isLinked && unauthorizedSourcesOmitted > 0 ? { unauthorized_sources_omitted: unauthorizedSourcesOmitted } : {})
-    },
+    selection: Object.defineProperty(
+      {
+        ...selected.selection,
+        ...(!isLinked && unauthorizedSourcesOmitted > 0 ? { unauthorized_sources_omitted: unauthorizedSourcesOmitted } : {})
+      },
+      'need',
+      { value: selected.selection.context_need, enumerable: false, configurable: true, writable: true }
+    ),
     context_receipt: {
       ...selected.receipt,
+      // Present only when FTS5 ranked the packet; absent means deterministic-json, so JSON-engine packets stay byte-identical.
+      ...(engine === 'fts5' ? { engine } : {}),
       status: queryStatus,
-      cache: selected.cache
+      cache: selected.cache,
+      ...(!isLinked && !isMcp
+        ? {
+            policy_sources: buildReceiptPolicySources(records),
+            excluded_incomplete_metadata: countCatalogExcludedIncompleteMetadata(catResult.self)
+          }
+        : {})
     },
     proposals: isLinked && project ? withoutPrivatePaths(listProposalData(project).filter(p => p.status === 'pending')) : [],
     cache: selected.cache,

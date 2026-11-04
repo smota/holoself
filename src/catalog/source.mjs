@@ -4,8 +4,10 @@ import { join, relative } from 'node:path'
 import { VISIBILITIES } from '../annotations.mjs'
 import { canonicalSort, readSourceWithStat, slugHeading, sourceRef } from '../catalog.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
+import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { claims, links, sections, tags } from '../markdown/text.mjs'
 import { privacyMetadata, visibility } from '../policy/access.mjs'
+import { resolveDocumentPolicy } from '../policy/policy-defaults.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
 import { SECRET_RE, secretFile } from '../policy/secrets.mjs'
 import { assertContainedPath, hash, slash } from '../shared/fs.mjs'
@@ -17,12 +19,18 @@ export function catalogFilePath(project) {
   return join(catalogRoot(project), 'catalog.json')
 }
 export function privacySections(body, policy) {
-  const chunks = [],
-    claimPattern = /<!-- holoself-claim visibility=([a-z-]+) -->([\s\S]*?)<!-- \/holoself-claim -->/g
-  const ordinary = body.replace(claimPattern, (_, claimVisibility, claimBody) => {
-    const v = VISIBILITIES.includes(claimVisibility) ? claimVisibility : 'private'
-    for (const section of sections(claimBody))
-      chunks.push({ ...section, visibility: v, claim: true, disclosure: v === 'public-safe' ? 'publish-approved' : 'review-required' })
+  const chunks = []
+  const ordinary = replaceClaimBlocks(body, block => {
+    const v = block.visibility,
+      status = block.status
+    for (const section of sections(block.body))
+      chunks.push({
+        ...section,
+        visibility: v,
+        claim: true,
+        disclosure: v === 'public-safe' ? 'publish-approved' : 'review-required',
+        ...(status === 'current' ? {} : { claim_status: status })
+      })
     return ''
   })
   for (const section of sections(ordinary)) {
@@ -47,12 +55,15 @@ export function buildCatalogSections(rawSections, defaults = {}) {
       visibility: sec.visibility ?? defaults.visibility,
       disclosure: sec.disclosure ?? defaults.disclosure,
       claim: Boolean(sec.claim ?? defaults.claim),
+      ...(sec.claim_status ? { claim_status: sec.claim_status } : {}),
       snippet
     }
   })
 }
 export function extractSectionAnnotations(rawSections) {
-  const annotatedClaims = rawSections.flatMap(sec => claims(sec.content).map(text => ({ text, visibility: sec.visibility })))
+  const annotatedClaims = rawSections.flatMap(sec =>
+    claims(sec.content).map(text => ({ text, visibility: sec.visibility, ...(sec.claim_status ? { claim_status: sec.claim_status } : {}) }))
+  )
   const annotatedLinks = rawSections.flatMap(sec => links(sec.content).map(value => ({ value, visibility: sec.visibility })))
   const annotatedTags = rawSections.flatMap(sec => tags(sec.content).map(value => ({ value, visibility: sec.visibility })))
   annotatedClaims.sort((a, b) => canonicalSort(a.text, b.text))
@@ -73,16 +84,18 @@ export function buildCatalogSource(file, sourceKind, root, registry, tolerant = 
     return { error: `${rel}: ${err.message}` }
   }
   const { metadata, body, warnings: docWarnings } = parsed
-  if (secretFile(file, root) || SECRET_RE.test(text) || ['secret', 'credential', 'credentials'].includes(metadata.sensitivity)) {
+  const resolvedPolicy = sourceKind === 'canonical' ? resolveDocumentPolicy(file, root, metadata, registry) : null
+  const effectiveMetadata = resolvedPolicy ? resolvedPolicy.effectiveMetadata : metadata
+  if (secretFile(file, root) || SECRET_RE.test(text) || ['secret', 'credential', 'credentials'].includes(effectiveMetadata.sensitivity)) {
     return { secret: true }
   }
   if (sourceKind === 'canonical') {
-    const metadataErrors = canonicalPrivacyMetadataErrors(metadata, registry)
+    const metadataErrors = canonicalPrivacyMetadataErrors(effectiveMetadata, registry)
     if (metadataErrors.length) return { error: `${rel}: ${metadataErrors.join('; ')}` }
   }
-  if (!VISIBILITIES.includes(visibility(metadata))) return null
+  if (!VISIBILITIES.includes(visibility(effectiveMetadata))) return null
 
-  const policy = privacyMetadata(metadata, registry)
+  const policy = privacyMetadata(effectiveMetadata, registry)
   const rawSections = privacySections(body, policy)
   const catalogSections = buildCatalogSections(rawSections)
   const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSections)
@@ -104,6 +117,7 @@ export function buildCatalogSource(file, sourceKind, root, registry, tolerant = 
       dev: stat.dev,
       source_text_hash: sourceTextHash,
       frontmatter: policy,
+      ...(resolvedPolicy ? { policy_sources: resolvedPolicy.policySources } : {}),
       sections: catalogSections,
       claims: annotatedClaims,
       tags: annotatedTags,
@@ -111,6 +125,6 @@ export function buildCatalogSource(file, sourceKind, root, registry, tolerant = 
       estimated_tokens: estimatedTokens
     },
     rawSections,
-    warnings: (docWarnings || []).map(w => `${rel}: ${w}`)
+    warnings: [...(resolvedPolicy?.policyErrors || []), ...(docWarnings || []).map(w => `${rel}: ${w}`)]
   }
 }

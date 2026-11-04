@@ -15,6 +15,8 @@ import { readLedgerEntries, recordServedPacket } from './ledger.mjs'
 import { mcpClientOverview } from './mcp-config.mjs'
 import { contextData } from './retrieval/context.mjs'
 import { canonicalPath, samePath } from './path-guard.mjs'
+import { resolveDocumentPolicy } from './policy/policy-defaults.mjs'
+import { excludedCanonicalDocuments } from './policy/validate-fix.mjs'
 import {
   CONFLICT_CODES,
   HttpError,
@@ -108,8 +110,18 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
       if (url.pathname === '/api/overview') {
         const catalog = reconcileCatalog(root),
           spaces = await Promise.all(catalog.spaces.map(status)),
-          h = detectHarnesses()
-        return send(res, 200, { ok: true, data: { root, spaces, harnesses: h, documents: existsSync(root) ? listDocuments(root).length : 0 } })
+          h = detectHarnesses(),
+          excludedIncompleteMetadata = existsSync(root) ? excludedCanonicalDocuments(root).length : 0
+        return send(res, 200, {
+          ok: true,
+          data: {
+            root,
+            spaces,
+            harnesses: h,
+            documents: existsSync(root) ? listDocuments(root).length : 0,
+            excluded_incomplete_metadata: excludedIncompleteMetadata
+          }
+        })
       }
       if (url.pathname === '/api/filesystem/roots' && req.method === 'GET')
         return send(res, 200, {
@@ -257,12 +269,17 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
         if (b.metadata !== undefined && (!b.metadata || typeof b.metadata !== 'object' || Array.isArray(b.metadata)))
           throw new HttpError(400, 'INVALID_INPUT', 'metadata must be an object')
         const registry = loadLensRegistry(root),
+          resolved = typeof b.path === 'string' && b.path.trim() ? resolveDocumentPolicy(b.path, root, b.metadata || {}, registry) : null,
+          targetMeta = resolved ? resolved.effectiveMetadata : b.metadata,
           result = validateAnnotationMetadata(
-            b.metadata,
+            targetMeta,
             registry.lenses.map(lens => lens.id),
             { allowLegacy: true }
           )
-        return send(res, 200, { ok: true, data: result })
+        return send(res, 200, {
+          ok: true,
+          data: resolved ? { ...result, effective_policy: resolved.effectiveMetadata, policy_sources: resolved.policySources } : result
+        })
       }
       if (url.pathname === '/api/documents' && req.method === 'GET') return send(res, 200, { ok: true, data: listDocuments(root) })
       if (url.pathname === '/api/document' && req.method === 'GET')
@@ -289,16 +306,22 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
       }
       if (url.pathname === '/api/proposals' && req.method === 'POST') {
         const b = await body(req)
+        const retire = b.operation === 'retire' || b.operation === 'retire_claim'
         if (
           typeof b.project !== 'string' ||
           !b.project.trim() ||
-          typeof b.claim !== 'string' ||
-          !b.claim.trim() ||
+          (!retire && (typeof b.claim !== 'string' || !b.claim.trim())) ||
           typeof b.sourceFile !== 'string' ||
           !b.sourceFile.trim()
         )
           throw new HttpError(400, 'INVALID_INPUT', 'project, claim, and sourceFile are required')
-        const args = ['propose', '--project', b.project, '--claim', b.claim, '--source-file', b.sourceFile]
+        for (const key of ['operation', 'claimId', 'reason'])
+          if (b[key] !== undefined && typeof b[key] !== 'string') throw new HttpError(400, 'INVALID_INPUT', `${key} must be a string`)
+        const args = ['propose', '--project', b.project, '--source-file', b.sourceFile]
+        if (!retire) args.push('--claim', b.claim)
+        if (b.operation) args.push('--op', b.operation)
+        if (b.claimId) args.push('--claim-id', b.claimId)
+        if (b.reason) args.push('--reason', b.reason)
         if (b.target) args.push('--target-file', b.target)
         if (b.evidence) args.push('--evidence', b.evidence)
         return send(res, 201, { ok: true, data: JSON.parse((await cli(args)).stdout) })
@@ -321,7 +344,8 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
             proposalId: data.proposal_id,
             changes: data.changes,
             previewHash: data.preview_hash,
-            affectedFiles: [...new Set(data.changes.map(x => x.target))]
+            affectedFiles: [...new Set(data.changes.map(x => x.target))],
+            evidence: [...new Set(data.changes.map(x => x.evidence).filter(Boolean))].join('; ')
           }
         })
       }

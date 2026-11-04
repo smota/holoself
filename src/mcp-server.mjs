@@ -9,6 +9,7 @@ import {
   holoselfMcpSearch,
   holoselfMcpStatus,
   mcpToolEnvelope,
+  PROPOSAL_OPERATIONS,
   PROPOSAL_TYPES,
   VISIBILITIES
 } from './ecosystem.mjs'
@@ -24,6 +25,7 @@ const MAX_LINE_BYTES = 1024 * 1024
 const MAX_RESULT_BYTES = 512 * 1024
 const TEMPORAL = ['current', 'historical', 'superseded', 'all']
 const BUDGETS = ['small', 'standard', 'deep']
+const NEEDS = ['required', 'helpful', 'not-needed']
 export const DEFAULT_TOOL_TIMEOUT_MS = 60000
 export const DEFAULT_TOOL_CONCURRENCY = 2
 export const DEFAULT_MAX_PENDING_CALLS = 256
@@ -46,6 +48,11 @@ const baseContextProperties = {
     description: 'Recurring session-start load: without a task, return only the lens session_start_sources (default identity, preferences, work-context).'
   }
 }
+const needProperty = {
+  type: 'string',
+  enum: NEEDS,
+  description: 'Explicit context-need override; overrides task keyword classification.'
+}
 const objectSchema = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false })
 const resultSchema = objectSchema({ schema_version: { type: 'integer' }, data: { type: 'object' }, error: { type: 'object' } })
 
@@ -67,6 +74,7 @@ export const MCP_TOOLS = [
     inputSchema: objectSchema(
       {
         ...baseContextProperties,
+        need: needProperty,
         source_ids: { type: 'array', minItems: 1, maxItems: 16, uniqueItems: true, items: { type: 'string', pattern: '^hs-[A-Za-z0-9_-]{8,}$' } }
       },
       ['task']
@@ -78,7 +86,7 @@ export const MCP_TOOLS = [
     name: `${TOOL_PREFIX}context_manifest`,
     title: 'Holoself context manifest',
     description: 'Return bounded source handles, metadata, restrictions, and a deterministic receipt. It does not return source bodies.',
-    inputSchema: objectSchema(baseContextProperties),
+    inputSchema: objectSchema({ ...baseContextProperties, need: needProperty }),
     outputSchema: resultSchema,
     annotations: { title: 'Holoself context manifest', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
@@ -116,18 +124,33 @@ export const MCP_TOOLS = [
   {
     name: `${TOOL_PREFIX}proposal_create`,
     title: 'Create Holoself proposal',
-    description: 'Create a project-local pending proposal backed by contained project evidence. It never writes canonical self.',
+    description:
+      'Create a project-local pending proposal backed by contained project evidence. It never writes canonical self. ' +
+      'operation append_claim (default) adds a claim; replace_claim, supersede_claim and retire_claim target an existing ' +
+      'claim by the claim_id shown in delivered context and require evidence.',
     inputSchema: objectSchema(
       {
-        claim: { type: 'string', minLength: 1, maxLength: 4000 },
+        operation: {
+          type: 'string',
+          enum: PROPOSAL_OPERATIONS,
+          default: 'append_claim',
+          description: 'append_claim and the claim operations replace_claim, supersede_claim (keeps the old claim as history) and retire_claim (marks it historical).'
+        },
+        claim: { type: 'string', minLength: 1, maxLength: 4000, description: 'Claim wording; required except for retire_claim.' },
+        claim_id: {
+          type: 'string',
+          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          description: 'Id of the existing claim (the id= attribute of a holoself-claim block in delivered context); required for replace_claim, supersede_claim and retire_claim.'
+        },
+        reason: { type: 'string', minLength: 1, maxLength: 500, pattern: '^[^\\r\\n]+$', description: 'Single-line retirement reason; required for retire_claim.' },
         evidence: { type: 'string', minLength: 1, maxLength: 4000 },
         source_files: { type: 'array', minItems: 1, maxItems: 8, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 500 } },
         target: { type: 'string', minLength: 1, maxLength: 500, default: 'context/claims.md' },
-        proposal_type: { type: 'string', enum: PROPOSAL_TYPES, default: 'new_fact' },
+        proposal_type: { type: 'string', enum: PROPOSAL_TYPES },
         confidence: { type: 'string', minLength: 1, maxLength: 120, default: 'unverified' },
-        visibility: { type: 'string', enum: VISIBILITIES, default: 'private' }
+        visibility: { type: 'string', enum: VISIBILITIES }
       },
-      ['claim', 'source_files']
+      ['source_files']
     ),
     outputSchema: resultSchema,
     annotations: { title: 'Create Holoself proposal', readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
@@ -272,6 +295,7 @@ function affinityKey(name, args = {}, defaultLens = null) {
       'context',
       {
         task: args.task || '',
+        need: args.need || null,
         lens: args.lens || defaultLens,
         budget: args.budget || 'standard',
         temporal: args.temporal || 'current',

@@ -5,13 +5,33 @@ export { validateCatalogSchema } from './catalog.mjs'
 export { buildIndex, readIndex, searchIndex } from './catalog/index.mjs'
 export { ensureCatalog, ensureCatalogPartition, ensureContribPartition } from './catalog/partitions.mjs'
 export { buildCatalogSource } from './catalog/source.mjs'
-export { catalogBuildWarnings, ecosystemValidationErrors } from './catalog/validation.mjs'
+export { catalogBuildWarnings, ecosystemValidationErrors, policyProvenanceSummary } from './catalog/validation.mjs'
 export { runEcosystem } from './cli/dispatch.mjs'
 export { canonicalSpaceId } from './link/registry.mjs'
 export { configureSpaceLink, readSpaceLink, spaceLinkConfiguration, withSpaceConfigurationLock } from './link/workbench.mjs'
 export { LENSES } from './policy/access.mjs'
+export {
+  CANONICAL_POLICY_DIRS,
+  POLICY_DEFAULT_FIELDS,
+  POLICY_FILE_NAME,
+  discoverPolicyFiles,
+  readPolicyFile,
+  resolveDocumentPolicy,
+  validatePolicyDefaultsObject
+} from './policy/policy-defaults.mjs'
 export { PRIVACY_FIELDS, canonicalPrivacyMetadataErrors, privacyMetadataErrors, privacyValueValid } from './policy/privacy-fields.mjs'
-export { PROPOSAL_STATES, PROPOSAL_TYPES } from './proposals/store.mjs'
+export {
+  CONSERVATIVE_PRIVACY_DEFAULTS,
+  PUBLISH_APPROVED_SKIP_WARNING,
+  REQUIRED_CANONICAL_PRIVACY_FIELDS,
+  applyValidateFixPlan,
+  buildValidateFixPlan,
+  countCatalogExcludedIncompleteMetadata,
+  excludedCanonicalDocuments,
+  excludedIncompleteMetadataNotice,
+  formatValidateFixPlanText
+} from './policy/validate-fix.mjs'
+export { PROPOSAL_OPERATIONS, PROPOSAL_STATES, PROPOSAL_TYPES } from './proposals/store.mjs'
 export { mcpContextSummary, mcpToolEnvelope } from './render/packet.mjs'
 export { contextData } from './retrieval/context.mjs'
 export { catalogCandidateRecords } from './retrieval/records.mjs'

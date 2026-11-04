@@ -174,14 +174,18 @@
       "task": "Fix lint warnings in src/parser.mjs",
       "lens": "general",
       "budget": "small",
-      "expected_source_paths": [],
-      "forbidden_source_paths": [
+      "expected_source_paths": [
         "profile/identity.md",
         "profile/preferences.md",
-        "profile/voice.md",
+        "profile/work-context.md"
+      ],
+      "forbidden_source_paths": [
+        "context/projects.md",
+        "context/decisions.md",
+        "context/career.md",
         "context/restricted-vault.md"
       ],
-      "notes": "Pure mechanical lint fix requires no personal self context (context_need: not-needed)."
+      "notes": "Pure mechanical lint fix (context_need: not-needed) keeps only session-start/policy sources and omits zero-overlap content/evidence."
     },
     {
       "id": "mechanical-en-sort-imports",
@@ -190,13 +194,17 @@
       "task": "Sort the import statements alphabetically in index.mjs",
       "lens": "general",
       "budget": "small",
-      "expected_source_paths": [],
-      "forbidden_source_paths": [
+      "expected_source_paths": [
         "profile/identity.md",
         "profile/preferences.md",
+        "profile/work-context.md"
+      ],
+      "forbidden_source_paths": [
+        "context/projects.md",
+        "context/decisions.md",
         "context/restricted-vault.md"
       ],
-      "notes": "Pure mechanical import sorting skips all self records."
+      "notes": "Pure mechanical import sorting keeps only session-start/policy sources and omits broad personal context."
     },
     {
       "id": "mechanical-en-rename-variable",
@@ -205,13 +213,17 @@
       "task": "Rename the local variable tmpBuf to payloadBuffer",
       "lens": "technical",
       "budget": "small",
-      "expected_source_paths": [],
-      "forbidden_source_paths": [
+      "expected_source_paths": [
         "profile/identity.md",
-        "context/technical.md",
+        "profile/preferences.md",
+        "context/technical.md"
+      ],
+      "forbidden_source_paths": [
+        "profile/work-context.md",
+        "context/projects.md",
         "context/restricted-vault.md"
       ],
-      "notes": "Pure mechanical variable rename skips all self records."
+      "notes": "Pure mechanical variable rename under technical lens keeps only technical session_start_sources/policy and omits non-overlapping content."
     },
     {
       "id": "mechanical-pt-corrigir-sintaxe",
@@ -220,13 +232,17 @@
       "task": "Corrija a sintaxe deste objeto JSON: {\"a\": 1}",
       "lens": "general",
       "budget": "small",
-      "expected_source_paths": [],
-      "forbidden_source_paths": [
+      "expected_source_paths": [
         "profile/identity.md",
+        "profile/preferences.md",
+        "profile/work-context.md"
+      ],
+      "forbidden_source_paths": [
         "profile/values-pt.md",
+        "context/arquitetura-sistemas-pt.md",
         "context/restricted-medical-pt.md"
       ],
-      "notes": "Portuguese pure mechanical JSON syntax fix skips all self records."
+      "notes": "Portuguese pure mechanical JSON syntax fix keeps only session-start/policy sources and omits non-overlapping content."
     },
     {
       "id": "mechanical-pt-ordenar-numeros",
@@ -235,12 +251,17 @@
       "task": "Ordene esta lista de números inteiros em ordem crescente",
       "lens": "general",
       "budget": "small",
-      "expected_source_paths": [],
-      "forbidden_source_paths": [
+      "expected_source_paths": [
         "profile/identity.md",
+        "profile/preferences.md",
+        "profile/work-context.md"
+      ],
+      "forbidden_source_paths": [
+        "profile/values-pt.md",
+        "context/descoberta-produto-pt.md",
         "context/restricted-medical-pt.md"
       ],
-      "notes": "Portuguese pure mechanical integer sorting skips all self records."
+      "notes": "Portuguese pure mechanical integer sorting keeps only session-start/policy sources and omits non-overlapping content."
     },
     {
       "id": "mechanical-gap-en-format-readme",
@@ -259,7 +280,7 @@
       ],
       "known_gap": true,
       "gap_issue": "#68",
-      "notes": "Contains 'Format' which triggers MECHANICAL_PATTERN ('not-needed') and drops all self records, losing profile/preferences.md and profile/voice.md (#68)."
+      "notes": "Domain nouns ('README', 'documentation', 'style') prevent mechanical 'not-needed' classification and retrieve profile/preferences.md; profile/voice.md remains #4 under small budget due to exact token overlap (#68, #69)."
     },
     {
       "id": "mechanical-gap-en-testing-philosophy",
@@ -278,7 +299,7 @@
       ],
       "known_gap": true,
       "gap_issue": "#68",
-      "notes": "Contains 'testing' which triggers MECHANICAL_PATTERN ('not-needed') and drops all self context despite asking an architectural testing question (#68)."
+      "notes": "Domain nouns ('deterministic', 'simulation', 'harness') override 'testing' and retrieve context/testing-philosophy.md; context/technical.md remains #4 under small budget (#68)."
     },
     {
       "id": "mechanical-gap-en-fix-onboarding",
@@ -294,9 +315,9 @@
         "context/restricted-vault.md",
         "context/compensation.md"
       ],
-      "known_gap": true,
+      "known_gap": false,
       "gap_issue": "#68",
-      "notes": "Contains 'Fix' without a PERSONAL_PATTERN keyword, triggering 'not-needed' and omitting context/onboarding-playbook.md (#68)."
+      "notes": "Domain nouns ('onboarding', 'plan', 'engineers') outweigh 'Fix' (context_need: helpful) and retrieve context/onboarding-playbook.md (#68)."
     },
     {
       "id": "mechanical-gap-pt-corrigir-artigo",
@@ -313,9 +334,9 @@
         "context/restricted-medical-pt.md",
         "history/2023-estilo-escrita-pt.md"
       ],
-      "known_gap": true,
+      "known_gap": false,
       "gap_issue": "#68",
-      "notes": "Contains 'Corrija' without a PERSONAL_PATTERN keyword, triggering 'not-needed' and omitting voice and publishing policies (#68)."
+      "notes": "Portuguese domain nouns ('rascunho', 'artigo', 'estilo', 'editorial') outweigh 'Corrija' (context_need: helpful) and retrieve profile/voice.md and context/publishing.md (#68)."
     },
     {
       "id": "mechanical-gap-pt-testar-hipoteses",
@@ -330,9 +351,9 @@
       "forbidden_source_paths": [
         "context/restricted-medical-pt.md"
       ],
-      "known_gap": true,
+      "known_gap": false,
       "gap_issue": "#68",
-      "notes": "Contains 'testar' which matches MECHANICAL_PATTERN ('not-needed') and drops all self records (#68)."
+      "notes": "Portuguese domain nouns ('hipóteses', 'produto', 'clientes', 'trimestre') outweigh 'testar' (context_need: helpful) and retrieve context/descoberta-produto-pt.md (#68)."
     },
     {
       "id": "synonym-gap-en-oncall-pager",
@@ -434,9 +455,11 @@
       "forbidden_source_paths": [
         "context/restricted-medical-pt.md"
       ],
-      "known_gap": true,
+      "known_gap": [
+        "deterministic-json"
+      ],
       "gap_issue": "#69",
-      "notes": "Portuguese paraphrase ('queda de nós e lentidão entre servidores') misses context/arquitetura-sistemas-pt.md ('tolerância a falhas bizantinas', 'replicação assíncrona') (#69)."
+      "notes": "Portuguese paraphrase ('queda de nós e lentidão entre servidores') misses context/arquitetura-sistemas-pt.md ('tolerância a falhas bizantinas', 'replicação assíncrona') under the JSON engine (#69). The FTS5 engine (stemmed, diacritic-folded BM25 with prefix expansion) ranks it within the small budget, so it is a known gap only for deterministic-json."
     },
     {
       "id": "lifecycle-en-current-excludes-superseded-and-expired",
