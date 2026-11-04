@@ -395,6 +395,11 @@ test('client scope: one lens, self only, never private or restricted material, n
       assert.ok(result.data.sources.every(source => !source.path.startsWith('Context/')))
     } else assert.ok(result.data.results.every(row => row.source_kind === 'self'))
   }
+  // The session-harvest prompt drafts project-evidence proposals; an unlinked client lists no prompts.
+  m.accept(JSON.stringify({ jsonrpc: '2.0', id: 'prompts', method: 'prompts/list' }))
+  assert.deepEqual(m.output.at(-1).result.prompts, [])
+  m.accept(JSON.stringify({ jsonrpc: '2.0', id: 'prompt', method: 'prompts/get', params: { name: 'holoself_session_harvest' } }))
+  assert.equal(m.output.at(-1).error.data.code, 'PROMPT_NOT_FOUND')
   const status = m.call(30, 'holoself_status').data
   assert.deepEqual(status.client, { name: 'desk', lens: 'professional', proposals: 'disabled', status: 'active' })
   assert.equal(status.identity, 'client:unlinked')

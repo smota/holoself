@@ -67,7 +67,21 @@ export const COMMAND_FLAGS = {
   'data-root': ROOT_FLAGS,
   init: [...ROOT_FLAGS, '--contribs', '--exclude-contrib'],
   doctor: ROOT_FLAGS,
-  validate: [...ROOT_FLAGS, '--project'],
+  validate: [
+    ...ROOT_FLAGS,
+    '--project',
+    '--fix',
+    '--out',
+    '--output',
+    '--with-policy-files',
+    '--allow-publish-approved',
+    '--dry-run',
+    '--apply',
+    '--digest',
+    '--preview-hash',
+    ...CONFIRM_FLAGS,
+    ...JSON_FLAGS
+  ],
   migrate: [...ROOT_FLAGS, '--from', '--force', '--dry-run', ...CONFIRM_FLAGS],
   export: [...ROOT_FLAGS, '--target', '--packet-only', '--root-setup', '--dry-run', ...CONFIRM_FLAGS],
   link: [...ROOT_FLAGS, '--target', '--root-setup', '--force', '--dry-run', ...CONFIRM_FLAGS],
@@ -126,7 +140,7 @@ export const COMMAND_FLAGS = {
   'knowledge cleanup': [...ROOT_FLAGS, '--output', '--dry-run', '--apply', '--digest', '--preview-hash', ...CONFIRM_FLAGS, ...JSON_FLAGS],
   instructions: [...PROJECT_FLAGS, ...JSON_FLAGS],
   'instructions audit': [...PROJECT_FLAGS, ...JSON_FLAGS],
-  'instructions render': [...PROJECT_FLAGS, '--adapter', '--json'],
+  'instructions render': [...PROJECT_FLAGS, '--adapter', '--harvest', '--focus', '--json'],
   'skill status': ['--scope', '--platform', '--skill-home', ...JSON_FLAGS],
   'skill install': ['--scope', '--platform', '--skill-home', '--force', '--dry-run', ...CONFIRM_FLAGS, ...JSON_FLAGS],
   ...Object.fromEntries(['list', 'show', 'validate', 'bindings'].map(sub => ['lens ' + sub, [...ROOT_FLAGS, ...JSON_FLAGS]])),
@@ -206,10 +220,20 @@ export function validateFlags(o) {
       throw error
     }
   }
-  if (o.dryRun && (o.command === 'knowledge' || key === 'migrate policy') && (o.apply || o.revert || o.output))
+  if (o.dryRun && (o.command === 'knowledge' || o.command === 'validate' || key === 'migrate policy') && (o.apply || o.revert || o.output))
     throw new Error('--dry-run cannot be combined with --apply, --revert or --output')
   if (o.need !== undefined && !['required', 'helpful', 'not-needed'].includes(o.need)) {
     const error = new Error(`invalid context need: ${o.need}; expected required, helpful, or not-needed`)
+    error.code = 'INVALID_ARGUMENT'
+    throw error
+  }
+  if (o.focus !== undefined && !o.harvest) {
+    const error = new Error('--focus requires --harvest')
+    error.code = 'INVALID_ARGUMENT'
+    throw error
+  }
+  if (o.harvest && o.adapter) {
+    const error = new Error('--adapter cannot be combined with --harvest')
     error.code = 'INVALID_ARGUMENT'
     throw error
   }
@@ -291,13 +315,16 @@ export function parse(args) {
     else if (a === '--include-history') o.includeHistory = true
     else if (a === '--no-cache') o.noCache = true
     else if (a === '--format') o.format = requiredValue(args, i++, a)
-    else if (a === '--output') o.output = resolve(requiredValue(args, i++, a))
+    else if (a === '--output' || a === '--out') o.output = resolve(requiredValue(args, i++, a))
     else if (a === '--binding-hash') o.bindingHash = requiredValue(args, i++, a)
     else if (a === '--replacements') o.replacements = requiredValue(args, i++, a)
     else if (a === '--plan') o.plan = requiredValue(args, i++, a)
-    // `mcp configure --client ... --apply` is a switch; every other --apply takes a plan file.
+    // `mcp configure --client ... --apply` is a switch; `validate --apply` may be a switch; other --apply takes a plan file.
     else if (a === '--apply' && positional[0] === 'mcp') o.applyHost = true
-    else if (a === '--apply') o.apply = requiredValue(args, i++, a)
+    else if (a === '--apply') {
+      if (args.includes('validate') && (!args[i + 1] || args[i + 1].startsWith('-'))) o.apply = true
+      else o.apply = requiredValue(args, i++, a)
+    }
     else if (a === '--remove') o.remove = true
     else if (a === '--client') o.client = requiredValue(args, i++, a)
     else if (a === '--name') o.name = requiredValue(args, i++, a)
@@ -306,6 +333,8 @@ export function parse(args) {
     else if (a === '--revert') o.revert = requiredValue(args, i++, a)
     else if (a === '--digest' || a === '--preview-hash') o.digest = requiredValue(args, i++, a)
     else if (a === '--adapter') o.adapter = requiredValue(args, i++, a)
+    else if (a === '--harvest') o.harvest = true
+    else if (a === '--focus') o.focus = requiredValue(args, i++, a)
     else if (a === '--activate') o.activate = requiredValue(args, i++, a)
     else if (a === '--platform') {
       o.platforms = o.platforms || []
@@ -385,6 +414,9 @@ export function parse(args) {
     else if (a === '--confirm-narrowing') o.confirmNarrowing = true
     else if (a === '--allow-partial') o.allowPartial = true
     else if (a === '--include-linked') o.includeLinked = true
+    else if (a === '--fix') o.fix = true
+    else if (a === '--with-policy-files') o.withPolicyFiles = true
+    else if (a === '--allow-publish-approved') o.allowPublishApproved = true
     else if (a === '--packet-only') o.packetOnly = true
     else if (a === '--self-only') o.selfOnly = true
     else if (a === '--snapshot') o.snapshot = true

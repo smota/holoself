@@ -35,7 +35,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `data-root` | `--root`, `--data-root`, `--data-dir` |
 | `init` | `--root`, `--data-root`, `--data-dir`, `--contribs`, `--exclude-contrib` |
 | `doctor` | `--root`, `--data-root`, `--data-dir` |
-| `validate` | `--root`, `--data-root`, `--data-dir`, `--project` |
+| `validate` | `--root`, `--data-root`, `--data-dir`, `--project`, `--fix`, `--out`, `--output`, `--with-policy-files`, `--allow-publish-approved`, `--dry-run`, `--apply`, `--digest`, `--preview-hash`, `--yes`, `--confirm`, `--json` |
 | `migrate` | `--root`, `--data-root`, `--data-dir`, `--from`, `--force`, `--dry-run`, `--yes`, `--confirm` |
 | `export` | `--root`, `--data-root`, `--data-dir`, `--target`, `--packet-only`, `--root-setup`, `--dry-run`, `--yes`, `--confirm` |
 | `link` | `--root`, `--data-root`, `--data-dir`, `--target`, `--root-setup`, `--force`, `--dry-run`, `--yes`, `--confirm` |
@@ -62,7 +62,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `knowledge cleanup` | `--root`, `--data-root`, `--data-dir`, `--output`, `--dry-run`, `--apply`, `--digest`, `--preview-hash`, `--yes`, `--confirm`, `--json` |
 | `instructions` | `--project`, `--target`, `--json` |
 | `instructions audit` | `--project`, `--target`, `--json` |
-| `instructions render` | `--project`, `--target`, `--adapter`, `--json` |
+| `instructions render` | `--project`, `--target`, `--adapter`, `--harvest`, `--focus`, `--json` |
 | `skill status` | `--scope`, `--platform`, `--skill-home`, `--json` |
 | `skill install` | `--scope`, `--platform`, `--skill-home`, `--force`, `--dry-run`, `--yes`, `--confirm`, `--json` |
 | `lens list` | `--root`, `--data-root`, `--data-dir`, `--json` |
@@ -112,6 +112,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `init` | Create private data root and starter files |
 | `doctor` | Check runtime and required layout |
 | `validate` | Validate root, links, proposals, visibility, provenance, references, and markers |
+| `validate --fix` | Build or apply (`--apply --digest <sha256> --yes`, optional `--with-policy-files`, `--allow-publish-approved`, `--out <plan>`, `--json`) a digest-bound conservative privacy metadata repair plan for excluded canonical documents |
 | `migrate --from <dir>` | Copy supported PersonalOS data after confirmation |
 | `export --target <dir>` | Create reviewable project packet snapshot |
 | `upgrade` | Refresh selected public contrib availability; method files remain package-owned |
@@ -174,7 +175,7 @@ client add --name <name> --lens <id> [--proposals disabled|inbox] [--root <self-
 client list [--root <self-root>] [--json]
 client revoke|remove <client-id|name> [--root <self-root>] [--json]
 ledger --root <self-root> --client <client-id|name> [--json]
-instructions render|audit --project <dir> [--adapter generic] [--json]
+instructions render|audit --project <dir> [--adapter generic] [--harvest [--focus <text>]] [--json]
 knowledge migrate-lenses --root <self-root> [--output <plan.json>]
 knowledge transform --root <self-root> --replacements <changes.json> [--output <plan.json>]
 knowledge migrate-lenses|transform --root <self-root> --apply <plan.json> --digest <sha256> --yes

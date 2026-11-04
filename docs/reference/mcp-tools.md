@@ -22,4 +22,14 @@ Read-only MCP tools are physically non-mutating: context caching is disabled and
 
 Tool annotations describe expected effects for the client, but server-side enforcement is authoritative. The proposal tool is non-read-only, non-destructive, non-idempotent, and closed-world. All other tools are read-only and closed-world.
 
-Not exposed: resources, prompts, sampling, elicitation, tasks, link mutation, proposal approval/rejection, cleanup apply, skill installation, publication, network access, raw canonical files, or canonical writes.
+## Prompts
+
+The server advertises `prompts: { listChanged: false }` in `initialize` and serves `prompts/list` and `prompts/get` on the main thread without reading user files or embedding user data.
+
+| Prompt | Optional arguments | Description |
+|---|---|---|
+| `holoself_session_harvest` | `focus` (single-line string, 1–200 chars, no reserved markers) | Review the session and draft 0–3 evidence-backed pending proposals (`holoself_proposal_create` and `holoself_proposal_preview`) without writing canonical self. |
+
+The prompt text is a versioned constant (`v1`). It instructs the agent to prefer proposing nothing when unsure, never infer sensitive identity attributes or invent facts, use `append_claim`, `replace_claim`, `supersede_claim`, or `retire_claim` (targeting `claim_id` when a visible claim in context is outdated), report what was proposed, and remind the owner to approve in the CLI or Workbench. Unknown prompt names or invalid arguments return JSON-RPC `-32602` (`PROMPT_NOT_FOUND` or `INVALID_ARGUMENT`). Non-MCP hosts print the identical prompt text with `holoself instructions render --harvest --project <dir> [--focus <text>]`.
+
+Not exposed: resources, sampling, elicitation, tasks, link mutation, proposal approval/rejection, cleanup apply, skill installation, publication, network access, raw canonical files, or canonical writes.

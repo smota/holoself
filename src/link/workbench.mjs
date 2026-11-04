@@ -17,7 +17,11 @@ import {
   writeLink
 } from './config.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from './registry.mjs'
-export function spaceLinkConfiguration(project, self, { lens = 'general', metadataAbsent = false } = {}) {
+export function spaceLinkConfiguration(
+  project,
+  self,
+  { lens = 'general', explicitLens, secondaryLenses, projectContext, force = false, metadataAbsent = false } = {}
+) {
   const existing = !metadataAbsent && pathExists(linkPath(project)) ? readLink(project, { tolerant: true }) : null
   if (!metadataAbsent) inspectLinkCollisions(project)
   const registry = loadLensRegistry(self),
@@ -27,11 +31,18 @@ export function spaceLinkConfiguration(project, self, { lens = 'general', metada
     access: 'read',
     proposals: 'enabled',
     index: 'local',
-    default_lens: binding?.default_lens || existing?.default_lens || lens,
-    secondary_lenses: binding?.secondary_lenses || existing?.secondary_lenses || [],
-    project_context: existing
-      ? parseYaml(readFileSync(linkPath(project), 'utf8')).project_context || {}
-      : { include: [], exclude: DEFAULT_PROJECT_EXCLUDES, assert_include: [], assert_exclude: [] }
+    default_lens: explicitLens || binding?.default_lens || existing?.default_lens || lens,
+    secondary_lenses: secondaryLenses || binding?.secondary_lenses || existing?.secondary_lenses || [],
+    project_context: projectContext
+      ? {
+          include: projectContext.include || [],
+          exclude: projectContext.exclude || DEFAULT_PROJECT_EXCLUDES,
+          assert_include: projectContext.assert_include || [],
+          assert_exclude: projectContext.assert_exclude || []
+        }
+      : existing
+        ? parseYaml(readFileSync(linkPath(project), 'utf8')).project_context || {}
+        : { include: [], exclude: DEFAULT_PROJECT_EXCLUDES, assert_include: [], assert_exclude: [] }
   }
   const { project_context, ...selfContext } = desired
   const errors = [...linkSchemaErrors(selfContext, registry), ...projectContextErrors(project_context)]
@@ -42,7 +53,7 @@ export function spaceLinkConfiguration(project, self, { lens = 'general', metada
     link: desired,
     registry_hash: sovereign.registry_hash,
     lens_registry_hash: registry.registry_hash,
-    binding_salt: entry?.binding_salt || existing?.binding_salt || null
+    binding_salt: (!force && (entry?.binding_salt || existing?.binding_salt)) || null
   }
 }
 export function readSpaceLink(project) {

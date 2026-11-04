@@ -20,6 +20,17 @@ export {
   validatePolicyDefaultsObject
 } from './policy/policy-defaults.mjs'
 export { PRIVACY_FIELDS, canonicalPrivacyMetadataErrors, privacyMetadataErrors, privacyValueValid } from './policy/privacy-fields.mjs'
+export {
+  CONSERVATIVE_PRIVACY_DEFAULTS,
+  PUBLISH_APPROVED_SKIP_WARNING,
+  REQUIRED_CANONICAL_PRIVACY_FIELDS,
+  applyValidateFixPlan,
+  buildValidateFixPlan,
+  countCatalogExcludedIncompleteMetadata,
+  excludedCanonicalDocuments,
+  excludedIncompleteMetadataNotice,
+  formatValidateFixPlanText
+} from './policy/validate-fix.mjs'
 export { PROPOSAL_OPERATIONS, PROPOSAL_STATES, PROPOSAL_TYPES } from './proposals/store.mjs'
 export { mcpContextSummary, mcpToolEnvelope } from './render/packet.mjs'
 export { contextData } from './retrieval/context.mjs'
