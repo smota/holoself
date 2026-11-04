@@ -4,6 +4,7 @@
 // (revoked link, missing binding, missing self root, missing project, bad arguments) produces no output at all.
 import { isAbsolute } from 'node:path'
 import { HOOK_ID } from '../adapters/hooks.mjs'
+import { recordServedPacket } from '../ledger.mjs'
 import { packetFormat } from '../render/packet.mjs'
 import { contextData } from '../retrieval/context.mjs'
 import { appendAuditLine } from '../shared/audit-log.mjs'
@@ -30,13 +31,28 @@ export function hookContext(o, env = process.env) {
   if (o.hook !== HOOK_ID) throw refuse('HOOK_ID_UNKNOWN', `unknown hook id: ${o.hook}`)
   const project = hookProject(o, env)
   if (!project) throw refuse('HOOK_PROJECT_REQUIRED', 'hook mode requires --project or an absolute CLAUDE_PROJECT_DIR')
-  if (o.output || o.snapshot || o.json || o.task || o.manifest || o.cursor || o.sources?.length || o.restrictedHost)
+  if (o.output || o.snapshot || o.json || o.task || o.need || o.manifest || o.cursor || o.sources?.length || o.restrictedHost)
     throw refuse('HOOK_OPTION_REFUSED', 'hook mode emits only the live session-start packet')
   if (o.format && o.format !== 'packet') throw refuse('HOOK_OPTION_REFUSED', 'hook mode emits only the packet format')
   const options = { ...o, project, sessionStart: true, envelopeCapBytes: HOOK_PACKET_MAX_BYTES },
     data = contextData(options),
     content = packetFormat(data, o.adapter || 'packet').trimEnd() + '\n'
   if (Buffer.byteLength(content) > HOOK_PACKET_MAX_BYTES) throw refuse('HOOK_PACKET_TOO_LARGE', 'session-start packet exceeds the hook output cap')
+  recordServedPacket({
+    data,
+    project,
+    surface: 'hook',
+    mode: 'packet',
+    env,
+    onFailure: err =>
+      appendAuditLine(env.HOLOSELF_HOOK_AUDIT_LOG, {
+        event: 'ledger/write',
+        hook_id: HOOK_ID,
+        at: new Date().toISOString(),
+        ok: false,
+        error_code: err.code
+      })
+  })
   return { data, content }
 }
 

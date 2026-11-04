@@ -851,3 +851,85 @@ test('BOM-prefixed _policy.yaml is parsed after stripping leading UTF-8 BOM whil
   assert.ok(!errors.some((e) => e.includes('context/bom/_policy.yaml')));
   assert.ok(errors.some((e) => e.includes('context/bom-bad/_policy.yaml')));
 });
+
+test('migrate policy judges AFTER with inherited _policy.yaml defaults: removing visibility cannot widen through inheritance', () => {
+  const root = makeTempDir();
+  initDataRoot({ root });
+  const contextDir = path.join(root, 'context');
+  fs.mkdirSync(contextDir, { recursive: true });
+  fs.writeFileSync(path.join(contextDir, '_policy.yaml'), [
+    'access_lenses: [general, private]',
+    'read_scope: shared',
+    'disclosure: publish-approved',
+    'sensitivity: personal',
+    'document_role: content'
+  ].join('\n') + '\n', 'utf8');
+  const docRel = 'context/legacy-secret.md';
+  const before = '---\nvisibility: private\n---\n# Secret\n';
+  fs.writeFileSync(path.join(root, docRel), before, 'utf8');
+  const opts = { selfRoot: root, docPath: docRel };
+
+  // Replacing visibility with explicit fields but leaving access_lenses to inheritance grants general: refused.
+  const inheritsLenses = '---\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Secret\n';
+  const r1 = verifyNonAmplification(before, inheritsLenses, opts);
+  assert.equal(r1.valid, false);
+  assert.match(r1.violation, /DENY -> ALLOW/);
+
+  // Explicit private lenses but disclosure left to inheritance (publish-approved): only visible with inheritance.
+  const inheritsDisclosure = '---\naccess_lenses: [private]\nread_scope: restricted\nsensitivity: personal\ndocument_role: content\n---\n# Secret\n';
+  assert.equal(verifyNonAmplification(before, inheritsDisclosure).valid, true, 'frontmatter-only view misses the inherited widening');
+  const r2 = verifyNonAmplification(before, inheritsDisclosure, opts);
+  assert.equal(r2.valid, false);
+  assert.match(r2.violation, /obsidian-public|public|Publication gate/);
+  assert.match(r2.violation, /DENY -> ALLOW/);
+
+  // Fully self-describing replacement: nothing left for the policy to widen.
+  const explicit = '---\naccess_lenses: [private]\nread_scope: restricted\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Secret\n';
+  const r3 = verifyNonAmplification(before, explicit, opts);
+  assert.equal(r3.valid, true);
+  assert.deepEqual(r3.coverageLoss, {});
+
+  // The plan writes all four required fields plus read_scope, so the document stays private even if a later
+  // edit removes legacy visibility and turns policy inheritance on.
+  const plan = planPolicyMigration(root, { dryRun: true });
+  assert.equal(plan.summary.non_amplification_verified, true);
+  const entry = plan.entries.find((e) => e.path === docRel);
+  assert.ok(entry);
+  assert.equal(entry.needs_migration, true);
+  assert.deepEqual(entry.changes, {
+    read_scope: 'restricted',
+    access_lenses: ['private'],
+    disclosure: 'internal-only',
+    sensitivity: 'personal',
+    document_role: 'content'
+  });
+  assert.deepEqual(entry.after_metadata.access_lenses, ['private']);
+  const withoutVisibility = entry.after_text.replace(/^visibility: private\r?\n/m, '');
+  assert.ok(!withoutVisibility.includes('visibility:'));
+  const effective = resolveDocumentPolicy(docRel, root, parseFrontmatter(withoutVisibility, { tolerant: true }).metadata).effectiveMetadata;
+  assert.deepEqual(effective.access_lenses, ['private']);
+  assert.equal(effective.read_scope, 'restricted');
+  assert.equal(effective.disclosure, 'internal-only');
+  assert.equal(verifyNonAmplification(before, withoutVisibility, opts).valid, true);
+});
+
+test('migrate policy reports coverage loss when inherited _policy.yaml defaults narrow a migrated document', () => {
+  const root = makeTempDir();
+  initDataRoot({ root });
+  const topicsDir = path.join(root, 'topics');
+  fs.mkdirSync(topicsDir, { recursive: true });
+  fs.writeFileSync(path.join(topicsDir, '_policy.yaml'), 'read_scope: restricted\naccess_lenses: [private]\n', 'utf8');
+  const docRel = 'topics/prof.md';
+  const before = '---\nvisibility: professional\n---\n# Professional\n';
+  fs.writeFileSync(path.join(root, docRel), before, 'utf8');
+  // Visibility replaced by the exact legacy lens mapping; read_scope is left to inheritance (restricted).
+  const after = '---\naccess_lenses: [general, professional, interview, private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Professional\n';
+
+  assert.deepEqual(verifyNonAmplification(before, after).coverageLoss, {}, 'frontmatter-only mapping is exact');
+  const result = verifyNonAmplification(before, after, { selfRoot: root, docPath: docRel });
+  assert.equal(result.valid, true);
+  for (const lens of ['general', 'professional', 'interview']) {
+    assert.ok(result.coverageLoss[lens] > 0, `expected coverage loss for ${lens}`);
+  }
+  assert.equal(result.coverageLoss.private, undefined);
+});

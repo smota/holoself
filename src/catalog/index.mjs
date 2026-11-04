@@ -60,7 +60,8 @@ export function readIndex(project) {
 export function searchIndex(index, query, lens = 'general', registry = null, resolution = null, temporal = 'current', options = {}) {
   const terms = [...tokenize(query, { stopwords: false })],
     results = [],
-    behaviorLens = lens
+    behaviorLens = lens,
+    adapter = options.adapter || 'generic'
   const entries = index.entries || index.sources || []
   const consumerSpaceId = index.project ? canonicalSpaceId(index.project) : null
   for (const entry of entries) {
@@ -74,22 +75,24 @@ export function searchIndex(index, query, lens = 'general', registry = null, res
         }
       : null
     if (
-      !allowed(entry.frontmatter || {}, lens, 'generic', null, resolution, subj, entrySpaceId) ||
+      !allowed(entry.frontmatter || {}, lens, adapter, null, resolution, subj, entrySpaceId) ||
       !temporalDisposition(entry.frontmatter || {}, query, { temporal }).include
     )
       continue
     const policy = entry.frontmatter || {}
     for (const section of entry.sections || []) {
       const sectionVisibility = VISIBILITIES.includes(section.visibility) ? section.visibility : 'private'
-      if (!visibleUnderBehavior(sectionVisibility, behaviorLens, 'generic')) continue
+      if (!visibleUnderBehavior(sectionVisibility, behaviorLens, adapter)) continue
       const restrictions = []
       const filtered = filterFieldVisibility(
-        filterClaimVisibility(section.snippet || '', lens, entry.file, restrictions, resolution),
+        filterClaimVisibility(section.snippet || '', lens, entry.file, restrictions, resolution, 'owner:direct', adapter),
         entry.frontmatter || {},
         lens,
         entry.file,
         restrictions,
-        resolution
+        resolution,
+        'owner:direct',
+        adapter
       )
       if (!filtered.trim()) continue
       const hay = `${section.heading} ${filtered}`.toLowerCase(),

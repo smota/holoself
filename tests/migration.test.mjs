@@ -4,7 +4,16 @@ import { mkdtemp, mkdir, readFile, writeFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { run } from '../src/cli.mjs'
-import { verifyNonAmplification, computeMeetMetadata } from '../src/migration.mjs'
+import { DEFAULT_LENSES, DEFAULT_LENS_IDS } from '../src/lenses.mjs'
+import {
+  verifyNonAmplification,
+  computeMeetMetadata,
+  planPolicyMigration,
+  applyPolicyMigration,
+  applyFrontmatterModifications
+} from '../src/migration.mjs'
+import { accessLenses, allowedDocument, disclosure, publicationAllowed, visibility, PUBLICATION_ADAPTERS } from '../src/policy/access.mjs'
+import { frontmatter } from '../src/policy/privacy-fields.mjs'
 
 async function temp(prefix = 'holoself-migration-') {
   return mkdtemp(join(tmpdir(), prefix))
@@ -26,16 +35,19 @@ test('verifyNonAmplification gate detects illegal permission expansion', () => {
   // Safe narrowing / identity: allowed_after => allowed_before
   const safe = verifyNonAmplification(
     { visibility: 'linked-projects' },
-    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'career', 'publishing', 'technical', 'leadership', 'interview', 'private'] }
+    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'professional', 'public-voice', 'technical', 'leadership', 'interview', 'private'] }
   )
   assert.equal(safe.valid, true)
 
-  // Narrowing (career removes public-voice, technical, leadership): allowed
+  // Narrowing (linked-projects -> professional removes public-voice, technical, leadership): allowed
   const narrowing = verifyNonAmplification(
-    { visibility: 'career' },
-    { visibility: 'career', read_scope: 'shared', access_lenses: ['general', 'career', 'interview', 'private'] }
+    { visibility: 'linked-projects' },
+    { visibility: 'professional', read_scope: 'shared', access_lenses: ['general', 'professional', 'interview', 'private'] }
   )
   assert.equal(narrowing.valid, true)
+  assert.ok(narrowing.coverageLoss['public-voice'] > 0)
+  assert.ok(narrowing.coverageLoss.technical > 0)
+  assert.ok(narrowing.coverageLoss.leadership > 0)
 
   // Amplification: private gaining access under general lens
   const amplified = verifyNonAmplification(
@@ -92,8 +104,8 @@ test('migrate policy requires --confirm-narrowing when coverage loss occurs', as
   const self = await temp()
   await run(['init', '--root', self])
 
-  // Create a document with visibility: career (which loses public-voice, technical, leadership coverage)
-  await writeFile(join(self, 'context', 'career-guide.md'), '---\nvisibility: career\n---\n# Career\nCareer details.\n')
+  // Create a document with visibility: professional
+  await writeFile(join(self, 'context', 'career-guide.md'), '---\nvisibility: professional\n---\n# Career\nCareer details.\n')
 
   const planOutput = await capture(() => run(['migrate', 'policy', '--root', self]))
   const plan = JSON.parse(planOutput)
@@ -234,4 +246,370 @@ test('migrate policy explicit dry-run writes no files or directories',async()=>{
     for(const flag of ['--output','--apply','--revert'])await assert.rejects(run(['migrate','policy','--root',root,'--dry-run',flag,'example']),/cannot be combined|not supported/)
     assert.deepEqual(await snapshot(root),before)
   }
+})
+
+test('regression (a): runtime-private doc with access_lenses: [] or present-but-empty privacy fields never grants other lenses', async () => {
+  const self = await temp()
+  await mkdir(join(self, 'context'), { recursive: true })
+
+  // Doc with visibility: linked-projects and access_lenses: [] is restricted to private by runtime frontmatter()
+  const docPath = join(self, 'context', 'empty-lenses.md')
+  await writeFile(docPath, '---\nvisibility: linked-projects\naccess_lenses: []\n---\n# Restricted\n')
+
+  // Also test block-style empty access_lenses and other present-but-empty fields
+  const emptyBlockPath = join(self, 'context', 'empty-block.md')
+  await writeFile(emptyBlockPath, '---\nvisibility: public-safe\naccess_lenses:\n---\n# Restricted Block\n')
+
+  const emptyVisPath = join(self, 'context', 'empty-vis.md')
+  await writeFile(emptyVisPath, '---\nvisibility: ""\n---\n# Empty Visibility\n')
+
+  const plan = planPolicyMigration(self, { dryRun: true })
+  assert.equal(plan.summary.non_amplification_verified, true)
+  assert.deepEqual(plan.summary.coverage_loss, {})
+
+  for (const rel of ['context/empty-lenses.md', 'context/empty-block.md', 'context/empty-vis.md']) {
+    const entry = plan.entries.find(e => e.path === rel)
+    assert.ok(entry, `expected entry for ${rel}`)
+    assert.deepEqual(entry.after_metadata.access_lenses, ['private'])
+    assert.equal(entry.after_metadata.read_scope, 'restricted')
+    const afterParsed = frontmatter(entry.after_text, { tolerant: true })
+    assert.deepEqual(afterParsed.metadata.access_lenses, ['private'])
+    assert.equal(afterParsed.metadata.read_scope, 'restricted')
+    assert.equal(publicationAllowed(afterParsed.metadata), false)
+  }
+
+  // Present-but-empty values in computeMeetMetadata and verifyNonAmplification
+  for (const emptyMeta of [
+    { visibility: 'linked-projects', access_lenses: [] },
+    { access_lenses: [] },
+    { visibility: '' },
+    { read_scope: '' },
+    { disclosure: '' },
+    { sensitivity: '' },
+    { document_role: '' },
+    { public_safe: null },
+    { task_include: [] },
+    { task_exclude: [] }
+  ]) {
+    const meet = computeMeetMetadata(emptyMeta, 'self')
+    assert.deepEqual(meet.access_lenses, ['private'])
+    assert.equal(meet.read_scope, 'restricted')
+    assert.equal(meet.disclosure, 'internal-only')
+
+    // Widening an empty-lenses or invalid doc to general lens must be refused
+    const widened = verifyNonAmplification(emptyMeta, {
+      visibility: 'linked-projects',
+      read_scope: 'shared',
+      access_lenses: ['general', 'private']
+    })
+    assert.equal(widened.valid, false)
+    assert.match(widened.violation, /DENY -> ALLOW/)
+  }
+})
+
+test('regression (b): removing public_safe: false is refused as publication widening', () => {
+  // Doc with visibility: public-safe and public_safe: false is NOT publishable before, but removing public_safe: false makes it publishable
+  const beforeWithPublicSafeFalse = {
+    visibility: 'public-safe',
+    public_safe: false,
+    read_scope: 'shared',
+    access_lenses: ['general', 'public-voice', 'private']
+  }
+  const afterRemovedPublicSafeFalse = {
+    visibility: 'public-safe',
+    read_scope: 'shared',
+    access_lenses: ['general', 'public-voice', 'private']
+  }
+  assert.equal(publicationAllowed(beforeWithPublicSafeFalse), false)
+  assert.equal(publicationAllowed(afterRemovedPublicSafeFalse), true)
+
+  const check1 = verifyNonAmplification(beforeWithPublicSafeFalse, afterRemovedPublicSafeFalse)
+  assert.equal(check1.valid, false)
+  assert.match(check1.violation, /DENY -> ALLOW/)
+
+  // Even when access_lenses is ['private'] and read_scope is 'restricted', removing public_safe: false from a publish-approved doc widens publicationAllowed
+  const beforePrivatePub = {
+    visibility: 'private',
+    read_scope: 'restricted',
+    access_lenses: ['private'],
+    disclosure: 'publish-approved',
+    public_safe: false,
+    sensitivity: 'personal'
+  }
+  const afterPrivatePub = {
+    visibility: 'private',
+    read_scope: 'restricted',
+    access_lenses: ['private'],
+    disclosure: 'publish-approved',
+    sensitivity: 'personal'
+  }
+  assert.equal(publicationAllowed(beforePrivatePub), false)
+  assert.equal(publicationAllowed(afterPrivatePub), true)
+
+  const check2 = verifyNonAmplification(beforePrivatePub, afterPrivatePub)
+  assert.equal(check2.valid, false)
+  assert.match(check2.violation, /DENY -> ALLOW/)
+})
+
+test('regression (c): visibility: private mapping is exact with zero coverage loss', async () => {
+  const self = await temp()
+  await mkdir(join(self, 'context'), { recursive: true })
+
+  const docPath = join(self, 'context', 'private-note.md')
+  await writeFile(docPath, '---\nvisibility: private\n---\n# Secret Note\n')
+
+  const plan = planPolicyMigration(self)
+  assert.equal(plan.summary.modified_files, 1)
+  assert.equal(plan.summary.non_amplification_verified, true)
+  assert.deepEqual(plan.summary.coverage_loss, {})
+
+  const entry = plan.entries[0]
+  assert.equal(entry.changes.read_scope, 'restricted')
+  assert.deepEqual(entry.changes.access_lenses, ['private'])
+
+  // Applies cleanly without --confirm-narrowing because there is no coverage loss
+  const receipt = applyPolicyMigration(self, plan.plan_id)
+  assert.equal(receipt.status, 'applied')
+  assert.equal(receipt.narrowing_confirmed, false)
+
+  const updated = await readFile(docPath, 'utf8')
+  assert.match(updated, /read_scope: restricted/)
+  assert.match(updated, /access_lenses: \[private\]/)
+})
+
+test('verifyNonAmplification evaluates custom lenses from registry across all callers and public adapters', async () => {
+  const self = await temp()
+  await run(['init', '--root', self])
+  await mkdir(join(self, 'lenses'), { recursive: true })
+  await writeFile(
+    join(self, 'lenses', 'coaching.json'),
+    JSON.stringify({
+      schema_version: 1,
+      id: 'coaching',
+      label: 'Coaching',
+      description: 'Custom coaching lens',
+      behavior_lens: 'general',
+      sensitivity_access: ['personal', 'compensation-confidential'],
+      allow_linked_clients: true
+    })
+  )
+
+  // Granting custom lens 'coaching' when it was not granted before is refused as amplification
+  const customWidened = verifyNonAmplification(
+    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'private'] },
+    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
+    { selfRoot: self }
+  )
+  assert.equal(customWidened.valid, false)
+  assert.match(customWidened.violation, /Cell \(coaching, .+\) transited DENY -> ALLOW/)
+
+  // Preserving custom lens 'coaching' has 0 widening and 0 coverage loss
+  const customExact = verifyNonAmplification(
+    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
+    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
+    { selfRoot: self }
+  )
+  assert.equal(customExact.valid, true)
+  assert.deepEqual(customExact.coverageLoss, {})
+
+  // Removing custom lens 'coaching' is reported as coverage loss for 'coaching'
+  const customNarrowed = verifyNonAmplification(
+    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'coaching', 'private'] },
+    { visibility: 'linked-projects', read_scope: 'shared', access_lenses: ['general', 'private'] },
+    { selfRoot: self }
+  )
+  assert.equal(customNarrowed.valid, true)
+  assert.ok(customNarrowed.coverageLoss.coaching > 0)
+})
+
+test('regression (d): synthetic exhaustive check over visibility x public_safe x disclosure x sensitivity x access_lenses x read_scope', () => {
+  const visibilities = [undefined, 'private', 'linked-projects', 'professional', 'public-voice', 'public-safe']
+  const publicSafes = [undefined, true, false]
+  const disclosures = [undefined, 'internal-only', 'review-required', 'publish-approved']
+  const sensitivities = [undefined, 'public', 'personal', 'employer-confidential', 'restricted']
+  const accessLensOpts = [undefined, [], ['general', 'private']]
+  const readScopes = [undefined, 'shared', 'local', 'restricted']
+
+  const customLens = {
+    id: 'custom-audit',
+    sensitivity_access: ['personal', 'employer-confidential']
+  }
+  const registry = {
+    lenses: [...DEFAULT_LENSES, customLens],
+    byId: new Map([...DEFAULT_LENSES, customLens].map(l => [l.id, l]))
+  }
+  const allLenses = [...DEFAULT_LENS_IDS, customLens.id]
+  const subjects = [
+    { kind: 'owner:direct', accessible_spaces: ['self', 'contrib'] },
+    { kind: 'client:linked', accessible_spaces: ['self', 'contrib'], effective_allowed_lenses: new Set(allLenses) }
+  ]
+  const adapters = ['generic', 'public', 'obsidian-public', 'restricted-host']
+
+  let totalCombinations = 0
+  let exactLegacyCombinations = 0
+  let planWidened = 0
+  let exactWidened = 0
+  let exactFalseCoverageLoss = 0
+
+  for (const vis of visibilities) {
+    for (const pubSafe of publicSafes) {
+      for (const disc of disclosures) {
+        for (const sens of sensitivities) {
+          for (const al of accessLensOpts) {
+            for (const rs of readScopes) {
+              totalCombinations++
+
+              const lines = ['---']
+              if (vis !== undefined) lines.push(`visibility: ${vis}`)
+              if (pubSafe !== undefined) lines.push(`public_safe: ${pubSafe}`)
+              if (disc !== undefined) lines.push(`disclosure: ${disc}`)
+              if (sens !== undefined) lines.push(`sensitivity: ${sens}`)
+              if (al !== undefined) lines.push(`access_lenses: [${al.join(', ')}]`)
+              if (rs !== undefined) lines.push(`read_scope: ${rs}`)
+              lines.push('---', '# Synthetic Doc', '')
+              const rawText = lines.join('\n')
+
+              // Parse BEFORE exactly as catalog parses it
+              const beforeParsed = frontmatter(rawText, { tolerant: true, registry })
+              const beforeMeta = beforeParsed.metadata
+
+              // 1. Check the migration plan the tool would compute and apply
+              const rawParsed = frontmatter(rawText, { tolerant: true, validatePrivacy: false, registry })
+              const rawMeta = rawParsed.metadata
+              const wasRestricted = beforeParsed.warnings.some(w => w.includes('restricted'))
+              const meetMeta = computeMeetMetadata(beforeMeta, 'self', registry)
+
+              const changes = {}
+              if (rawMeta.read_scope !== meetMeta.read_scope) changes.read_scope = meetMeta.read_scope
+              const beforeAccess = Array.isArray(rawMeta.access_lenses) ? rawMeta.access_lenses : null
+              if (!beforeAccess || JSON.stringify(beforeAccess) !== JSON.stringify(meetMeta.access_lenses)) {
+                changes.access_lenses = meetMeta.access_lenses
+              }
+              if (wasRestricted) {
+                if (rawMeta.visibility !== undefined && rawMeta.visibility !== meetMeta.visibility) changes.visibility = meetMeta.visibility
+                if (rawMeta.disclosure !== undefined && rawMeta.disclosure !== meetMeta.disclosure) changes.disclosure = meetMeta.disclosure
+                if (rawMeta.public_safe !== undefined && rawMeta.public_safe !== meetMeta.public_safe) changes.public_safe = meetMeta.public_safe
+                if (rawMeta.sensitivity !== undefined && rawMeta.sensitivity !== meetMeta.sensitivity) changes.sensitivity = meetMeta.sensitivity
+                if (rawMeta.document_role !== undefined && rawMeta.document_role !== meetMeta.document_role) changes.document_role = meetMeta.document_role
+              }
+
+              const afterText = Object.keys(changes).length > 0 ? applyFrontmatterModifications(rawText, changes) : rawText
+              const afterParsed = frontmatter(afterText, { tolerant: true, registry })
+              const afterMeta = afterParsed.metadata
+
+              const planCheck = verifyNonAmplification(beforeMeta, afterMeta, { registry })
+              if (!planCheck.valid) planWidened++
+
+              // Directly verify with runtime allowedDocument & publicationAllowed across all lenses, callers, and adapters
+              if (publicationAllowed(afterMeta) && !publicationAllowed(beforeMeta)) {
+                planWidened++
+              }
+              for (const lens of allLenses) {
+                const lensObj = registry.byId.get(lens)
+                const res = { sensitivity_access: lensObj.sensitivity_access || [] }
+                for (const s of subjects) {
+                  for (const a of adapters) {
+                    const bAllow = allowedDocument(beforeMeta, lens, a, null, res, s, 'self').allowed
+                    const aAllow = allowedDocument(afterMeta, lens, a, null, res, s, 'self').allowed
+                    if (aAllow && !bAllow) planWidened++
+                  }
+                }
+              }
+
+              // 2. Check exact runtime mapping: must have 0 widened and 0 false coverage loss
+              const exactAfter = {
+                ...beforeMeta,
+                read_scope: ['shared', 'local', 'restricted'].includes(beforeMeta.read_scope)
+                  ? beforeMeta.read_scope
+                  : visibility(beforeMeta) === 'private'
+                    ? 'restricted'
+                    : 'shared',
+                access_lenses: accessLenses(beforeMeta),
+                disclosure: disclosure(beforeMeta),
+                sensitivity: beforeMeta.sensitivity || 'personal',
+                document_role: beforeMeta.document_role || 'content'
+              }
+              const exactCheck = verifyNonAmplification(beforeMeta, exactAfter, { registry })
+              if (!exactCheck.valid) exactWidened++
+              if (Object.keys(exactCheck.coverageLoss).length > 0) exactFalseCoverageLoss++
+
+              if ((!Array.isArray(al) || al.length > 0) && sens !== 'employer-confidential' && rs !== 'local') {
+                exactLegacyCombinations++
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert.equal(totalCombinations, 4320)
+  assert.equal(exactLegacyCombinations, 1728)
+  assert.equal(planWidened, 0)
+  assert.equal(exactWidened, 0)
+  assert.equal(exactFalseCoverageLoss, 0)
+})
+
+test('regression (e): applyFrontmatterModifications anchors keys at column 0 to preserve nested field_visibility', async () => {
+  // Assert verifyNonAmplification adapter list includes every entry of PUBLICATION_ADAPTERS
+  assert.ok(Array.isArray(verifyNonAmplification.adapters))
+  for (const adapter of PUBLICATION_ADAPTERS) {
+    assert.ok(
+      verifyNonAmplification.adapters.includes(adapter),
+      `verifyNonAmplification adapters must include publication adapter ${adapter}`
+    )
+  }
+
+  const self = await temp()
+  await mkdir(join(self, 'context'), { recursive: true })
+
+  const nestedLine = '  visibility: public-safe'
+  const initialContent = [
+    '---',
+    'field_visibility:',
+    nestedLine,
+    'visibility: private',
+    '---',
+    '# Canonical Doc',
+    'Body text.',
+    ''
+  ].join('\n')
+
+  const docPath = join(self, 'context', 'canonical-doc.md')
+  await writeFile(docPath, initialContent)
+
+  // Run the migrate-policy plan/apply path existing tests use
+  const plan = planPolicyMigration(self)
+  assert.equal(plan.summary.modified_files, 1)
+  assert.equal(plan.summary.non_amplification_verified, true)
+  assert.deepEqual(plan.summary.coverage_loss, {})
+
+  const entry = plan.entries[0]
+  assert.equal(entry.changes.read_scope, 'restricted')
+  assert.deepEqual(entry.changes.access_lenses, ['private'])
+
+  const receipt = applyPolicyMigration(self, plan.plan_id)
+  assert.equal(receipt.status, 'applied')
+
+  const updated = await readFile(docPath, 'utf8')
+
+  // Assert the nested line is byte-unchanged
+  assert.ok(
+    updated.includes(nestedLine),
+    'nested field_visibility line must remain byte-unchanged'
+  )
+  assert.match(updated, /field_visibility:\r?\n  visibility: public-safe/)
+
+  // Assert top-level key is the one migrated
+  assert.match(updated, /^visibility:\s*private/m)
+  assert.match(updated, /^read_scope:\s*restricted/m)
+  assert.match(updated, /^access_lenses:\s*\[private\]/m)
+
+  // Also assert directly that applyFrontmatterModifications modifies top-level key without rewriting nested key
+  const directModified = applyFrontmatterModifications(initialContent, { visibility: 'public-safe' })
+  assert.ok(
+    directModified.includes(nestedLine),
+    'applyFrontmatterModifications must not rewrite nested line when modifying visibility'
+  )
+  assert.match(directModified, /^visibility:\s*public-safe/m)
 })

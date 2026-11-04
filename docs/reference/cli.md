@@ -24,7 +24,7 @@ holoself <command> [options]
 <!-- generated:start -->
 Generated from `holoself capabilities --json` (product `holoself`, version `0.10.1`, context schema `v1`, index schema `v5`, proposal schemas `v1, v2`) and the CLI flag contract:
 
-- Capability command groups (11): `doctor`, `context`, `search`, `propose`, `proposals`, `instructions`, `knowledge`, `link`, `skill`, `mcp`, `coaching`
+- Capability command groups (12): `doctor`, `context`, `ledger`, `search`, `propose`, `proposals`, `instructions`, `knowledge`, `link`, `skill`, `mcp`, `coaching`
 - Coaching subcommands (7): `coaching start`, `coaching note`, `coaching action`, `coaching choose`, `coaching review`, `coaching material`, `coaching resume`
 - Context features: `need-gate`, `budgets`, `manifest`, `source-handles`, `lifecycle`, `receipts`, `task-contrib-routing`
 - MCP tools (7): `holoself_status`, `holoself_context`, `holoself_context_manifest`, `holoself_context_get`, `holoself_search`, `holoself_proposal_create`, `holoself_proposal_preview`
@@ -73,14 +73,14 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `link repair` | `--project`, `--target`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--mcp`, `--no-mcp`, `--approve-read-tools`, `--no-approve-read-tools`, `--force`, `--dry-run`, `--yes`, `--confirm`, `--lens`, `--secondary-lenses` |
 | `link deactivate` | `--project`, `--target`, `--adapters`, `--dry-run`, `--yes`, `--confirm` |
 | `link status` | `--project`, `--target`, `--skill-home`, `--json` |
-| `link doctor` | `--project`, `--target`, `--skill-home`, `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--snapshot` |
+| `link doctor` | `--project`, `--target`, `--skill-home`, `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--need`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--snapshot` |
 | `link remove` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--force`, `--dry-run`, `--yes`, `--confirm` |
 | `link approve` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--revoke`, `--lenses` |
 | `link backfill` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--all`, `--lenses` |
 | `link prune` | `--root`, `--data-root`, `--data-dir`, `--self` |
 | `link skill migrate-global` | `--project`, `--target`, `--platform`, `--instructions`, `--skill-home`, `--force`, `--dry-run`, `--yes`, `--confirm` |
 | `migrate policy` | `--root`, `--data-root`, `--data-dir`, `--self`, `--apply`, `--revert`, `--confirm-narrowing`, `--allow-partial`, `--include-linked`, `--dry-run`, `--json` |
-| `context` | `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--output`, `--snapshot`, `--yes`, `--confirm` |
+| `context` | `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--need`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--output`, `--snapshot`, `--yes`, `--confirm` |
 | `analyze overlap` | `--project`, `--target`, `--json` |
 | `analyze conflicts` | `--project`, `--target`, `--json` |
 | `analyze stale` | `--project`, `--target`, `--json` |
@@ -96,6 +96,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.10
 | `index` | `--project`, `--target`, `--changed`, `--json` |
 | `index status` | `--project`, `--target`, `--json` |
 | `index rebuild` | `--project`, `--target`, `--json` |
+| `ledger` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--since`, `--lens`, `--surface`, `--limit`, `--json` |
 | `search` | `--project`, `--target`, `--lens`, `--temporal`, `--federated`, `--spaces`, `--json` |
 <!-- generated:end -->
 

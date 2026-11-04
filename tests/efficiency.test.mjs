@@ -6,7 +6,7 @@ import { basename } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { applyCleanupPlan, buildCleanupPlan } from '../src/cleanup.mjs'
-import { contextNeed, selectContextRecords, sourceId, dateValue, temporalDisposition } from '../src/context-selection.mjs'
+import { classifyContextNeed, contextNeed, selectContextRecords, sourceId, dateValue, temporalDisposition } from '../src/context-selection.mjs'
 import { canonicalPrivacyMetadataErrors, privacyMetadataErrors, privacyValueValid, redactRootPaths } from '../src/ecosystem.mjs'
 import { runHarness } from '../src/harnesses.mjs'
 import { run } from '../src/cli.mjs'
@@ -174,4 +174,103 @@ test('redactRootPaths preserves sibling-prefix paths, handles win32 case-insensi
   const longVal='x'.repeat(120)
   const redacted=redactRootPaths(`context/a.md: invalid superseded_by value ${longVal}`,[])
   assert.equal(redacted,`context/a.md: invalid superseded_by value ${'x'.repeat(80)}...`)
+})
+
+test('classifyContextNeed scores personal, domain, and mechanical signals in EN and PT and respects explicit override',()=>{
+  assert.deepEqual(classifyContextNeed('format this JSON object: {"x":1}'),{need:'not-needed',reason:'matched:mechanical:format'})
+  assert.deepEqual(classifyContextNeed('fix lint error in src/foo.js'),{need:'not-needed',reason:'matched:mechanical:lint'})
+  assert.deepEqual(classifyContextNeed('indentar este arquivo JSON'),{need:'not-needed',reason:'matched:mechanical:indent'})
+  assert.deepEqual(classifyContextNeed('corrija a indentação deste arquivo JSON'),{need:'not-needed',reason:'matched:mechanical:indent'})
+  assert.deepEqual(classifyContextNeed('summarize my career trajectory'),{need:'required',reason:'matched:personal:career'})
+  assert.deepEqual(classifyContextNeed('qual é meu estilo de liderança em engenharia?'),{need:'required',reason:'matched:personal:leadership'})
+  assert.deepEqual(classifyContextNeed('refine my leadership voice for the onboarding plan'),{need:'required',reason:'matched:personal:leadership'})
+  assert.deepEqual(classifyContextNeed('Fix the 30-60-90 day onboarding plan for new senior engineers'),{need:'helpful',reason:'default'})
+  assert.deepEqual(classifyContextNeed('Corrija o tom deste artigo técnico para soar mais direto'),{need:'helpful',reason:'default'})
+  assert.deepEqual(classifyContextNeed('Format the README intro in our house style'),{need:'helpful',reason:'default'})
+  assert.deepEqual(classifyContextNeed('How should we structure our deterministic simulation testing harness?'),{need:'helpful',reason:'default'})
+  assert.deepEqual(classifyContextNeed('Como devemos testar hipóteses de produto com clientes enterprise?'),{need:'helpful',reason:'default'})
+  assert.deepEqual(classifyContextNeed('help decide our roadmap'),{need:'helpful',reason:'default'})
+  for(const need of ['required','helpful','not-needed']){
+    assert.deepEqual(classifyContextNeed('format this JSON',need),{need,reason:'explicit'})
+    assert.equal(contextNeed('format this JSON',need),need)
+  }
+  assert.throws(()=>classifyContextNeed('task','invalid'),/invalid context need/)
+})
+
+test('softened not-needed keeps policy, session-start sources, and overlapping self records while explicit not-needed drops all self records',async()=>{
+  const records=[
+    {...record('lenses/general.md','general lens policy',{document_role:'policy'}),document_role:'policy'},
+    record('profile/identity.md','Sam identity and engineering background'),
+    record('profile/preferences.md','Prefer concise direct writing'),
+    record('context/testing-philosophy.md','Deterministic simulation testing harness and property-based checks'),
+    record('context/career.md','Unrelated executive career biography and history'),
+    record('Context/project.md','Project local docs for lint and property-based checks',{},'project')
+  ]
+  const softMechanical=selectContextRecords(records,{
+    task:'fix lint error in foo.js',
+    budget:'small',
+    sessionStartSources:['profile/identity.md','profile/preferences.md']
+  })
+  assert.equal(softMechanical.selection.context_need,'not-needed')
+  assert.equal(softMechanical.selection.need,'not-needed')
+  assert.equal(softMechanical.selection.need_reason,'matched:mechanical:lint')
+  assert.equal(softMechanical.receipt.need,'not-needed')
+  assert.equal(softMechanical.receipt.need_reason,'matched:mechanical:lint')
+  assert.deepEqual(softMechanical.records.map(r=>r.path),['profile/identity.md','profile/preferences.md','lenses/general.md','Context/project.md'])
+  assert.equal(softMechanical.omitted.some(o=>o.source==='context/career.md'&&o.reason==='personal context not needed for this task'),true)
+  assert.equal(softMechanical.omitted.some(o=>o.source==='context/testing-philosophy.md'&&o.reason==='personal context not needed for this task'),true)
+
+  const softOverlap=selectContextRecords(records,{
+    task:'test property-based checks in foo.js',
+    budget:'small',
+    sessionStartSources:['profile/identity.md','profile/preferences.md']
+  })
+  assert.equal(softOverlap.selection.context_need,'not-needed')
+  assert.equal(softOverlap.selection.need_reason,'matched:mechanical:test')
+  assert.equal(softOverlap.records.some(r=>r.path==='context/testing-philosophy.md'),true,'overlapping self record kept under soft not-needed')
+  assert.equal(softOverlap.records.some(r=>r.path==='context/career.md'),false,'non-overlapping self record omitted under soft not-needed')
+
+  const strictExplicit=selectContextRecords(records,{
+    task:'test property-based checks in foo.js',
+    need:'not-needed',
+    budget:'small',
+    sessionStartSources:['profile/identity.md','profile/preferences.md']
+  })
+  assert.equal(strictExplicit.selection.context_need,'not-needed')
+  assert.equal(strictExplicit.selection.need,'not-needed')
+  assert.equal(strictExplicit.selection.need_reason,'explicit')
+  assert.deepEqual(strictExplicit.records.map(r=>r.path),['Context/project.md'])
+  assert.equal(strictExplicit.omitted.filter(o=>o.reason==='personal context not needed for this task').length,5)
+
+  const self=temp(),project=temp(),cli=join(process.cwd(),'bin','holoself.mjs')
+  await run(['init','--root',self])
+  writeFileSync(join(self,'context','career.md'),'---\naccess_lenses: [general, professional, private]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Career\n\nPrincipal systems architect notes.\n')
+  await run(['link','add','--project',project,'--self',self,'--lens','general','--no-activate','--yes'])
+
+  const softCli=JSON.parse(spawnSync(process.execPath,[cli,'context','--project',project,'--task','format this JSON','--json'],{encoding:'utf8',shell:false}).stdout)
+  assert.equal(softCli.status,'not-needed')
+  assert.equal(softCli.selection.need_reason,'matched:mechanical:format')
+  assert.equal(softCli.context_receipt.need,'not-needed')
+  assert.equal(softCli.context_receipt.need_reason,'matched:mechanical:format')
+  assert.equal(softCli.self.documents.some(d=>d.path==='profile/identity.md'),true)
+  assert.equal(softCli.self.documents.some(d=>d.path==='context/career.md'),false)
+
+  const strictCli=JSON.parse(spawnSync(process.execPath,[cli,'context','--project',project,'--task','format this JSON','--need','not-needed','--json'],{encoding:'utf8',shell:false}).stdout)
+  assert.equal(strictCli.status,'not-needed')
+  assert.equal(strictCli.selection.need_reason,'explicit')
+  assert.equal(strictCli.self.documents.length,0)
+
+  const forcedCli=JSON.parse(spawnSync(process.execPath,[cli,'context','--project',project,'--task','format this JSON','--need','required','--json'],{encoding:'utf8',shell:false}).stdout)
+  assert.equal(forcedCli.status,'complete')
+  assert.equal(forcedCli.selection.context_need,'required')
+  assert.equal(forcedCli.selection.need_reason,'explicit')
+  assert.equal(forcedCli.self.documents.some(d=>d.path==='context/career.md'),true)
+
+  const packetText=spawnSync(process.execPath,[cli,'context','--project',project,'--task','format this JSON'],{encoding:'utf8',shell:false}).stdout
+  assert.match(packetText,/Context gate: not-needed \(matched:mechanical:format\);/)
+
+  const hookWithNeed=spawnSync(process.execPath,[cli,'context','--project',project,'--hook','holoself-session-start','--need','required'],{encoding:'utf8',shell:false})
+  assert.equal(hookWithNeed.status,0)
+  assert.equal(hookWithNeed.stdout,'')
+  assert.equal(hookWithNeed.stderr,'')
 })

@@ -38,6 +38,7 @@ export const CONTEXT_FLAGS = [
   '--self',
   '--lens',
   '--task',
+  '--need',
   '--self-only',
   '--budget',
   '--source',
@@ -163,6 +164,7 @@ export const COMMAND_FLAGS = {
   index: [...PROJECT_FLAGS, '--changed', ...JSON_FLAGS],
   'index status': [...PROJECT_FLAGS, ...JSON_FLAGS],
   'index rebuild': [...PROJECT_FLAGS, ...JSON_FLAGS],
+  ledger: [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--since', '--lens', '--surface', '--limit', ...JSON_FLAGS],
   search: [...PROJECT_FLAGS, '--lens', '--temporal', '--federated', '--spaces', ...JSON_FLAGS]
 }
 export function commandKey(o) {
@@ -185,6 +187,11 @@ export function validateFlags(o) {
   }
   if (o.dryRun && (o.command === 'knowledge' || key === 'migrate policy') && (o.apply || o.revert || o.output))
     throw new Error('--dry-run cannot be combined with --apply, --revert or --output')
+  if (o.need !== undefined && !['required', 'helpful', 'not-needed'].includes(o.need)) {
+    const error = new Error(`invalid context need: ${o.need}; expected required, helpful, or not-needed`)
+    error.code = 'INVALID_ARGUMENT'
+    throw error
+  }
   return o
 }
 export function parseArguments(args) {
@@ -216,6 +223,7 @@ export function parse(args) {
         .map(x => x.trim())
         .filter(Boolean)
     else if (a === '--task') o.task = requiredValue(args, i++, a)
+    else if (a === '--need') o.need = requiredValue(args, i++, a)
     else if (a === '--question') o.question = requiredValue(args, i++, a)
     else if (a === '--text') o.coachingText = requiredValue(args, i++, a)
     else if (a === '--plan-kind') o.planKind = requiredValue(args, i++, a)
@@ -233,6 +241,9 @@ export function parse(args) {
         'Document import is unsupported. Have an external tool extract the text, then use coaching material --material-text with source provenance.'
       )
     else if (a === '--budget') o.budget = requiredValue(args, i++, a)
+    else if (a === '--since') o.since = requiredValue(args, i++, a)
+    else if (a === '--surface') o.surface = requiredValue(args, i++, a)
+    else if (a === '--limit') o.limit = requiredValue(args, i++, a)
     else if (a === '--temporal') o.temporal = requiredValue(args, i++, a)
     else if (a === '--cursor') o.cursor = requiredValue(args, i++, a)
     else if (a === '--source') {

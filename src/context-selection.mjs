@@ -8,37 +8,81 @@ export { sections, tokenize } from './markdown/text.mjs'
 
 export const CONTEXT_BUDGETS = Object.freeze({ small: 8_000, standard: 24_000, deep: 64_000, unbounded: Number.MAX_SAFE_INTEGER })
 export const ENVELOPE_BYTE_CAPS = Object.freeze({ small: 16_384, standard: 49_152, deep: 131_072, unbounded: Number.MAX_SAFE_INTEGER })
+export const CONTEXT_NEEDS = Object.freeze(['required', 'helpful', 'not-needed'])
 
 export function estimateTokens(chars) {
   return Math.ceil(Number(chars || 0) / 4)
 }
-const PERSONAL_PATTERN = new RegExp(
+const wordBoundary = body => new RegExp(String.raw`(?:^|[^\p{L}\p{N}])(?:${body})(?:$|[^\p{L}\p{N}])`, 'iu')
+const PERSONAL_PATTERNS = Object.freeze([
+  { id: 'identity', re: wordBoundary(String.raw`identi(?:ty|ties|dade|dades)|holoself`) },
+  { id: 'career', re: wordBoundary(String.raw`career|careers|carreir[ao]s?`) },
+  { id: 'leadership', re: wordBoundary(String.raw`leadership|lideran[cç]as?`) },
+  { id: 'voice', re: wordBoundary(String.raw`voice|voices|voz(?:es)?`) },
+  { id: 'preferences', re: wordBoundary(String.raw`prefer[eê]n(?:ce|ces|cia|cias|ça|ças)|personal|personally|pessoais|pessoal`) },
+  {
+    id: 'interview',
+    re: wordBoundary(String.raw`interview|interviews|entrevistas?|application|applications|apresenta[cç][aã]o|apresenta[cç][oõ]es`)
+  },
+  { id: 'priority', re: wordBoundary(String.raw`priorit(?:y|ies)|prioridades?`) },
+  { id: 'history', re: wordBoundary(String.raw`hist[oó]rias?`) }
+])
+const MECHANICAL_PATTERNS = Object.freeze([
+  { id: 'format', re: wordBoundary(String.raw`format(?:s|ed|ing|e|ar|ando|ado|[aã]o|[oõ]es)?`) },
+  { id: 'rename', re: wordBoundary(String.raw`rename|renam(?:ed|ing)|renome(?:ar|ie|ando|ado)`) },
+  { id: 'compile', re: wordBoundary(String.raw`compile|compil(?:ed|ing|ar|e|ando|ado|[aã]o)`) },
+  { id: 'lint', re: wordBoundary(String.raw`lint(?:s|ed|ing|ar)?`) },
+  { id: 'syntax', re: wordBoundary(String.raw`syntax|sintaxe`) },
+  { id: 'test', re: wordBoundary(String.raw`tests?|test(?:ed|ing|ar|e|ando|ado)`) },
+  { id: 'install', re: wordBoundary(String.raw`install|install(?:ed|ing)|instal(?:ar|e|ando|ado|[aã]o)`) },
+  { id: 'sort', re: wordBoundary(String.raw`sort|sort(?:s|ed|ing)|orden(?:ar|e|ando|ado|[aã]o)`) },
+  { id: 'convert', re: wordBoundary(String.raw`convert|convert(?:s|ed|ing|er|a|endo|ido)|convers[aã]o`) },
+  { id: 'indent', re: wordBoundary(String.raw`indent(?:s|ed|ing|ar|e|ando|ado|ation|a[cç][aã]o)?`) },
+  { id: 'fix', re: wordBoundary(String.raw`fix(?:es|ed|ing)?|corri(?:gir|ja|gindo|gido)|corre[cç][aã]o`) }
+])
+const DOMAIN_NOUN_RE = new RegExp(
   [
-    String.raw`(?:^|[^\p{L}\p{N}])(?:identi(?:ty|ties|dade|dades)|career|careers|carreir[ao]s?|leadership|`,
-    String.raw`lideran[cç]as?|voice|voices|voz(?:es)?|prefer[eê]n(?:ce|ces|cia|cias|ça|ças)|personal|personally|`,
-    String.raw`pessoais|pessoal|interview|interviews|entrevistas?|application|applications|apresenta[cç][aã]o|`,
-    String.raw`apresenta[cç][oõ]es|priorit(?:y|ies)|prioridades?|hist[oó]rias?|holoself)(?:$|[^\p{L}\p{N}])`
+    String.raw`(?:^|[^\p{L}\p{N}])(?:readme|documentation|documenta[cç][aã]o|editorial|style|estilo|artigo|article|`,
+    String.raw`rascunho|draft|publishing|publica[cç][aã]o|guide|guia|runbook|handbook|architecture|arquitetura|`,
+    String.raw`design|philosophy|filosofia|principles|princ[ií]pios|deterministic|determin[ií]stic[ao]s?|simulation|`,
+    String.raw`simula[cç][aã]o|harness|consensus|consenso|distributed|distribu[ií]d[ao]s?|rfc|adr|onboarding|`,
+    String.raw`integra[cç][aã]o|playbook|engineers?|engenheir[ao]s?|mentorship|mentoria|postmortem|incident|`,
+    String.raw`incidente|calibration|calibra[cç][aã]o|team|equipe|time|product|produto|hypothes[ie]s|hip[oó]teses?|`,
+    String.raw`discovery|descoberta|customers?|clientes?|roadmap|strategy|estrat[eé]gia|quarterly|trimestre|okrs?|`,
+    String.raw`plan|plano|policy|policies|pol[ií]tica|pol[ií]ticas|conventions?|conven[cç][aã]o|conven[cç][oõ]es|`,
+    String.raw`governance|governan[cç]a|values|valores)(?=$|[^\p{L}\p{N}])`
   ].join(''),
-  'iu'
-)
-const MECHANICAL_PATTERN = new RegExp(
-  [
-    String.raw`(?:^|[^\p{L}\p{N}])(?:format(?:s|ed|ing|e|ar|ando|ado|[aã]o|[oõ]es)?|rename|renam(?:ed|ing)|`,
-    String.raw`renome(?:ar|ie|ando|ado)|compile|compil(?:ed|ing|ar|e|ando|ado|[aã]o)|lint(?:s|ed|ing|ar)?|`,
-    String.raw`syntax|sintaxe|tests?|test(?:ed|ing|ar|e|ando|ado)|install|install(?:ed|ing)|instal(?:ar|e|`,
-    String.raw`ando|ado|[aã]o)|sort|sort(?:s|ed|ing)|orden(?:ar|e|ando|ado|[aã]o)|convert|convert(?:s|ed|`,
-    String.raw`ing|er|a|endo|ido)|convers[aã]o|indent|indent(?:s|ed|ing|ar|e|ando|ado|[aã]o)|fix(?:es|ed|`,
-    String.raw`ing)?|corri(?:gir|ja|gindo|gido)|corre[cç][aã]o)(?:$|[^\p{L}\p{N}])`
-  ].join(''),
-  'iu'
+  'giu'
 )
 
-export function contextNeed(task = '') {
+export function classifyContextNeed(task = '', explicitNeed = null) {
+  if (explicitNeed !== null && explicitNeed !== undefined && explicitNeed !== '') {
+    if (!CONTEXT_NEEDS.includes(explicitNeed)) {
+      const err = new Error(`invalid context need: ${explicitNeed}`)
+      err.code = 'INVALID_ARGUMENT'
+      throw err
+    }
+    return { need: explicitNeed, reason: 'explicit' }
+  }
   const str = String(task).trim()
-  if (!str) return 'helpful'
-  if (PERSONAL_PATTERN.test(str)) return 'required'
-  if (MECHANICAL_PATTERN.test(str)) return 'not-needed'
-  return 'helpful'
+  if (!str) return { need: 'helpful', reason: 'default' }
+  const personalMatches = PERSONAL_PATTERNS.filter(p => p.re.test(str)),
+    mechanicalMatches = MECHANICAL_PATTERNS.filter(p => p.re.test(str)),
+    domainCount = (str.match(DOMAIN_NOUN_RE) || []).length
+  const personalScore = personalMatches.length,
+    positiveScore = personalScore + domainCount,
+    mechanicalScore = mechanicalMatches.length
+  if (mechanicalScore === 0) {
+    if (personalScore > 0) return { need: 'required', reason: `matched:personal:${personalMatches[0].id}` }
+    return { need: 'helpful', reason: 'default' }
+  }
+  if (mechanicalScore > positiveScore) return { need: 'not-needed', reason: `matched:mechanical:${mechanicalMatches[0].id}` }
+  if (positiveScore > mechanicalScore && personalScore > 0) return { need: 'required', reason: `matched:personal:${personalMatches[0].id}` }
+  return { need: 'helpful', reason: 'default' }
+}
+
+export function contextNeed(task = '', explicitNeed = null) {
+  return classifyContextNeed(task, explicitNeed).need
 }
 
 export function dateValue(value, isEnd = false) {
@@ -70,8 +114,8 @@ export function temporalDisposition(metadata = {}, task = '', options = {}) {
   return { include: true, reason: null, status, scope }
 }
 
-export function relevanceScore(record, task) {
-  if (!task) return record.document_role === 'policy' ? 4 : 1
+export function taskOverlapScore(record, task) {
+  if (!task) return 0
   const text = record.content || record.search_text || ''
   const wanted = tokenize(task),
     pathTokens = new Set(tokenize(record.path)),
@@ -84,6 +128,12 @@ export function relevanceScore(record, task) {
     if (headingTokens.has(token)) score += 3
     if (contentTokens.has(token)) score += 2
   }
+  return score
+}
+
+export function relevanceScore(record, task) {
+  if (!task) return record.document_role === 'policy' ? 4 : 1
+  let score = taskOverlapScore(record, task)
   if (record.document_role === 'policy') score += 2
   if (/^profile\/(?:identity|work-context|preferences|voice|thinking|change)\.md$/i.test(record.path)) score += 2
   if (record.kind === 'contrib') score = Math.max(0, score - 2)
@@ -269,7 +319,9 @@ export function applySelectionPolicy(candidates, options = {}) {
   const budgetName = options.budget || 'standard',
     budgetChars = CONTEXT_BUDGETS[budgetName] || CONTEXT_BUDGETS.standard,
     requested = new Set(options.sources || [])
-  const isNotNeeded = contextNeed(options.task) === 'not-needed',
+  const { need } = classifyContextNeed(options.task, options.need),
+    isNotNeeded = need === 'not-needed',
+    strictNotNeeded = options.need === 'not-needed',
     patterns = options.sessionStartSources || DEFAULT_SESSION_START_SOURCES
   const sessionFilter = isSessionStart(options) && !patterns.includes('*')
   let ordered = candidates
@@ -283,6 +335,18 @@ export function applySelectionPolicy(candidates, options = {}) {
       rank = x => (x.r < 0 ? patterns.length : x.r)
     ordered = [...self.sort((a, b) => rank(a) - rank(b) || a.i - b.i).map(x => x.record), ...candidates.filter(record => record.kind !== 'self')]
     unmatchedPatterns = patterns.filter((_, index) => !self.some(x => x.r === index))
+  } else if (isNotNeeded && !strictNotNeeded && !requested.size && !patterns.includes('*')) {
+    const self = candidates
+        .map((record, i) => ({ record, i }))
+        .filter(x => x.record.kind === 'self')
+        .map(x => {
+          const overlap = taskOverlapScore(x.record, options.task),
+            idx = sessionStartIndex(x.record.path, patterns),
+            tier = overlap >= 6 ? 0 : idx >= 0 ? 1 : x.record.document_role === 'policy' ? 2 : 3
+          return { ...x, tier, idx }
+        }),
+      cmp = (a, b) => a.tier - b.tier || (a.tier === 1 ? a.idx - b.idx : 0) || a.i - b.i
+    ordered = [...self.sort(cmp).map(x => x.record), ...candidates.filter(record => record.kind !== 'self')]
   }
   const records = [],
     omitted = []
@@ -290,8 +354,11 @@ export function applySelectionPolicy(candidates, options = {}) {
     truncated = false
   for (const record of ordered) {
     if (!requested.size && isNotNeeded && record.kind === 'self') {
-      omitted.push({ source: record.path, reason: 'personal context not needed for this task' })
-      continue
+      const inSessionStart = patterns.includes('*') || sessionStartIndex(record.path, patterns) >= 0
+      if (strictNotNeeded || (record.document_role !== 'policy' && !inSessionStart && taskOverlapScore(record, options.task) <= 0)) {
+        omitted.push({ source: record.path, reason: 'personal context not needed for this task' })
+        continue
+      }
     }
     if (options.task && !requested.size && record.kind === 'project' && record.task_relevance <= 0 && record.document_role !== 'policy') {
       omitted.push({ source: record.path, reason: 'no meaningful task relevance' })
@@ -337,7 +404,7 @@ export function applySelectionPolicy(candidates, options = {}) {
   return { records, omitted, chars, truncated, unmatchedPatterns }
 }
 
-export function selectionReceipt(records, { budget, taskHash, lens, temporal }) {
+export function selectionReceipt(records, { budget, taskHash, lens, temporal, need, needReason }) {
   const receiptInput = {
     budget,
     task_hash: taskHash,
@@ -351,6 +418,8 @@ export function selectionReceipt(records, { budget, taskHash, lens, temporal }) 
     lens: lens || null,
     budget,
     temporal,
+    need: need || 'helpful',
+    need_reason: needReason || 'default',
     source_ids: records.map(record => record.source_id),
     source_hashes: records.map(record => record.source_hash)
   }
@@ -360,6 +429,7 @@ export function selectContextRecords(records, options = {}) {
   const budgetName = options.budget || 'standard',
     budgetChars = CONTEXT_BUDGETS[budgetName]
   if (!budgetChars) throw new Error(`invalid context budget: ${budgetName}`)
+  const { need, reason: needReason } = classifyContextNeed(options.task, options.need)
   const { candidates, temporalExcluded } = rankCandidates(records, options)
   const taskHash = hash(String(options.task || '')),
     temporalVal = options.temporal || 'current',
@@ -369,8 +439,13 @@ export function selectContextRecords(records, options = {}) {
   let picked,
     nextCursor = null
   if (options.manifest) {
-    const page = applyManifestPage(candidates, startOffset, { budget: budgetName })
-    picked = { records: page.records, omitted: page.omitted, chars: 0, truncated: page.truncated }
+    const manifestCandidates = options.need === 'not-needed' && !options.sources?.length ? candidates.filter(c => c.kind !== 'self') : candidates
+    const page = applyManifestPage(manifestCandidates, startOffset, { budget: budgetName })
+    const strictOmitted =
+      options.need === 'not-needed' && !options.sources?.length
+        ? candidates.filter(c => c.kind === 'self').map(c => ({ source: c.path, reason: 'personal context not needed for this task' }))
+        : []
+    picked = { records: page.records, omitted: [...strictOmitted, ...page.omitted], chars: 0, truncated: page.truncated }
     if (page.nextOffset !== null)
       nextCursor = buildCursor(
         identityId,
@@ -387,19 +462,11 @@ export function selectContextRecords(records, options = {}) {
   } else picked = applySelectionPolicy(candidates, { ...options, budget: budgetName })
   const selected = picked.records,
     omitted = picked.omitted,
-    chars = picked.chars
-  return {
-    records: selected,
-    omitted,
-    temporalExcluded,
-    candidates,
-    startOffset,
-    taskHash,
-    temporalVal,
-    stateHash,
-    selection: {
+    chars = picked.chars,
+    selection = {
       schema_version: 1,
-      context_need: contextNeed(options.task),
+      context_need: need,
+      need_reason: needReason,
       budget: budgetName,
       budget_chars: budgetChars === Number.MAX_SAFE_INTEGER ? null : budgetChars,
       manifest_only: Boolean(options.manifest),
@@ -419,8 +486,19 @@ export function selectContextRecords(records, options = {}) {
       contradiction_digest: contradictionDigest(selected),
       next_cursor: nextCursor,
       ...(picked.unmatchedPatterns?.length ? { session_start_unmatched: picked.unmatchedPatterns } : {})
-    },
-    receipt: selectionReceipt(selected, { budget: budgetName, taskHash, lens: options.lens, temporal: temporalVal })
+    }
+  Object.defineProperty(selection, 'need', { value: need, enumerable: false, configurable: true, writable: true })
+  return {
+    records: selected,
+    omitted,
+    temporalExcluded,
+    candidates,
+    startOffset,
+    taskHash,
+    temporalVal,
+    stateHash,
+    selection,
+    receipt: selectionReceipt(selected, { budget: budgetName, taskHash, lens: options.lens, temporal: temporalVal, need, needReason })
   }
 }
 
@@ -444,6 +522,7 @@ function cacheKey(records, options = {}) {
       identity_id: options.identityId || null,
       allowed_lenses: options.allowedLenses || null,
       task: options.task || '',
+      need: options.need || null,
       lens: options.lens || '',
       budget: options.budget || 'standard',
       manifest: Boolean(options.manifest),
