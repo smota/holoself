@@ -63,6 +63,22 @@ const runBin = (args, env = {}) =>
 test('Claude Code SessionStart hook is verified in the matrix and uses no absolute path', () => {
   assert.equal(hookSupport('claude', undefined, 'linux').support, 'verified')
   assert.equal(hookSupport('claude', undefined, 'win32').support, 'unverified', 'Windows stays unverified without a Windows record')
+  // Test-only platform override: honoured under node --test, ignored in a product process.
+  const saved = process.env.HOLOSELF_TEST_PLATFORM
+  try {
+    process.env.HOLOSELF_TEST_PLATFORM = 'win32'
+    assert.equal(hookSupport('claude').support, process.env.NODE_TEST_CONTEXT ? 'unverified' : hookSupport('claude', undefined, process.platform).support)
+  } finally {
+    if (saved === undefined) delete process.env.HOLOSELF_TEST_PLATFORM
+    else process.env.HOLOSELF_TEST_PLATFORM = saved
+  }
+  const { NODE_TEST_CONTEXT, ...productEnv } = process.env
+  const product = spawnSync(
+    process.execPath,
+    ['--input-type=module', '-e', `import { hookSupport } from ${JSON.stringify(new URL('../src/adapters/hooks.mjs', import.meta.url).href)}; console.log(hookSupport('claude').support)`],
+    { encoding: 'utf8', env: { ...productEnv, HOLOSELF_TEST_PLATFORM: process.platform === 'win32' ? 'linux' : 'win32' } }
+  )
+  assert.equal(product.stdout.trim(), hookSupport('claude', undefined, process.platform).support, 'override ignored outside node --test')
   assert.equal(hookSupport('codex').support, 'unsupported')
   assert.equal(hookSupport('agy').support, 'unsupported')
   const command = HOOK_HOSTS.claude.command

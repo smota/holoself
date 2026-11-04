@@ -56,7 +56,9 @@ export async function buildParityFixture({ baseDir = tmpdir() } = {}) {
 function cleanEnv(home) {
   const env = {}
   for (const [key, value] of Object.entries(process.env)) if (!/^(HOLOSELF_|CLAUDE|CODEX|OPENRIG|MESHLOOP)/i.test(key)) env[key] = value
-  return { ...env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), NO_COLOR: '1', TZ: 'UTC' }
+  // HOLOSELF_TEST_PLATFORM (test-only, needs NODE_TEST_CONTEXT) pins session-start hook support to the Linux record so
+  // the golden is the same on every platform; Windows behaviour has its own unit test.
+  return { ...env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), NO_COLOR: '1', TZ: 'UTC', HOLOSELF_TEST_PLATFORM: 'linux' }
 }
 
 export async function seedParityFixture(fx) {

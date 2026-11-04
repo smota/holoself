@@ -34,7 +34,12 @@ export const HOOK_NOT_INSTALLED = {
 }
 
 // Windows is reported `unverified` (and not installed by default) unless the record says Windows was verified.
-export function hookSupport(id, matrix = loadVerificationMatrix(), platform = process.platform) {
+// Test-only: HOLOSELF_TEST_PLATFORM overrides the platform, honoured only under node --test (NODE_TEST_CONTEXT), so
+// golden fixtures are platform-independent. Product runs always use process.platform.
+function hookPlatform() {
+  return (process.env.NODE_TEST_CONTEXT && process.env.HOLOSELF_TEST_PLATFORM) || process.platform
+}
+export function hookSupport(id, matrix = loadVerificationMatrix(), platform = hookPlatform()) {
   if (!HOOK_HOSTS[id]) return { support: 'unsupported', tested_version: null, last_verified: null, reason: HOOK_NOT_INSTALLED[id] || null }
   const record = (matrix?.platforms || []).find(item => item?.platform === id)?.session_start_hook
   const verified = record?.result === 'pass' && record.marker_returned === true && record.hook_ran === true
