@@ -217,7 +217,7 @@ export function ensureCatalogPartition(spaceId, rootDir, files, registry, option
   atomicWriteFile(catPath, JSON.stringify(catalog, null, 2) + '\n')
   return { catalog, fresh: false, skippedSecrets, warnings, catalog_reads: catalogReads }
 }
-export let CONTRIB_CATALOG_CACHE = null
+let CONTRIB_CATALOG_CACHE = null
 export function ensureContribPartition(packageRoot, registry, selfRoot = null) {
   const catPath = selfRoot ? join(catalogRoot(selfRoot), 'contrib.json') : null
   if (CONTRIB_CATALOG_CACHE && CONTRIB_CATALOG_CACHE.lens_registry_hash === registry.registry_hash) {

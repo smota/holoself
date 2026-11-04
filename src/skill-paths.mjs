@@ -3,8 +3,12 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path
 import { assertNoLinkBelow } from './path-guard.mjs'
 
 function stat(path) {
-  try { return lstatSync(path) }
-  catch (error) { if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null; throw error }
+  try {
+    return lstatSync(path)
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null
+    throw error
+  }
 }
 function contained(root, path) {
   const rel = relative(root, path)
@@ -19,7 +23,8 @@ function plainPath(path) {
 // Diagnostics stop at local links. A global terminal directory link has a
 // separate, read-only path contract; managed project writes never use it.
 export function inspectSkillFile(root, rel, { allowDirectoryLink = false } = {}) {
-  let external = false, linkPath = null
+  let external = false,
+    linkPath = null
   const base = resolve(root)
   let path = base
   try {
@@ -27,11 +32,15 @@ export function inspectSkillFile(root, rel, { allowDirectoryLink = false } = {})
     path = resolve(base, rel)
     if (!contained(base, path)) throw new Error('skill path escapes its root')
     plainPath(base)
-    const chain = []; for (let current = path; current !== base; current = dirname(current)) chain.push(current)
+    const chain = []
+    for (let current = path; current !== base; current = dirname(current)) chain.push(current)
     for (const item of chain.reverse()) {
       const entry = stat(item)
       if (!entry) return { path, status: 'missing', external, linkPath }
-      if (!entry.isSymbolicLink()) { if (item !== path && !entry.isDirectory()) throw new Error('skill ancestor is not a directory'); continue }
+      if (!entry.isSymbolicLink()) {
+        if (item !== path && !entry.isDirectory()) throw new Error('skill ancestor is not a directory')
+        continue
+      }
       linkPath = item
       if (!allowDirectoryLink || item !== dirname(path) || basename(item) !== 'holoself') {
         return { path, status: 'external-link', external: true, linkPath, reason: 'Skill discovery stopped at a symlink; target was not read' }
