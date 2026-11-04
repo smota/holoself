@@ -1,5 +1,7 @@
 # Context packet budget
 
+> Superseded: the decision cache and federation described here were removed in #60.
+
 Status: accepted for implementation (issue #31). Ships with the #31 pull request. The prerequisite #32 lands first.
 
 ## Problem

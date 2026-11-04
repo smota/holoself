@@ -1,5 +1,7 @@
 # T02-R: Rastreamento de Indexação, Seleção, Caches e Comparativo de Armazenamento Local
 
+> Superseded: the decision cache and federation described here were removed in #60.
+
 | Campo | Valor |
 |---|---|
 | Tarefa | T02-R (Ciclo C-02 — Catálogo Incremental e Cache Limitado) |

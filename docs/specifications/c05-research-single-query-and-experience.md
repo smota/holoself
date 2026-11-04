@@ -1,5 +1,7 @@
 # C-05: Pesquisa e Inventário de Experiência e Integração — Consulta Única, Instruções e Workbench
 
+> Superseded: the decision cache and federation described here were removed in #60.
+
 | Campo | Valor |
 |---|---|
 | Ciclo | C-05 — Experiência e integração |

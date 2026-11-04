@@ -1,5 +1,7 @@
 # C-06: Pesquisa de Rastreabilidade, Regressão e Prontidão para Adoção (T06-R)
 
+> Superseded: the decision cache and federation described here were removed in #60.
+
 Este documento registra a pesquisa e auditoria formal da etapa **T06-R** do ciclo **C-06** da especificação `context-and-lenses-vnext` e do plano de implementação (`docs/specifications/context-and-lenses-implementation-plan.md`).
 
 ---

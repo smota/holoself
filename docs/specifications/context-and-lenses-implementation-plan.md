@@ -1,5 +1,7 @@
 # Holoself — plano de implementação de contexto e lentes
 
+> Superseded: the decision cache and federation described here were removed in #60.
+
 Historical design and evidence. The current contract is documented in [Lenses and privacy](../concepts/lenses-and-privacy.md): self-side bindings, uniform definitions and self-only indexing.
 
 ID: HS-PLAN-001 | Versão: 0.1 | Data: 2026-09-19

@@ -1,5 +1,7 @@
 # Link adapter scope for repair and deactivation
 
+> Superseded: the decision cache and federation described here were removed in #60.
+
 Status: accepted for implementation (issues #34, #33). Ships with the #34 pull request; #33 builds on it.
 
 ## Problem

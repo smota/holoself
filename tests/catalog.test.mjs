@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
@@ -408,10 +408,69 @@ test('--no-cache warns on stderr, link.yaml accepts deprecated cache_limit_* key
   writeFileSync(legacyCatalogCache, '{}')
   writeFileSync(join(legacyRuntimeCacheDir, 'b'.repeat(64) + '.json'), '{}')
 
-  await capture(() => run(['index', 'rebuild', '--project', project]))
+  const rebuildRes = await capture(() => run(['index', 'rebuild', '--project', project]))
+  const rebuildJson = JSON.parse(rebuildRes.stdout)
+  assert.equal(rebuildJson.warnings, undefined)
   assert.equal(existsSync(legacyCatalogCache), false)
   assert.equal(existsSync(legacyRuntimeCacheDir), false)
   assert.equal(existsSync(join(project, '.holoself', 'catalog', 'catalog.json')), true)
+})
+
+test('index rebuild legacy cache cleanup refuses symlinks at runtime, context-cache, or catalog hex files and surfaces warnings without absolute paths', async () => {
+  const self = temp()
+  const project = temp()
+  const outside = temp()
+  await capture(() => run(['init', '--root', self]))
+  await capture(() => run(['link', 'add', '--project', project, '--self', self, '--lens', 'general', '--no-activate', '--yes']))
+
+  // 1. runtime -> outside dir symlink with outside/context-cache/file survives rebuild
+  const outsideCacheDir = join(outside, 'context-cache')
+  const outsideCacheFile = join(outsideCacheDir, 'survivor.json')
+  mkdirSync(outsideCacheDir, { recursive: true })
+  writeFileSync(outsideCacheFile, '{"keep":true}')
+
+  const runtimeLink = join(project, '.holoself', 'runtime')
+  symlinkSync(outside, runtimeLink, 'dir')
+
+  const res1 = await capture(() => run(['index', 'rebuild', '--project', project]))
+  const out1 = JSON.parse(res1.stdout)
+  assert.equal(existsSync(outsideCacheFile), true, 'outside/context-cache/file must survive when runtime is a symlink')
+  assert.ok(Array.isArray(out1.warnings) && out1.warnings.some(w => w.includes('.holoself/runtime/context-cache') && w.includes('refused symlink')))
+  assert.ok(out1.warnings.every(w => !w.includes(project) && !w.includes(outside) && !w.includes(self)), 'warnings must not leak absolute paths')
+
+  // 2. context-cache itself a symlink to an outside directory is not followed
+  rmSync(runtimeLink, { force: true })
+  mkdirSync(runtimeLink, { recursive: true })
+  const contextCacheLink = join(runtimeLink, 'context-cache')
+  symlinkSync(outsideCacheDir, contextCacheLink, 'dir')
+
+  // Also test a symlinked <64-hex>.json in .holoself/catalog/
+  const hexLinkName = 'c'.repeat(64) + '.json'
+  const hexLinkPath = join(project, '.holoself', 'catalog', hexLinkName)
+  symlinkSync(outsideCacheFile, hexLinkPath, 'file')
+
+  const res2 = await capture(() => run(['index', 'rebuild', '--project', project]))
+  const out2 = JSON.parse(res2.stdout)
+  assert.equal(existsSync(outsideCacheFile), true, 'outside target must survive when context-cache and hex file are symlinks')
+  assert.equal(lstatSync(contextCacheLink).isSymbolicLink(), true, 'context-cache symlink itself is not followed or removed')
+  assert.equal(lstatSync(hexLinkPath).isSymbolicLink(), true, 'catalog hex symlink itself is not followed or removed')
+  assert.ok(Array.isArray(out2.warnings) && out2.warnings.some(w => w.includes('.holoself/runtime/context-cache')))
+  assert.ok(out2.warnings.some(w => w.includes(`.holoself/catalog/${hexLinkName}`)))
+  assert.ok(out2.warnings.every(w => !w.includes(project) && !w.includes(outside) && !w.includes(self)))
+
+  // 3. Normal legacy cache dir and normal hex file are removed cleanly
+  rmSync(contextCacheLink, { force: true })
+  rmSync(hexLinkPath, { force: true })
+  mkdirSync(contextCacheLink, { recursive: true })
+  writeFileSync(join(contextCacheLink, 'd'.repeat(64) + '.json'), '{}')
+  const normalHexPath = join(project, '.holoself', 'catalog', 'e'.repeat(64) + '.json')
+  writeFileSync(normalHexPath, '{}')
+
+  const res3 = await capture(() => run(['index', 'rebuild', '--project', project]))
+  const out3 = JSON.parse(res3.stdout)
+  assert.equal(existsSync(contextCacheLink), false, 'normal legacy context-cache dir is removed')
+  assert.equal(existsSync(normalHexPath), false, 'normal legacy catalog hex file is removed')
+  assert.equal(out3.warnings, undefined)
 })
 
 test('ensureContribPartition caches on-disk at selfRoot/.holoself/catalog/contrib.json', async () => {
