@@ -1,5 +1,5 @@
 import { inspectSkillFile } from './skill-paths.mjs'
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
@@ -98,7 +98,9 @@ function userSkillTargets(ids,options={}){
   for(const adapter of REGISTRY.filter(a=>wanted.has(a.id)))for(const dir of adapter.userSkillDirs||[])targets.push({id:adapter.id,file:slash(join(dir,'SKILL.md')),path:resolve(home,dir,'SKILL.md')})
   return targets
 }
-function instructionIdentity(project,rel){let path;try{path=safeProjectFile(project,rel,'instruction identity')}catch{const unsafe=resolve(project,rel);return `unsafe:${process.platform==='win32'?unsafe.toLowerCase():unsafe}`}const identity=existsSync(path)?realpathSync(path):resolve(path);return process.platform==='win32'?identity.toLowerCase():identity}
+// Existing files are identified by device and inode, so case aliases on a
+// case-insensitive filesystem (macOS APFS) or hard links collapse to one file.
+function instructionIdentity(project,rel){let path;try{path=safeProjectFile(project,rel,'instruction identity')}catch{const unsafe=resolve(project,rel);return `unsafe:${process.platform==='win32'?unsafe.toLowerCase():unsafe}`}if(process.platform!=='win32'&&existsSync(path)){const info=statSync(path,{bigint:true});return `inode:${info.dev}:${info.ino}`}const identity=existsSync(path)?realpathSync(path):resolve(path);return process.platform==='win32'?identity.toLowerCase():identity}
 function uniqueInstructionFiles(project,items){const seen=new Set(),result=[];for(const item of items){const identity=instructionIdentity(project,item);if(seen.has(identity))continue;seen.add(identity);result.push(item)}return result}
 export function activationPlan(project,options={}){
   if(options.installSkill&&!['auto','project','global','none'].includes(options.installSkill))throw new Error(`invalid --install-skill value: ${options.installSkill}`)
@@ -197,7 +199,7 @@ function deactivateAdapters(project,ids,options={}){
   if(!remaining.length)return [...deactivateProject(project,{...options,adapters:null}),...ids.filter(id=>!active.includes(id)).map(adapter=>({adapter,file:null,result:'not-active'}))]
   if(selected.includes('agents'))throw new Error(`deactivation preflight failed: agents is required by ${remaining.join(', ')}; deactivate them too or use --adapters all`)
   const recorded=runtime?.activatedAdapters||[],installations=runtime?.skillInstallations||runtime?.skillShims||[]
-  const instructionFiles=selected.flatMap(adapter=>{const file=recorded.find(x=>x.id===adapter)?.file;return (file?[file]:REGISTRY.find(a=>a.id===adapter).files.filter(item=>{try{return managedMarkerState(safeProjectFile(project,item,'scoped deactivation discovery'))==='active'}catch{return false}})).map(item=>({adapter,file:item}))})
+  const instructionFiles=selected.flatMap(adapter=>{const file=recorded.find(x=>x.id===adapter)?.file;return (file?[file]:uniqueInstructionFiles(project,REGISTRY.find(a=>a.id===adapter).files).filter(item=>{try{return managedMarkerState(safeProjectFile(project,item,'scoped deactivation discovery'))==='active'}catch{return false}})).map(item=>({adapter,file:item}))})
   const skillFiles=selected.flatMap(adapter=>{const tracked=installations.filter(x=>x.id===adapter).map(x=>x.file);return (tracked.length?tracked:REGISTRY.find(a=>a.id===adapter).skillDirs.map(dir=>slash(join(dir,'SKILL.md')))).map(file=>({adapter,file}))})
   for(const {file} of instructionFiles){const state=managedMarkerState(safeProjectFile(project,file,'deactivation preflight'));if(['unsafe','malformed'].includes(state))throw new Error(`deactivation preflight failed: ${file}: ${state}`)}
   for(const {file} of skillFiles){const state=skillState(safeProjectFile(project,file,'skill deactivation preflight'));if(['unsafe','malformed'].includes(state))throw new Error(`deactivation preflight failed: ${file}: ${state}`)}
