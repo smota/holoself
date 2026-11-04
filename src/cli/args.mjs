@@ -38,6 +38,7 @@ export const CONTEXT_FLAGS = [
   '--self',
   '--lens',
   '--task',
+  '--need',
   '--self-only',
   '--budget',
   '--source',
@@ -189,6 +190,11 @@ export function validateFlags(o) {
   }
   if (o.dryRun && (o.command === 'knowledge' || key === 'migrate policy') && (o.apply || o.revert || o.output))
     throw new Error('--dry-run cannot be combined with --apply, --revert or --output')
+  if (o.need !== undefined && !['required', 'helpful', 'not-needed'].includes(o.need)) {
+    const error = new Error(`invalid context need: ${o.need}; expected required, helpful, or not-needed`)
+    error.code = 'INVALID_ARGUMENT'
+    throw error
+  }
   return o
 }
 export function parseArguments(args) {
@@ -220,6 +226,7 @@ export function parse(args) {
         .map(x => x.trim())
         .filter(Boolean)
     else if (a === '--task') o.task = requiredValue(args, i++, a)
+    else if (a === '--need') o.need = requiredValue(args, i++, a)
     else if (a === '--question') o.question = requiredValue(args, i++, a)
     else if (a === '--text') o.coachingText = requiredValue(args, i++, a)
     else if (a === '--plan-kind') o.planKind = requiredValue(args, i++, a)

@@ -31,9 +31,10 @@ export function packetFormat(data, adapter = 'generic') {
     ...data.project.documents.map(x => ({ ...x, owner: 'project' })),
     ...(data.methods?.documents || []).map(x => ({ ...x, owner: 'method' }))
   ]
+  const needReason = data.selection.need_reason || data.context_receipt?.need_reason || 'default'
   const receipt =
     `Context receipt: ${data.context_receipt.context_hash} (${data.context_receipt.cache.hit ? 'cache hit' : 'fresh resolution'})\n` +
-    `Context gate: ${data.selection.context_need}; budget: ${data.selection.budget}; estimated tokens: ${data.selection.estimated_tokens}; ` +
+    `Context gate: ${data.selection.context_need} (${needReason}); budget: ${data.selection.budget}; estimated tokens: ${data.selection.estimated_tokens}; ` +
     `selected sources: ${data.selection.selected_count}${data.selection.total_bytes ? `; packet bytes: ${data.selection.total_bytes}` : ''}`
   return (
     `# ${title}\n\nPacket ID: ${metadata.packet_id}\n${receipt}\nGenerated: ${metadata.generated_at}\n` +

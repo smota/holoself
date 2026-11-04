@@ -25,6 +25,7 @@ const MAX_LINE_BYTES = 1024 * 1024
 const MAX_RESULT_BYTES = 512 * 1024
 const TEMPORAL = ['current', 'historical', 'superseded', 'all']
 const BUDGETS = ['small', 'standard', 'deep']
+const NEEDS = ['required', 'helpful', 'not-needed']
 export const DEFAULT_TOOL_TIMEOUT_MS = 60000
 export const DEFAULT_TOOL_CONCURRENCY = 2
 export const DEFAULT_MAX_PENDING_CALLS = 256
@@ -47,6 +48,11 @@ const baseContextProperties = {
     description: 'Recurring session-start load: without a task, return only the lens session_start_sources (default identity, preferences, work-context).'
   }
 }
+const needProperty = {
+  type: 'string',
+  enum: NEEDS,
+  description: 'Explicit context-need override; overrides task keyword classification.'
+}
 const objectSchema = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false })
 const resultSchema = objectSchema({ schema_version: { type: 'integer' }, data: { type: 'object' }, error: { type: 'object' } })
 
@@ -68,6 +74,7 @@ export const MCP_TOOLS = [
     inputSchema: objectSchema(
       {
         ...baseContextProperties,
+        need: needProperty,
         source_ids: { type: 'array', minItems: 1, maxItems: 16, uniqueItems: true, items: { type: 'string', pattern: '^hs-[A-Za-z0-9_-]{8,}$' } }
       },
       ['task']
@@ -79,7 +86,7 @@ export const MCP_TOOLS = [
     name: `${TOOL_PREFIX}context_manifest`,
     title: 'Holoself context manifest',
     description: 'Return bounded source handles, metadata, restrictions, and a deterministic receipt. It does not return source bodies.',
-    inputSchema: objectSchema(baseContextProperties),
+    inputSchema: objectSchema({ ...baseContextProperties, need: needProperty }),
     outputSchema: resultSchema,
     annotations: { title: 'Holoself context manifest', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
@@ -288,6 +295,7 @@ function affinityKey(name, args = {}, defaultLens = null) {
       'context',
       {
         task: args.task || '',
+        need: args.need || null,
         lens: args.lens || defaultLens,
         budget: args.budget || 'standard',
         temporal: args.temporal || 'current',

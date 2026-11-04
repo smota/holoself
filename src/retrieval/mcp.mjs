@@ -36,6 +36,7 @@ export function mcpContextData(project, options = {}) {
     project,
     surface: 'mcp',
     task: options.task,
+    need: options.need || null,
     lens: requestedLens,
     budget: options.budget || 'standard',
     temporal: options.temporal || 'current',
