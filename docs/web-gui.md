@@ -6,9 +6,9 @@ For a screen-by-screen user guide with real Workbench screenshots, start with th
 
 ```bash
 cd C:/Code/holoself
-node bin/holoself.mjs web --root C:/Cowork/holoself-sam
+node bin/holoself.mjs web --root C:/Users/<you>/holoself
 # installed CLI equivalent:
-holoself web --root C:/Cowork/holoself-sam
+holoself web --root C:/Users/<you>/holoself
 ```
 
 Canonical root contains `config.json`, `profile/`, `context/`, `topics/`, and related Markdown data; it does not need `.holoself/link.yaml`. Optional `--project <linked-project>` adds a linked project context and must resolve to the same root.
