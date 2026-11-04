@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { canonicalSort } from '../catalog.mjs'
+import { indexEngine, lexicalBonuses, lexicalScores } from '../catalog/fts.mjs'
 import { ensureCatalog } from '../catalog/partitions.mjs'
 import { cachedSelection } from '../context-selection.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
@@ -77,12 +78,32 @@ function gatherCandidates(o, { project, link, self, identity, registry, lens, re
 
   const rawCandidates = [...selfData.records, ...local.records, ...contribCandidates]
   const candidates = deduplicateCandidates(rawCandidates, subject.space_id)
+  const lexical = rankingSignal(o, self, catResult, candidates)
 
-  return { adapter, catResult, selfData, local, candidates }
+  return { adapter, catResult, selfData, local, candidates, ...lexical }
+}
+
+// Optional FTS5 BM25 signal over the candidates that already passed the privacy gate (issue #69).
+// Section text is the caller's claim- and field-filtered snippet; hidden documents are never scored.
+function rankingSignal(o, self, catResult, candidates) {
+  const engine = indexEngine()
+  if (engine === 'deterministic-json' || !o.task || !candidates.length) return { engine, lexicalScores: null }
+  const docs = candidates.map(record => ({
+    id: record.source_id,
+    sections: (record.sections || []).map(section => ({
+      source_id: record.source_id,
+      section_id: section.section_id,
+      heading: section.heading,
+      text: section.snippet
+    }))
+  }))
+  const scores = lexicalScores(docs, o.task, { selfRoot: self, partition: catResult.self })
+  if (!scores) return { engine: 'deterministic-json', lexicalScores: null }
+  return { engine, lexicalScores: lexicalBonuses(scores) }
 }
 
 // Selection over the candidates, delivering each selected record through policy.
-function selectRecords(o, { project, self, identity, registry, lens, resolution, subject, adapter, catResult, candidates }) {
+function selectRecords(o, { project, self, identity, registry, lens, resolution, subject, adapter, catResult, candidates, engine, lexicalScores }) {
   const cursorSecret = getOrCreateCursorSecret(self)
   const identityId = getIdentityId(identity, cursorSecret)
   const selfId = hash(slash(safeRealpath(self))).slice(0, 16)
@@ -110,7 +131,9 @@ function selectRecords(o, { project, self, identity, registry, lens, resolution,
     deliver: deliverRecord,
     sessionStart: Boolean(o.sessionStart),
     sessionStartSources: resolution.session_start_sources || null,
-    now: o.now
+    now: o.now,
+    engine,
+    lexicalScores
   }
 
   const selected = cachedSelection(candidates, selectionOptions)
@@ -123,7 +146,7 @@ function selectRecords(o, { project, self, identity, registry, lens, resolution,
 // The packet before envelope fitting: documents, provenance index, restrictions, warnings, receipt and proposals.
 function assembleResult(
   o,
-  { surface, project, link, self, identity, registry, lens, resolution, subject, adapter, catResult, selfData, local, selected, deliveryRestrictions }
+  { surface, project, link, self, identity, registry, lens, resolution, subject, adapter, catResult, selfData, local, selected, deliveryRestrictions, engine }
 ) {
   const records = [...selected.records]
   const warnings = [...(catResult.warnings || []), ...(identity.kind === 'owner:direct' ? [...(selfData.warnings || []), ...(local.warnings || [])] : [])]
@@ -188,6 +211,8 @@ function assembleResult(
     },
     context_receipt: {
       ...selected.receipt,
+      // Present only when FTS5 ranked the packet; absent means deterministic-json, so JSON-engine packets stay byte-identical.
+      ...(engine === 'fts5' ? { engine } : {}),
       status: queryStatus,
       cache: selected.cache
     },

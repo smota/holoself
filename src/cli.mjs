@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { join, resolve, relative, dirname, basename } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
+import { ftsSupport, indexEngine } from './catalog/fts.mjs'
 import { catalogBuildWarnings, ecosystemValidationErrors, runEcosystem } from './ecosystem.mjs'
 import { seedLensDefinitions } from './lenses.mjs'
 import { ensureHoloselfGitignore } from './link/config.mjs'
@@ -192,6 +193,10 @@ export async function run(argv) {
           contextFeatures: ['need-gate', 'budgets', 'manifest', 'source-handles', 'lifecycle', 'receipts', 'task-contrib-routing'],
           proposalSchemaVersions: [1, 2],
           indexSchemaVersion: 5,
+          index: {
+            // selected: the engine this process ranks with (HOLOSELF_INDEX_ENGINE=json forces deterministic-json).
+            engine: { selected: indexEngine(), available: ftsSupport() ? ['fts5', 'deterministic-json'] : ['deterministic-json'] }
+          },
           mcp: {
             transport: 'stdio',
             projectBound: true,

@@ -232,8 +232,8 @@ export function rankCandidates(records, options = {}) {
       temporalExcluded.push({ source: record.path, reason: temporal.reason })
       continue
     }
-    const score = relevanceScore(record, options.task),
-      id = sourceId(record)
+    const id = sourceId(record),
+      score = relevanceScore(record, options.task) + (options.task ? options.lexicalScores?.get(id) || 0 : 0)
     if (requested.size && !requested.has(id) && !requested.has(record.path)) continue
     candidates.push({ ...record, task_relevance: score, source_id: id, knowledge_status: temporal.status, temporal_scope: temporal.scope })
   }
@@ -443,7 +443,9 @@ function cacheKey(records, options = {}) {
       history: Boolean(options.includeHistory),
       cursor: options.cursor || null,
       session_start: Boolean(options.sessionStart),
-      session_start_sources: options.sessionStartSources || null
+      session_start_sources: options.sessionStartSources || null,
+      // Only non-default engines enter the key, so deterministic-json keys are unchanged.
+      ...(options.engine && options.engine !== 'deterministic-json' ? { engine: options.engine } : {})
     })
   )
 }

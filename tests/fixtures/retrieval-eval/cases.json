@@ -434,9 +434,11 @@
       "forbidden_source_paths": [
         "context/restricted-medical-pt.md"
       ],
-      "known_gap": true,
+      "known_gap": [
+        "deterministic-json"
+      ],
       "gap_issue": "#69",
-      "notes": "Portuguese paraphrase ('queda de nós e lentidão entre servidores') misses context/arquitetura-sistemas-pt.md ('tolerância a falhas bizantinas', 'replicação assíncrona') (#69)."
+      "notes": "Portuguese paraphrase ('queda de nós e lentidão entre servidores') misses context/arquitetura-sistemas-pt.md ('tolerância a falhas bizantinas', 'replicação assíncrona') under the JSON engine (#69). The FTS5 engine (stemmed, diacritic-folded BM25 with prefix expansion) ranks it within the small budget, so it is a known gap only for deterministic-json."
     },
     {
       "id": "lifecycle-en-current-excludes-superseded-and-expired",

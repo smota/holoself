@@ -8553,6 +8553,7 @@
         "json": {
           "query": "refactoring",
           "federated": false,
+          "engine": "deterministic-json",
           "results": [
             {
               "source_file": "context/note-00.md",
@@ -22248,6 +22249,7 @@
                         "query": "refactoring",
                         "lens": "general",
                         "federated": false,
+                        "engine": "deterministic-json",
                         "results": [
                           {
                             "source_file": "context/note-00.md",
@@ -22451,6 +22453,7 @@
                   "query": "refactoring",
                   "lens": "general",
                   "federated": false,
+                  "engine": "deterministic-json",
                   "results": [
                     {
                       "source_file": "context/note-00.md",

@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { canonicalJson, validateCatalogSchema } from '../../catalog.mjs'
+import { indexEngine } from '../../catalog/fts.mjs'
 import { buildIndex } from '../../catalog/index.mjs'
 import { isPartitionFresh } from '../../catalog/partitions.mjs'
 import { loadLensRegistry } from '../../lenses.mjs'
@@ -57,7 +58,7 @@ export async function runIndex(o, sub) {
           schema_version: projectCatalog.schema_version,
           privacy_policy_version: 4,
           lens_registry_hash: registry.registry_hash,
-          engine: 'deterministic-json',
+          engine: indexEngine(),
           entries: projectCatalog.sources.length + (selfCatalog?.sources?.length || 0),
           generated_at: projectCatalog.generated_at,
           input_state_hash,

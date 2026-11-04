@@ -1,10 +1,11 @@
 {
   "schema_version": 1,
   "kind": "retrieval-eval-report",
+  "engine": "deterministic-json",
   "dataset_version": 1,
   "corpus_document_count": 53,
   "corpus_digest": "26e4c4bf4cc690e848080456bab23495f73e0b15489693f48b3d8cecc822bae2",
-  "cases_digest": "83c6a75ac63aa058406f0a00675278017fa0162f36b6af537c785e6078188fbe",
+  "cases_digest": "6096aeac2ebd16215e22ae0475e314752cc84df557b5e715d95c4018c1280ba9",
   "summary": {
     "total_cases": 48,
     "non_gap_cases": 37,
@@ -978,7 +979,7 @@
       "missing_source_paths": [
         "context/arquitetura-sistemas-pt.md"
       ],
-      "notes": "Portuguese paraphrase ('queda de nós e lentidão entre servidores') misses context/arquitetura-sistemas-pt.md ('tolerância a falhas bizantinas', 'replicação assíncrona') (#69)."
+      "notes": "Portuguese paraphrase ('queda de nós e lentidão entre servidores') misses context/arquitetura-sistemas-pt.md ('tolerância a falhas bizantinas', 'replicação assíncrona') under the JSON engine (#69). The FTS5 engine (stemmed, diacritic-folded BM25 with prefix expansion) ranks it within the small budget, so it is a known gap only for deterministic-json."
     },
     {
       "id": "lifecycle-en-current-excludes-superseded-and-expired",
