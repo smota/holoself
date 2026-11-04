@@ -7,3 +7,5 @@ contribs/** text eol=lf
 templates/** text eol=lf
 skills/holoself/** text eol=lf
 tests/fixtures/parity/** text eol=lf
+docs/reference/cli.md text eol=lf
+docs/reference/mcp-tools.md text eol=lf

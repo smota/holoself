@@ -1,6 +1,6 @@
 # ADR E06: Minimal coaching work and confirmation
 
-Status: proposed D00 contract, pending independent review and human acceptance. Issue: #9; date: 2026-09-28.
+Status: Superseded by docs/specifications/external-sources-and-coaching-plan.md (2026-09-30) ([plan](../specifications/external-sources-and-coaching-plan.md)). Historical D00 proposal; coaching was delivered in `<self-root>/coaching/sessions` without the separate evidence-root runtime (see [Local coaching sessions](../guides/coaching.md)). Issue: #9; date: 2026-09-28.
 
 ## Decision
 

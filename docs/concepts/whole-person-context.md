@@ -2,7 +2,7 @@
 
 Holoself represents one person across identity, work, preferences, voice, thinking, professional, technical work, leadership, public-voice, projects, people, decisions, stories, and private context.
 
-It does not create separate career or publishing personas. A lens changes relevance, depth, and privacy for a task while preserving one canonical self.
+It does not create separate professional or public-voice personas. A lens changes relevance, depth, and privacy for a task while preserving one canonical self.
 
 Canonical context should contain durable, reusable knowledge. Temporary project execution remains project-owned. This separation prevents a central vault from swallowing every artifact and prevents independent projects from cloning a complete profile.
 

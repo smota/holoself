@@ -109,4 +109,4 @@ Launch local `holoself web --root <canonical-self-root>` from installed CLI or p
 
 ## Use
 
-Use whole-person context for technical, professional, administrative, leadership, interview, and publishing work. Lenses control relevance and privacy, not identity. Match depth and voice to user profile, keep recommendations concrete, preserve provenance, and note assumptions.
+Use whole-person context for technical, professional, administrative, leadership, interview, and public-voice work. Lenses control relevance and privacy, not identity. Match depth and voice to user profile, keep recommendations concrete, preserve provenance, and note assumptions.

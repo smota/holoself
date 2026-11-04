@@ -4,11 +4,11 @@ MCP becomes preferred only for a tested product/version. `configured` means the 
 
 | Platform | Tested version | Config | Startup/root evidence | Discovery | Read invocation | Proposal boundary | Fallback | Status |
 |---|---:|---|---|---|---|---|---|---|
-| Codex | 0.146.1 | `.codex/config.toml` | explicit fixed synthetic project | six-tool schema accepted; allowlisted status discovered | `holoself_status` returned correct project/link/lens/context | automated core test passes | BOOTSTRAP/skill/CLI | native status verified; full promotion pending |
-| AGY | 1.1.22 | `.agents/mcp_config.json` | registered synthetic project with fixed absolute project argument | six tools discovered natively | headless call reached normal MCP approval gate; not bypassed | automated core test passes | BOOTSTRAP/skill/CLI | native discovery verified; invocation approval-gated |
+| Codex | 0.146.1 | `.codex/config.toml` | explicit fixed synthetic project | tool schema accepted (2026-08-31 baseline); allowlisted status discovered | `holoself_status` returned correct project/link/lens/context | automated core test passes | BOOTSTRAP/skill/CLI | native status verified; full promotion pending |
+| AGY | 1.1.22 | `.agents/mcp_config.json` | registered synthetic project with fixed absolute project argument | tools discovered natively (2026-08-31 baseline; server now exposes seven tools including `holoself_proposal_preview`) | headless call reached normal MCP approval gate; not bypassed | automated core test passes | BOOTSTRAP/skill/CLI | native discovery verified; invocation approval-gated |
 | Claude Code | 2.1.220 | `.mcp.json` | client supplied synthetic `CLAUDE_PROJECT_DIR` | explicit config discovered | `holoself_status` returned correct project/link/lens/context | automated core test passes | BOOTSTRAP/skill/CLI | native status verified; full promotion pending |
 
-Required native evidence for each row: process launch, six-tool discovery, correct fixed project, status call, manifest/source retrieval, no absolute private root in output, malformed/missing-link failure, and continued instruction/CLI fallback. Record exact command, product version, date, result, and any approval interaction. Do not claim verified discovery from generated files alone.
+Required native evidence for each row: process launch, seven-tool discovery (`holoself_status`, `holoself_context`, `holoself_context_manifest`, `holoself_context_get`, `holoself_search`, `holoself_proposal_create`, `holoself_proposal_preview`), correct fixed project, status call, manifest/source retrieval, no absolute private root in output, malformed/missing-link failure, and continued instruction/CLI fallback. Record exact command, product version, date, result, and any approval interaction. Do not claim verified discovery from generated files alone.
 
 ## Native evidence recorded 2026-08-31
 

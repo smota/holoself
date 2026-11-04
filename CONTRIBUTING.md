@@ -12,7 +12,7 @@ Thank you for helping improve Holoself. Small, focused contributions are welcome
 ## Contribution flow
 
 1. Fork the repository and create a short-lived branch from `main`.
-2. Use a descriptive branch name such as `feat/bounded-search`, `fix/link-validation`, or `docs/quickstart`.
+2. Use a descriptive branch name with one of the configured prefixes in `agent-workflow.config.json` (`work/`, `feature/`, `fix/`, `hotfix/`, `spike/`, or `chore/`), such as `feature/bounded-search`, `fix/link-validation`, or `chore/quickstart-docs`.
 3. Make one focused change and add or update tests and documentation where behavior changes.
 4. Run the full local verification:
 
