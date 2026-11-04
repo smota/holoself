@@ -1,8 +1,26 @@
 import { existsSync, lstatSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import { CLAIM_MARKER_RE } from './markdown/claim-blocks.mjs'
 import { hash } from './shared/fs.mjs'
 
 export const INSTRUCTION_SCHEMA = 1
+export const HARVEST_PROMPT_VERSION = 1
+export const HARVEST_PROMPT_NAME = 'holoself_session_harvest'
+export const HARVEST_FOCUS_MAX_LENGTH = 200
+export const HARVEST_PROMPT_TEXT = [
+  '# Holoself session harvest (v1)',
+  '',
+  'Review this session and identify at most 3 (0–3) durable, reusable facts about the user (preferences, decisions, stories) that are directly evidenced in the session.',
+  '',
+  'Rules:',
+  '- Prefer "propose nothing" when unsure or when the session contains only task-local or ephemeral details; proposing nothing (0 proposals) is a valid outcome.',
+  '- Never infer sensitive identity attributes or invent facts beyond what the user stated or confirmed in the session.',
+  '- Never write canonical self data directly.',
+  '- Never include secrets, credentials, or other people\'s private details in claims or evidence.',
+  '- For each candidate (at most 3), call `holoself_proposal_create` and `holoself_proposal_preview` (or on the CLI `holoself propose --project .` and `holoself proposals show <id> --project .`) with `claim`, `evidence` (quote or paraphrase from the session), contained project `source_files`, `confidence`, and the right `operation`: `append_claim` (`append`) for a new claim, or `replace_claim` (`replace`), `supersede_claim` (`supersede`), or `retire_claim` (`retire`, with `reason`) targeting `claim_id` when an existing claim with an `id` shown in context is now wrong or outdated.',
+  '- Report what was proposed (or that nothing was proposed) and remind the user that the owner approves pending proposals in the CLI (`holoself proposals approve`) or Workbench; MCP never approves proposals.'
+].join('\n')
+const RESERVED_PROMPT_MARKER_RE = /<!--|-->|@@holoself-commit-time|holoself-(?:claim|link|skill|export|root|mcp)\b/iu
 export const LINK_START = '<!-- holoself-link-start schema=1 -->'
 export const LINK_END = '<!-- holoself-link-end -->'
 export const TRUST_INVARIANTS = [
@@ -10,6 +28,52 @@ export const TRUST_INVARIANTS = [
   'Never modify canonical self directly; use proposal/review for durable self changes.',
   'Readable context is not publication approval; publishing requires explicit disclosure approval.'
 ]
+export function validateHarvestPromptArgs(args = {}) {
+  if (!args || Array.isArray(args) || typeof args !== 'object') {
+    const err = new Error('arguments must be an object')
+    err.code = 'INVALID_ARGUMENT'
+    throw err
+  }
+  for (const key of Object.keys(args)) {
+    if (key !== 'focus') {
+      const err = new Error(`arguments.${key} is not allowed`)
+      err.code = 'INVALID_ARGUMENT'
+      throw err
+    }
+  }
+  if (args.focus === undefined) return {}
+  if (typeof args.focus !== 'string') {
+    const err = new Error('arguments.focus must be a string')
+    err.code = 'INVALID_ARGUMENT'
+    throw err
+  }
+  const focus = args.focus.trim()
+  if (args.focus.length < 1 || !focus) {
+    const err = new Error('arguments.focus is too short')
+    err.code = 'INVALID_ARGUMENT'
+    throw err
+  }
+  if (args.focus.length > HARVEST_FOCUS_MAX_LENGTH) {
+    const err = new Error(`arguments.focus is too long (max ${HARVEST_FOCUS_MAX_LENGTH} chars)`)
+    err.code = 'INVALID_ARGUMENT'
+    throw err
+  }
+  if (/[\r\n\0]/.test(args.focus)) {
+    const err = new Error('arguments.focus must be a single line')
+    err.code = 'INVALID_ARGUMENT'
+    throw err
+  }
+  if (CLAIM_MARKER_RE.test(args.focus) || RESERVED_PROMPT_MARKER_RE.test(args.focus)) {
+    const err = new Error('arguments.focus contains reserved markers')
+    err.code = 'INVALID_ARGUMENT'
+    throw err
+  }
+  return { focus }
+}
+export function harvestPromptText(args = {}) {
+  const { focus } = validateHarvestPromptArgs(args)
+  return focus ? `${HARVEST_PROMPT_TEXT}\n\nFocus area: ${focus}` : HARVEST_PROMPT_TEXT
+}
 export const instructionHash = text => hash(text.replaceAll('\r\n', '\n'))
 // Accept legacy byte hashes as well as normalized hashes without ignoring content edits.
 export function instructionHashMatches(text, expected) {

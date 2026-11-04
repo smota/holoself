@@ -60,7 +60,7 @@ The `holoself` executable must be on the client process PATH. Install `holoself-
 
 The client starts `holoself mcp` as a STDIO subprocess. STDOUT is JSON-RPC only. The process exits with the client session; no service remains running. The server rejects missing, unsafe, or ambiguous project bindings before serving context.
 
-Tool calls run on a small pool of worker threads, so a slow context call never delays `ping`, `initialize`, `tools/list`, or other protocol messages. Responses may arrive out of order; clients must match each response to its request by JSON-RPC id. The CLI and MCP still use the same synchronous core.
+Tool calls run on a small pool of worker threads, so a slow context call never delays `ping`, `initialize`, `tools/list`, `prompts/list`, `prompts/get`, or other protocol messages. Responses may arrive out of order; clients must match each response to its request by JSON-RPC id. The CLI and MCP still use the same synchronous core.
 
 - At most two tool calls run at once (`HOLOSELF_MCP_CONCURRENCY`, 1–8). Read-only tools may run in parallel. `holoself_proposal_create` writes project state, so it waits for running calls and runs alone.
 - A repeated context call goes to the worker that served it before (the link's default lens is read once at startup for this), so `context_receipt.cache.hit` behaves as it would in a single process. Calls are compared after defaults are applied, so an omitted budget or lens matches the explicit default. After a worker is replaced (cancellation, timeout, or crash), its cache is gone and the next matching call reports `cache.hit: false`.
@@ -70,7 +70,7 @@ Tool calls run on a small pool of worker threads, so a slow context call never d
 - At most 256 calls can be pending at once (`HOLOSELF_MCP_MAX_PENDING`, 1–65536). Calls beyond that return JSON-RPC error `-32000` (`Server busy`, `data.code` `SERVER_BUSY`). A request that reuses the id of a call that has not been answered yet returns `-32600`.
 - Each worker's heap is limited to 512 MB (`HOLOSELF_MCP_WORKER_HEAP_MB`, 64–16384). A worker that runs out of memory is replaced, and its call returns a generic tool error.
 - When the client closes STDIN, the server finishes the calls it already accepted, writes their responses, stops the workers, and exits. It waits at most the longer of the two timeouts. After that, calls still queued are dropped without a response and the remaining workers are stopped.
-- `HOLOSELF_MCP_AUDIT_LOG` (absolute path, opt-in) records one line per `tools/list` and `tools/call` with the event, tool name, outcome, and error code (`CANCELLED`, `TOOL_TIMEOUT`, and `SERVER_BUSY` included). The server does not follow a symlink at that path, refuses a file with more than one hard link, sets the file to mode 0600, and stops appending at 10 MiB after writing one final `{"event":"audit_log_capped"}` line.
+- `HOLOSELF_MCP_AUDIT_LOG` (absolute path, opt-in) records one line per `tools/list`, `tools/call`, `prompts/list`, and `prompts/get` with the event, tool or prompt name, outcome, and error code (`CANCELLED`, `TOOL_TIMEOUT`, `SERVER_BUSY`, `PROMPT_NOT_FOUND`, and `INVALID_ARGUMENT` included; arguments are never recorded). The server does not follow a symlink at that path, refuses a file with more than one hard link, sets the file to mode 0600, and stops appending at 10 MiB after writing one final `{"event":"audit_log_capped"}` line.
 
 Recommended model flow:
 
@@ -79,6 +79,7 @@ Recommended model flow:
 3. Request the smallest useful source set with `holoself_context_get`.
 4. Preserve source handles, hashes, restrictions, and the context receipt.
 5. Use `holoself_proposal_create` only for durable reusable discoveries with project evidence; review and approval remain outside MCP.
+6. At the end of a session, request the `holoself_session_harvest` prompt (`prompts/get`, with optional `focus` ≤ 200 characters) or run `holoself instructions render --harvest --project <dir>` on the CLI to draft 0–3 evidence-backed pending proposals (preferring "propose nothing" when unsure, never inferring sensitive identity attributes or inventing facts, and reminding the owner to approve in the CLI or Workbench).
 
 ## Fallback
 

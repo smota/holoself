@@ -8577,6 +8577,7 @@
         "json": {
           "query": "refactoring",
           "federated": false,
+          "engine": "deterministic-json",
           "results": [
             {
               "source_file": "context/note-00.md",
@@ -8986,6 +8987,9 @@
               "protocolVersion": "2025-11-25",
               "capabilities": {
                 "tools": {
+                  "listChanged": false
+                },
+                "prompts": {
                   "listChanged": false
                 }
               },
@@ -13779,7 +13783,8 @@
                 "document_role": "frontmatter",
                 "sensitivity": "frontmatter"
               }
-            }
+            },
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {
@@ -15308,7 +15313,8 @@
                 "document_role": "frontmatter",
                 "sensitivity": "frontmatter"
               }
-            }
+            },
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {
@@ -17510,7 +17516,8 @@
                 "document_role": "frontmatter",
                 "sensitivity": "frontmatter"
               }
-            }
+            },
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {
@@ -17782,7 +17789,8 @@
               "hit": false,
               "persistent": false
             },
-            "policy_sources": {}
+            "policy_sources": {},
+            "excluded_incomplete_metadata": 0
           },
           "proposals": [],
           "cache": {
@@ -23115,6 +23123,9 @@
               "capabilities": {
                 "tools": {
                   "listChanged": false
+                },
+                "prompts": {
+                  "listChanged": false
                 }
               },
               "serverInfo": {
@@ -23242,6 +23253,7 @@
                         "query": "refactoring",
                         "lens": "general",
                         "federated": false,
+                        "engine": "deterministic-json",
                         "results": [
                           {
                             "source_file": "context/note-00.md",
@@ -23445,6 +23457,7 @@
                   "query": "refactoring",
                   "lens": "general",
                   "federated": false,
+                  "engine": "deterministic-json",
                   "results": [
                     {
                       "source_file": "context/note-00.md",

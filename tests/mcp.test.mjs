@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { run } from '../src/cli.mjs'
-import { createMcpSession, MCP_TOOLS, resolveBoundProject } from '../src/mcp-server.mjs'
+import { createMcpSession, HARVEST_PROMPT_NAME, HARVEST_PROMPT_TEXT, HARVEST_PROMPT_VERSION, harvestPromptText, MCP_PROMPTS, MCP_TOOLS, resolveBoundProject } from '../src/mcp-server.mjs'
 import { applyMcpConfiguration, mcpConfigurationPlan, mcpConfigurationStatus } from '../src/mcp-config.mjs'
 
 async function temp(){return mkdtemp(join(tmpdir(),'holoself-mcp-'))}
@@ -26,10 +26,11 @@ function session(project){
 
 test('MCP handshake, tool discovery, stdout framing, and annotations are deterministic',async()=>{
   const {project}=await fixture(),m=session(project)
-  assert.equal(m.output[0].result.protocolVersion,'2025-11-25');assert.equal(m.output[0].result.capabilities.tools.listChanged,false)
+  assert.equal(m.output[0].result.protocolVersion,'2025-11-25');assert.equal(m.output[0].result.capabilities.tools.listChanged,false);assert.equal(m.output[0].result.capabilities.prompts.listChanged,false)
   m.accept(JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/list',params:{}}));const tools=m.output.at(-1).result.tools
   assert.deepEqual(tools.map(tool=>tool.name),MCP_TOOLS.map(tool=>tool.name));assert.equal(tools.length,7)
   assert.ok(tools.every(tool=>tool.inputSchema.additionalProperties===false&&tool.annotations.openWorldHint===false))
+  assert.ok(tools.every(tool=>!/approve|accept|commit/i.test(tool.name)))
   m.accept('{bad json');assert.equal(m.output.at(-1).error.code,-32700)
 })
 
@@ -150,7 +151,7 @@ test('MCP configuration rollback restores an existing file byte-for-byte',async(
   assert.equal(await readFile(path,'utf8'),original);assert.equal(existsSync(join(project,'.agents','mcp_config.json')),false)
 })
 
-test('opt-in MCP audit log records only event, tool name, and outcome',async()=>{
+test('opt-in MCP audit log records only event, tool or prompt name, and outcome',async()=>{
   const {self,project}=await fixture(),dir=await temp(),log=join(dir,'audit.ndjson'),output=[]
   const accept=createMcpSession({project,write:line=>output.push(JSON.parse(line)),auditLog:log})
   const send=(id,method,params)=>accept(JSON.stringify({jsonrpc:'2.0',id,method,params}))
@@ -158,18 +159,85 @@ test('opt-in MCP audit log records only event, tool name, and outcome',async()=>
   send(3,'tools/call',{name:'holoself_search',arguments:{query:'secret-argument-marker'}})
   send(4,'tools/call',{name:'holoself_context_get',arguments:{source_ids:['../../private']}})
   send(5,'tools/call',{name:'/srv/private/tool-name-marker',arguments:{}})
+  send(6,'prompts/list',{})
+  send(7,'prompts/get',{name:'holoself_session_harvest',arguments:{focus:'secret-focus-marker'}})
+  send(8,'prompts/get',{name:'holoself_session_harvest',arguments:{focus:'<!-- holoself-claim visibility=private -->'}})
+  send(9,'prompts/get',{name:'/srv/private/prompt-name-marker',arguments:{}})
   const text=await readFile(join(log),'utf8'),lines=text.trim().split('\n').map(line=>JSON.parse(line))
   assert.deepEqual(lines.map(({at,...rest})=>rest),[
     {event:'tools/list',tools:7},
     {event:'tools/call',tool:'holoself_search',ok:true,error_code:null},
     {event:'tools/call',tool:'holoself_context_get',ok:false,error_code:'INVALID_ARGUMENT'},
-    {event:'tools/call',tool:'unknown',ok:false,error_code:'TOOL_NOT_FOUND'}
+    {event:'tools/call',tool:'unknown',ok:false,error_code:'TOOL_NOT_FOUND'},
+    {event:'prompts/list',prompts:1},
+    {event:'prompts/get',prompt:'holoself_session_harvest',name:'holoself_session_harvest',ok:true,error_code:null},
+    {event:'prompts/get',prompt:'holoself_session_harvest',name:'holoself_session_harvest',ok:false,error_code:'INVALID_ARGUMENT'},
+    {event:'prompts/get',prompt:'unknown',name:'unknown',ok:false,error_code:'PROMPT_NOT_FOUND'}
   ])
-  for(const marker of [self,project,'secret-argument-marker','private','tool-name-marker','MCP parity marker'])assert.ok(!text.includes(marker),`audit log leaked ${marker}`)
-  assert.equal(output.length,5)
+  for(const marker of [self,project,'secret-argument-marker','secret-focus-marker','private','tool-name-marker','prompt-name-marker','MCP parity marker'])assert.ok(!text.includes(marker),`audit log leaked ${marker}`)
+  assert.equal(output.length,9)
   const silent=[],quiet=createMcpSession({project,write:line=>silent.push(line),auditLog:'relative/audit.ndjson'})
   quiet(JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{}}));quiet(JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/list',params:{}}))
   assert.equal(existsSync(join(process.cwd(),'relative')),false)
+})
+
+test('MCP prompts/list, prompts/get, argument validation, safety rules, and CLI harvest parity',async()=>{
+  const {self,project}=await fixture(),m=session(project)
+  const send=(id,method,params)=>{m.accept(JSON.stringify({jsonrpc:'2.0',id,method,params}));return m.output.at(-1)}
+  const listed=send(2,'prompts/list',{}).result.prompts
+  assert.equal(listed.length,1);assert.deepEqual(listed,MCP_PROMPTS)
+  assert.equal(listed[0].name,HARVEST_PROMPT_NAME)
+  assert.deepEqual(listed[0].arguments.map(item=>({name:item.name,required:item.required})),[{name:'focus',required:false}])
+
+  const base=send(3,'prompts/get',{name:HARVEST_PROMPT_NAME}).result
+  assert.equal(typeof base.description,'string');assert.equal(base.messages.length,1)
+  assert.equal(base.messages[0].role,'user');assert.equal(base.messages[0].content.type,'text')
+  const text=base.messages[0].content.text
+  assert.equal(text,HARVEST_PROMPT_TEXT);assert.equal(text,harvestPromptText());assert.equal(HARVEST_PROMPT_VERSION,1)
+  assert.match(text,/v1/);assert.match(text,/at most 3/i);assert.match(text,/propose nothing/i)
+  assert.match(text,/Never infer sensitive identity attributes or invent facts/)
+  assert.match(text,/holoself_proposal_preview/);assert.match(text,/holoself_proposal_create/)
+  assert.match(text,/append_claim/);assert.match(text,/replace_claim/);assert.match(text,/supersede_claim/);assert.match(text,/retire_claim/);assert.match(text,/claim_id/)
+  assert.match(text,/holoself proposals approve/);assert.match(text,/Workbench/)
+  assert.doesNotMatch(text,new RegExp(self.replaceAll('\\','\\\\'),'i'));assert.doesNotMatch(text,new RegExp(project.replaceAll('\\','\\\\'),'i'))
+
+  const focused=send(4,'prompts/get',{name:HARVEST_PROMPT_NAME,arguments:{focus:'testing preferences'}}).result
+  assert.equal(focused.messages[0].content.text,`${HARVEST_PROMPT_TEXT}\n\nFocus area: testing preferences`)
+
+  const badName=send(5,'prompts/get',{name:'/srv/private/unknown-prompt'}).error
+  assert.equal(badName.code,-32602);assert.equal(badName.data.code,'PROMPT_NOT_FOUND');assert.doesNotMatch(badName.message,/srv|private/)
+
+  for(const badParams of [
+    null,
+    [],
+    {},
+    {name:''},
+    {name:HARVEST_PROMPT_NAME,extra:true},
+    {name:HARVEST_PROMPT_NAME,arguments:[]},
+    {name:HARVEST_PROMPT_NAME,arguments:'focus'},
+    {name:HARVEST_PROMPT_NAME,arguments:{extra:'nope'}},
+    {name:HARVEST_PROMPT_NAME,arguments:{focus:123}},
+    {name:HARVEST_PROMPT_NAME,arguments:{focus:'   '}},
+    {name:HARVEST_PROMPT_NAME,arguments:{focus:'x'.repeat(201)}},
+    {name:HARVEST_PROMPT_NAME,arguments:{focus:'line one\nline two'}},
+    {name:HARVEST_PROMPT_NAME,arguments:{focus:'<!-- holoself-claim visibility=private -->'}},
+    {name:HARVEST_PROMPT_NAME,arguments:{focus:'<!-- /holoself-claim -->'}},
+    {name:HARVEST_PROMPT_NAME,arguments:{focus:'<!-- holoself-link-start schema=1 -->'}},
+    {name:HARVEST_PROMPT_NAME,arguments:{focus:'@@holoself-commit-time-deadbeef@@'}}
+  ]){
+    const err=send(6,'prompts/get',badParams).error
+    assert.equal(err.code,-32602);assert.equal(err.data.code,'INVALID_ARGUMENT')
+  }
+
+  const cliRaw=(await capture(()=>run(['instructions','render','--harvest']))).trimEnd()
+  assert.equal(cliRaw,text)
+  const cliProject=(await capture(()=>run(['instructions','render','--project',project,'--harvest','--focus','testing preferences']))).trimEnd()
+  assert.equal(cliProject,focused.messages[0].content.text)
+  const cliJson=JSON.parse(await capture(()=>run(['instructions','render','--harvest','--focus','testing preferences','--json'])))
+  assert.equal(cliJson.prompt,HARVEST_PROMPT_NAME);assert.equal(cliJson.content,focused.messages[0].content.text)
+  await assert.rejects(()=>run(['instructions','render','--focus','testing preferences']),/--focus requires --harvest/)
+  await assert.rejects(()=>run(['instructions','render','--harvest','--adapter','claude']),/--adapter cannot be combined with --harvest/)
+  await assert.rejects(()=>run(['instructions','render','--harvest','--focus','x'.repeat(201)]),/max 200 chars/)
 })
 
 test('MCP status reports per-platform support from the verification matrix',async()=>{

@@ -282,10 +282,16 @@ export function rankCandidates(records, options = {}) {
       temporalExcluded.push({ source: record.path, reason: temporal.reason })
       continue
     }
-    const score = relevanceScore(record, options.task),
-      id = sourceId(record)
+    const id = sourceId(record),
+      score = relevanceScore(record, options.task)
     if (requested.size && !requested.has(id) && !requested.has(record.path)) continue
     candidates.push({ ...record, task_relevance: score, source_id: id, knowledge_status: temporal.status, temporal_scope: temporal.scope })
+  }
+  // Optional lexical signal (FTS5 BM25): scored only over candidates that passed the temporal and source filters above,
+  // so excluded documents never shape document counts, term statistics or scaling.
+  if (options.task && options.lexicalScorer && candidates.length) {
+    const bonuses = options.lexicalScorer(candidates)
+    if (bonuses) for (const candidate of candidates) candidate.task_relevance += bonuses.get(candidate.source_id) || 0
   }
   const byId = (a, b) => (a.source_id < b.source_id ? -1 : a.source_id > b.source_id ? 1 : 0) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
   candidates.sort((a, b) => (requested.size ? byId(a, b) : b.task_relevance - a.task_relevance || byId(a, b)))
@@ -531,7 +537,9 @@ function cacheKey(records, options = {}) {
       history: Boolean(options.includeHistory),
       cursor: options.cursor || null,
       session_start: Boolean(options.sessionStart),
-      session_start_sources: options.sessionStartSources || null
+      session_start_sources: options.sessionStartSources || null,
+      // Only non-default engines enter the key, so deterministic-json keys are unchanged.
+      ...(options.engine && options.engine !== 'deterministic-json' ? { engine: options.engine } : {})
     })
   )
 }
