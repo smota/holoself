@@ -7,7 +7,7 @@
   "files": ["bin", "src", "web", "skills", "contribs", "docs", "schemas", "templates", "README.md", "CHANGELOG.md", "PRIVACY.md", "LICENSE"],
   "engines": { "node": ">=20" },
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
+    "test": "node scripts/run-tests.mjs",
     "start": "node bin/holoself.mjs",
     "web": "node bin/holoself.mjs web",
     "docs:reference": "node scripts/generate-reference.mjs",
