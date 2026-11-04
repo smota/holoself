@@ -234,8 +234,11 @@ test('current version strings, superseded evidence ADRs, lens vocabulary, and br
 
   assert.doesNotMatch(ownership,/\b(?:career|publishing)\b/i)
   assert.match(docsMap,/Synthetic professional and public-voice example/)
-  assert.match(workbenchLenses,/SENSITIVITY_LENSES/)
-  assert.match(lensesPrivacy,/SENSITIVITY_LENSES/)
+  // Both pages must describe public-voice the same way: sensitivity_access gating, no extra publication filter.
+  for(const page of [workbenchLenses,lensesPrivacy]){
+    assert.match(page,/sensitivity_access/)
+    assert.match(page,/`public-voice`[^.]*no extra publication filter/)
+  }
 
   for(const prefix of workflowConfig.branching.workBranchPrefixes){
     assert.ok(agentsMd.includes(prefix),`AGENTS.md missing branch prefix ${prefix}`)
