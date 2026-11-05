@@ -21,7 +21,33 @@
     "subject": { "type": "string", "minLength": 1 },
     "fromRole": { "type": "string", "minLength": 1 },
     "toRole": { "type": "string", "minLength": 1 },
-    "decision": { "enum": ["pass", "blocked", "returned", "skipped"] },
+    "decision": {
+      "enum": [
+        "pass",
+        "blocked",
+        "returned",
+        "skipped",
+        "delivered",
+        "no_change",
+        "feasible_work_remains_same_worker",
+        "concrete_blocker",
+        "unknown_outcome",
+        "repeated_failure"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "delivered",
+        "no_change",
+        "feasible_work_remains_same_worker",
+        "concrete_blocker",
+        "unknown_outcome",
+        "repeated_failure"
+      ]
+    },
+    "queueAction": { "enum": ["close", "handoff", "keep_open"] },
+    "domainStatus": { "enum": ["in_progress", "slice_complete", "goal_complete"] },
+    "result": { "type": "object", "additionalProperties": true },
     "nextContract": { "type": "string", "minLength": 1 },
     "timestamp": { "type": "string", "format": "date-time" },
     "profile": { "type": "string", "minLength": 1 },

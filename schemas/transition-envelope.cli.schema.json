@@ -1,0 +1,206 @@
+{
+  "title": "AgentFlow Transition Envelope CLI Projection",
+  "type": "object",
+  "required": [
+    "version",
+    "subject",
+    "fromRole",
+    "toRole",
+    "decision",
+    "nextContract",
+    "timestamp",
+    "profile",
+    "actionBoundary",
+    "inputRefs",
+    "outputRefs",
+    "validationRefs",
+    "extensionPlays",
+    "refusals",
+    "provenance"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "subject": { "type": "string", "minLength": 1 },
+    "fromRole": { "type": "string", "minLength": 1 },
+    "toRole": { "type": "string", "minLength": 1 },
+    "decision": {
+      "enum": [
+        "pass",
+        "blocked",
+        "returned",
+        "skipped",
+        "delivered",
+        "no_change",
+        "feasible_work_remains_same_worker",
+        "concrete_blocker",
+        "unknown_outcome",
+        "repeated_failure"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "delivered",
+        "no_change",
+        "feasible_work_remains_same_worker",
+        "concrete_blocker",
+        "unknown_outcome",
+        "repeated_failure"
+      ]
+    },
+    "queueAction": { "enum": ["close", "handoff", "keep_open"] },
+    "domainStatus": { "enum": ["in_progress", "slice_complete", "goal_complete"] },
+    "result": { "type": "object", "additionalProperties": true },
+    "nextContract": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string" },
+    "profile": { "type": "string", "minLength": 1 },
+    "actionBoundary": {
+      "type": "object",
+      "required": ["version", "profile", "requested", "effective", "parent"],
+      "properties": {
+        "version": { "const": 1 },
+        "profile": { "type": "string", "minLength": 1 },
+        "requested": { "type": "string", "minLength": 1 },
+        "effective": { "type": "string", "minLength": 1 },
+        "parent": { "type": "string", "minLength": 1 },
+        "owningRole": { "type": "string" },
+        "enforcementRefs": { "type": "array", "items": { "type": "object" } }
+      },
+      "additionalProperties": true
+    },
+    "inputRefs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["kind", "system", "uri", "authority", "relationship"],
+        "properties": {
+          "kind": {
+            "enum": [
+              "goal",
+              "requirement",
+              "design",
+              "plan",
+              "implementation",
+              "validation",
+              "review",
+              "release",
+              "incident",
+              "job",
+              "capability-map",
+              "other"
+            ]
+          },
+          "system": { "type": "string", "minLength": 1 },
+          "uri": { "type": "string", "minLength": 1 },
+          "authority": { "enum": ["authoritative", "working-copy", "mirror"] },
+          "relationship": {
+            "enum": ["input", "output", "supersedes", "verifies", "implements", "observes"]
+          },
+          "scope": { "type": "string" },
+          "revision": { "type": "string" },
+          "digest": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "outputRefs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["kind", "system", "uri", "authority", "relationship"],
+        "properties": {
+          "kind": {
+            "enum": [
+              "goal",
+              "requirement",
+              "design",
+              "plan",
+              "implementation",
+              "validation",
+              "review",
+              "release",
+              "incident",
+              "job",
+              "capability-map",
+              "other"
+            ]
+          },
+          "system": { "type": "string", "minLength": 1 },
+          "uri": { "type": "string", "minLength": 1 },
+          "authority": { "enum": ["authoritative", "working-copy", "mirror"] },
+          "relationship": {
+            "enum": ["input", "output", "supersedes", "verifies", "implements", "observes"]
+          },
+          "scope": { "type": "string" },
+          "revision": { "type": "string" },
+          "digest": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "validationRefs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "system", "uri", "authority", "relationship"],
+        "properties": {
+          "kind": {
+            "enum": [
+              "goal",
+              "requirement",
+              "design",
+              "plan",
+              "implementation",
+              "validation",
+              "review",
+              "release",
+              "incident",
+              "job",
+              "capability-map",
+              "other"
+            ]
+          },
+          "system": { "type": "string", "minLength": 1 },
+          "uri": { "type": "string", "minLength": 1 },
+          "authority": { "enum": ["authoritative", "working-copy", "mirror"] },
+          "relationship": {
+            "enum": ["input", "output", "supersedes", "verifies", "implements", "observes"]
+          },
+          "scope": { "type": "string" },
+          "revision": { "type": "string" },
+          "digest": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "openQuestions": { "type": "array", "items": { "type": "string" } },
+    "extensionPlays": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "refusals": {
+      "type": "object",
+      "required": [
+        "directExternalSignalToDeveloper",
+        "highAssuranceSelfReview",
+        "boundaryWidening"
+      ],
+      "properties": {
+        "directExternalSignalToDeveloper": { "const": true },
+        "highAssuranceSelfReview": { "const": true },
+        "boundaryWidening": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["platform", "executor", "transport", "delegationBoundary"],
+      "properties": {
+        "platform": { "type": "string", "minLength": 1 },
+        "executor": { "type": "string", "minLength": 1 },
+        "transport": { "type": "string", "minLength": 1 },
+        "delegationBoundary": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

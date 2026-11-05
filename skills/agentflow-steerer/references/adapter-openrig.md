@@ -14,16 +14,16 @@ This document maps the provider-neutral 6-verb steering interface (`steer.lead`)
 
 The steering plane communicates exclusively across rig boundaries to designated entry seats. Direct communication with internal delivery execution seats is strictly prohibited:
 
-| Target Seat    | Canonical Session Pattern                 | Allowed Verbs                | Purpose                                                                                 |
-| :------------- | :---------------------------------------- | :--------------------------- | :-------------------------------------------------------------------------------------- |
-| `pm.manager`   | `manager@<project>-product`, `pm-manager` | `assign`, `nudge`, `observe` | Ingestion of customer jobs, goal framing, macro DAG alignment.                          |
-| `orch.arch`    | `architect@<project>`, `orch-arch`        | `observe`, `nudge`, `read`   | Cross-rig synchronization, unfreeze resolutions, merge-check readiness.                 |
-| `human`        | `human`                                   | `escalate`, `queue create`   | Human release gates, person-waivers, abandonment approvals, quota/security escalations. |
-| `dev.build*`   | `builder*@<project>`                      | **PROHIBITED**               | In-rig builder seats. Steerer must never assign, nudge, or dispatch to builders.        |
-| `dev.qa`       | `qa@<project>`                            | **PROHIBITED**               | In-rig verification seat. Verification is owned within the delivery squad.              |
-| `dev.test-eng` | `test-eng@<project>`                      | **PROHIBITED**               | In-rig test authoring seat. Steerer must not interfere with test authoring.             |
-| `rev.review`   | `reviewer@<project>`                      | **PROHIBITED**               | In-rig peer review seat. Independent review must remain uninfluenced by steering.       |
-| `pm.analyst`   | `analyst@<project>-product`               | **PROHIBITED**               | In-rig product analysis seat. Communication flows through `pm.manager`.                 |
+| Target Seat    | Canonical Session Pattern                 | Allowed Verbs                | Purpose                                                                                                                                                                                                     |
+| :------------- | :---------------------------------------- | :--------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pm.manager`   | `manager@<project>-product`, `pm-manager` | `assign`, `nudge`, `observe` | Ingestion of customer jobs, goal framing, macro DAG alignment.                                                                                                                                              |
+| `orch.arch`    | `architect@<project>`, `orch-arch`        | `observe`, `nudge`, `read`   | Cross-rig synchronization, unfreeze resolutions, merge-check readiness.                                                                                                                                     |
+| `human`        | `<entityId>@external`                     | `escalate`, `queue create`   | Registered person for release gates, person-waivers, abandonment approvals, and quota/security escalations. `human` is not an address. `rig send` does not reach a person. A shared channel cannot approve. |
+| `dev.build*`   | `builder*@<project>`                      | **PROHIBITED**               | In-rig builder seats. Steerer must never assign, nudge, or dispatch to builders.                                                                                                                            |
+| `dev.qa`       | `qa@<project>`                            | **PROHIBITED**               | In-rig verification seat. Verification is owned within the delivery squad.                                                                                                                                  |
+| `dev.test-eng` | `test-eng@<project>`                      | **PROHIBITED**               | In-rig test authoring seat. Steerer must not interfere with test authoring.                                                                                                                                 |
+| `rev.review`   | `reviewer@<project>`                      | **PROHIBITED**               | In-rig peer review seat. Independent review must remain uninfluenced by steering.                                                                                                                           |
+| `pm.analyst`   | `analyst@<project>-product`               | **PROHIBITED**               | In-rig product analysis seat. Communication flows through `pm.manager`.                                                                                                                                     |
 
 ---
 
@@ -117,10 +117,16 @@ Executes squash-and-merge of a verified pull request after bilateral/council rev
 Raises an out-of-band escalation to the human operator or supervising orchestrator.
 
 - **Signature**: `escalate(class: "human-gate" | "contract-breach" | "blocker" | "resource-exhaustion", msg: string) -> { escalated: boolean }`
-- **OpenRig Mapping**:
+- **OpenRig Mapping**: `human` is not an address. `rig send` does not reach a person. A shared channel cannot approve a decision. When nobody is registered, stop and do not invent an address or post a queue row.
   ```bash
-  # Enqueue durable human decision/escalation item
-  rig queue create --destination human --summary "ESCALATION [<class>]: <msg>" --body-file <escalation_file> --human-intent decision
+  # Discover the person. Stop if this reports no registered person or no default.
+  rig gateway participants --json
+  # Enqueue only to the person address resolveHumanDestination returns.
+  rig queue create --destination <entityId>@external \
+    --human-intent decision \
+    --summary "ESCALATION [<class>]: <msg>" \
+    --body-file <escalation_file> \
+    --evidence-ref <evidence-ref>
   # Record durable escalation on issue or PR
   gh issue comment <issue> --body "⚠️ **ESCALATION [<class>]**: <msg>"
   ```
