@@ -72,6 +72,15 @@ export function installIoMeter({ roots, syntheticPaths = [] } = {}) {
       ) {
         return local.run(true, () => original.apply(this, args))
       }
+      if (name === 'openSync' && !local.getStore() && pathOf(args[0])) {
+        let handle
+        try { handle = original.apply(this, args) } catch (error) {
+          // A failed path lookup yields no descriptor or body bytes. Count the
+          // metadata attempt; successful raw opens remain unsupported below.
+          metadata(name, args[0]); throw error
+        }
+        unsupported(name, 'raw file descriptor operation'); return handle
+      }
       unsupported(name, 'raw file descriptor operation'); return original.apply(this, args)
     })
     for (const name of ['read', 'readv', 'readFile', 'createReadStream']) if (typeof fileHandlePrototype[name] === 'function') replace(fileHandlePrototype, name, original => function (...args) { unsupported(`FileHandle.${name}`, 'raw FileHandle operation'); return original.apply(this, args) })
