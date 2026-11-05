@@ -14,6 +14,8 @@ const within = (parent, path) => { const rel = relative(parent, path); return re
 const root = fs.realpathSync(fixture.root)
 if (!within(fs.realpathSync(tmpdir()), root) || !root.split(/[\\/]/).at(-1).startsWith('holoself-c00-')) throw new Error('worker requires isolated C00 temporary fixture')
 for (const field of ['self', 'project', 'peer']) if (!within(root, fs.realpathSync(fixture[field]))) throw new Error('fixture path escapes temporary root')
+// In-process and child link commands register the synthetic self in a self map inside the fixture, never the user's.
+if (!process.env.HOLOSELF_CONFIG_DIR) process.env.HOLOSELF_CONFIG_DIR = join(root, 'holoself-config')
 if (!Number.isInteger(fixture.count) || fixture.count < 0 || fixture.count > 10000) throw new Error('invalid fixture count')
 const syntheticPaths = Array.from({ length: fixture.count }, (_, i) => join(fixture.self, 'context', `synthetic-${String(i).padStart(5, '0')}.md`))
 const meter = installIoMeter({ roots: { self: fixture.self, project: fixture.project, peer: fixture.peer }, syntheticPaths })

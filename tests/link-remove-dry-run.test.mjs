@@ -1,4 +1,5 @@
 // Issue #43: `holoself link remove --dry-run` must leave the project and the sovereign self byte-for-byte unchanged.
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { access, mkdtemp, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises'
@@ -6,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { run } from '../src/cli.mjs'
 import { canonicalSpaceId } from '../src/link/registry.mjs'
+import { parseYaml } from '../src/shared/yaml.mjs'
 
 async function capture(fn) {
   const old = console.log
@@ -65,6 +67,7 @@ test('link remove --dry-run --yes leaves project and self unchanged (#43)', asyn
   assert.doesNotMatch(out, /\[ok\] removed/)
   assert.match(out, /\[dry-run\] would revoke sovereign link for /)
   assert.match(out, /\[dry-run\] would remove .*link\.yaml/)
+  assert.match(out, /\[dry-run\] lens binding kept for other machines; run 'holoself lens unbind' to remove it everywhere/)
 })
 
 test('link remove --dry-run with no link.yaml does not revoke the registry entry (#43)', async t => {
@@ -79,10 +82,14 @@ test('link remove --dry-run with no link.yaml does not revoke the registry entry
 
 test('link remove without --dry-run revokes the registry entry and removes link.yaml', async t => {
   const { self, project } = await linkedFixture(t)
+  const key = parseYaml(await readFile(join(project, '.holoself', 'link.yaml'), 'utf8')).project_key
   const out = await capture(() => run(['link', 'remove', '--project', project, '--yes']))
   assert.match(out, /\[ok\] removed /)
   assert.equal(await registryStatus(self, project), 'revoked')
   await assert.rejects(access(join(project, '.holoself', 'link.yaml')))
+  // The project_key binding is shared with the project's other machines and is kept.
+  assert.match(out, /lens binding kept for other machines; run 'holoself lens unbind' to remove it everywhere/)
+  assert.deepEqual(Object.keys(JSON.parse(await readFile(join(self, 'lenses', 'bindings.json'), 'utf8')).bindings), [key])
 })
 
 test('link remove with no link.yaml still revokes the registry entry when --self is given', async t => {

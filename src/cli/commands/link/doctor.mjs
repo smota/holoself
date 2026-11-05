@@ -1,5 +1,6 @@
 // holoself link doctor subcommand (moved verbatim from runEcosystem).
 import { existsSync } from 'node:fs'
+import { pathKeyedBindingCount } from '../../../bindings.mjs'
 import { loadLensRegistry } from '../../../lenses.mjs'
 import { readLink } from '../../../link/config.mjs'
 import { healthStatus } from '../../../link/health.mjs'
@@ -55,6 +56,10 @@ export async function linkDoctor(o, sub, project) {
     checks.context = 'broken'
     checks.context_error = redactRootPaths(error.message, [link.path, project])
   }
+  let pathKeyedBindings = null
+  try {
+    pathKeyedBindings = pathKeyedBindingCount(link.path)
+  } catch {}
   const ok = !Object.values(checks).some(x => ['missing', 'invalid', 'degraded', 'broken', 'present', 'drifted', 'unsafe', 'untracked'].includes(x))
   console.log(
     JSON.stringify(
@@ -63,6 +68,8 @@ export async function linkDoctor(o, sub, project) {
         checks,
         warnings: checks.warnings || [],
         errors: health.errors,
+        // Legacy lens bindings keyed by absolute path (one per machine that has not run link repair yet).
+        path_keyed_bindings: pathKeyedBindings,
         project_skill_override_details: health.activation.projectSkillOverrideDetails,
         project_skill_deployments: health.activation.projectSkillDeployments,
         session_start_hooks: health.activation.hooks.map(({ detail, ...hook }) => hook)

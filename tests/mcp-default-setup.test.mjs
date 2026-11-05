@@ -1,5 +1,6 @@
 // Issue #64: MCP by default where verified, one-command multi-client setup, opt-in read-tool pre-approval and the
 // Workbench per-client view. Everything runs in temp directories; PATH is a fake bin directory where detection matters.
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'

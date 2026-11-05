@@ -1,6 +1,7 @@
 // Non-blocking MCP server (#62): tool calls run on a bounded worker pool while protocol messages, cancellation and
 // timeouts are handled on the main thread. Slow work is simulated with the worker's test-only busy-time seam
 // (createMcpToolPool({ simulateWorkMs })) except in the spawned test, which uses a large synthetic self root.
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holoself.local/schemas/selves.schema.json",
+  "title": "Holoself per-machine self map (selves.json)",
+  "description": "Per-user, per-machine map from a self_id to this machine's checkout of that self. Lives in HOLOSELF_CONFIG_DIR, %APPDATA%\\holoself, $XDG_CONFIG_HOME/holoself or ~/.config/holoself with mode 0600. Never synced or committed.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "selves"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "selves": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^hs-self-[0-9a-f]{32}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "path",
+          "updated_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absolute realpath of the self root on this machine."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "ISO-8601 time of the last registration."
+          }
+        }
+      }
+    }
+  }
+}

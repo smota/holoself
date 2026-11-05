@@ -187,6 +187,9 @@ export async function startWebServer({ project = process.cwd(), root, port = 0, 
             return send(res, 200, { ok: true, data: { preview: { output: preview.stdout, plan: repairPlan(preview.stdout), plan_hash: planHash } } })
           if (b.plan_hash !== planHash)
             throw new HttpError(409, 'PLAN_CHANGED', 'repair plan changed since preview; review it again', { current_hash: planHash })
+          // A project_key renewal changes a synced file and detaches the project from its binding: the owner runs it.
+          if (repairPlan(preview.stdout).project_key_renewal)
+            throw new HttpError(409, 'PROJECT_KEY_RENEWAL_REQUIRES_CLI', `run holoself link repair --project ${s.path} in a terminal to give this copied project its own project_key`)
           return send(res, 200, { ok: true, data: { output: (await cli(['link', 'repair', '--project', s.path, '--yes'])).stdout, plan_hash: planHash } })
         })
       }

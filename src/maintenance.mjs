@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, mkdirSync, openSync, closeSync, rmdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { DEFAULT_LENSES, loadLensRegistry } from './lenses.mjs'
-import { normalizeProjectPath, readBindings } from './bindings.mjs'
+import { normalizeBindingKey, readBindings } from './bindings.mjs'
 import { assertNoLinkBelow, linkBelow } from './path-guard.mjs'
 import { replaceClaimBlocks } from './markdown/claim-blocks.mjs'
 import { hash as sha, pathExists, slash } from './shared/fs.mjs'
@@ -186,7 +186,7 @@ export function buildLensMigrationPlan(root, options = {}) {
       throw new Error('invalid lens bindings for migration')
     const bindings = Object.create(null)
     for (const [project, choice] of Object.entries(value.bindings)) {
-      const key = normalizeProjectPath(project)
+      const key = normalizeBindingKey(project)
       if (Object.hasOwn(bindings, key)) throw new Error(`conflicting normalized lens bindings: ${key}`)
       bindings[key] = { default_lens: renamedLens(choice.default_lens), secondary_lenses: choice.secondary_lenses.map(renamedLens) }
     }

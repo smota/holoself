@@ -157,7 +157,7 @@ flowchart LR
     class M,A,X mode
 ```
 
-- **Metadata project link — recommended:** `link add|status|remove|setup|activate|deactivate|repair|doctor --project ...` creates `.holoself/link.yaml`, activates configured startup pointers, and maintains local index, proposal, and report directories.
+- **Metadata project link — recommended:** `link add|status|remove|setup|activate|deactivate|repair|doctor --project ...` creates `.holoself/link.yaml`, activates configured startup pointers, and maintains local index, proposal, and report directories. The link names the self by a random `self_id` and holds no machine path, so the self and its projects can be synced to [several machines](docs/guides/multiple-machines.md).
 - **Local MCP — preferred interaction where verified:** the agent client launches Holoself on demand and calls bounded typed tools; this still requires the metadata link and coexists with startup instructions.
 - **Snapshot:** `export` or `context --snapshot` creates reviewed generated context for portable or sandboxed use. It is not live and can become stale.
 - **Legacy live mount:** `link --target ...` creates a filesystem symlink/junction from project `.holoself` to complete data root. It remains compatibility-only.

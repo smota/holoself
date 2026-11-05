@@ -52,7 +52,7 @@ Hosts ask before each MCP tool call in interactive sessions and refuse in headle
 
 Holoself records which entries it added and removes only those; a rule you already had stays. Codex 0.166.0 already runs read-only tools without asking under the generated `default_tools_approval_mode = "writes"`; the per-tool entries make that explicit.
 
-Codex and AGY absolute bindings are intentionally deterministic local configuration. Do not commit them when a path identifies a private host or user. Claude's project file is path-portable. Existing divergent `holoself` entries and malformed managed markers are refused rather than overwritten.
+Codex and AGY absolute bindings are intentionally deterministic local configuration: each machine regenerates them for its own project path, so keep them per machine and do not commit them when a path identifies a private host or user. Claude's project file is path-portable. The server finds the linked self through the project's `link.yaml` and this machine's self map, never through a path in the MCP configuration; see [Use one self on several machines](multiple-machines.md). Existing divergent `holoself` entries and malformed managed markers are refused rather than overwritten.
 
 The `holoself` executable must be on the client process PATH. Install `holoself-ai` from npm (for example `npm install --global holoself-ai`) or, from a source checkout, use a reviewed local or managed package-bin installation that points at that checkout. Confirm `holoself --version` in the client environment before applying configuration; running `node bin/holoself.mjs` in a terminal proves only that the checkout works. See [CLI invocation](../reference/cli.md#invocation).
 

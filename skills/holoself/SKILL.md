@@ -28,8 +28,9 @@ Treat `.holoself` modes as mutually exclusive. Do not replace, merge, or convert
 When `.holoself` is real directory containing `link.yaml`:
 
 - Parse the link and resolve its self-side binding; reject malformed YAML, unknown root fields, or unknown `self_context` fields.
-- Require non-empty `path`, `access: read`, `index: local`, `proposals: enabled|disabled`, a self-side `lenses/bindings.json` choice with known `default_lens` and unique known `secondary_lenses`.
-- Resolve relative `self_context.path` from project directory; canonicalize it.
+- Require `self_context.self_id` or a non-empty `path`, `access: read`, `index: local`, `proposals: enabled|disabled`, a self-side `lenses/bindings.json` choice (keyed by the link's `project_key`, else by project path) with known `default_lens` and unique known `secondary_lenses`.
+- A portable link names its self only by `self_id`: let `holoself context --project .` resolve it (explicit `--self`, `HOLOSELF_HOME`, then this machine's self map, then any legacy `path`, each accepted only when its `config.json` carries the same `self_id`). On `SELF_NOT_FOUND`, stop and report `holoself machine register --root <dir>`; never search for the self elsewhere.
+- For a legacy link, resolve relative `self_context.path` from project directory; canonicalize it.
 - Accept target only when it is valid canonical root with Holoself config plus real `profile/` and `context/` directories.
 - Use the self-side binding default lens unless user explicitly selects another supported lens. Resolve all IDs from the linked self root with `holoself lens list|show|validate`; never invent a lens name.
 - Treat project `.holoself/index/`, `proposals/`, and `reports/` as project-owned operational data, not canonical self context.
@@ -89,7 +90,7 @@ When the host exposes project-bound Holoself MCP tools, prefer `holoself_context
 - **validate:** use `holoself link doctor --project .` and surface degraded activation;
 - **snapshot:** when external paths are inaccessible, use reviewed `.holoself/runtime/context-packet.md`, clearly marked as non-live.
 
-`link add` normally creates `.holoself/BOOTSTRAP.md`, bounded startup sections, runtime metadata, and managed full public skill installations. Bounded startup sections are pointers, not copies of personal data. If activation is missing, recommend `holoself link repair --project .`; do not silently rewrite project instructions.
+`link add` normally creates `.holoself/BOOTSTRAP.md`, bounded startup sections, runtime metadata, and managed full public skill installations. Bounded startup sections are pointers, not copies of personal data. If activation is missing, recommend `holoself link repair --project .`; do not silently rewrite project instructions. Repair, setup, approve and backfill never widen an existing grant on their own: without an explicit lens choice the grant can only narrow to the binding, and legacy `link.yaml` lens fields never choose it. If a command reports `shared binding adds lenses not granted on this machine`, tell the owner, and leave `--accept-shared-lenses` for the owner to run.
 
 ### End of session
 

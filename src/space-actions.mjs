@@ -44,6 +44,7 @@ export function planSpaceAction(request, { absentRegistryParent = false } = {}) 
     lens = 'general',
     explicitLens,
     secondaryLenses,
+    acceptSharedLenses,
     projectContext,
     activate,
     platforms,
@@ -98,6 +99,7 @@ export function planSpaceAction(request, { absentRegistryParent = false } = {}) 
         lens,
         explicitLens,
         secondaryLenses,
+        acceptSharedLenses,
         projectContext,
         force,
         metadataAbsent: legacy

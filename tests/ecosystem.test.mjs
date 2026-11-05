@@ -1,3 +1,4 @@
+import './helpers/isolated-config.mjs'
 import { indexEngine } from '../src/catalog/fts.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -7,6 +8,7 @@ import { linkSync, lstatSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { run } from '../src/cli.mjs'
+import { linkProjectKey } from '../src/link/config.mjs'
 import { ecosystemValidationErrors } from '../src/ecosystem.mjs'
 import { migrateProjectSkillsToGlobal } from '../src/adapters.mjs'
 
@@ -98,10 +100,10 @@ test('validation reports link, visibility, reference, and proposal provenance er
 })
 
 test('malformed links fail closed while valid reordered YAML lists parse',async()=>{
-  const {self,project}=await fixture(),path=self.replaceAll('\\','/')
-  await writeFile(join(project,'.holoself','link.yaml'),`self_context:\n  secondary_lenses:\n    - "leadership"\n    - "technical"\n  path: "${path}"\n  proposals: "enabled"\n  access: "read"\n  default_lens: "professional"\n  index: "local"\n`)
+  const {self,project}=await fixture(),path=self.replaceAll('\\','/'),key=`project_key: "${linkProjectKey(project)}"\n`
+  await writeFile(join(project,'.holoself','link.yaml'),`${key}self_context:\n  secondary_lenses:\n    - "leadership"\n    - "technical"\n  path: "${path}"\n  proposals: "enabled"\n  access: "read"\n  default_lens: "professional"\n  index: "local"\n`)
   const status=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.deepEqual(status.self_context.secondary_lenses,['public-voice','general'])
-  await writeFile(join(project,'.holoself','link.yaml'),`self_context:\n  path: "${path}" # canonical root\n  secondary_lenses: [leadership, technical] # valid flow list\n  access: read\n  proposals: enabled\n  index: local\n  default_lens: career\n`);const inline=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.deepEqual(inline.self_context.secondary_lenses,['public-voice','general'])
+  await writeFile(join(project,'.holoself','link.yaml'),`${key}self_context:\n  path: "${path}" # canonical root\n  secondary_lenses: [leadership, technical] # valid flow list\n  access: read\n  proposals: enabled\n  index: local\n  default_lens: career\n`);const inline=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.deepEqual(inline.self_context.secondary_lenses,['public-voice','general'])
   await writeFile(join(project,'.holoself','link.yaml'),`self_context:\n  path: "${path}"\n  secondary_lenses: [leadership, leadership]\n  access: read\n  proposals: enabled\n  index: local\n  default_lens: career\n`)
   const broken=JSON.parse(await capture(()=>run(['link','status','--project',project])));assert.equal(broken.state,'broken');assert.match(broken.errors[0],/secondary_lenses must contain unique lenses/);process.exitCode=0
   const duplicateProject=await temp()

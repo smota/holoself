@@ -1,5 +1,6 @@
 // Issue #108 (0.11.0 stage of docs/decisions/privacy-fields-and-legacy-mount.md): deprecation warnings for the legacy
 // privacy fields and the legacy live mount. Behaviour is otherwise unchanged. Synthetic fixtures only.
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { lstat, mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises'

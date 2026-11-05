@@ -64,7 +64,7 @@ Private contribs must be placed under `<data-root>/contribs/local/`. They are no
 
 ## Root detection and loading order
 
-Agents resolve roots deterministically: (1) current/opened directory itself when it has Holoself `config.json` plus `profile/` and `context/`; (2) an ancestor's `.holoself/` directory link; (3) `HOLOSELF_HOME`; (4) `~/.holoself`. Invalid or ambiguous roots require asking the user. Direct data roots always win over project links.
+Agents resolve roots deterministically: (1) current/opened directory itself when it has Holoself `config.json` plus `profile/` and `context/`; (2) an ancestor's `.holoself/` directory link, whose self is found by its `self_id` (explicit root, `HOLOSELF_HOME`, this machine's self map, then a legacy path; see [portable links](decisions/portable-links.md)); (3) `HOLOSELF_HOME`; (4) `~/.holoself`. Invalid or ambiguous roots require asking the user. Direct data roots always win over project links.
 
 After root resolution, the context resolver applies lifecycle, privacy, task relevance, and a bounded budget. It progressively selects current profile/context/topic sources, zero to two task-relevant public methods from the package allowlisted by `config.json.selectedContribs`, then private `contribs/local/` or reference material only when specifically relevant. For linked projects, use the resolver or a reviewed `.holoself/context-packet.md`; do not bulk-read the canonical root.
 

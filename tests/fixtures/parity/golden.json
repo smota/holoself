@@ -29,7 +29,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "[ok] linked <ROOT>/project -> <ROOT>/self\n",
+      "stdout": "[ok] granting lenses on this machine: general, leadership\n[ok] linked <ROOT>/project -> <ROOT>/self\n",
       "stderr": ""
     },
     {
@@ -56,7 +56,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "[ok] linked <ROOT>/orphan-project -> <ROOT>/orphan-self\n",
+      "stdout": "[ok] granting lenses on this machine: general\n[ok] linked <ROOT>/orphan-project -> <ROOT>/orphan-self\n",
       "stderr": ""
     }
   ],
@@ -89,6 +89,8 @@
           "mode": "metadata-link",
           "isLegacyMount": false,
           "self_context": {
+            "project_key": "hs-proj-<HEX:1>",
+            "self_id": "hs-self-<HEX:2>",
             "path": "<ROOT>/self",
             "access": "read",
             "proposals": "enabled",
@@ -18390,7 +18392,7 @@
       ],
       "status": 1,
       "stdout": "",
-      "stderr": "[!!] No self-side lens binding for <ROOT>/orphan-project. Run holoself lens bind --root <self-root> --project <project> --lens <lens> --yes\n"
+      "stderr": "[!!] self hs-self-<HEX:1> has no checkout registered on this machine; run 'holoself machine register --root <dir>' or 'holoself link setup' (the self map entry is stale: its path is missing or its config.json carries another id)\n"
     },
     {
       "name": "linked context legacy mount",
@@ -23919,14 +23921,17 @@
         "json": {
           "schema_version": 1,
           "bindings": {
-            "<ROOT>/project": {
+            "hs-proj-<HEX:1>": {
               "default_lens": "general",
               "secondary_lenses": [
                 "leadership"
               ]
             }
           },
-          "hash": "<HEX:1>"
+          "hash": "<HEX:2>",
+          "projects": {
+            "hs-proj-<HEX:1>": "<ROOT>/project"
+          }
         }
       },
       "stderr": ""
@@ -23977,7 +23982,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "{\n  \"project\": \"<ROOT>/project\",\n  \"binding\": {\n    \"default_lens\": \"general\",\n    \"secondary_lenses\": [\n      \"leadership\",\n      \"professional\"\n    ]\n  }\n}\n{\n  \"schema_version\": 1,\n  \"bindings\": {\n    \"<ROOT>/project\": {\n      \"default_lens\": \"general\",\n      \"secondary_lenses\": [\n        \"leadership\",\n        \"professional\"\n      ]\n    }\n  },\n  \"hash\": \"<HEX:1>\"\n}\n",
+      "stdout": "{\n  \"project\": \"<ROOT>/project\",\n  \"binding\": {\n    \"default_lens\": \"general\",\n    \"secondary_lenses\": [\n      \"leadership\",\n      \"professional\"\n    ]\n  }\n}\n{\n  \"schema_version\": 1,\n  \"bindings\": {\n    \"hs-proj-<HEX:1>\": {\n      \"default_lens\": \"general\",\n      \"secondary_lenses\": [\n        \"leadership\",\n        \"professional\"\n      ]\n    }\n  },\n  \"hash\": \"<HEX:2>\",\n  \"projects\": {\n    \"hs-proj-<HEX:1>\": \"<ROOT>/project\"\n  }\n}\n",
       "stderr": ""
     },
     {
@@ -24016,6 +24021,8 @@
           "mode": "metadata-link",
           "isLegacyMount": false,
           "self_context": {
+            "project_key": "hs-proj-<HEX:1>",
+            "self_id": "hs-self-<HEX:2>",
             "path": "<ROOT>/self",
             "access": "read",
             "proposals": "enabled",
@@ -24135,6 +24142,7 @@
             "no activated adapters",
             "no public skill installation"
           ],
+          "path_keyed_bindings": 0,
           "project_skill_override_details": [],
           "project_skill_deployments": [],
           "session_start_hooks": []
@@ -24154,7 +24162,7 @@
         "--dry-run"
       ],
       "status": 1,
-      "stdout": "{\n  \"instructions\": [\n    \"AGENTS.md\"\n  ],\n  \"context\": [\n    \"profile-notes.md\"\n  ],\n  \"suggested_lens\": \"general\",\n  \"likely_duplicates\": [\n    \"profile-notes.md\"\n  ],\n  \"migration_recommendations\": [\n    \"profile-notes.md: compare with canonical self; retain project-specific content and propose reusable knowledge\"\n  ]\n}\n{\n  \"activation_plan\": {\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true,\n        \"file\": \"AGENTS.md\",\n        \"skillDirs\": [\n          \".agents/skills/holoself\"\n        ]\n      }\n    ],\n    \"skills\": [\n      {\n        \"adapter\": \"agents\",\n        \"file\": \".agents/skills/holoself/SKILL.md\"\n      }\n    ],\n    \"global_skills\": [],\n    \"hook_policy\": \"auto\",\n    \"session_start_hooks\": [],\n    \"mcp_policy\": \"auto\",\n    \"mcp_approve_read_tools\": false,\n    \"mcp_servers\": [],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \".agents/skills/holoself/SKILL.md\"\n    ]\n  }\n}\n",
+      "stdout": "{\n  \"instructions\": [\n    \"AGENTS.md\"\n  ],\n  \"context\": [\n    \"profile-notes.md\"\n  ],\n  \"suggested_lens\": \"general\",\n  \"likely_duplicates\": [\n    \"profile-notes.md\"\n  ],\n  \"migration_recommendations\": [\n    \"profile-notes.md: compare with canonical self; retain project-specific content and propose reusable knowledge\"\n  ]\n}\n[ok] granting lenses on this machine: general\n{\n  \"activation_plan\": {\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true,\n        \"file\": \"AGENTS.md\",\n        \"skillDirs\": [\n          \".agents/skills/holoself\"\n        ]\n      }\n    ],\n    \"skills\": [\n      {\n        \"adapter\": \"agents\",\n        \"file\": \".agents/skills/holoself/SKILL.md\"\n      }\n    ],\n    \"global_skills\": [],\n    \"hook_policy\": \"auto\",\n    \"session_start_hooks\": [],\n    \"mcp_policy\": \"auto\",\n    \"mcp_approve_read_tools\": false,\n    \"mcp_servers\": [],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \".agents/skills/holoself/SKILL.md\"\n    ]\n  }\n}\n",
       "stderr": "[!!] Create and activate link using <ROOT>/self and general lens? Re-run with --yes to confirm.\n"
     },
     {
@@ -24172,7 +24180,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "{\n  \"instructions\": [\n    \"AGENTS.md\"\n  ],\n  \"context\": [\n    \"profile-notes.md\"\n  ],\n  \"suggested_lens\": \"general\",\n  \"likely_duplicates\": [\n    \"profile-notes.md\"\n  ],\n  \"migration_recommendations\": [\n    \"profile-notes.md: compare with canonical self; retain project-specific content and propose reusable knowledge\"\n  ]\n}\n{\n  \"activation_plan\": {\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true,\n        \"file\": \"AGENTS.md\",\n        \"skillDirs\": [\n          \".agents/skills/holoself\"\n        ]\n      },\n      {\n        \"id\": \"claude\",\n        \"name\": \"Claude Code\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Claude Code\",\n        \"tested_version\": null,\n        \"evidence\": \"CLAUDE.md activation is generated and covered by filesystem tests; product discovery is not asserted without a recorded smoke test.\",\n        \"last_verified\": null,\n        \"detected\": false,\n        \"file\": \"CLAUDE.md\",\n        \"skillDirs\": [\n          \".claude/skills/holoself\"\n        ]\n      }\n    ],\n    \"skills\": [\n      {\n        \"adapter\": \"agents\",\n        \"file\": \".agents/skills/holoself/SKILL.md\"\n      }\n    ],\n    \"global_skills\": [],\n    \"hook_policy\": \"auto\",\n    \"session_start_hooks\": [\n      {\n        \"adapter\": \"claude\",\n        \"file\": \".claude/settings.local.json\",\n        \"event\": \"SessionStart\",\n        \"hook_id\": \"holoself-session-start\",\n        \"support\": \"verified\",\n        \"install\": true,\n        \"action\": \"create\"\n      }\n    ],\n    \"mcp_policy\": \"auto\",\n    \"mcp_approve_read_tools\": false,\n    \"mcp_servers\": [\n      {\n        \"adapter\": \"claude\",\n        \"file\": \".mcp.json\",\n        \"support\": \"verified\",\n        \"install\": true,\n        \"action\": \"create\"\n      }\n    ],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \"CLAUDE.md\",\n      \".agents/skills/holoself/SKILL.md\",\n      \".claude/settings.local.json\",\n      \".mcp.json\"\n    ]\n  }\n}\n[dry-run] setup complete; no files deleted or relocated\n",
+      "stdout": "{\n  \"instructions\": [\n    \"AGENTS.md\"\n  ],\n  \"context\": [\n    \"profile-notes.md\"\n  ],\n  \"suggested_lens\": \"general\",\n  \"likely_duplicates\": [\n    \"profile-notes.md\"\n  ],\n  \"migration_recommendations\": [\n    \"profile-notes.md: compare with canonical self; retain project-specific content and propose reusable knowledge\"\n  ]\n}\n[ok] granting lenses on this machine: general\n{\n  \"activation_plan\": {\n    \"canonical\": \"AGENTS.md\",\n    \"adapters\": [\n      {\n        \"id\": \"agents\",\n        \"name\": \"Generic AGENTS\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"AGENTS.md-compatible hosts\",\n        \"tested_version\": null,\n        \"evidence\": \"Holoself generates a bounded AGENTS.md pointer; each host still needs an application-level discovery test.\",\n        \"last_verified\": null,\n        \"detected\": true,\n        \"file\": \"AGENTS.md\",\n        \"skillDirs\": [\n          \".agents/skills/holoself\"\n        ]\n      },\n      {\n        \"id\": \"claude\",\n        \"name\": \"Claude Code\",\n        \"support\": \"configured\",\n        \"delivery\": \"file\",\n        \"discovery\": \"configured\",\n        \"tested_product\": \"Claude Code\",\n        \"tested_version\": null,\n        \"evidence\": \"CLAUDE.md activation is generated and covered by filesystem tests; product discovery is not asserted without a recorded smoke test.\",\n        \"last_verified\": null,\n        \"detected\": false,\n        \"file\": \"CLAUDE.md\",\n        \"skillDirs\": [\n          \".claude/skills/holoself\"\n        ]\n      }\n    ],\n    \"skills\": [\n      {\n        \"adapter\": \"agents\",\n        \"file\": \".agents/skills/holoself/SKILL.md\"\n      }\n    ],\n    \"global_skills\": [],\n    \"hook_policy\": \"auto\",\n    \"session_start_hooks\": [\n      {\n        \"adapter\": \"claude\",\n        \"file\": \".claude/settings.local.json\",\n        \"event\": \"SessionStart\",\n        \"hook_id\": \"holoself-session-start\",\n        \"support\": \"verified\",\n        \"install\": true,\n        \"action\": \"create\"\n      }\n    ],\n    \"mcp_policy\": \"auto\",\n    \"mcp_approve_read_tools\": false,\n    \"mcp_servers\": [\n      {\n        \"adapter\": \"claude\",\n        \"file\": \".mcp.json\",\n        \"support\": \"verified\",\n        \"install\": true,\n        \"action\": \"create\"\n      }\n    ],\n    \"writes\": [\n      \".holoself/BOOTSTRAP.md\",\n      \".holoself/runtime.json\",\n      \"AGENTS.md\",\n      \"CLAUDE.md\",\n      \".agents/skills/holoself/SKILL.md\",\n      \".claude/settings.local.json\",\n      \".mcp.json\"\n    ]\n  }\n}\n[dry-run] setup complete; no files deleted or relocated\n",
       "stderr": ""
     },
     {
@@ -24350,6 +24358,8 @@
           "mode": "metadata-link",
           "isLegacyMount": false,
           "self_context": {
+            "project_key": "hs-proj-<HEX:1>",
+            "self_id": "hs-self-<HEX:2>",
             "path": "<ROOT>/self",
             "access": "read",
             "proposals": "enabled",
@@ -26490,7 +26500,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "[dry-run] would revoke sovereign link for <ROOT>/project\n[dry-run] would remove <ROOT>/project/.holoself/link.yaml; indexes, reports, and proposals preserved\n",
+      "stdout": "[dry-run] would revoke sovereign link for <ROOT>/project\n[dry-run] would remove <ROOT>/project/.holoself/link.yaml; indexes, reports, and proposals preserved\n[dry-run] lens binding kept for other machines; run 'holoself lens unbind' to remove it everywhere\n",
       "stderr": ""
     },
     {
@@ -26510,6 +26520,8 @@
           "mode": "metadata-link",
           "isLegacyMount": false,
           "self_context": {
+            "project_key": "hs-proj-<HEX:1>",
+            "self_id": "hs-self-<HEX:2>",
             "path": "<ROOT>/self",
             "access": "read",
             "proposals": "enabled",

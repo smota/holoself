@@ -1,6 +1,7 @@
 // Issue #69: optional SQLite FTS5 (BM25) retrieval index. Feature detection and JSON fallback, the derived
 // cache (freshness, delete/corrupt/symlink safety, 0600), privacy (hidden documents are never returned or
 // scored and do not change visible scores), claim/field/lifecycle filters, determinism and path handling.
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'

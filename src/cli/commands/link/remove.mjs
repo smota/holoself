@@ -1,8 +1,9 @@
 // holoself link remove subcommand (moved verbatim from runEcosystem).
 import { existsSync, lstatSync, readFileSync, rmSync } from 'node:fs'
 import { deactivateProject } from '../../../adapters.mjs'
-import { writeBinding } from '../../../bindings.mjs'
+import { hasPathBinding, writeBinding } from '../../../bindings.mjs'
 import { isCanonicalSelf, linkPath } from '../../../link/config.mjs'
+import { linkSelfReference, resolveLinkedSelf } from '../../../link/self-resolution.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, registryFilePath, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { pathExists } from '../../../shared/fs.mjs'
 import { redactRootPaths } from '../../../shared/redact.mjs'
@@ -59,7 +60,17 @@ export async function linkRemove(o, sub, project) {
   } catch (e) {
     throw new Error(`cannot parse link at ${path}: ${e.message}`)
   }
+  const reference = linkSelfReference(parsedRaw)
   let selfRoot = o.self || parsedRaw?.self_context?.path || (o.rootExplicit ? o.root : null)
+  if (reference.selfId) {
+    // A portable link resolves its self like every other reader; an explicit self naming another self is refused.
+    try {
+      selfRoot = resolveLinkedSelf({ project, ...reference, explicitSelf: o.self || (o.rootExplicit ? o.root : null) }).path
+    } catch (error) {
+      if (error.code === 'SELF_ROOT_NOT_CANONICAL') throw error
+      selfRoot = null
+    }
+  }
   let selfReachable = false
   if (selfRoot) {
     try {
@@ -93,12 +104,20 @@ export async function linkRemove(o, sub, project) {
         `but sovereign registry was NOT updated. Run 'holoself link approve --project <dir> --revoke' from self root to complete sovereign revocation.`
     )
   } else await revokeSovereignLink(o, project, selfRoot, pId, canonicalProj)
+  // A project_key binding is shared with this project's other machines through the synced self, so removing the link
+  // here keeps it; only a legacy path-keyed entry (this machine's own) is removed.
+  const keptBinding = 'lens binding kept for other machines; run \'holoself lens unbind\' to remove it everywhere'
   if (o.dryRun) {
     console.log(`[dry-run] would remove ${path}; indexes, reports, and proposals preserved`)
+    if (reference.projectKey) console.log(`[dry-run] ${keptBinding}`)
     return true
   }
-  if (selfReachable) writeBinding(selfRoot, project, null)
+  if (selfReachable) {
+    if (!reference.projectKey) writeBinding(selfRoot, project, null)
+    else if (hasPathBinding(selfRoot, project)) writeBinding(selfRoot, project, null)
+  }
   rmSync(path)
   console.log(`[ok] removed ${path}; indexes, reports, and proposals preserved`)
+  if (reference.projectKey) console.log(`[ok] ${keptBinding}`)
   return true
 }

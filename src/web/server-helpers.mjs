@@ -4,7 +4,8 @@ import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
-import { normalizeProjectPath, readBindings } from '../bindings.mjs'
+import { bindingProjects, normalizeProjectPath, readBindings } from '../bindings.mjs'
+import { readRegistry } from '../link/registry.mjs'
 import { canonicalPath, samePath } from '../path-guard.mjs'
 import { PACKAGE_ROOT as BASE } from '../shared/package-root.mjs'
 import { escapeRegExp, redactRootPaths } from '../shared/redact.mjs'
@@ -223,7 +224,14 @@ export function reconcileCatalog(root) {
     prevSpaces = Array.isArray(previous?.spaces) ? previous.spaces : [],
     known = new Map(prevSpaces.filter(item => item?.path).map(item => [normalizeProjectPath(item.path), item])),
     bindings = readBindings(root)
-  const spaces = Object.entries(bindings.bindings).map(([project, binding]) => {
+  // project_key bindings join this machine's registry; keys attested only on other machines are not spaces here.
+  let registryLinks = []
+  try {
+    registryLinks = readRegistry(root).links
+  } catch {}
+  const spaces = bindingProjects(bindings.bindings, registryLinks)
+    .filter(item => item.project)
+    .map(({ project, binding }) => {
     const canonProject = canonicalPath(project),
       existing =
         known.get(project) || prevSpaces.find(item => item?.path && samePath(canonicalPath(item.path), canonProject))
@@ -235,7 +243,7 @@ export function reconcileCatalog(root) {
       secondary_lenses: binding.secondary_lenses,
       discoveredFrom: 'lenses/bindings.json'
     }
-  })
+    })
   const catalog = { schemaVersion: 1, spaces }
   if (JSON.stringify(previous) !== JSON.stringify(catalog)) writeCatalog(root, catalog)
   return { ...catalog, discovered: spaces.map(item => item.path) }

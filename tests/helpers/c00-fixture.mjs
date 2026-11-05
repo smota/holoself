@@ -60,6 +60,9 @@ export async function createFixture({ count = 100, baseDir } = {}) {
   try {
     const self = join(root, 'self'), project = join(root, 'project'), peer = join(root, 'peer'), qualityRoot = join(root, 'quality')
     await Promise.all([self, project, peer, qualityRoot].map(path => mkdir(path)))
+    // In-process link commands (and the workers and CLI children that inherit this environment) register the synthetic
+    // self in a self map inside the fixture, never in the developer's configuration directory.
+    if (!process.env.HOLOSELF_CONFIG_DIR) process.env.HOLOSELF_CONFIG_DIR = join(root, 'holoself-config')
     await quietRun(['init', '--root', self])
     for (const linked of [project, peer]) await quietRun(['link', 'add', '--project', linked, '--self', self, '--lens', 'general', '--no-activate', '--yes'])
     await writeFile(join(peer, 'C00-PEER-EXCLUSIVE.md'), '# Peer synthetic evidence\nC00_PEER_EXCLUSIVE\n')

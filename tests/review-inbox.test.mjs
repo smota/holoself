@@ -1,4 +1,5 @@
 // Workbench review inbox: cross-space pending inbox, deterministic duplicate grouping, conflict hints and atomic batch actions (issue #71).
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { chmodSync, existsSync, rmSync, symlinkSync } from 'node:fs'
@@ -725,7 +726,9 @@ test('HTTP space resolution is strictly limited to catalog id or name; CLI allow
       linkBBefore = await readFile(linkBPath, 'utf8')
     try {
       await capture(() => run(['lens', 'bind', '--root', otherSelf, '--project', f.projectB, '--lens', 'professional', '--yes']))
-      await writeFile(linkBPath, await readFile(join(otherProject, '.holoself', 'link.yaml'), 'utf8'))
+      // Keeps projectB's own project_key: a key attested for otherProject would fail earlier with PROJECT_KEY_CONFLICT.
+      const projectBKey = linkBBefore.match(/^project_key:.*$/m)[0]
+      await writeFile(linkBPath, (await readFile(join(otherProject, '.holoself', 'link.yaml'), 'utf8')).replace(/^project_key:.*$/m, projectBKey))
       const getMixed = await f.call('/api/inbox?space=all')
       assert.equal(getMixed.status, 400)
       assert.equal(getMixed.json.error.code, 'MIXED_SELF_ROOTS')

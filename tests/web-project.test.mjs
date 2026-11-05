@@ -1,3 +1,4 @@
+import './helpers/isolated-config.mjs'
 import { planSpaceAction, applySpaceAction } from '../src/space-actions.mjs'
 import { readdirSync, lstatSync, readFileSync, readlinkSync, realpathSync, mkdirSync, writeFileSync, unlinkSync, symlinkSync } from 'node:fs'
 import { normalizeProjectPath, writeBinding } from '../src/bindings.mjs'
@@ -10,11 +11,15 @@ import { request } from 'node:http'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { run } from '../src/cli.mjs'
+import { linkProjectKey } from '../src/link/config.mjs'
+import { canonicalProjectPath, canonicalSpaceId } from '../src/link/registry.mjs'
 import { startWebServer as startServer, scrubMessage } from '../src/web-server.mjs'
 
 const BIN=fileURLToPath(new URL('../bin/holoself.mjs',import.meta.url))
 
 const temp=()=>mkdtemp(join(tmpdir(),'holoself-web-project-'))
+// A space's path is canonical (project_key bindings hold no path), so a project is found by identity, not spelling.
+const sameSpace=(a,b)=>canonicalProjectPath(a)===canonicalProjectPath(b)
 // Every Workbench API route requires the session token and mutations require a loopback Origin, as the served page sends them.
 const tokens=new Map()
 async function startWebServer(options){const app=await startServer(options);tokens.set(app.url,app.token);return app}
@@ -59,7 +64,7 @@ test('Workbench discovers canonical linked projects and lazily browses local fol
   const app=await startWebServer({project:productCwd,root:self,port:0})
   try{
     const spaces=await (await fetch(`${app.url}/api/spaces`)).json()
-    const discovered=spaces.data.find(space=>normalizeProjectPath(space.path)===normalizeProjectPath(project))
+    const discovered=spaces.data.find(space=>sameSpace(space.path,project))
     assert.equal(discovered.discoveredFrom,'lenses/bindings.json')
     assert.ok(['configured','activated','active'].includes(discovered.status.state))
     const listing=await (await fetch(`${app.url}/api/filesystem/folders?path=${encodeURIComponent(project)}`)).json()
@@ -86,7 +91,7 @@ test('Workbench detects legacy mount, suggests migration setup, and migrates to 
   try {
     const session = (await (await fetch(`${app.url}/api/session`)).json()).data
     const spacesRes = await (await fetch(`${app.url}/api/spaces`)).json()
-    const space = spacesRes.data.find(s => normalizeProjectPath(s.path) === normalizeProjectPath(project))
+    const space = spacesRes.data.find(s => sameSpace(s.path,project))
     assert.ok(space)
     assert.equal(space.status.state, 'legacy-mount')
     assert.equal(space.status.mode, 'legacy-mount')
@@ -107,7 +112,7 @@ test('Workbench detects legacy mount, suggests migration setup, and migrates to 
     assert.equal((await lstat(join(project, '.holoself'))).isDirectory(), true)
 
     const updatedSpaces = await (await fetch(`${app.url}/api/spaces`)).json()
-    const updated = updatedSpaces.data.find(s => normalizeProjectPath(s.path) === normalizeProjectPath(project))
+    const updated = updatedSpaces.data.find(s => sameSpace(s.path,project))
     assert.equal(updated.status.mode, 'metadata-link')
   } finally {
     await new Promise(resolveClose => app.server.close(resolveClose))
@@ -117,7 +122,7 @@ test('Workbench detects legacy mount, suggests migration setup, and migrates to 
 test('Workbench binding CRUD uses optimistic hashes and prunes the catalog after unbinding',async()=>{
  const self=await temp(),project=await temp();await run(['init','--root',self]);await run(['link','add','--project',project,'--self',self,'--lens','professional','--no-activate','--yes']);const app=await startWebServer({root:self,port:0})
  try{const session=(await(await fetch(app.url+'/api/session')).json()).data,headers={'content-type':'application/json','x-holoself-token':app.token},store=(await(await fetch(app.url+'/api/bindings')).json()).data
- const changed=await fetch(app.url+'/api/bindings',{method:'PUT',headers,body:JSON.stringify({project,default_lens:'public-voice',secondary_lenses:['general'],expectedHash:store.hash})});assert.equal(changed.status,200);const current=(await changed.json()).data;assert.equal(current.bindings[normalizeProjectPath(project)].default_lens,'public-voice')
+ const changed=await fetch(app.url+'/api/bindings',{method:'PUT',headers,body:JSON.stringify({project,default_lens:'public-voice',secondary_lenses:['general'],expectedHash:store.hash})});assert.equal(changed.status,200);const current=(await changed.json()).data;assert.equal(current.bindings[linkProjectKey(project)].default_lens,'public-voice')
  const stale=await fetch(app.url+'/api/bindings',{method:'DELETE',headers,body:JSON.stringify({project,expectedHash:store.hash})});assert.equal(stale.status,409);assert.equal((await(await fetch(app.url+'/api/spaces')).json()).data.length,1)
  const removed=await fetch(app.url+'/api/bindings',{method:'DELETE',headers,body:JSON.stringify({project,expectedHash:current.hash})});assert.equal(removed.status,200);assert.deepEqual((await(await fetch(app.url+'/api/spaces')).json()).data,[])
  }finally{await new Promise(done=>app.server.close(done))}
@@ -130,7 +135,7 @@ test('Workbench repair previews the plan and applies only a matching plan hash',
   const app=await startWebServer({root:self,port:0})
   try{
     const session=(await(await fetch(`${app.url}/api/session`)).json()).data,headers={'content-type':'application/json','x-holoself-token':app.token}
-    const space=(await(await fetch(`${app.url}/api/spaces`,{headers})).json()).data.find(item=>normalizeProjectPath(item.path)===normalizeProjectPath(project))
+    const space=(await(await fetch(`${app.url}/api/spaces`,{headers})).json()).data.find(item=>sameSpace(item.path,project))
     const post=payload=>fetch(`${app.url}/api/spaces/${space.id}/repair`,{method:'POST',headers,body:JSON.stringify(payload)})
     const runtimeBefore=await readFile(join(project,'.holoself','runtime.json'),'utf8')
     const preview=(await(await post({})).json()).data.preview
@@ -148,7 +153,7 @@ async function actionFixture({legacy=false}={}){
   const self=await temp(),project=await temp();await run(['init','--root',self])
   if(legacy){writeBinding(self,project,{default_lens:'general',secondary_lenses:[]});await run(['link','--root',self,'--target',project,'--yes'])}
   else await run(['link','add','--project',project,'--self',self,'--lens','professional','--secondary-lenses','general','--project-include','src/**','--activate','agents','--install-skill','none','--yes'])
-  const app=await startWebServer({root:self,port:0}),session=(await(await fetch(app.url+'/api/session')).json()).data,headers={'content-type':'application/json','x-holoself-token':app.token},space=(await(await fetch(app.url+'/api/spaces')).json()).data.find(item=>normalizeProjectPath(item.path)===normalizeProjectPath(project))
+  const app=await startWebServer({root:self,port:0}),session=(await(await fetch(app.url+'/api/session')).json()).data,headers={'content-type':'application/json','x-holoself-token':app.token},space=(await(await fetch(app.url+'/api/spaces')).json()).data.find(item=>sameSpace(item.path,project))
   return {self,project,app,space,post:(action,payload={})=>fetch(`${app.url}/api/spaces/${space.id}/${action}`,{method:'POST',headers,body:JSON.stringify(payload)}),close:()=>new Promise(done=>app.server.close(done))}
 }
 test('space action previews write nothing',async()=>{
@@ -306,7 +311,7 @@ test('Workbench maps validation and CLI refusals to 400/413, stale hashes to 409
   assert.match(invalidLensBind.error.message,/unknown lens: nonexistent-lens/)
 
   const spaces=(await (await globalThis.fetch(`${app.url}/api/spaces`,{headers:{'x-holoself-token':token}})).json()).data
-  const space=spaces.find(item=>normalizeProjectPath(item.path)===normalizeProjectPath(project))
+  const space=spaces.find(item=>sameSpace(item.path,project))
   assert.equal((await call('/api/bindings',{method:'PUT',body:{project,default_lens:'general',secondary_lenses:[],expectedHash:'0'.repeat(64)}},409)).error.code,'STALE_BINDINGS')
   assert.equal((await call('/api/document',{method:'PUT',body:{path:'profile/identity.md',content:'# Identity\n',expectedHash:'0'.repeat(64)}},409)).error.code,'STALE_DOCUMENT')
   assert.equal((await call('/api/lenses/general/instructions',{method:'PUT',body:{instructions:{purpose:'Test'},expectedHash:'0'.repeat(64)}},409)).error.code,'STALE_REGISTRY')
@@ -344,4 +349,60 @@ test('Workbench maps validation and CLI refusals to 400/413, stale hashes to 409
    assert.deepEqual(err4,{ok:false,error:{code:'INTERNAL',message:'internal error'}})
   }finally{delete process.env.HOLOSELF_TEST_FORCE_INTERNAL}
  }finally{await new Promise(done=>app.server.close(done))}
+})
+
+test('Workbench repair preview shows a shared-lens grant update and apply never widens the grant',async()=>{
+  const self=await temp(),project=await temp()
+  await run(['init','--root',self])
+  await run(['link','add','--project',project,'--self',self,'--lens','general','--secondary-lenses','professional','--no-activate','--yes'])
+  await run(['link','approve','--project',project,'--self',self,'--lenses','general'])
+  const allowed=async()=>JSON.parse(await readFile(join(self,'.holoself','links.json'),'utf8')).links[0].allowed_lenses
+  const app=await startWebServer({root:self,port:0})
+  try{
+    const headers={'content-type':'application/json','x-holoself-token':app.token}
+    const space=(await(await fetch(`${app.url}/api/spaces`,{headers})).json()).data.find(item=>sameSpace(item.path,project))
+    const post=payload=>fetch(`${app.url}/api/spaces/${space.id}/repair`,{method:'POST',headers,body:JSON.stringify(payload)})
+    const preview=(await(await post({})).json()).data.preview
+    assert.deepEqual(preview.plan.grant_update.adds,['professional']);assert.equal(preview.plan.grant_update.applied,false)
+    const applied=await post({apply:true,plan_hash:preview.plan_hash});assert.equal(applied.status,200)
+    assert.deepEqual(await allowed(),['general'])
+  }finally{await new Promise(done=>app.server.close(done))}
+  const ui=readFileSync(fileURLToPath(new URL('../web/app.mjs',import.meta.url)),'utf8')
+  assert.match(ui,/grant_update/);assert.match(ui,/--accept-shared-lenses/)
+})
+
+test('Workbench repair never performs a project_key renewal and never widens through a legacy lens migration',async()=>{
+  const self=await temp(),project=await temp(),copy=await temp()
+  await run(['init','--root',self])
+  await run(['link','add','--project',project,'--self',self,'--lens','general','--secondary-lenses','professional','--no-activate','--yes'])
+  await run(['link','approve','--project',project,'--self',self,'--lenses','general'])
+  const key=linkProjectKey(project),file=join(project,'.holoself','link.yaml'),linkBody=await readFile(file,'utf8')
+  // A committed legacy field equal to the binding triggers binding_migration on repair.
+  await writeFile(file,linkBody.replace('  access:','  default_lens: general\n  secondary_lenses: [professional]\n  access:'))
+  const registryFile=join(self,'.holoself','links.json'),registry=()=>readFile(registryFile,'utf8').then(JSON.parse)
+  const app=await startWebServer({root:self,port:0})
+  try{
+    const headers={'content-type':'application/json','x-holoself-token':app.token}
+    const spaces=async()=>(await(await fetch(`${app.url}/api/spaces`,{headers})).json()).data
+    const post=(id,payload)=>fetch(`${app.url}/api/spaces/${id}/repair`,{method:'POST',headers,body:JSON.stringify(payload)})
+    const space=(await spaces()).find(item=>sameSpace(item.path,project))
+    const preview=(await(await post(space.id,{})).json()).data.preview
+    assert.ok(preview.plan.binding_migration);assert.deepEqual(preview.plan.grant_update.adds,['professional'])
+    assert.equal((await post(space.id,{apply:true,plan_hash:preview.plan_hash})).status,200)
+    assert.deepEqual((await registry()).links[0].allowed_lenses,['general'])
+    // A copy attested later under the same key: the plan shows the renewal, and Apply refuses it.
+    mkdirSync(join(copy,'.holoself'),{recursive:true});writeFileSync(join(copy,'.holoself','link.yaml'),await readFile(file,'utf8'))
+    const stored=await registry(),[entry]=stored.links,copyPath=canonicalProjectPath(copy)
+    stored.links.push({...entry,project_id:canonicalSpaceId(copy),project_path:copyPath,created_at:new Date(Date.now()+1000).toISOString()})
+    writeFileSync(registryFile,JSON.stringify(stored,null,2))
+    const catalogFile=join(self,'ui','catalog.json'),catalog=JSON.parse(await readFile(catalogFile,'utf8'))
+    catalog.spaces.push({id:'copy-space',path:copy,addedAt:new Date().toISOString()});writeFileSync(catalogFile,JSON.stringify(catalog,null,2))
+    const renewal=(await(await post('copy-space',{})).json()).data.preview
+    assert.ok(renewal.plan.project_key_renewal)
+    const refused=await post('copy-space',{apply:true,plan_hash:renewal.plan_hash})
+    assert.equal(refused.status,409);assert.equal((await refused.json()).error.code,'PROJECT_KEY_RENEWAL_REQUIRES_CLI')
+    assert.equal(linkProjectKey(copy),key)
+  }finally{await new Promise(done=>app.server.close(done))}
+  const ui=readFileSync(fileURLToPath(new URL('../web/app.mjs',import.meta.url)),'utf8')
+  assert.match(ui,/project_key_renewal/);assert.match(ui,/portable_migration/)
 })

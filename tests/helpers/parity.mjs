@@ -11,6 +11,7 @@
 //     slashes, plus lowercase forms on win32
 //   - ISO-8601 timestamps, including dash forms in generated file names -> <TIME>
 //   - UUIDs (proposal ids, packet ids) -> <UUID:n>, numbered by first appearance per case
+//   - portable link identifiers hs-self-<hex> and hs-proj-<hex> anywhere in the output -> hs-self-<HEX:n>
 //   - hexadecimal values under the JSON keys in VOLATILE_HEX_KEYS (random salts and secrets,
 //     path-derived ids, cache keys, links-registry hashes) -> <HEX:n>, numbered by first appearance per
 //     case; the same values are masked wherever else they appear (plain-text packets, cursor
@@ -60,7 +61,7 @@ function cleanEnv(home) {
   // the golden is the same on every platform; Windows behaviour has its own unit test.
   // HOLOSELF_INDEX_ENGINE=json pins the deterministic JSON engine so the golden does not depend on node:sqlite
   // availability; the optional FTS5 engine has its own suite (tests/fts-index.test.mjs).
-  return { ...env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), NO_COLOR: '1', TZ: 'UTC', HOLOSELF_TEST_PLATFORM: 'linux', HOLOSELF_INDEX_ENGINE: 'json' }
+  return { ...env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), HOLOSELF_CONFIG_DIR: join(home, '.config', 'holoself'), NO_COLOR: '1', TZ: 'UTC', HOLOSELF_TEST_PLATFORM: 'linux', HOLOSELF_INDEX_ENGINE: 'json' }
 }
 
 export async function seedParityFixture(fx) {
@@ -244,7 +245,8 @@ function mcpInput() {
 export const VOLATILE_HEX_KEYS = new Set([
   'key', // decision-cache key: includes the canonical self/project location
   'identity_id', // HMAC over the caller identity with the random per-root cursor secret
-  'self_id', // derived from the canonical self root path
+  'self_id', // cursor payload: derived from the canonical self root path; link.yaml/config.json: random hs-self-<hex>
+  'project_key', // random hs-proj-<hex> per linked project (portable links, #131)
   'binding_salt', // random per link
   'project_id', // hs-space-<hash of canonical project path>
   'space_id',
@@ -290,6 +292,8 @@ export function normalise(cases, fx) {
     }
     entry.args?.forEach((arg, index) => { if (entry.args[index - 1] === '--cursor') visit(decodeCursor(arg), '', learn) })
     for (const parsed of parseOutput(entry.stdout || '')) visit(parsed, '', learn)
+    // Portable link identifiers (hs-self-<hex>, hs-proj-<hex>) are random wherever they appear, including messages.
+    for (const match of `${entry.stdout || ''}\n${entry.stderr || ''}`.matchAll(/\bhs-(?:self|proj)-([0-9a-f]{32})\b/g)) volatile.add(match[1])
     // Plain-text output (concatenated JSON documents, approval previews) is scanned by pattern.
     for (const match of `${entry.stdout || ''}\n${entry.stderr || ''}`.matchAll(textKey)) {
       if (match[1] && !volatileKey(match[1], entry)) continue

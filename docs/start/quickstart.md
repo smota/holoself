@@ -17,7 +17,7 @@ This guide uses the installed `holoself` package bin. To evaluate or develop fro
 
 ## 2. Initialize private context
 
-Default location is `~/.holoself`. Override with `HOLOSELF_HOME` or `--data-dir`; CLI option wins.
+Default location is `~/.holoself`. Override with `HOLOSELF_HOME` or `--data-dir`; CLI option wins. Linked projects find the self through a per-machine self map instead (`HOLOSELF_CONFIG_DIR` overrides its directory); see [several machines](../guides/multiple-machines.md).
 
 ```bash
 holoself init --data-dir C:/private/my-self

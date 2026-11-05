@@ -43,7 +43,7 @@ export async function linkStatus(o, sub, project) {
   const health = healthStatus(project, link, o),
     { project_context, binding_salt, ledger: _ledger, ...selfContext } = link,
     proposalScan = scanProposalStore(project)
-  const selfExists = existsSync(link.path)
+  const selfExists = Boolean(link.path) && existsSync(link.path)
   let registryAttested = false
   if (selfExists) {
     try {
@@ -59,7 +59,7 @@ export async function linkStatus(o, sub, project) {
     state: health.state,
     mode: health.mode,
     isLegacyMount: health.isLegacyMount,
-    self_context: { ...selfContext, path: slash(link.path) },
+    self_context: { ...selfContext, path: link.path ? slash(link.path) : null },
     project_context,
     binding_salt_present: Boolean(binding_salt && binding_salt.length === 32),
     registry_attested: registryAttested,

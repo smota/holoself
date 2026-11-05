@@ -1,3 +1,4 @@
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, readFile, rm, writeFile, symlink } from 'node:fs/promises'
@@ -7,6 +8,7 @@ import { DEFAULT_LENS_IDS, loadLensRegistry, saveCustomLens, removeCustomLens, s
 import { normalizeProjectPath, readBindings, writeBinding, resolveBinding } from '../src/bindings.mjs'
 import { run } from '../src/cli.mjs'
 import { contextData } from '../src/ecosystem.mjs'
+import { linkProjectKey } from '../src/link/config.mjs'
 const temp=()=>mkdtemp(join(tmpdir(),'holoself-lens-'))
 const definition=id=>({schema_version:1,id,title:id,sensitivity_access:[],instructions:{purpose:'Synthetic perspective'}})
 async function capture(fn){const old=console.log;let out='';console.log=(...args)=>out+=args.join(' ')+'\n';try{await fn();return out}finally{console.log=old}}
@@ -32,14 +34,14 @@ test('bindings normalize Windows paths and reject malformed stores, collisions a
  for(const value of ['{',JSON.stringify({schema_version:2,bindings:{}}),JSON.stringify({schema_version:1,bindings:{'C:/Example/Domain':{default_lens:'general',secondary_lenses:[]},'c:/example/domain':{default_lens:'professional',secondary_lenses:[]}}})]){await writeFile(join(root,'lenses','bindings.json'),value);assert.throws(()=>readBindings(root),/malformed|schema|conflicting/)}
 })
 test('binding CRUD controls context and attestation grants; unbound execution fails closed',async()=>{
- const {root,project}=await fixture();await capture(()=>run(['lens','bind','--root',root,'--project',project,'--lens','professional','--yes']));assert.equal(contextData({project,noCache:true}).lens,'professional');assert.deepEqual(readBindings(root).bindings[normalizeProjectPath(project)].secondary_lenses,[])
+ const {root,project}=await fixture();await capture(()=>run(['lens','bind','--root',root,'--project',project,'--lens','professional','--yes']));assert.equal(contextData({project,noCache:true}).lens,'professional');assert.deepEqual(readBindings(root).bindings[linkProjectKey(project)].secondary_lenses,[])
  assert.throws(()=>removeCustomLens(root,'professional',loadLensRegistry(root).registry_hash),/bound/)
  await capture(()=>run(['lens','unbind','--root',root,'--project',project,'--yes']));assert.throws(()=>contextData({project}),error=>error.code==='LENS_BINDING_REQUIRED'&&error.message.includes('lens bind'))
  const cwd=process.cwd();process.chdir(root);try{assert.equal(contextData({root,rootExplicit:true,lens:'private'}).lens,'private')}finally{process.chdir(cwd)}
 })
 test('repair migrates legacy choices, removes legacy fields and refuses a conflicting self choice',async()=>{
- const {root,project}=await fixture(),file=join(project,'.holoself','link.yaml'),original=await readFile(file,'utf8');writeBinding(root,project,null);await writeFile(file,original.replace('  access:', '  default_lens: career\n  secondary_lenses: [publishing]\n  access:'))
- await capture(()=>run(['link','repair','--project',project,'--yes','--no-activate']));assert.equal(resolveBinding(root,project).default_lens,'professional');assert.deepEqual(resolveBinding(root,project).secondary_lenses,['public-voice']);assert.doesNotMatch(await readFile(file,'utf8'),/default_lens|secondary_lenses/);assert.equal(contextData({project}).lens,'professional')
+ const {root,project}=await fixture(),file=join(project,'.holoself','link.yaml'),original=await readFile(file,'utf8'),projectKey=linkProjectKey(project);writeBinding(root,project,null,{projectKey});await writeFile(file,original.replace('  access:', '  default_lens: career\n  secondary_lenses: [publishing]\n  access:'))
+ await capture(()=>run(['link','repair','--project',project,'--yes','--no-activate']));assert.equal(resolveBinding(root,project,{projectKey}).default_lens,'professional');assert.deepEqual(resolveBinding(root,project,{projectKey}).secondary_lenses,['public-voice']);assert.doesNotMatch(await readFile(file,'utf8'),/default_lens|secondary_lenses/);assert.equal(contextData({project}).lens,'professional')
  await writeFile(file,original.replace('  access:','  default_lens: general\n  access:'));const before=await readFile(join(root,'lenses','bindings.json'),'utf8');await assert.rejects(run(['link','repair','--project',project,'--yes','--no-activate']),/conflicts/);assert.equal(await readFile(join(root,'lenses','bindings.json'),'utf8'),before)
 })
 test('public voice retrieves compensation and unapproved evidence; explicit private markers stay private',async()=>{
