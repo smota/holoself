@@ -1,3 +1,4 @@
+import { observeOperation } from './product-telemetry.mjs'
 import { existsSync, lstatSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, readlinkSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { join, resolve, relative, dirname, basename, isAbsolute } from 'node:path'
@@ -221,7 +222,7 @@ async function confirm(o, message) {
     rl.close()
   }
 }
-export async function run(argv, options = {}) {
+async function execute(argv, options = {}) {
   const o = parse(argv)
   if (process.env.NODE_TEST_CONTEXT && options?.afterConfigure) o.afterConfigure = options.afterConfigure
   validateFlags(o)
@@ -690,4 +691,10 @@ export async function run(argv, options = {}) {
     return
   }
   throw new Error(`unknown command: ${o.command}`)
+}
+
+export async function run(argv, options = {}) {
+  return observeOperation(() => execute(argv, options), {
+    classify: () => process.exitCode ? 'error' : 'success'
+  })
 }

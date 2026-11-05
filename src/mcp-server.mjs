@@ -22,6 +22,7 @@ import { createToolPool } from './mcp-pool.mjs'
 import { clientMcpContextData, clientMcpCreateProposal, clientMcpPreviewProposal, clientMcpSearch, clientMcpStatus } from './retrieval/client-mcp.mjs'
 import { AUDIT_LOG_MAX_BYTES, appendAuditLine } from './shared/audit-log.mjs'
 import { VERSION } from './version.mjs'
+import { createMcpObserver } from './product-telemetry.mjs'
 
 const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26']
 const TOOL_PREFIX = 'holoself_'
@@ -438,8 +439,10 @@ export function createMcpSession({
   auditLog = process.env.HOLOSELF_MCP_AUDIT_LOG,
   auditLogMaxBytes = AUDIT_LOG_MAX_BYTES,
   pool = null,
-  maxPending = DEFAULT_MAX_PENDING_CALLS
+  maxPending = DEFAULT_MAX_PENDING_CALLS,
+  telemetry = {}
 } = {}) {
+  const observeMcp = createMcpObserver(telemetry)
   // Client mode: the identity and the proposal mode shown in tools/list are fixed at startup; every call re-attests.
   const startupClient = client ? attestClient(client.self, client.client_id) : null,
     sessionTools = client ? [...CLIENT_READ_TOOLS, ...(startupClient.proposals === 'inbox' ? CLIENT_PROPOSAL_TOOLS : [])] : MCP_TOOLS,
@@ -474,6 +477,7 @@ export function createMcpSession({
     for (const done of waiters) done()
   }
   function dispatch(request) {
+    const finishObservation = observeMcp()
     const name = request.params?.name,
       args = request.params?.arguments || {},
       key = idKey(request.id)
@@ -483,28 +487,41 @@ export function createMcpSession({
       // and the worker attests again before running the tool.
       if (client) attestClient(client.self, client.client_id)
     } catch (error) {
+      finishObservation('error')
       const result = toolError(error)
       auditToolCall(log, name, result)
       write(JSON.stringify(response(request.id, result)))
       return
     }
     if (inFlight.size >= maxPending) {
+      finishObservation('busy')
       log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok: false, error_code: 'SERVER_BUSY' })
       write(JSON.stringify(response(request.id, null, protocolError(SERVER_BUSY_RPC_CODE, 'Server busy', { code: 'SERVER_BUSY' }))))
       return
     }
-    const handle = pool.submit({ project, client, name, args }, { key: affinityKey(name, args, sessionLens), exclusive: EXCLUSIVE_TOOLS.has(name) })
+    let handle
+    try {
+      handle = pool.submit({ project, client, name, args }, { key: affinityKey(name, args, sessionLens), exclusive: EXCLUSIVE_TOOLS.has(name) })
+    } catch (error) {
+      finishObservation('error')
+      throw error
+    }
     inFlight.set(key, handle)
     handle.promise.then(outcome => {
       settled(key)
       // A cancelled request gets no response (MCP cancellation) and never a partial packet.
-      if (outcome.status === 'cancelled') return log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok: false, error_code: 'CANCELLED' })
+      if (outcome.status === 'cancelled') {
+        finishObservation('cancelled')
+        return log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok: false, error_code: 'CANCELLED' })
+      }
       // A cancelled write that had already started ran to completion: record what it did, still send nothing.
       if (outcome.status === 'dropped') {
+        finishObservation('cancelled')
         const ok = Boolean(outcome.value?.ok)
         return log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok, cancelled: true, error_code: ok ? null : outcome.value?.error?.code || 'HOLOSELF_ERROR' })
       }
       if (outcome.status === 'timeout') {
+        finishObservation('timeout')
         log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok: false, error_code: 'TOOL_TIMEOUT' })
         return write(JSON.stringify(response(request.id, null, protocolError(TOOL_TIMEOUT_RPC_CODE, 'Tool call timed out', { code: 'TOOL_TIMEOUT' }))))
       }
@@ -513,11 +530,13 @@ export function createMcpSession({
           try {
             attestClient(client.self, client.client_id)
           } catch (error) {
+            finishObservation('error')
             const result = toolError(error)
             auditToolCall(log, name, result)
             return write(JSON.stringify(response(request.id, result)))
           }
         }
+        finishObservation('success')
         log({ at: new Date().toISOString(), event: 'tools/call', tool: name, ok: true, error_code: null })
         if (CONTEXT_TOOLS.has(name)) {
           try {
@@ -527,6 +546,7 @@ export function createMcpSession({
         // Same bytes as JSON.stringify(response(id, result)): the worker already serialised the result.
         return write(`{"jsonrpc":"2.0","id":${JSON.stringify(request.id)},"result":${outcome.value.json}}`)
       }
+      finishObservation('error')
       const result = toolError(outcome.status === 'ok' ? errorFromJob(outcome.value.error) : new Error('worker stopped'))
       auditToolCall(log, name, result)
       write(JSON.stringify(response(request.id, result)))
@@ -599,11 +619,13 @@ export function createMcpSession({
         log({ at: new Date().toISOString(), event: 'tools/list', tools: sessionTools.length })
       } else if (request.method === 'tools/call') {
         if (pool) return dispatch(request)
+        const finishObservation = observeMcp()
         try {
           result = toolResult(callTool(project, request.params?.name, request.params?.arguments || {}, client), request.params?.name)
         } catch (error) {
           result = toolError(error)
         }
+        finishObservation(result.isError ? 'error' : 'success')
         auditToolCall(log, request.params?.name, result)
         if (!result.isError) recordMcpLedger(request.params?.name, result.structuredContent?.data)
       } else throw Object.assign(new Error(`Method not found: ${request.method}`), { rpcCode: -32601 })

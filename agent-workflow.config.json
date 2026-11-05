@@ -719,5 +719,12 @@
       "grantsPublicationOrMergePower": false
     },
     "confirmedDigest": "9c9af145f1f4c165168ff43bceef9dc81b2b42e4769c204041b3365d8d4c1bf9"
+  },
+  "observability": {
+    "enabled": true,
+    "offline": false,
+    "otlpEndpoint": "http://127.0.0.1:24318",
+    "serviceName": "holoself-delivery",
+    "maxQueueSize": 256
   }
 }

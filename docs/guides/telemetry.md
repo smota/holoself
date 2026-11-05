@@ -1,0 +1,24 @@
+# Product operation telemetry
+
+The CLI optionally exports one `cli.operation` OTLP/HTTP protobuf span per completed command when `~/.config/observability/consumer.env` exists with `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:24318` and `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`. IPv6 loopback is also supported. The file is parsed as bounded data, never sourced. Only the endpoint and protocol are used; resource attributes and unrelated keys are not forwarded. A missing or invalid file disables export. Set `HOLOSELF_TELEMETRY=off` for a process to opt out. The standard `OTEL_SDK_DISABLED=true` or `OTEL_SDK_DISABLED=1` also disables export. Endpoint, protocol and resource settings from global OTEL environment variables are not consumed; no global provider is registered.
+
+Spans contain fixed service identity `holoself`, start/end times, trace/span correlation IDs and one finite `operation.outcome`: `success` or `error`, based on thrown errors and the command exit code. Duration ends before export. There are no command names, arguments, paths, product identifiers, contents, personal context, error messages, token estimates or cost values. This measures CLI completion, not external application delivery or SDLC execution. MCP tool calls are also covered as described below; other direct domain calls are not covered.
+
+Export is best effort: no retries, no redirects, no authentication, literal loopback HTTP only and a 200 ms deadline per completed command. Export failure preserves the product result and output. A killed process cannot emit a completion span. Long-running operations emit only when they complete; this is not an event stream. No telemetry signal grants approval or changes product state.
+
+Source changes do not activate installed copies. After review, the parent must publish/install the candidate through the declared product workflow and separately verify synthetic sink delivery. Removing the consumer file or setting the product opt-out disables collection. No station configuration is modified by the product.
+
+Session-start hook invocation in `bin/holoself.mjs` bypasses this wrapper and does not export. Web requests remain outside this coverage. MCP process lifetime still has its CLI completion span, independently of the tool-call spans below.
+
+A valid inherited `TRACEPARENT` links the operation to its calling bridge/tool span: the trace ID is preserved, the incoming span ID becomes the parent, and this operation receives a fresh nonzero child span ID. Trace flags are preserved. Accepted context has exactly 55 characters, version `00`, lowercase hexadecimal IDs/flags, and nonzero trace and parent span IDs. Malformed, oversized or unsupported context is ignored and the operation starts a new trace; rejected strings are never logged or attached as attributes. Trace/span IDs are correlation fields, never metric labels.
+
+
+## MCP tool completion
+
+The main MCP session dispatcher emits `mcp.operation` for tool calls completed inline or by the production worker pool. It records only the fixed service identity, timing, generated correlation IDs and `operation.outcome`: `success`, `error` (including tool `isError`, validation, authorization or worker failure), `timeout`, `cancelled` (including a cancelled write whose result was dropped), or `busy`. No tool name, arguments, returned context, error message/code, profile, subject, query, path, session identifier or client identity is exported. Worker execution and inline session acceptance keep their synchronous return contracts; RPC replies, cancellation and queue policy are unchanged.
+
+There is no declared per-request trace-context metadata contract in this server. Each tool-call span therefore starts an independent, uncorrelated root. Neither the persistent process's startup `TRACEPARENT` nor arbitrary request `_meta` values parent these calls. CLI inheritance of validated `TRACEPARENT` remains unchanged.
+
+MCP exports never await HTTP or participate in session drain. Across all sessions in a process, at most four HTTP requests are in flight, with no pending queue; excess completions are dropped. Each request has the same 200 ms finite deadline and no retries. Background sockets and timers do not keep the process alive, so shutdown may lose final spans. Export and classification failures cannot replace product results. A killed worker/process cannot guarantee a completion observation; malformed RPC messages, duplicate request IDs, protocol control messages, prompts and direct domain calls are outside this tool-call coverage.
+
+The safe consumer configuration and product/global opt-outs are sampled when a session is created. A missing, unsafe or disabled consumer produces no MCP export. Restart the server to pick up consumer changes; source edits do not reload or activate an existing MCP process. Native hooks remain outside all product telemetry.

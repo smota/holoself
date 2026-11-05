@@ -167,3 +167,5 @@ Compatibility entry points remain at [architecture.md](architecture.md), [linked
 - [Execution Distributions](execution-distributions.md)
 - [Product Discipline](sources/product-discipline.md)
 
+
+Optional privacy-safe [product operation telemetry](guides/telemetry.md) documents collection, opt-out and activation boundaries.
