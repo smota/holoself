@@ -205,14 +205,19 @@ const CUT_SHAPES = {
 }
 for (const [label, shape] of Object.entries(CUT_SHAPES))
   test(`N3: sections is a subset of content when the snippet limit falls on ${label}`, async t => {
-    const docs = {}
-    for (const n of [280, 300, 330, 340, 345, 350, 355]) docs[`context/cut-${n}.md`] = doc(`# T\n\n${pad(n)}\n\n${shape}\n\n${pad(200)}\n`)
+    // The old cut kept 357 characters. These pads end it on the shape's last characters, and on either side of them.
+    const docs = {},
+      firstLine = shape.split('\n')[0].length,
+      exact = 357 - 2 - firstLine
+    for (const n of [exact - 2, exact - 1, exact, exact + 1, exact + 2, exact + 3, exact + 4]) docs[`context/cut-${n}.md`] = doc(`# T\n\n${pad(n)}\n\n${shape}\n\n${pad(200)}\n`)
     const fixture = await linked(t, docs)
     for (const rel of Object.keys(docs)) {
       const got = paths(fixture, 'linked', 'general', 'generic', rel, 'filler')
-      assert.ok(!got.content.includes('200000'), `${rel} content`)
-      assert.ok(!got.sections.includes('200000'), `${rel} sections`)
-      assert.ok(!got.claims.includes('200000'), `${rel} claims`)
+      for (const needle of ['2000', 'Salary is']) {
+        assert.ok(!got.content.includes(needle), `${rel} content`)
+        assert.ok(!got.sections.includes(needle), `${rel} sections`)
+        assert.ok(!got.claims.includes(needle), `${rel} claims`)
+      }
       assert.ok(!got.sections.includes('full_text'), `${rel}: the full text never leaves the catalog`)
     }
     assert.ok(!JSON.stringify(searchIndex(buildIndex(fixture.project), 'filler', 'general', null, null, 'current', {})).includes('200000'), 'search')
