@@ -7,6 +7,7 @@ import { CUSTOM_SENSITIVITY_CATEGORIES, DEFAULT_LENSES, DEFAULT_LENS_IDS, lensId
 import { CLAIM_MARKER_RE, claimMarkerRewrites, stripClaimMarkers } from './markdown/claim-blocks.mjs'
 import {
   allowedDocument,
+  deliveredSection,
   disclosure as runtimeDisclosure,
   filterClaimVisibility,
   filterFieldVisibility,
@@ -482,7 +483,7 @@ function subDocumentOutputs(text, meta, lens, adapter, registry) {
   const raw = privacySections(body, policy, registry),
     annotations = extractSectionAnnotations(raw, policy),
     visible = list => list.filter(item => catalogElementVisible(item, lens, adapter))
-  for (const section of visible(buildCatalogSections(raw))) add('sections', section.heading, filtered(section.snippet || ''))
+  for (const section of visible(buildCatalogSections(raw))) add('sections', section.heading, deliveredSection(section, filtered).snippet)
   for (const claim of visible(annotations.claims)) add('claims', claim.text)
   for (const tag of visible(annotations.tags)) add('tags', tag.value)
   for (const link of visible(annotations.links)) add('links', link.value)
@@ -637,6 +638,11 @@ export function validateMigrationReceiptSchema(receipt) {
   return { valid: errors.length === 0, errors }
 }
 
+// The violation names an output path and a cell, never document text.
+function gateRefusal(path, violation) {
+  return `${path}: the non-amplification gate refused this rewrite (${violation}); left out of the migration, fix it by hand`
+}
+
 export function planPolicyMigration(selfRoot, options = {}) {
   const migrationsDir = join(selfRoot, '.holoself', 'migrations')
   if (!options.dryRun && !existsSync(migrationsDir)) mkdirSync(migrationsDir, { recursive: true })
@@ -719,9 +725,9 @@ export function planPolicyMigration(selfRoot, options = {}) {
         confirmActivation: true
       })
       if (!nonAmp.valid) {
-        const err = new Error(`Non-amplification gate failed for ${item.relPath}: ${nonAmp.violation}`)
-        err.code = 'NON_AMPLIFICATION_VIOLATION'
-        throw err
+        // One document the gate refuses stays as it is. It must not take the rest of the plan with it.
+        warnings.push(gateRefusal(item.relPath, nonAmp.violation))
+        continue
       }
       for (const [lens, count] of Object.entries(nonAmp.coverageLoss)) coverageLossSummary[lens] = (coverageLossSummary[lens] || 0) + count
       entries.push({
@@ -811,9 +817,9 @@ export function planPolicyMigration(selfRoot, options = {}) {
         afterText: proposedAfterText
       })
       if (!baselineNonAmp.valid) {
-        const err = new Error(`Non-amplification gate failed for ${item.relPath}: ${baselineNonAmp.violation}`)
-        err.code = 'NON_AMPLIFICATION_VIOLATION'
-        throw err
+        // One document the gate refuses stays as it is. It must not take the rest of the plan with it.
+        warnings.push(gateRefusal(item.relPath, baselineNonAmp.violation))
+        continue
       }
 
       const reach = migrationActivationReach(proposedAfterEffective, {
@@ -898,9 +904,9 @@ export function planPolicyMigration(selfRoot, options = {}) {
         sourceSpaceId: item.spaceId
       })
       if (!nonAmp.valid) {
-        const err = new Error(`Non-amplification gate failed for ${item.relPath}: ${nonAmp.violation}`)
-        err.code = 'NON_AMPLIFICATION_VIOLATION'
-        throw err
+        // One document the gate refuses stays as it is. It must not take the rest of the plan with it.
+        warnings.push(gateRefusal(item.relPath, nonAmp.violation))
+        continue
       }
 
       for (const [lens, count] of Object.entries(nonAmp.coverageLoss)) {

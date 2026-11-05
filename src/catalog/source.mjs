@@ -4,7 +4,7 @@ import { join, relative } from 'node:path'
 import { VISIBILITIES } from '../annotations.mjs'
 import { canonicalSort, readSourceWithStat, slugHeading, sourceRef } from '../catalog.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
-import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
+import { replaceClaimBlocks, withoutRuleLines } from '../markdown/claim-blocks.mjs'
 import { claims, links, sections, tags } from '../markdown/text.mjs'
 import { privacyMetadata, scopedLines, visibility } from '../policy/access.mjs'
 import { resolveDocumentPolicy } from '../policy/policy-defaults.mjs'
@@ -23,6 +23,7 @@ export function catalogFilePath(project) {
 export function privacySections(body, policy, registry = null) {
   const chunks = [],
     table = fieldRuleTable(policy),
+    ruled = table.legacy.length + table.modern.length > 0,
     enclosing = new Map()
   // A claim block is lifted out of its section, so it takes the field heading rules around it from the same walk that
   // filters content: a claim under a hidden heading stays hidden on the catalog paths too.
@@ -37,13 +38,14 @@ export function privacySections(body, policy, registry = null) {
     block => {
       const status = block.status,
         scope = createHeadingScope(table, enclosing.get(block.start) || [])
-      for (const section of sections(block.body, { empty: true })) {
+      for (const section of sections(withoutRuleLines(block.body), { empty: true })) {
         if (section.level) scope.heading(section.level, section.heading)
         const fieldRule = scopeRule(scope.matches()),
           rule = fieldRule ? intersectRules(block.rule, fieldRule) : block.rule
         if (section.content)
           chunks.push({
             ...section,
+            ruled,
             rule,
             claim: true,
             disclosure: rule.disclosure === 'publish-approved' ? 'publish-approved' : 'review-required',
@@ -66,6 +68,7 @@ export function privacySections(body, policy, registry = null) {
     if (section.content)
       chunks.push({
         ...section,
+        ruled,
         rule: fieldRule || inherited,
         claim: false,
         disclosure: fieldRule ? narrowerDisclosure(policy.disclosure, fieldRule.disclosure) : policy.disclosure
@@ -81,10 +84,10 @@ export function buildCatalogSections(rawSections, defaults = {}) {
     const count = (seenSlugs.get(baseSlug) || 0) + 1
     seenSlugs.set(baseSlug, count)
     const section_id = count === 1 ? baseSlug : `${baseSlug}-${count}`
-    // A heading shape can span lines, so a cut in a section that has any keeps whole paragraphs only.
-    const cut = sec.content.slice(0, 357),
-      kept = sec.starts ? cut.slice(0, Math.max(0, cut.lastIndexOf('\n\n'))) : cut,
-      snippet = (sec.content.length > 360 ? kept + '...' : sec.content).trim()
+    // Rules are applied per caller, and a cut could break the text they read, so these sections are cut after filtering.
+    const long = sec.content.length > 360,
+      keepFull = long && sec.ruled,
+      snippet = keepFull ? '' : (long ? sec.content.slice(0, 357) + '...' : sec.content).trim()
     return {
       section_id,
       heading: sec.heading,
@@ -92,7 +95,8 @@ export function buildCatalogSections(rawSections, defaults = {}) {
       disclosure: sec.disclosure ?? defaults.disclosure,
       claim: Boolean(sec.claim ?? defaults.claim),
       ...(sec.claim_status ? { claim_status: sec.claim_status } : {}),
-      snippet
+      snippet,
+      ...(keepFull ? { full_text: sec.content.trim() } : {})
     }
   })
 }

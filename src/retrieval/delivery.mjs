@@ -6,6 +6,7 @@ import { withClaimIds, withoutClaimRuleDetails } from '../markdown/claim-blocks.
 import {
   allowed,
   claimStatusIncluded,
+  deliveredSection,
   filterClaimStatus,
   filterClaimVisibility,
   filterFieldVisibility,
@@ -105,19 +106,20 @@ export function createRecordDelivery(o, { project, self, identity, registry, len
       const catSecs = buildCatalogSections(rawSecs)
       sectionsList = catSecs
         .filter(sec => catalogElementVisible(sec, lens, adapter) && claimStatusIncluded(sec.claim_status, temporal))
-        .map(sec => {
-          const filtered = filterFieldVisibility(
-            filterClaimVisibility(sec.snippet || '', lens, cand.path, deliveryRestrictions, resolution, identity.kind, adapter, registry),
-            metadata,
-            lens,
-            cand.path,
-            deliveryRestrictions,
-            resolution,
-            identity.kind,
-            adapter
+        .map(sec =>
+          deliveredSection(sec, text =>
+            filterFieldVisibility(
+              filterClaimVisibility(text, lens, cand.path, deliveryRestrictions, resolution, identity.kind, adapter, registry),
+              metadata,
+              lens,
+              cand.path,
+              deliveryRestrictions,
+              resolution,
+              identity.kind,
+              adapter
+            )
           )
-          return { ...sec, snippet: filtered }
-        })
+        )
       const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSecs, safeMeta)
       claimsList = annotatedClaims.filter(c => catalogElementVisible(c, lens, adapter) && claimStatusIncluded(c.claim_status, temporal))
       tagsList = annotatedTags.filter(t => catalogElementVisible(t, lens, adapter))

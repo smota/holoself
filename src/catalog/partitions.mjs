@@ -254,7 +254,7 @@ export function ensureCatalogPartition(spaceId, rootDir, files, registry, option
     }
     for (const s of sources) {
       for (const sec of s.sections || []) {
-        if (SECRET_RE.test(sec.snippet)) assertionErrors.push(`${s.source_kind}:${s.file}: secret-like content survived index build`)
+        if (SECRET_RE.test(sec.full_text ?? sec.snippet)) assertionErrors.push(`${s.source_kind}:${s.file}: secret-like content survived index build`)
       }
     }
     if (assertionErrors.length) throw new Error(`index post-build assertions failed: ${assertionErrors.join('; ')}`)

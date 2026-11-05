@@ -164,6 +164,10 @@ export function withClaimIds(body, target, { registry = null } = {}) {
     { target, registry }
   )
 }
+// A claim body can hold a review line that spells out a rule, written by earlier versions of a proposal approval.
+export function withoutRuleLines(text) {
+  return String(text).replace(/^[ \t]*[-*][ \t]+Visibility:[^\n]*access_lenses=[^\n]*(?:\r?\n|$)/gim, '')
+}
 // Delivered markers for callers who are not reading their own rules: the lens list can name a custom lens, so only the
 // disclosure stays. The marker stays well formed, with its id and lifecycle, so a linked proposal can still target it.
 export function withoutClaimRuleDetails(body, { registry = null } = {}) {
@@ -173,7 +177,7 @@ export function withoutClaimRuleDetails(body, { registry = null } = {}) {
       const marker = block.malformed
         ? formatClaimMarker({ disclosure: block.rule.disclosure }, { status: 'historical' })
         : formatClaimMarker({ disclosure: block.rule.disclosure }, block.attrs)
-      return marker + block.body + CLAIM_CLOSER
+      return marker + withoutRuleLines(block.body) + CLAIM_CLOSER
     },
     { registry }
   )

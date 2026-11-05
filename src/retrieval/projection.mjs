@@ -1,4 +1,5 @@
 // Packet projections: document entries, body-free source index, restriction grouping, path stripping.
+import { callerLenses } from '../policy/sub-document-rules.mjs'
 
 // One entry per reason: the first source (kept as `source` for compatibility), up to five sources, and the total count.
 export function groupRestrictions(list) {
@@ -42,15 +43,16 @@ export function sourceIndexEntry(record) {
   } = entry
   return { ...index, headings: (sections || []).map(section => section.heading).filter(Boolean) }
 }
-// Sub-document rules are the owner's own: they can name a custom lens. Callers on a publication adapter and every
-// non-owner caller receive what the rules allow, not the rules. Only output is stripped: delivery still needs the rules.
-export function withoutRuleDetails(value) {
-  if (Array.isArray(value)) return value.map(withoutRuleDetails)
+// Rules are the owner's own: they can name a custom lens. Callers on a publication adapter and every non-owner caller
+// receive what the rules allow, not the rules. Only output is stripped: delivery still needs the rules.
+export function withoutRuleDetails(value, lens = null) {
+  if (Array.isArray(value)) return value.map(item => withoutRuleDetails(item, lens))
   if (!value || typeof value !== 'object') return value
   const clean = {}
   for (const [key, item] of Object.entries(value)) {
     if (key === 'access_rule' || key === 'field_access') continue
-    clean[key] = key === 'field_visibility' ? {} : withoutRuleDetails(item)
+    if ((key === 'access_lenses' || key === 'exclude_lenses') && Array.isArray(item)) clean[key] = callerLenses(item, lens)
+    else clean[key] = key === 'field_visibility' ? {} : withoutRuleDetails(item, lens)
   }
   return clean
 }

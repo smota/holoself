@@ -35,7 +35,7 @@ export const ALLOWED_SOURCE_KEYS = new Set([
   'estimated_tokens'
 ])
 export const ALLOWED_SOURCE_REF_KEYS = new Set(['space_id', 'source_id', 'revision', 'section_id'])
-export const ALLOWED_SECTION_KEYS = new Set(['section_id', 'heading', 'visibility', 'access_rule', 'disclosure', 'claim', 'claim_status', 'snippet'])
+export const ALLOWED_SECTION_KEYS = new Set(['section_id', 'heading', 'visibility', 'access_rule', 'disclosure', 'claim', 'claim_status', 'snippet', 'full_text'])
 export const ALLOWED_CLAIM_KEYS = new Set(['text', 'visibility', 'access_rule', 'claim_status'])
 export const ALLOWED_TAG_KEYS = new Set(['value', 'visibility', 'access_rule'])
 export const ALLOWED_LINK_KEYS = new Set(['value', 'visibility', 'access_rule'])
@@ -176,6 +176,7 @@ export function validateCatalogSchema(catalog) {
           if (sec.claim_status !== undefined && !['superseded', 'historical'].includes(sec.claim_status))
             errors.push(`${sp}.claim_status must be one of: superseded, historical`)
           if (typeof sec.snippet !== 'string') errors.push(`${sp}.snippet must be a string`)
+          if (sec.full_text !== undefined && typeof sec.full_text !== 'string') errors.push(`${sp}.full_text must be a string`)
         }
       }
       if (!Array.isArray(s.claims)) {

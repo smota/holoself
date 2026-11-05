@@ -88,7 +88,7 @@ function assertEveryPath(fixture, sentinels, expected) {
 }
 const SECRET = `SECRETTEXT ${S} #secrettag [s](https://secretlink.example)`
 
-// shape, and whether a level-2 real heading ends it (level 1 shapes run on to the next level-1 heading).
+// shape, and the level of real heading that ends it: 2 for a level-2 shape or one with no level, 1 for a level-1 shape.
 const START_SHAPES = {
   'indented by two spaces': ['  ## Salary\n', 2],
   'indented by four spaces': ['    ## Salary\n', 2],
@@ -109,15 +109,15 @@ const START_SHAPES = {
   'inside a closed comment': ['<!--\n## Salary\n-->\n', 2],
   'on a one-line comment': ['<!-- ## Salary -->\n', 2],
   'without a space': ['##Salary\n', 2],
-  'seven hashes': ['####### Salary\n', 1],
-  'bold line': ['**Salary**\n', 1],
-  'bold HTML line': ['<strong>Salary</strong>\n', 1],
-  'italic line': ['*Salary*\n', 1],
-  'bold italic line': ['***Salary***\n', 1],
-  'name and colon alone on a line': ['Salary:\n', 1],
-  'bold name and colon': ['**Salary:**\n', 1],
-  'summary element': ['<summary>Salary</summary>\n', 1],
-  'table caption element': ['<caption>Salary</caption>\n', 1]
+  'seven hashes': ['####### Salary\n', 2],
+  'bold line': ['**Salary**\n', 2],
+  'bold HTML line': ['<strong>Salary</strong>\n', 2],
+  'italic line': ['*Salary*\n', 2],
+  'bold italic line': ['***Salary***\n', 2],
+  'name and colon alone on a line': ['Salary:\n', 2],
+  'bold name and colon': ['**Salary:**\n', 2],
+  'summary element': ['<summary>Salary</summary>\n', 2],
+  'table caption element': ['<caption>Salary</caption>\n', 2]
 }
 for (const [label, [shape, level]] of Object.entries(START_SHAPES))
   for (const [vocabulary, rules] of Object.entries(RULES))
@@ -166,7 +166,6 @@ for (const [label, opener] of Object.entries(UNCLOSED))
 
 const REAL_ENDS = {
   'column 0': '## Next\n',
-  'column 3': '   ## Next\n',
   'closed ATX': '## Next ##\n',
   'above the rule': '# Next\n',
   'after a closed pre': '<pre>\nx\n</pre>\n\n## Next\n',

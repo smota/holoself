@@ -181,7 +181,7 @@ export function* scopedLines(body, table) {
     outerLines[outerLines.length - 1] += source.slice(cursor, end)
     physical.push({ line, offset, end, touching, outerIndex: outerLines.length - 1 })
     // A line break inside a claim block is gone once the block is lifted out, so the outer line carries on.
-    if (!blocks.slice(index).some(item => item.start <= end && end < item.end)) outerLines.push('')
+    if (!touching.some(item => end < item.end)) outerLines.push('')
     offset = end + (parts[i + 1]?.length ?? 0)
   }
   const walk = (kind, scope) => {
@@ -193,17 +193,16 @@ export function* scopedLines(body, table) {
     outerScope = createHeadingScope(table),
     inner = new Map()
   let walked = -1
-  for (const { line, offset: start, end, touching, outerIndex } of physical) {
+  for (const { line, end, touching, outerIndex } of physical) {
     let step = { heading: false, opened: null }
     while (walked < outerIndex) step = walk(outerKinds[++walked], outerScope)
     const outer = outerScope.matches()
     for (const item of touching) {
       if (!inner.has(item.start))
-        inner.set(item.start, { scope: createHeadingScope(table, outer), kinds: classifyLines(item.body.split(/\r?\n/)), next: 0 })
-      const state = inner.get(item.start),
-        bodyStart = item.start + item.raw.indexOf('-->') + 3,
-        lineIndex = end < bodyStart ? -1 : start <= bodyStart ? 0 : source.slice(bodyStart, start).split('\n').length - 1
-      while (state.next <= lineIndex && state.next < state.kinds.length) {
+        inner.set(item.start, { scope: createHeadingScope(table, outer), kinds: classifyLines(item.body.split(/\r?\n/)), next: 0, line: -1 })
+      const state = inner.get(item.start)
+      if (end >= item.start + item.raw.indexOf('-->') + 3) state.line++
+      while (state.next <= state.line && state.next < state.kinds.length) {
         const innerStep = walk(state.kinds[state.next++], state.scope)
         step = { heading: step.heading || innerStep.heading, opened: innerStep.opened || step.opened }
       }
@@ -232,7 +231,9 @@ export function filterFieldVisibility(
 ) {
   const table = fieldRuleTable(metadata),
     visible = match => subDocumentVisible(match.rule, lens, adapter),
-    record = match => restrictions.push({ source, reason: subDocumentExclusion(`field ${match.name}`, match.rule, lens, adapter) }),
+    // A field name is a rule detail, so only the owner reading their own document sees it in a reason.
+    named = identityKind === 'owner:direct' && !publicationAdapter(adapter),
+    record = match => restrictions.push({ source, reason: subDocumentExclusion(named ? `field ${match.name}` : 'field', match.rule, lens, adapter) }),
     kept = []
   for (const { line, block, closes, heading, opened, matches, outer } of scopedLines(body, table)) {
     if (opened && !visible(opened)) record(opened)
@@ -244,6 +245,14 @@ export function filterFieldVisibility(
     else if (block && closes && outer.every(visible)) kept.push(CLAIM_CLOSER)
   }
   return kept.join('\n')
+}
+// The text of a catalog section for one caller. A long section of a document with field rules keeps its full text in the
+// local catalog, so it is filtered first and cut after: a cut can never break a heading shape the filter relies on.
+export function deliveredSection(section, filter) {
+  const { full_text: fullText, ...rest } = section
+  if (fullText === undefined) return { ...rest, snippet: filter(section.snippet || '') }
+  const text = filter(fullText).trim()
+  return { ...rest, snippet: text.length > 360 ? text.slice(0, 357) + '...' : text }
 }
 export function privacyMetadata(metadata, registry = null) {
   const rawSensitivity = typeof metadata.sensitivity === 'string' ? metadata.sensitivity : null,

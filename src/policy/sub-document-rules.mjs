@@ -2,11 +2,17 @@
 // `field_visibility` values and `visibility=` markers (docs/decisions/privacy-fields-and-legacy-mount.md, section 2).
 // A rule is `{ access_lenses?, disclosure }`. Omitted `access_lenses` inherits the document; `disclosure` is always set.
 import { DISCLOSURES, VISIBILITIES } from '../annotations.mjs'
-import { lensIdStructurallyValid } from '../lenses.mjs'
+import { DEFAULT_LENS_IDS, lensIdStructurallyValid } from '../lenses.mjs'
+import { foldText, ruleKey, stripLinePrefixes } from '../markdown/lines.mjs'
 
 export const PUBLICATION_ADAPTERS = ['obsidian-public', 'public', 'restricted-host']
 export function publicationAdapter(adapter) {
   return PUBLICATION_ADAPTERS.includes(adapter)
+}
+// A lens list as a caller who is not the owner may read it: a custom lens's name is the owner's, so only the seeded lenses
+// and the caller's own lens stay.
+export function callerLenses(lenses, lens) {
+  return lenses.filter(id => DEFAULT_LENS_IDS.includes(id) || id === lens)
 }
 // The lens sets of the legacy values narrower than "every lens".
 export const LEGACY_LENS_SETS = Object.freeze({
@@ -126,14 +132,14 @@ export function ruleForRegistry(rule, registry = null) {
 // Field rules of a document, ready to match. The deprecated map keeps its first-match behaviour; every matching
 // `field_access` entry applies, and all of them intersect with it, so a conflict can only narrow.
 export function fieldRuleTable(metadata = {}) {
-  const entries = map => Object.entries(map).map(([name, rule]) => ({ name, key: name.toLowerCase(), rule })),
+  const key = name => ruleKey(name) || name.toLowerCase(),
     legacy = metadata?.field_visibility
   return {
     legacy:
       legacy && typeof legacy === 'object' && !Array.isArray(legacy)
-        ? Object.entries(legacy).map(([name, value]) => ({ name, key: name.toLowerCase(), rule: legacySubDocumentRule(value) }))
+        ? Object.entries(legacy).map(([name, value]) => ({ name, key: key(name), rule: legacySubDocumentRule(value) }))
         : [],
-    modern: entries(normalizeFieldAccess(metadata?.field_access))
+    modern: Object.entries(normalizeFieldAccess(metadata?.field_access)).map(([name, rule]) => ({ name, key: key(name), rule }))
   }
 }
 function matchFieldRule(table, matches) {
@@ -142,16 +148,35 @@ function matchFieldRule(table, matches) {
   if (!found.length) return null
   return { name: found[0].name, rule: found.map(entry => entry.rule).reduce(intersectRules) }
 }
+// The names a line presents as `Field: value`, read through list and quote prefixes, emphasis, HTML and table cells.
+function fieldLineKeys(line) {
+  const text = stripLinePrefixes(
+    foldText(String(line).slice(0, 2000))
+      .replace(/<\/?t[dh]\b[^>]{0,200}>/gi, '|')
+      .replace(/<[^>]{0,200}>/g, '')
+      .trim()
+  )
+    .replace(/[*_~`]/g, '')
+    .replace(/^-\s*/, '')
+    .trim()
+  const cells = text.startsWith('|') ? text.split('|').map(cell => cell.trim()).filter(Boolean) : null,
+    source = cells ? cells[0] || '' : text,
+    keys = []
+  if (cells && cells.length > 1) keys.push(source)
+  for (const pattern of [/^([^:]{2,40}):\s*(.+)$/, /^(.{2,40}?)\s*(?:=|\s[-\u2013\u2014]\s)\s*(.+)$/]) {
+    const field = source.match(pattern)
+    if (field) keys.push(field[1])
+  }
+  return keys.map(ruleKey)
+}
 // The rule filterFieldVisibility applies to one line: `Field: value` lines whose field name equals a rule.
 export function fieldLineRule(line, table) {
-  const field = String(line).match(/^\s*[-*]?\s*([^:]{2,40}):\s*(.+)$/)
-  if (!field) return null
-  const key = field[1].trim().toLowerCase()
-  return matchFieldRule(table, name => key === name)
+  const keys = fieldLineKeys(line)
+  return keys.length ? matchFieldRule(table, name => keys.includes(name)) : null
 }
 // The rule filterFieldVisibility applies to a whole section through its heading.
 export function fieldHeadingRule(heading, table) {
-  const key = String(heading).trim().toLowerCase()
+  const key = ruleKey(heading)
   return matchFieldRule(table, name => key.includes(name))
 }
 // The field heading rules in force at one point of a document. A ruled heading covers everything under it, deeper

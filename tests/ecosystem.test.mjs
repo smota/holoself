@@ -133,7 +133,7 @@ test('index and search enforce claim, field, compensation, metadata, and secret 
   await assert.rejects(run(['search','private unicorn','--project',project,'--lens','private']),/not granted/)
   const field=JSON.parse(await capture(()=>run(['search','golden package','--project',project,'--lens','general'])));assert.equal(field.results.length,0)
   const publishingSearch=JSON.parse(await capture(()=>run(['search','annual compensation bonus equity','--project',project,'--lens','public-voice'])));assert.equal(publishingSearch.results.length,0)
-  const publishingPacket=await capture(()=>run(['context','--project',project,'--lens','public-voice','--format','packet']));assert.doesNotMatch(publishingPacket,/200000|210,000|annual bonus|bonus and equity/);assert.match(publishingPacket,/compensation content excluded|field Compensation excluded/)
+  const publishingPacket=await capture(()=>run(['context','--project',project,'--lens','public-voice','--format','packet']));assert.doesNotMatch(publishingPacket,/200000|210,000|annual bonus|bonus and equity/);assert.match(publishingPacket,/compensation content excluded|field excluded by/)
 })
 
 test('metadata collisions, legacy export overwrite, and unknown flags fail safely',async()=>{

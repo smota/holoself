@@ -138,19 +138,19 @@ test('the line classifier follows CommonMark for fences and fails closed', () =>
       const heading = real || starts[0]
       return [raw, heading ? `${heading.level}:${heading.text}` : null]
     })
-  assert.deepEqual(walk(['# Real', 'text', '####### seven', '#nospace']), [[false, '1:Real'], [false, null], [false, '1:seven'], [false, '1:nospace']])
-  assert.deepEqual(walk(['```', '# In', '```', '# Out']), [[true, null], [true, '1:In'], [true, null], [false, '1:Out']])
-  assert.deepEqual(walk(['~~~ info', '# In', '~~~', '# Out']), [[true, null], [true, '1:In'], [true, null], [false, '1:Out']])
-  assert.deepEqual(walk(['   ```', '# In', '   ```', '# Out']), [[true, null], [true, '1:In'], [true, null], [false, '1:Out']])
+  assert.deepEqual(walk(['# Real', 'text', '####### seven', '#nospace']), [[false, '1:Real'], [false, null], [false, 'Infinity:seven'], [false, 'Infinity:nospace']])
+  assert.deepEqual(walk(['```', '# In', '```', '# Out']), [[true, null], [true, 'Infinity:In'], [true, null], [false, '1:Out']])
+  assert.deepEqual(walk(['~~~ info', '# In', '~~~', '# Out']), [[true, null], [true, 'Infinity:In'], [true, null], [false, '1:Out']])
+  assert.deepEqual(walk(['   ```', '# In', '   ```', '# Out']), [[true, null], [true, 'Infinity:In'], [true, null], [false, '1:Out']])
   assert.deepEqual(walk(['    ```', '# Out']), [[false, null], [false, '1:Out']], 'four spaces is not a fence')
   assert.deepEqual(walk(['\t```', '# Out']), [[false, null], [false, '1:Out']], 'a tab is not a fence')
   assert.deepEqual(walk(['``', '# Out']), [[false, null], [false, '1:Out']], 'two backticks are not a fence')
   assert.deepEqual(walk(['``` a`b', '# Out']), [[false, null], [false, '1:Out']], 'a backtick info string is inline code')
-  assert.deepEqual(walk(['~~~ a~b', '# In']), [[true, null], [true, '1:In']], 'a tilde info string may hold tildes')
-  assert.deepEqual(walk(['````', '```', '# In', '`````  ', '# Out']), [[true, null], [true, null], [true, '1:In'], [true, null], [false, '1:Out']])
-  assert.deepEqual(walk(['```', '```js', '# In']), [[true, null], [true, null], [true, '1:In']])
-  assert.deepEqual(walk(['```', '~~~', '# In']), [[true, null], [true, null], [true, '1:In']])
-  assert.deepEqual(walk(['```', '    ```', '# In']), [[true, null], [true, null], [true, '1:In']], 'a closer takes at most three spaces too')
+  assert.deepEqual(walk(['~~~ a~b', '# In']), [[true, null], [true, 'Infinity:In']], 'a tilde info string may hold tildes')
+  assert.deepEqual(walk(['````', '```', '# In', '`````  ', '# Out']), [[true, null], [true, null], [true, 'Infinity:In'], [true, null], [false, '1:Out']])
+  assert.deepEqual(walk(['```', '```js', '# In']), [[true, null], [true, null], [true, 'Infinity:In']])
+  assert.deepEqual(walk(['```', '~~~', '# In']), [[true, null], [true, null], [true, 'Infinity:In']])
+  assert.deepEqual(walk(['```', '    ```', '# In']), [[true, null], [true, null], [true, 'Infinity:In']], 'a closer takes at most three spaces too')
 })
 
 test('a heading inside a fence creates no section, in the splitter and the catalog', () => {
@@ -174,9 +174,9 @@ const REVERSE = [
     ['INTROTEXT', 'AFTERTEXT']
   ],
   [
-    'a deep real heading after a fenced ruled name stays covered',
-    `\`\`\`\n## Salary\n\`\`\`\n\n### Deep\n\nSECRETTEXT ${S}\n\n## After\n\nAFTERTEXT ${S}\n`,
-    ['AFTERTEXT']
+    'a fenced ruled name has no level, so any real heading ends it',
+    `\`\`\`\n## Salary\n\`\`\`\n\nTAILTEXT ${S}\n\n### Deep\n\nSECRETTEXT ${S}\n\n## After\n\nAFTERTEXT ${S}\n`,
+    ['SECRETTEXT', 'AFTERTEXT']
   ],
   [
     'an opener inside a claim ends with the claim, so it cannot swallow a real ruled heading',
@@ -279,27 +279,24 @@ function generate(next) {
 function fenceBlindHidden(lines) {
   const hidden = new Set(),
     ruled = text => text.toLowerCase().includes('salary')
-  let outer = [],
+  let outer = false,
     inner = null
   for (const line of lines) {
     if (line.startsWith('<!-- holoself-claim')) {
-      inner = [...outer]
+      inner = outer
       continue
     }
     if (line.startsWith('<!-- /holoself-claim')) {
       inner = null
       continue
     }
-    const heading = line.match(/^ {0,3}(#{1,6}) (.+)$/)
+    const heading = line.match(/^#{1,6}\s+(.+)$/)
     if (heading) {
-      const level = heading[1].length,
-        scope = (inner ?? outer).filter(value => value < level)
-      if (ruled(heading[2])) scope.push(level)
-      if (inner) inner = scope
-      else outer = scope
+      if (inner === null) outer = ruled(heading[1])
+      else inner = outer || ruled(heading[1])
       continue
     }
-    if ((inner ?? outer).length && line.startsWith('SENT')) hidden.add(line.split(' ')[0])
+    if ((inner ?? outer) && line.startsWith('SENT')) hidden.add(line.split(' ')[0])
   }
   return hidden
 }

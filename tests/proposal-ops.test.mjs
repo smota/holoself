@@ -407,7 +407,7 @@ test('MCP duplicate and ambiguity checks only consider claims the link can read'
   assert.ok(!twin.isError, JSON.stringify(twin))
   const preview = m.call(5, 'holoself_proposal_preview', { proposal_id: twin.structuredContent.data.proposal_id })
   assert.ok(!preview.isError)
-  assert.match(preview.structuredContent.data.changes[0].before_block, /visibility=professional/)
+  assert.match(preview.structuredContent.data.changes[0].before_block, /disclosure=review-required/)
   await assert.rejects(capture(() => run(['proposals', 'approve', twin.structuredContent.data.proposal_id, '--project', project, '--yes'])), error => error.code === 'CLAIM_AMBIGUOUS')
 })
 

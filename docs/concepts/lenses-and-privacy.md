@@ -115,12 +115,15 @@ field_access:
 - A `Field: value` line matches a rule with the same name, and a heading matches a rule whose name it contains, ignoring case. When several `field_access` rules match, all of them apply.
 - A heading rule covers everything under that heading until the next heading of its level or above: its text, deeper headings and claim blocks, on every output path. A claim under a hidden heading stays hidden whatever its own rule says. A heading rule inside a claim block stops at the end of that block.
 - A heading rule starts liberally and ends conservatively, so unusual heading shapes hide more rather than less.
-  - It starts on any line that could present its name as a heading: any indent, Setext, closed ATX, no space after `#`, HTML headings, lines holding only emphasis, a `<summary>`-like element or a name and a colon, behind blockquote or list prefixes, and inside fenced code, raw HTML and comments. A tag-only line such as `#salary` and a line such as `Salary:` count too.
-  - It ends only at an ATX heading of its level or above, at column 0 to 3, outside fenced code, raw HTML and comments, with no other heading shape on the line. Nothing else ends it, and a shape with no clear level counts as level 1.
-  - An unclosed fence, `<pre>` or comment runs to the end of the file, or of its claim block.
+  - It starts on any line that could present its name as a heading: any indent, Setext, closed ATX, no space after `#`, HTML headings, table header cells, lines holding only emphasis, a `<summary>`-like element or a name and a colon, behind blockquote or list prefixes, and inside fenced code, raw HTML and comments.
+  - It ends only at an ATX heading at column 0, of its level or above, outside fenced code, raw HTML and comments, with no other heading shape on the line.
+  - A shape that states no level, such as `#salary`, `My salary history:` or a line inside fenced code, ends at the next real heading of any level.
+  - An unclosed fence, `<pre>` or comment runs to the end of the file. One opened inside a claim block ends with the block, and one opened outside continues across a block.
+- Names match through presentation on both sides: compatibility forms such as full-width letters, invisible characters, whitespace, HTML entities, inline emphasis and case. Lookalike letters from other scripts do not match.
+- A field rule also matches `**Salary:** x`, `**Salary**: x`, `1. Salary: x`, `> Salary: x`, `- [ ] Salary: x`, `Salary = x`, `Salary - x` and a table row whose first cell is the name.
 - `_policy.yaml` cannot carry these rules.
 
-Rules are the owner's. On publication adapters, and for every non-owner caller, delivered claim markers keep only `disclosure`, and `field_access`, `field_visibility` and `access_rule` are left out of delivered metadata and index entries, because a lens list can name a custom lens. A document's own `access_lenses` is still delivered.
+Rules are the owner's. On publication adapters, and for every non-owner caller, delivered claim markers keep only `disclosure`, and `field_access`, `field_visibility` and `access_rule` are left out of delivered metadata and index entries, because a lens list can name a custom lens. `access_lenses` and `exclude_lenses` keep only seeded lenses and the caller's lens, and restriction reasons name no field.
 
 Mistakes fail closed. An unknown attribute, lens or `disclosure` makes a claim block private and historical. Malformed `field_access` excludes a canonical document with a validation error and restricts a project document to `private`.
 
@@ -142,7 +145,7 @@ The rewrite changes only the targeted bytes and never changes a claim's id, so p
 - A marker or field rule whose conflicting vocabularies admit no lens, because that has no written form.
 - `field_visibility` beside an invalid `field_access`, or one that is not a mapping.
 
-Some files stay out of the plan entirely, with a warning: a file that is not valid UTF-8, and a document whose frontmatter does not parse while it carries field rules. `migrate policy --apply` checks every file before it writes the first one, and restores the files it has written if a later write fails. Revert restores the exact prior bytes.
+Some files stay out of the plan entirely, with a warning: a file that is not valid UTF-8, a document whose frontmatter does not parse while it carries field rules, and a document the non-amplification gate refuses. `migrate policy --apply` checks every file before it writes the first one, and restores the files it has written if a later write fails. Revert restores the exact prior bytes.
 
 `field_visibility` stops at the first rule that matches, while `field_access` applies every match. A heading that matches two old rules can therefore become narrower after migration. The plan reports that as coverage loss, so it needs `--confirm-narrowing`.
 

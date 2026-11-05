@@ -174,7 +174,7 @@ function assembleResult(
   const isLinked = identity.kind === 'client:linked' || isUnlinkedClient,
     isMcp = surface === 'mcp'
   // Document bodies live only in the owning documents array; sources[] is a body-free provenance index.
-  const delivered = isLinked || publicationAdapter(adapter) ? withoutRuleDetails : view => view
+  const delivered = isLinked || publicationAdapter(adapter) ? view => withoutRuleDetails(view, lens) : view => view
   const projections = list => {
     const selfDocs = list.filter(r => r.kind === 'self').map(documentProjection),
       localDocs = list.filter(r => r.kind === 'project' && (!r.space_id || r.space_id === localSpaceId)).map(documentProjection)

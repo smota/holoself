@@ -169,7 +169,8 @@
                 "disclosure": { "type": "string", "enum": ["internal-only", "review-required", "publish-approved"] },
                 "claim": { "type": "boolean" },
                 "claim_status": { "type": "string", "enum": ["superseded", "historical"] },
-                "snippet": { "type": "string" }
+                "snippet": { "type": "string" },
+                "full_text": { "description": "Whole text of a long section in a document with field rules, filtered per caller and then cut. Never delivered.", "type": "string" }
               }
             }
           },

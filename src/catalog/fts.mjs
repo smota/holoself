@@ -144,7 +144,7 @@ function partitionRows(partition) {
     const sourceId = source.source_ref?.source_id
     if (!sourceId) continue
     for (const section of source.sections || []) {
-      rows.push({ source_id: sourceId, section_id: section.section_id, heading: section.heading || '', body: section.snippet || '' })
+      rows.push({ source_id: sourceId, section_id: section.section_id, heading: section.heading || '', body: section.full_text?.slice(0, 360) ?? section.snippet ?? '' })
     }
   }
   return rows

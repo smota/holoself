@@ -12,7 +12,7 @@ Proposed D00 contracts, not active runtime interfaces: [evidence v1](../../schem
 - [`schemas/context.schema.json`](../../schemas/context.schema.json): resolved runtime context
 - [`schemas/document-metadata.schema.json`](../../schemas/document-metadata.schema.json): canonical Markdown frontmatter, including `field_access` rules (`field_visibility` is deprecated)
 - [`schemas/policy-defaults.schema.json`](../../schemas/policy-defaults.schema.json): directory-level privacy policy defaults (`_policy.yaml`)
-- [`schemas/catalog.schema.json`](../../schemas/catalog.schema.json): deterministic incremental catalog, schema version 5. An element keeps its deprecated `visibility` label and carries `access_rule` only when no label states its rule exactly
+- [`schemas/catalog.schema.json`](../../schemas/catalog.schema.json): deterministic incremental catalog, schema version 5. An element keeps its deprecated `visibility` label and carries `access_rule` only when no label states its rule exactly. A long section of a document with field rules holds `full_text`, which is never delivered
 - [`schemas/context-decision-cache.schema.json`](../../schemas/context-decision-cache.schema.json): content-free context decision cache (deprecated; on-disk decision cache removed)
 - [`schemas/proposal.schema.json`](../../schemas/proposal.schema.json): proposal lifecycle
 
