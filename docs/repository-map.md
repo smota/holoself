@@ -14,6 +14,7 @@ Product runtime code (`bin/`, `src/`, `web/`) never imports from `lib/` or any A
 | `contribs/` | Product | Shipped synthetic/public default framework library (`contribs/catalog.json`, `contribs/default/`). |
 | `templates/` | Product | Shipped Markdown and configuration seed templates used by `holoself init` and project links. |
 | `package.json` | Product | npm package manifest (`holoself-ai`), `files` allowlist, and verification scripts. |
+| `pnpm-lock.yaml` | Product tooling | pnpm dependency lockfile for reproducible installs; not shipped in the npm package. |
 | `README.md` | Product | Shipped package and repository overview. |
 | `CHANGELOG.md` | Product | Shipped release history. |
 | `PRIVACY.md` | Product | Shipped privacy policy. |
