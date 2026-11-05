@@ -347,3 +347,23 @@ test('Workbench maps validation and CLI refusals to 400/413, stale hashes to 409
   }finally{delete process.env.HOLOSELF_TEST_FORCE_INTERNAL}
  }finally{await new Promise(done=>app.server.close(done))}
 })
+
+test('Workbench repair preview shows a shared-lens grant update and apply never widens the grant',async()=>{
+  const self=await temp(),project=await temp()
+  await run(['init','--root',self])
+  await run(['link','add','--project',project,'--self',self,'--lens','general','--secondary-lenses','professional','--no-activate','--yes'])
+  await run(['link','approve','--project',project,'--self',self,'--lenses','general'])
+  const allowed=async()=>JSON.parse(await readFile(join(self,'.holoself','links.json'),'utf8')).links[0].allowed_lenses
+  const app=await startWebServer({root:self,port:0})
+  try{
+    const headers={'content-type':'application/json','x-holoself-token':app.token}
+    const space=(await(await fetch(`${app.url}/api/spaces`,{headers})).json()).data.find(item=>normalizeProjectPath(item.path)===normalizeProjectPath(realpathSync(project)))
+    const post=payload=>fetch(`${app.url}/api/spaces/${space.id}/repair`,{method:'POST',headers,body:JSON.stringify(payload)})
+    const preview=(await(await post({})).json()).data.preview
+    assert.deepEqual(preview.plan.grant_update.adds,['professional']);assert.equal(preview.plan.grant_update.applied,false)
+    const applied=await post({apply:true,plan_hash:preview.plan_hash});assert.equal(applied.status,200)
+    assert.deepEqual(await allowed(),['general'])
+  }finally{await new Promise(done=>app.server.close(done))}
+  const ui=readFileSync(fileURLToPath(new URL('../web/app.mjs',import.meta.url)),'utf8')
+  assert.match(ui,/grant_update/);assert.match(ui,/--accept-shared-lenses/)
+})

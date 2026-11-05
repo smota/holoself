@@ -1,8 +1,9 @@
 // Canonical space identity and the self-owned links registry with its lock file.
-import { closeSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, lstatSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { atomicWriteFile, canonicalSort } from '../catalog.mjs'
 import { ensureDir, hash, pathExists, safeRealpath, slash } from '../shared/fs.mjs'
+import { parseYaml } from '../shared/yaml.mjs'
 
 export function canonicalSpaceId(projectDir) {
   const real = safeRealpath(projectDir)
@@ -17,13 +18,40 @@ export function canonicalProjectPath(projectDir) {
 }
 // Active (non-revoked) entries in `links` that hold projectKey for a project other than `project` (docs/decisions/
 // portable-links.md: on one machine a project_key belongs to at most one project path, e.g. never to a copied folder).
+//
+// An entry attested before project_key was recorded (or before this machine repaired a synced link) counts by the
+// project_key its project's link.yaml carries now. When this project is itself attested with the same key, only entries
+// attested earlier count against it (the later one is the copy), so `link repair` on the copy resolves a conflict and
+// the original keeps its key.
 export function projectKeyHolders(links, projectKey, project = null) {
   if (!projectKey) return []
   const id = project ? canonicalSpaceId(project) : null,
-    path = project ? canonicalProjectPath(project) : null
-  return links.filter(
-    entry => entry?.project_key === projectKey && entry.status !== 'revoked' && (!project || (entry.project_id !== id && entry.project_path !== path))
-  )
+    path = project ? canonicalProjectPath(project) : null,
+    same = entry => entry.project_id === id || entry.project_path === path,
+    active = links.filter(entry => entry && entry.status !== 'revoked' && effectiveProjectKey(entry) === projectKey)
+  if (!project) return active
+  const own = active.find(same),
+    rank = entry => [String(entry.created_at || ''), String(entry.project_path || '')]
+  return active.filter(entry => {
+    if (same(entry)) return false
+    if (!own) return true
+    const [a, b] = [rank(entry), rank(own)]
+    return a[0] < b[0] || (a[0] === b[0] && a[1] < b[1])
+  })
+}
+// The project_key a registry entry stands for: its recorded key, else the key in its project's link.yaml (tolerant).
+export function effectiveProjectKey(entry) {
+  if (typeof entry?.project_key === 'string') return entry.project_key
+  if (typeof entry?.project_path !== 'string') return null
+  try {
+    const path = join(entry.project_path, '.holoself', 'link.yaml'),
+      info = lstatSync(path, { throwIfNoEntry: false })
+    if (!info || info.isSymbolicLink() || !info.isFile() || lstatSync(dirname(path)).isSymbolicLink()) return null
+    const key = parseYaml(readFileSync(path, 'utf8'))?.project_key
+    return typeof key === 'string' && /^hs-proj-[0-9a-f]{32}$/.test(key) ? key : null
+  } catch {
+    return null
+  }
 }
 export const projectKeyReusedNotice = (projectKey, project) =>
   `[note] project_key ${projectKey} is already used by another project on this machine (a copied folder?); created a new project_key for ${project}`

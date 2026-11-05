@@ -47,20 +47,25 @@ export async function linkApprove(o, sub, project) {
   if (hasLink) {
     assertContainedPath(project, lPath, 'project link file')
     if (lstatSync(lPath).isSymbolicLink()) throw new Error(`symlink detected at ${lPath}`)
-    // A copied folder carrying another project's project_key gets its own key before approval and inherits nothing.
+    const read = () => {
+      try {
+        // A portable link is approved only by the self it names (its self_id); revocation needs no match.
+        return readLink(project, { tolerant: true, explicitSelf: revokeMode ? null : selfRoot })
+      } catch (e) {
+        if (e.code === 'SELF_ROOT_NOT_CANONICAL') throw Object.assign(new Error(`project link names a different self than ${selfRoot}; refusing to approve`), { code: e.code })
+        throw new Error(`cannot read project link at ${lPath}: ${e.message}`)
+      }
+    }
+    linkObj = read()
+    // Only after the self check: a copied folder carrying another project's project_key gets its own key and inherits
+    // nothing.
     if (!revokeMode && linkProjectKeyTaken(selfRoot, project)) {
       const previous = linkProjectKey(project)
       renewLinkProjectKeyInPlace(project)
       renewedKey = true
       console.warn(projectKeyReusedNotice(previous, project))
       console.warn(`[note] bind its lens with: holoself lens bind --root <self-root> --project <dir> --lens <id> --yes`)
-    }
-    try {
-      // A portable link is approved only by the self it names (its self_id); revocation needs no match.
-      linkObj = readLink(project, { tolerant: true, explicitSelf: revokeMode ? null : selfRoot })
-    } catch (e) {
-      if (e.code === 'SELF_ROOT_NOT_CANONICAL') throw Object.assign(new Error(`project link names a different self than ${selfRoot}; refusing to approve`), { code: e.code })
-      throw new Error(`cannot read project link at ${lPath}: ${e.message}`)
+      linkObj = read()
     }
   }
   // Approval records this machine's checkout of the self (adding a self_id to it when missing).

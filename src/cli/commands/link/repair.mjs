@@ -5,19 +5,47 @@ import { resolve } from 'node:path'
 import { bindingsPath, hasPathBinding, resolveBinding } from '../../../bindings.mjs'
 import { canonicalJson } from '../../../catalog.mjs'
 import { loadLensRegistry, resolveLens } from '../../../lenses.mjs'
-import { linkPath, readLink, writeLink } from '../../../link/config.mjs'
+import { linkPath, linkProjectKeyTaken, readLink, renewLinkProjectKeyInPlace, writeLink } from '../../../link/config.mjs'
 import { ensureSelfId, registerSelf, selfIdOf } from '../../../link/machine.mjs'
-import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { canonicalPath, samePath } from '../../../path-guard.mjs'
 import { atomicWrite, slash } from '../../../shared/fs.mjs'
 import { activateLinkedProject, askConfirm, repairSelection } from '../../link-helpers.mjs'
 
 export async function linkRepair(o, sub, project) {
-  const diagnostic = readLink(project, { tolerant: true, explicitSelf: o.self || null })
+  let diagnostic = readLink(project, { tolerant: true, explicitSelf: o.self || null })
   if (diagnostic._schemaErrors.length) throw new Error(diagnostic._schemaErrors.join('; '))
   if (diagnostic._selfError) throw Object.assign(new Error(diagnostic._selfError.message), { code: diagnostic._selfError.code })
   if (o.self && !samePath(canonicalPath(resolve(o.self)), canonicalPath(diagnostic.path)))
     throw Object.assign(new Error('supplied self root does not match canonical link root'), { code: 'SELF_ROOT_NOT_CANONICAL' })
+  // This project is a copy of another project attested earlier on this machine under the same project_key: give the copy
+  // its own key (the original keeps it), which also resolves a PROJECT_KEY_CONFLICT. The copy inherits no binding.
+  if (diagnostic.project_key && linkProjectKeyTaken(diagnostic.path, project)) {
+    console.log(JSON.stringify({ project_key_renewal: { project: slash(project), reason: 'project_key already used by another project on this machine' } }, null, 2))
+    if (o.dryRun) return true
+    if (!(await askConfirm(o, 'Give this copied project its own project_key?'))) return true
+    await withRegistryLock(diagnostic.path, () => {
+      const previous = diagnostic.project_key,
+        renewed = renewLinkProjectKeyInPlace(project),
+        attestation = readRegistry(diagnostic.path)
+      console.warn(projectKeyReusedNotice(previous, project))
+      writeRegistry(
+        diagnostic.path,
+        links =>
+          links.map(entry =>
+            entry.project_id === canonicalSpaceId(project) || entry.project_path === canonicalProjectPath(project)
+              ? { ...entry, project_key: renewed, updated_at: new Date().toISOString() }
+              : entry
+          ),
+        attestation.registry_hash
+      )
+    })
+    diagnostic = readLink(project, { tolerant: true, explicitSelf: o.self || null })
+    if (!o.lens) {
+      console.log(`[note] bind this project's lens with: holoself lens bind --root <self-root> --project <dir> --lens <id> --yes`)
+      return true
+    }
+  }
   const rename = id => ({ career: 'professional', publishing: 'public-voice' })[id] || id
   const legacy = diagnostic._legacyBinding
     ? { default_lens: rename(diagnostic._legacyBinding.default_lens), secondary_lenses: diagnostic._legacyBinding.secondary_lenses.map(rename) }
@@ -39,20 +67,32 @@ export async function linkRepair(o, sub, project) {
     bindingMigration = Boolean(legacy || o.lens || !current),
     // Portable form: self_id and project_key in link.yaml, no machine path, binding keyed by project_key.
     portableMigration = !diagnostic.self_id || !diagnostic.project_key || Boolean(diagnostic._legacyPath) || pathBinding
-  // A portable binding is shared: lens bind on another machine changes it, and this machine's attestation grant
-  // (allowed_lenses) is brought in line here, after preview and confirmation.
+  // A portable binding is shared: lens bind/unbind on another machine changes it. This machine's attestation grant
+  // (allowed_lenses) follows a narrowed binding automatically (serving already intersects), but is widened only with
+  // --accept-shared-lenses (and its own confirmation): --yes alone never grants a lens.
   const choiceLenses = [choice.default_lens, ...choice.secondary_lenses].filter(id => id !== 'private'),
     attested = diagnostic.project_key
       ? readRegistry(diagnostic.path).links.find(
           entry => entry.status === 'active' && (entry.project_id === canonicalSpaceId(project) || entry.project_path === canonicalProjectPath(project))
         )
       : null,
+    granted = attested?.allowed_lenses || [],
+    adds = attested && !bindingMigration ? choiceLenses.filter(id => !granted.includes(id)) : [],
+    removes = attested && !bindingMigration ? granted.filter(id => !choiceLenses.includes(id)) : [],
+    acceptAdds = adds.length > 0 && Boolean(o.acceptSharedLenses),
     grantUpdate =
-      !bindingMigration && attested && canonicalJson([...(attested.allowed_lenses || [])].sort()) !== canonicalJson([...choiceLenses].sort())
-        ? { project: slash(project), before: attested.allowed_lenses || [], after: choiceLenses }
-        : null
-  if (bindingMigration || portableMigration || grantUpdate) {
-    if (grantUpdate) console.log(JSON.stringify({ grant_update: grantUpdate }, null, 2))
+      adds.length || removes.length ? { project: slash(project), adds, removes, applied: !adds.length || acceptAdds } : null,
+    grantWrite = Boolean(removes.length || acceptAdds)
+  if (grantUpdate) {
+    console.log(JSON.stringify({ grant_update: grantUpdate }, null, 2))
+    if (acceptAdds) console.log(`adds: [${adds.join(', ')}] / removes: [${removes.join(', ')}]`)
+    else if (adds.length)
+      console.log(
+        `[note] shared binding adds lenses not granted on this machine: ${adds.join(', ')}; ` +
+          `run 'holoself link repair --project <dir> --accept-shared-lenses' to grant them`
+      )
+  }
+  if (bindingMigration || portableMigration || grantWrite) {
     if (bindingMigration) console.log(JSON.stringify({ binding_migration: { project: slash(project), before: current, legacy, after: choice } }, null, 2))
     if (portableMigration)
       console.log(
@@ -75,12 +115,12 @@ export async function linkRepair(o, sub, project) {
       if (!o.noActivate) await activateLinkedProject(o, project, diagnostic, 'Repair', repairSelection(project))
       return true
     }
-    const question = bindingMigration
-      ? 'Migrate lens choice into self-side bindings?'
-      : portableMigration
-        ? 'Migrate link to portable self_id and project_key?'
-        : `Grant this machine's link the bound lenses ${choiceLenses.join(', ')}?`
-    if (!(await askConfirm(o, question))) return true
+    if (bindingMigration || portableMigration)
+      if (!(await askConfirm(o, bindingMigration ? 'Migrate lens choice into self-side bindings?' : 'Migrate link to portable self_id and project_key?')))
+        return true
+    // Widening always has its own question, even when a migration question was asked.
+    const widen = acceptAdds && (await askConfirm(o, `Grant this machine's link the shared lenses ${adds.join(', ')}?`)),
+      nextGrant = widen ? choiceLenses : granted.filter(id => !removes.includes(id))
     const file = bindingsPath(diagnostic.path),
       before = existsSync(file) ? readFileSync(file) : null,
       linkBefore = readFileSync(linkPath(project))
@@ -103,7 +143,7 @@ export async function linkRepair(o, sub, project) {
                     ...entry,
                     ...(written.project_key ? { project_key: written.project_key } : {}),
                     ...(bindingMigration ? { allowed_lenses: [choice.default_lens, ...choice.secondary_lenses] } : {}),
-                    ...(grantUpdate ? { allowed_lenses: choiceLenses } : {}),
+                    ...(grantWrite ? { allowed_lenses: nextGrant } : {}),
                     updated_at: new Date().toISOString()
                   }
                 : entry

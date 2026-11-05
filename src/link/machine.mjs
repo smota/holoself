@@ -6,7 +6,6 @@
 // it yields no entries and a diagnostic, never an exception.
 import { randomBytes } from 'node:crypto'
 import { closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { hostname } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { defaultConfigDir } from '../cli/args.mjs'
 import { lstat } from '../path-guard.mjs'
@@ -54,11 +53,17 @@ export function selfIdOf(root) {
   return config && isSelfId(config.self_id) ? config.self_id : null
 }
 
-// Short synchronous lock (exclusive create) shared by the self map and the config.json self_id writer. The lock records
-// pid, hostname, creation time and a nonce. It is stale only when older than LOCK_STALE_MS, or when it was taken on this
-// host by a process that no longer exists (PIDs are never compared across hosts or PID namespaces).
+// Short synchronous lock (exclusive create) shared by the self map and the config.json self_id writer. A lock is held for
+// milliseconds, so it is stale only by age (LOCK_STALE_MS): PIDs and host names are not compared, because they are not
+// comparable across PID namespaces (WSL and Windows share /mnt/c, and WSL reports the Windows host name).
+// A stale lock is renamed aside and deleted only if the renamed file is the one judged stale; a different (fresh) lock is
+// linked back. Transient errors (EPERM, EBUSY, EACCES, ENOTSUP, …, common on Windows and network drives) are retried with
+// backoff until the wait limit. Residual race: when two waiters break the same >30 s stale lock at the same instant and a
+// third takes a fresh lock in between, the fresh lock can be lost; a lock only goes stale when its holder crashed.
 export const LOCK_STALE_MS = 30000
 const LOCK_WAIT_MS = LOCK_STALE_MS + 10000
+const TRANSIENT_LOCK_ERRORS = new Set(['EPERM', 'EBUSY', 'EACCES', 'ENOTSUP', 'ENOSYS', 'EXDEV', 'EMLINK'])
+const lockOps = { openSync, renameSync, linkSync, rmSync }
 
 // The lock's current content and identity, and whether it is stale; null when there is no lock.
 export function readFileLockState(lockPath, now = Date.now()) {
@@ -68,31 +73,26 @@ export function readFileLockState(lockPath, now = Date.now()) {
     raw = readFileSync(lockPath, 'utf8')
   } catch (error) {
     if (error.code === 'ENOENT') return null
+    if (TRANSIENT_LOCK_ERRORS.has(error.code)) return { raw: null, ino: null, stale: false }
     throw error
   }
-  let held = null
+  let created = info.mtimeMs
   try {
-    held = JSON.parse(raw)
+    const held = JSON.parse(raw)
+    if (Number.isFinite(held?.created)) created = held.created
   } catch {}
-  const created = Number.isFinite(held?.created) ? held.created : info.mtimeMs
-  let holderGone = false
-  if (held && held.hostname === hostname() && Number.isInteger(held.pid) && held.pid !== process.pid)
-    try {
-      process.kill(held.pid, 0)
-    } catch (probe) {
-      holderGone = probe.code === 'ESRCH'
-    }
-  return { raw, ino: info.ino, stale: holderGone || now - created > LOCK_STALE_MS }
+  return { raw, ino: info.ino, stale: now - created > LOCK_STALE_MS }
 }
 
-// Breaks a lock judged stale without ever deleting a different (fresh) lock: the lock is first renamed aside, and only
-// unlinked when the renamed file is exactly the one judged stale; otherwise it is put back. Returns whether it broke it.
-export function breakStaleFileLock(lockPath, judged) {
-  const aside = `${lockPath}.stale-${process.pid}-${randomBytes(4).toString('hex')}`
+// Breaks a lock judged stale without deleting a different (fresh) lock. Returns whether it broke the judged lock; a
+// transient error, or a lock that changed, returns false so the caller simply retries acquisition.
+export function breakStaleFileLock(lockPath, judged, ops = {}) {
+  const fs = { ...lockOps, ...ops },
+    aside = `${lockPath}.stale-${process.pid}-${randomBytes(4).toString('hex')}`
   try {
-    renameSync(lockPath, aside)
+    fs.renameSync(lockPath, aside)
   } catch (error) {
-    if (error.code === 'ENOENT') return false
+    if (error.code === 'ENOENT' || TRANSIENT_LOCK_ERRORS.has(error.code)) return false
     throw error
   }
   let same = false
@@ -101,43 +101,51 @@ export function breakStaleFileLock(lockPath, judged) {
   } catch {}
   if (!same)
     try {
-      linkSync(aside, lockPath)
+      fs.linkSync(aside, lockPath)
     } catch (error) {
-      if (error.code !== 'EEXIST') throw error
+      // EEXIST: another waiter already holds a new lock. Without hard-link support the changed lock is not restored.
+      if (error.code !== 'EEXIST' && !TRANSIENT_LOCK_ERRORS.has(error.code)) throw error
     }
-  rmSync(aside, { force: true })
+  try {
+    fs.rmSync(aside, { force: true })
+  } catch {}
   return same
 }
 
-export function withFileLockSync(lockPath, fn) {
-  const deadline = Date.now() + LOCK_WAIT_MS,
-    content = JSON.stringify({ pid: process.pid, hostname: hostname(), created: Date.now(), nonce: randomBytes(8).toString('hex') }) + '\n'
+export function withFileLockSync(lockPath, fn, ops = {}) {
+  const fs = { ...lockOps, ...ops },
+    deadline = Date.now() + LOCK_WAIT_MS,
+    content = JSON.stringify({ pid: process.pid, created: Date.now(), nonce: randomBytes(8).toString('hex') }) + '\n'
+  let backoff = 10
+  const wait = () => {
+    if (Date.now() > deadline) throw machineError(`timed out waiting for lock ${lockPath}`, 'LOCK_TIMEOUT')
+    sleepSync(backoff)
+    backoff = Math.min(backoff * 2, 200)
+  }
   while (true) {
+    let fd
     try {
-      const fd = openSync(lockPath, 'wx', 0o600)
-      try {
-        writeFileSync(fd, content)
-      } finally {
-        closeSync(fd)
-      }
-      break
+      fd = fs.openSync(lockPath, 'wx', 0o600)
     } catch (error) {
-      if (error.code !== 'EEXIST') throw error
-      const judged = readFileLockState(lockPath)
-      if (judged?.stale) {
-        breakStaleFileLock(lockPath, judged)
-        continue
-      }
-      if (Date.now() > deadline) throw machineError(`timed out waiting for lock ${lockPath}`, 'LOCK_TIMEOUT')
-      sleepSync(25)
+      if (error.code !== 'EEXIST' && !TRANSIENT_LOCK_ERRORS.has(error.code)) throw error
+      const judged = error.code === 'EEXIST' ? readFileLockState(lockPath) : null
+      if (judged?.stale && breakStaleFileLock(lockPath, judged, ops)) continue
+      wait()
+      continue
     }
+    try {
+      writeFileSync(fd, content)
+    } finally {
+      closeSync(fd)
+    }
+    break
   }
   try {
     return fn()
   } finally {
-    // Release only our own lock: a lock broken as stale and retaken by another process is left alone.
+    // Release only our own lock (nonce match): a lock broken as stale and retaken by another process is left alone.
     try {
-      if (readFileSync(lockPath, 'utf8') === content) rmSync(lockPath, { force: true })
+      if (readFileSync(lockPath, 'utf8') === content) fs.rmSync(lockPath, { force: true })
     } catch {}
   }
 }

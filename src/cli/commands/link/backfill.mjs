@@ -51,20 +51,22 @@ export async function linkBackfill(o, sub, project) {
           if (!existsSync(lPath)) continue
           assertContainedPath(proj, lPath, 'project link file')
           if (lstatSync(lPath).isSymbolicLink()) throw new Error(`symlink detected at ${lPath}`)
-          // A copied folder carrying another project's project_key gets its own key and inherits nothing.
+          let linkObj
+          try {
+            linkObj = readLink(proj, { tolerant: true, explicitSelf: selfRoot })
+          } catch (error) {
+            // A portable link naming a different self is never attested (or rewritten) here.
+            if (error.code === 'SELF_ROOT_NOT_CANONICAL') continue
+            throw error
+          }
+          // Only after the self check: a copied folder carrying another project's project_key gets its own key and
+          // inherits nothing.
           const renewedKey = linkProjectKeyTaken(selfRoot, proj, links)
           if (renewedKey) {
             const previous = linkProjectKey(proj)
             renewLinkProjectKeyInPlace(proj)
             console.warn(projectKeyReusedNotice(previous, proj))
-          }
-          let linkObj
-          try {
             linkObj = readLink(proj, { tolerant: true, explicitSelf: selfRoot })
-          } catch (error) {
-            // A portable link naming a different self is never attested here.
-            if (error.code === 'SELF_ROOT_NOT_CANONICAL') continue
-            throw error
           }
           const allowedLenses = (
             o.lenses && o.lenses.length ? o.lenses : renewedKey ? ['general'] : [linkObj.default_lens, ...(linkObj.secondary_lenses || [])]

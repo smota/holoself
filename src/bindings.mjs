@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, resolve, win32 } from 'node:path'
 import { loadLensRegistry, resolveLens } from './lenses.mjs'
 import { assertNoLinkBelow, canonicalPath } from './path-guard.mjs'
 import { isProjectKey } from './link/machine.mjs'
-import { readRegistry } from './link/registry.mjs'
+import { effectiveProjectKey, readRegistry } from './link/registry.mjs'
 import { hash, slash } from './shared/fs.mjs'
 
 export function normalizeProjectPath(value) {
@@ -166,5 +166,5 @@ export function bindingProjects(bindings, registryLinks = []) {
   })
 }
 function activeKeyHolders(links, key) {
-  return links.filter(item => item?.project_key === key && item.status !== 'revoked')
+  return links.filter(item => item && item.status !== 'revoked' && effectiveProjectKey(item) === key)
 }

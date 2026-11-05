@@ -173,7 +173,7 @@ export const COMMAND_FLAGS = {
     ])
   ),
   'link activate': [...PROJECT_FLAGS, ...ACTIVATION_FLAGS],
-  'link repair': [...PROJECT_FLAGS, ...ACTIVATION_FLAGS, '--self', '--lens', '--secondary-lenses'],
+  'link repair': [...PROJECT_FLAGS, ...ACTIVATION_FLAGS, '--self', '--lens', '--secondary-lenses', '--accept-shared-lenses'],
   'link deactivate': [...PROJECT_FLAGS, '--adapters', '--dry-run', ...CONFIRM_FLAGS],
   'link status': [...PROJECT_FLAGS, '--skill-home', ...JSON_FLAGS],
   'link doctor': [...PROJECT_FLAGS, '--skill-home', ...CONTEXT_FLAGS.filter(flag => !['--output', '--yes', '--confirm'].includes(flag))],
@@ -451,6 +451,7 @@ export function parse(args) {
     else if (a === '--force') o.force = true
     else if (a === '--dry-run') o.dryRun = true
     else if (a === '--all') o.all = true
+    else if (a === '--accept-shared-lenses') o.acceptSharedLenses = true
     else if (a === '--revoke') o.revoke = true
     else if (a === '--confirm-narrowing') o.confirmNarrowing = true
     else if (a === '--confirm-activation') o.confirmActivation = true
