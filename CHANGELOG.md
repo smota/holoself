@@ -2,6 +2,10 @@
 
 All notable Holoself releases are documented here.
 
+## Unreleased
+
+- Portable links across machines (#131, [decision](docs/decisions/portable-links.md), [guide](docs/guides/multiple-machines.md)): a self root's `config.json` gains a random `self_id` (`init` writes it; `link setup|add|repair|approve` and the new `holoself machine register` add it), `link.yaml` names the self by `self_context.self_id` and the project by a random root `project_key` and no longer stores `self_context.path`, and a per-user, per-machine self map (`selves.json` in `HOLOSELF_CONFIG_DIR`, `%APPDATA%\holoself`, `$XDG_CONFIG_HOME/holoself` or `~/.config/holoself`; mode 0600, symlink-refusing, malformed treated as empty) records where each self is checked out. Linked readers (CLI, hooks, MCP, Workbench, every `link` subcommand) accept an explicit `--self`/`--root`, then `HOLOSELF_HOME`, then the self map, then a legacy `path`, each only when its `config.json` carries the link's `self_id`, else fail closed with `SELF_NOT_FOUND` (hooks stay silent). `lenses/bindings.json` keys bindings by `project_key` (legacy path keys still resolve); the attestation registry stays per machine and records `project_key`. New `holoself machine status|register|forget`; `link setup` joins a synced link that already names this self without `--force`; `link repair` (with new `--self`, and `--dry-run`) migrates legacy links; `link doctor` reports `path_keyed_bindings` and `holoself doctor` warns while any remain. Legacy path-only links and path-keyed bindings behave exactly as before until repaired. **Upgrade Holoself on every machine before repairing links:** older versions cannot read a `link.yaml` without `self_context.path` or a `project_key`-keyed `bindings.json`.
+
 ## [0.11.1] — 2026-11-05
 
 - `link remove --dry-run` no longer revokes the sovereign link or takes the registry lock (#43): the project and self root stay unchanged, and it prints `[dry-run] would revoke sovereign link for <project>` and `[dry-run] would remove <link.yaml>` instead of `[ok] removed`.

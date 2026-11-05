@@ -39,6 +39,17 @@
             }
           }
         }
+      },
+      "description": "Keyed by a portable project_key (hs-proj-<32 hex>) or, for legacy entries written before portable links, by absolute project path.",
+      "propertyNames": {
+        "anyOf": [
+          {
+            "pattern": "^hs-proj-[0-9a-f]{32}$"
+          },
+          {
+            "minLength": 1
+          }
+        ]
       }
     }
   }

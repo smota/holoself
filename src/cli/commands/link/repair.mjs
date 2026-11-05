@@ -1,23 +1,30 @@
-// holoself link repair subcommand (moved verbatim from runEcosystem).
+// holoself link repair subcommand: lens-binding migration, portable-link migration (docs/decisions/portable-links.md,
+// section 7) and activation repair.
 import { existsSync, readFileSync, rmSync } from 'node:fs'
-import { bindingsPath, resolveBinding } from '../../../bindings.mjs'
+import { resolve } from 'node:path'
+import { bindingsPath, hasPathBinding, resolveBinding } from '../../../bindings.mjs'
 import { canonicalJson } from '../../../catalog.mjs'
 import { loadLensRegistry, resolveLens } from '../../../lenses.mjs'
 import { linkPath, readLink, writeLink } from '../../../link/config.mjs'
+import { ensureSelfId, registerSelf, selfIdOf } from '../../../link/machine.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalPath, samePath } from '../../../path-guard.mjs'
 import { atomicWrite, slash } from '../../../shared/fs.mjs'
 import { activateLinkedProject, askConfirm, repairSelection } from '../../link-helpers.mjs'
 
 export async function linkRepair(o, sub, project) {
-  const diagnostic = readLink(project, { tolerant: true })
+  const diagnostic = readLink(project, { tolerant: true, explicitSelf: o.self || null })
   if (diagnostic._schemaErrors.length) throw new Error(diagnostic._schemaErrors.join('; '))
+  if (diagnostic._selfError) throw Object.assign(new Error(diagnostic._selfError.message), { code: diagnostic._selfError.code })
+  if (o.self && !samePath(canonicalPath(resolve(o.self)), canonicalPath(diagnostic.path)))
+    throw Object.assign(new Error('supplied self root does not match canonical link root'), { code: 'SELF_ROOT_NOT_CANONICAL' })
   const rename = id => ({ career: 'professional', publishing: 'public-voice' })[id] || id
   const legacy = diagnostic._legacyBinding
     ? { default_lens: rename(diagnostic._legacyBinding.default_lens), secondary_lenses: diagnostic._legacyBinding.secondary_lenses.map(rename) }
     : null
   let current = null
   try {
-    current = resolveBinding(diagnostic.path, project)
+    current = resolveBinding(diagnostic.path, project, { projectKey: diagnostic.project_key })
   } catch (error) {
     if (error.code !== 'LENS_BINDING_REQUIRED') throw error
   }
@@ -28,28 +35,55 @@ export async function linkRepair(o, sub, project) {
   const registry = loadLensRegistry(diagnostic.path)
   resolveLens(registry, choice.default_lens)
   for (const id of choice.secondary_lenses) resolveLens(registry, id)
-  if (legacy || o.lens || !current) {
-    console.log(JSON.stringify({ binding_migration: { project: slash(project), before: current, legacy, after: choice } }, null, 2))
+  const pathBinding = hasPathBinding(diagnostic.path, project),
+    bindingMigration = Boolean(legacy || o.lens || !current),
+    // Portable form: self_id and project_key in link.yaml, no machine path, binding keyed by project_key.
+    portableMigration = !diagnostic.self_id || !diagnostic.project_key || Boolean(diagnostic._legacyPath) || pathBinding
+  if (bindingMigration || portableMigration) {
+    if (bindingMigration) console.log(JSON.stringify({ binding_migration: { project: slash(project), before: current, legacy, after: choice } }, null, 2))
+    if (portableMigration)
+      console.log(
+        JSON.stringify(
+          {
+            portable_migration: {
+              project: slash(project),
+              self_id: selfIdOf(diagnostic.path) || 'new',
+              project_key: diagnostic.project_key || 'new',
+              registers_this_machine: true,
+              drops_self_path: Boolean(diagnostic._legacyPath),
+              rekeys_binding: pathBinding
+            }
+          },
+          null,
+          2
+        )
+      )
     if (o.dryRun) {
       if (!o.noActivate) await activateLinkedProject(o, project, diagnostic, 'Repair', repairSelection(project))
       return true
     }
-    if (!(await askConfirm(o, 'Migrate lens choice into self-side bindings?'))) return true
+    if (!(await askConfirm(o, bindingMigration ? 'Migrate lens choice into self-side bindings?' : 'Migrate link to portable self_id and project_key?'))) return true
     const file = bindingsPath(diagnostic.path),
       before = existsSync(file) ? readFileSync(file) : null,
       linkBefore = readFileSync(linkPath(project))
+    ensureSelfId(diagnostic.path)
     try {
       await withRegistryLock(diagnostic.path, () => {
         const attestation = readRegistry(diagnostic.path),
           pId = canonicalSpaceId(project),
           cPath = canonicalProjectPath(project)
-        writeLink(project, diagnostic.path, choice.default_lens, choice.secondary_lenses, diagnostic.project_context, diagnostic.binding_salt)
+        const written = writeLink(project, diagnostic.path, choice.default_lens, choice.secondary_lenses, diagnostic.project_context, diagnostic.binding_salt)
         writeRegistry(
           diagnostic.path,
           links =>
             links.map(entry =>
               entry.project_id === pId || entry.project_path === cPath
-                ? { ...entry, allowed_lenses: [choice.default_lens, ...choice.secondary_lenses], updated_at: new Date().toISOString() }
+                ? {
+                    ...entry,
+                    ...(written.project_key ? { project_key: written.project_key } : {}),
+                    ...(bindingMigration ? { allowed_lenses: [choice.default_lens, ...choice.secondary_lenses] } : {}),
+                    updated_at: new Date().toISOString()
+                  }
                 : entry
             ),
           attestation.registry_hash
@@ -61,7 +95,7 @@ export async function linkRepair(o, sub, project) {
       else if (existsSync(file)) rmSync(file)
       throw error
     }
-  }
+  } else if (!o.dryRun && diagnostic._selfSource !== 'map') registerSelf(diagnostic.path)
   if (!o.noActivate) await activateLinkedProject(o, project, readLink(project), 'Repair', repairSelection(project))
   return true
 }

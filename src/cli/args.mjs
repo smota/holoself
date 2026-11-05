@@ -1,9 +1,18 @@
 // Command-line argument parsing and the per-command flag contracts.
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { isAbsolute, join, resolve, win32 } from 'node:path'
 
 export function defaultRoot() {
   return process.env.HOLOSELF_HOME || join(homedir(), '.holoself')
+}
+// Per-user configuration directory (holds the per-machine self map, selves.json): HOLOSELF_CONFIG_DIR when absolute,
+// else %APPDATA%\holoself on Windows, else $XDG_CONFIG_HOME/holoself when absolute, else ~/.config/holoself.
+export function defaultConfigDir(env = process.env, platform = process.platform) {
+  const absolute = value => typeof value === 'string' && value.trim() && (platform === 'win32' ? win32.isAbsolute(value) : isAbsolute(value))
+  if (absolute(env.HOLOSELF_CONFIG_DIR)) return resolve(env.HOLOSELF_CONFIG_DIR)
+  if (platform === 'win32' && absolute(env.APPDATA)) return join(env.APPDATA, 'holoself')
+  if (absolute(env.XDG_CONFIG_HOME)) return join(env.XDG_CONFIG_HOME, 'holoself')
+  return join(homedir(), '.config', 'holoself')
 }
 export function requiredValue(args, i, flag) {
   const value = args[i + 1]
@@ -164,7 +173,7 @@ export const COMMAND_FLAGS = {
     ])
   ),
   'link activate': [...PROJECT_FLAGS, ...ACTIVATION_FLAGS],
-  'link repair': [...PROJECT_FLAGS, ...ACTIVATION_FLAGS, '--lens', '--secondary-lenses'],
+  'link repair': [...PROJECT_FLAGS, ...ACTIVATION_FLAGS, '--self', '--lens', '--secondary-lenses'],
   'link deactivate': [...PROJECT_FLAGS, '--adapters', '--dry-run', ...CONFIRM_FLAGS],
   'link status': [...PROJECT_FLAGS, '--skill-home', ...JSON_FLAGS],
   'link doctor': [...PROJECT_FLAGS, '--skill-home', ...CONTEXT_FLAGS.filter(flag => !['--output', '--yes', '--confirm'].includes(flag))],
@@ -172,6 +181,10 @@ export const COMMAND_FLAGS = {
   'link approve': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--revoke', '--lenses'],
   'link backfill': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--all', '--lenses'],
   'link prune': [...ROOT_FLAGS, '--self'],
+  machine: [],
+  'machine status': JSON_FLAGS,
+  'machine register': [...ROOT_FLAGS, '--dry-run', ...JSON_FLAGS],
+  'machine forget': ['--dry-run', ...CONFIRM_FLAGS, ...JSON_FLAGS],
   'link skill migrate-global': [...PROJECT_FLAGS, '--platform', '--instructions', '--skill-home', '--force', '--dry-run', ...CONFIRM_FLAGS],
   'migrate policy': [
     ...ROOT_FLAGS,
@@ -216,7 +229,7 @@ export const COMMAND_FLAGS = {
 }
 export function commandKey(o) {
   if (o.command === 'link' && o.args[0] === 'skill') return ['link', ...o.args.slice(0, 2)].join(' ')
-  if (['link', 'migrate', 'mcp', 'coaching', 'knowledge', 'instructions', 'skill', 'lens', 'analyze', 'proposals', 'index', 'client'].includes(o.command) && o.args[0])
+  if (['link', 'migrate', 'mcp', 'coaching', 'knowledge', 'instructions', 'skill', 'lens', 'analyze', 'proposals', 'index', 'client', 'machine'].includes(o.command) && o.args[0])
     return `${o.command} ${o.args[0]}`
   return o.command || ''
 }

@@ -24,7 +24,7 @@ holoself <command> [options]
 <!-- generated:start -->
 Generated from `holoself capabilities --json` (product `holoself`, version `0.11.1`, context schema `v1`, index schema `v5`, proposal schemas `v1, v2`) and the CLI flag contract:
 
-- Capability command groups (13): `doctor`, `context`, `ledger`, `search`, `propose`, `proposals`, `instructions`, `knowledge`, `link`, `skill`, `mcp`, `client`, `coaching`
+- Capability command groups (14): `doctor`, `context`, `ledger`, `search`, `propose`, `proposals`, `instructions`, `knowledge`, `link`, `machine`, `skill`, `mcp`, `client`, `coaching`
 - Coaching subcommands (7): `coaching start`, `coaching note`, `coaching action`, `coaching choose`, `coaching review`, `coaching material`, `coaching resume`
 - Context features: `need-gate`, `budgets`, `manifest`, `source-handles`, `lifecycle`, `receipts`, `task-contrib-routing`
 - MCP tools (7): `holoself_status`, `holoself_context`, `holoself_context_manifest`, `holoself_context_get`, `holoself_search`, `holoself_proposal_create`, `holoself_proposal_preview`
@@ -74,7 +74,7 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.11
 | `link add` | `--project`, `--target`, `--self`, `--lens`, `--secondary-lenses`, `--project-include`, `--project-exclude`, `--project-assert-include`, `--project-assert-exclude`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--mcp`, `--no-mcp`, `--approve-read-tools`, `--no-approve-read-tools`, `--force`, `--dry-run`, `--yes`, `--confirm` |
 | `link setup` | `--project`, `--target`, `--self`, `--lens`, `--secondary-lenses`, `--project-include`, `--project-exclude`, `--project-assert-include`, `--project-assert-exclude`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--mcp`, `--no-mcp`, `--approve-read-tools`, `--no-approve-read-tools`, `--force`, `--dry-run`, `--yes`, `--confirm` |
 | `link activate` | `--project`, `--target`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--mcp`, `--no-mcp`, `--approve-read-tools`, `--no-approve-read-tools`, `--force`, `--dry-run`, `--yes`, `--confirm` |
-| `link repair` | `--project`, `--target`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--mcp`, `--no-mcp`, `--approve-read-tools`, `--no-approve-read-tools`, `--force`, `--dry-run`, `--yes`, `--confirm`, `--lens`, `--secondary-lenses` |
+| `link repair` | `--project`, `--target`, `--activate`, `--platform`, `--instructions`, `--install-skill`, `--skill-home`, `--no-activate`, `--hooks`, `--no-hooks`, `--mcp`, `--no-mcp`, `--approve-read-tools`, `--no-approve-read-tools`, `--force`, `--dry-run`, `--yes`, `--confirm`, `--self`, `--lens`, `--secondary-lenses` |
 | `link deactivate` | `--project`, `--target`, `--adapters`, `--dry-run`, `--yes`, `--confirm` |
 | `link status` | `--project`, `--target`, `--skill-home`, `--json` |
 | `link doctor` | `--project`, `--target`, `--skill-home`, `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--need`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--hook-format`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--snapshot` |
@@ -82,6 +82,10 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.11
 | `link approve` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--revoke`, `--lenses` |
 | `link backfill` | `--project`, `--target`, `--root`, `--data-root`, `--data-dir`, `--self`, `--all`, `--lenses` |
 | `link prune` | `--root`, `--data-root`, `--data-dir`, `--self` |
+| `machine` | _(none)_ |
+| `machine status` | `--json` |
+| `machine register` | `--root`, `--data-root`, `--data-dir`, `--dry-run`, `--json` |
+| `machine forget` | `--dry-run`, `--yes`, `--confirm`, `--json` |
 | `link skill migrate-global` | `--project`, `--target`, `--platform`, `--instructions`, `--skill-home`, `--force`, `--dry-run`, `--yes`, `--confirm` |
 | `migrate policy` | `--root`, `--data-root`, `--data-dir`, `--self`, `--apply`, `--revert`, `--confirm-narrowing`, `--confirm-activation`, `--allow-partial`, `--include-linked`, `--dry-run`, `--json` |
 | `context` | `--root`, `--data-root`, `--data-dir`, `--project`, `--target`, `--self`, `--lens`, `--task`, `--need`, `--self-only`, `--budget`, `--source`, `--session-start`, `--hook`, `--hook-format`, `--temporal`, `--include-history`, `--manifest`, `--cursor`, `--no-cache`, `--federated`, `--spaces`, `--adapter`, `--restricted-host`, `--expires-hours`, `--format`, `--json`, `--output`, `--snapshot`, `--yes`, `--confirm` |
@@ -144,6 +148,11 @@ link add --project <dir> --self <dir> [--lens general] [--secondary-lenses a,b]
          [--activate auto|all|<list>] [--platform <id>] [--instructions <file>]
          [--install-skill auto|project|global|none] [--skill-home <dir>] [--no-activate] [--yes]
 link status|activate|deactivate|repair|doctor --project <dir> [--yes]
+link repair --project <dir> [--self <dir>] [--dry-run|--yes]
+link approve --project <dir> [--self <dir>] [--revoke]
+machine status [--json]
+machine register [--root <self-root>] [--dry-run] [--json]
+machine forget <self_id> [--dry-run] --yes [--json]
 link deactivate --project <dir> [--adapters all|<list>] [--dry-run|--yes]
 link skill migrate-global --project <dir> [--skill-home <dir>] [--dry-run] [--yes]
 link remove --project <dir> [--self <dir>] [--dry-run] --yes
@@ -186,6 +195,8 @@ knowledge cleanup [--root <self-root>] --apply <plan.json> --digest <sha256> --y
 ```
 
 `context` defaults to packet output unless `--json` is supplied. Every context packet stays within twice its budget (`selection.total_bytes`, `envelope_cap_bytes`). A packet that had to shrink lists dropped sources in `selection.envelope_dropped`, groups `restrictions` by reason (adding `count` and `sources`) and reduces `proposals` to ids. `--session-start` loads only the lens `session_start_sources`; see [context efficiency](../concepts/context-efficiency.md). Context and search index self only; `--self-only` remains a compatible explicit spelling, while `--federated` and `--no-cache` remain accepted as deprecated no-ops for one release and emit a stderr warning. Missing bindings fail closed. `--snapshot --yes` writes a reviewed project-only fallback; `--restricted-host` applies publication-safe filtering and adds default 24-hour expiry metadata. `--expires-hours` accepts values above 0 through 720. Link setup supports `--project-include`, `--project-exclude`, `--project-assert-include`, and `--project-assert-exclude`. `index` without subcommand builds/updates index; `index rebuild` also removes any legacy decision-cache files on disk. `link setup` previews without changes until self path and confirmation are supplied. `link add` configures and activates by default; instruction edits require confirmation. Global skill installation is separately confirmed; project migration validates the global copy before removing managed local copies.
+
+New links are portable ([decision](../decisions/portable-links.md), [guide](../guides/multiple-machines.md)): `link.yaml` names the self by `self_context.self_id` (from the self's `config.json`) and the project by a root `project_key`, and omits `self_context.path` once the self resolves through this machine's self map (`selves.json` in `HOLOSELF_CONFIG_DIR`, `%APPDATA%\holoself`, `$XDG_CONFIG_HOME/holoself` or `~/.config/holoself`). Readers accept an explicit `--self`/`--root` (another self fails with `SELF_ROOT_NOT_CANONICAL`), then `HOLOSELF_HOME` (skipped when it is another self), then the self map, then a legacy `path`, each only when its `config.json` carries the link's `self_id`; otherwise they fail closed with `SELF_NOT_FOUND`. `machine register` adds a `self_id` to the self when missing and records this machine's checkout; `machine status` lists registered selves with `exists` and `id_matches`; `machine forget` removes an entry. `link setup`, `link add`, `link repair` and `link approve` also register the self. `link setup` on a project whose synced `link.yaml` already names this self joins it without `--force`, keeping its `project_key`, `binding_salt`, project filters and lens binding. `link repair` migrates a legacy link (adds `self_id` and `project_key`, rekeys the lens binding, drops `self_context.path`; `--dry-run` prints `portable_migration`), and `link doctor` reports `path_keyed_bindings`.
 
 `mcp configure` first prints exact project-local file actions and expected hashes. Without `--dry-run`, it requires confirmation or `--yes`. Existing divergent `holoself` server entries and malformed markers fail closed; `--force-replace` with confirmation replaces a divergent entry. `--all-detected` selects every client whose executable is on PATH or whose configuration exists in the project, applies all changes or none, and refuses when the files changed after the preview. Link activation (`link setup|add|activate|repair`) configures MCP by default for verified hosts; `--mcp`/`--no-mcp` and opt-in `--approve-read-tools` control it. Bare `mcp` uses explicit `--project`, trusted `CLAUDE_PROJECT_DIR`, or unambiguous cwd and requires a safe `.holoself/link.yaml`; tools cannot supply paths. See [MCP tools](mcp-tools.md).
 

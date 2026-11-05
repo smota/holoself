@@ -316,9 +316,11 @@ test('hook mode prints only the packet and exits 0; it fails open and closed on 
     await capture(() => run(['lens', 'bind', '--root', self, '--project', project, '--lens', 'general', '--yes']))
     assert.match(runBin(args, env).stdout, /HOOK-SENTINEL-7/)
 
-    // Missing self root.
+    // Missing self root: the portable link names its self by self_id, and the registered checkout is gone.
     renameSync(self, `${self}-moved`)
-    silent(runBin(args, { ...env, HOLOSELF_HOME: `${self}-moved` }), 'missing self root')
+    silent(runBin(args, { ...env, HOLOSELF_HOME: `${self}-elsewhere` }), 'missing self root')
+    // HOLOSELF_HOME naming the same self (same self_id in config.json) still serves the moved checkout.
+    assert.match(runBin(args, { ...env, HOLOSELF_HOME: `${self}-moved` }).stdout, /HOOK-SENTINEL-7/)
     renameSync(`${self}-moved`, self)
 
     const codes = readFileSync(audit, 'utf8')

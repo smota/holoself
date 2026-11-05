@@ -109,7 +109,8 @@ function populateFixture(base, platform) {
     auditLog = join(base, 'mcp-audit.ndjson')
   mkdirSync(project, { recursive: true })
   mkdirSync(bin, { recursive: true })
-  const env = { ...process.env, HOLOSELF_HOME: base }
+  // The synthetic self is registered in a self map inside the fixture; the host inherits it through its environment.
+  const env = { ...process.env, HOLOSELF_HOME: base, HOLOSELF_CONFIG_DIR: join(base, 'holoself-config') }
   holoself(['init', '--root', self], env)
   writeFileSync(
     join(self, 'profile', 'identity.md'),

@@ -31,8 +31,10 @@ export function queryLiveCapabilitiesAndTools() {
   const projectDir = join(tempRoot, 'project')
   try {
     mkdirSync(projectDir, { recursive: true })
-    runBin(['init', '--root', selfDir])
-    runBin(['link', 'add', '--project', projectDir, '--self', selfDir, '--lens', 'professional', '--no-activate', '--yes'])
+    // The throwaway self is registered in a throwaway self map, never in the user's configuration directory.
+    const env = { ...process.env, HOLOSELF_CONFIG_DIR: join(tempRoot, 'config') }
+    runBin(['init', '--root', selfDir], { env })
+    runBin(['link', 'add', '--project', projectDir, '--self', selfDir, '--lens', 'professional', '--no-activate', '--yes'], { env })
     const rpcInput =
       [
         { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'docs-ref', version: '1' } } },
@@ -40,7 +42,7 @@ export function queryLiveCapabilitiesAndTools() {
       ]
         .map(msg => JSON.stringify(msg))
         .join('\n') + '\n'
-    const mcpStdout = runBin(['mcp', '--project', projectDir], { input: rpcInput })
+    const mcpStdout = runBin(['mcp', '--project', projectDir], { input: rpcInput, env })
     const lines = mcpStdout
       .trim()
       .split(/\r?\n/)

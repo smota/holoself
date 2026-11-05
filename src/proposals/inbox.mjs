@@ -1,12 +1,12 @@
 // Cross-space review inbox: pending proposal aggregation, near-duplicate grouping, conflict hints and atomic batch actions.
 import { existsSync, readFileSync, readdirSync, rmSync, rmdirSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { normalizeProjectPath, readBindings } from '../bindings.mjs'
+import { bindingProjects, normalizeProjectPath, readBindings } from '../bindings.mjs'
 import { canonicalSort } from '../catalog.mjs'
 import { ecosystemValidationErrors } from '../catalog/validation.mjs'
 import { contradictionDigest } from '../context-selection.mjs'
 import { readLink } from '../link/config.mjs'
-import { withRegistryLock } from '../link/registry.mjs'
+import { readRegistry, withRegistryLock } from '../link/registry.mjs'
 import { normalize, parseClaimBlocks, replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { sections, tokenize } from '../markdown/text.mjs'
 import { canonicalPath, samePath } from '../path-guard.mjs'
@@ -68,6 +68,13 @@ function shouldFailBatchItem(index) {
   return Boolean(process.env.NODE_TEST_CONTEXT) && Number(process.env.HOLOSELF_TEST_FAIL_BATCH_ITEM) === index + 1
 }
 
+function inboxRegistryLinks(root) {
+  try {
+    return readRegistry(root).links
+  } catch {
+    return []
+  }
+}
 export function resolveInboxSpaces(root, { space = 'all', spaces = null } = {}) {
   if (space !== undefined && space !== null && typeof space !== 'string')
     throw inboxError('space filter must be a string', 'INVALID_INPUT')
@@ -93,7 +100,9 @@ export function resolveInboxSpaces(root, { space = 'all', spaces = null } = {}) 
             lens: item.lens || 'general'
           }
         })
-      : Object.entries(readBindings(root).bindings).map(([project, binding]) => {
+      : bindingProjects(readBindings(root).bindings, inboxRegistryLinks(root))
+          .filter(item => item.project)
+          .map(({ project, binding }) => {
           const canonPath = canonicalPath(project),
             normPath = normalizeProjectPath(canonPath),
             matchedCat = catalogEntries.find(s => samePath(s.canonPath, canonPath))

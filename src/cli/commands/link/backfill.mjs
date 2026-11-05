@@ -43,7 +43,14 @@ export async function linkBackfill(o, sub, project) {
           if (!existsSync(lPath)) continue
           assertContainedPath(proj, lPath, 'project link file')
           if (lstatSync(lPath).isSymbolicLink()) throw new Error(`symlink detected at ${lPath}`)
-          const linkObj = readLink(proj, { tolerant: true })
+          let linkObj
+          try {
+            linkObj = readLink(proj, { tolerant: true, explicitSelf: selfRoot })
+          } catch (error) {
+            // A portable link naming a different self is never attested here.
+            if (error.code === 'SELF_ROOT_NOT_CANONICAL') continue
+            throw error
+          }
           const allowedLenses = (o.lenses && o.lenses.length ? o.lenses : [linkObj.default_lens, ...(linkObj.secondary_lenses || [])]).filter(
             l => l !== 'private'
           )
@@ -56,6 +63,7 @@ export async function linkBackfill(o, sub, project) {
           const entry = {
             project_id: pId,
             project_path: canonicalProj,
+            ...(linkObj.project_key ? { project_key: linkObj.project_key } : {}),
             binding_salt: salt,
             allowed_lenses: allowedLenses,
             status: 'active',

@@ -4,12 +4,14 @@ import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { stdin as input, stdout as output } from 'node:process'
 import { activateProject, preflightActivation } from '../../../adapters.mjs'
-import { bindingsPath } from '../../../bindings.mjs'
+import { bindingsPath, resolveBinding } from '../../../bindings.mjs'
 import { loadLensRegistry } from '../../../lenses.mjs'
 import { createLinkDirs, inspectLinkCollisions, linkPath, linkSchemaErrors, writeLink } from '../../../link/config.mjs'
+import { ensureSelfId, isProjectKey, selfIdOf } from '../../../link/machine.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { lstat } from '../../../path-guard.mjs'
-import { atomicWrite, pathExists, safeRealpath, slash } from '../../../shared/fs.mjs'
+import { assertContainedPath, atomicWrite, pathExists, safeRealpath, slash } from '../../../shared/fs.mjs'
+import { parseYaml } from '../../../shared/yaml.mjs'
 import { applySpaceAction, planSpaceAction } from '../../../space-actions.mjs'
 import { askConfirm, askValue, setupFindings, hookPlanSummary, mcpPlanSummary, printHookResults } from '../../link-helpers.mjs'
 
@@ -105,8 +107,16 @@ export async function linkSetup(o, sub, project) {
   if (!existsSync(join(selfRoot, 'profile')) || !existsSync(join(selfRoot, 'context')))
     throw new Error(`self path lacks profile/context layout: ${resolve(self)}`)
   const setupRegistry = loadLensRegistry(selfRoot)
-  const chosenDefaultLens = o.lens || findings.suggested_lens
-  const chosenSecondary = o.secondaryLenses || []
+  // Another machine already linked this project to this same self (a synced portable link.yaml naming this self's
+  // self_id): setup joins it on this machine, keeping its project_key, binding_salt and lens binding unless --force.
+  const joined = o.force ? null : portableLinkFor(project, selfRoot)
+  let joinedBinding = null
+  if (joined)
+    try {
+      joinedBinding = resolveBinding(selfRoot, project, { registry: setupRegistry, projectKey: joined.projectKey })
+    } catch {}
+  const chosenDefaultLens = o.lens || joinedBinding?.default_lens || findings.suggested_lens
+  const chosenSecondary = o.secondaryLenses || (o.lens ? null : joinedBinding?.secondary_lenses) || []
   const desired = {
     path: selfRoot,
     access: 'read',
@@ -117,7 +127,7 @@ export async function linkSetup(o, sub, project) {
   }
   const desiredErrors = linkSchemaErrors(desired, setupRegistry)
   if (desiredErrors.length) throw new Error(desiredErrors.join('; '))
-  const collisions = inspectLinkCollisions(project)
+  const collisions = inspectLinkCollisions(project).filter(path => !(joined && path === linkPath(project)))
   if (collisions.length && !o.force) throw new Error(`existing Holoself metadata collision: ${collisions.join(', ')}; use --force with explicit confirmation`)
   if (!o.noActivate) {
     const { plan } = preflightActivation(project, {
@@ -162,6 +172,8 @@ export async function linkSetup(o, sub, project) {
   let resolvedBindingSalt = null
   if (prevEntrySnapshot && typeof prevEntrySnapshot.binding_salt === 'string' && prevEntrySnapshot.binding_salt.length === 32 && !o.force) {
     resolvedBindingSalt = prevEntrySnapshot.binding_salt
+  } else if (joined?.bindingSalt) {
+    resolvedBindingSalt = joined.bindingSalt
   } else {
     resolvedBindingSalt = randomBytes(16).toString('hex')
   }
@@ -169,9 +181,10 @@ export async function linkSetup(o, sub, project) {
   const bindingFile = bindingsPath(selfRoot),
     previousBindings = existsSync(bindingFile) ? readFileSync(bindingFile) : null
   let link
+  ensureSelfId(selfRoot)
   try {
-    createLinkDirs(project, { preserveReadme: o.force })
-    link = writeLink(project, selfRoot, chosenDefaultLens, chosenSecondary, o.projectContext || {}, resolvedBindingSalt)
+    createLinkDirs(project, { preserveReadme: o.force || Boolean(joined) })
+    link = writeLink(project, selfRoot, chosenDefaultLens, chosenSecondary, o.projectContext || joined?.projectContext || {}, resolvedBindingSalt)
     await withRegistryLock(selfRoot, () => {
       const currentReg = readRegistry(selfRoot)
       const nowIso = new Date().toISOString()
@@ -182,6 +195,7 @@ export async function linkSetup(o, sub, project) {
           const entry = {
             project_id: pId,
             project_path: canonicalProj,
+            ...(link.project_key ? { project_key: link.project_key } : {}),
             binding_salt: resolvedBindingSalt,
             allowed_lenses: allowedLenses,
             status: 'active',
@@ -239,4 +253,22 @@ export async function linkSetup(o, sub, project) {
     throw error
   }
   return true
+}
+
+// The synced portable link already in the project when it names this self, else null.
+function portableLinkFor(project, selfRoot) {
+  const path = linkPath(project),
+    info = lstat(path)
+  if (!info || info.isSymbolicLink() || !info.isFile()) return null
+  let parsed
+  try {
+    parsed = parseYaml(readFileSync(assertContainedPath(project, path, 'link configuration'), 'utf8'))
+  } catch {
+    return null
+  }
+  const selfId = selfIdOf(selfRoot)
+  if (!selfId || parsed?.self_context?.self_id !== selfId || !isProjectKey(parsed?.project_key)) return null
+  const salt = parsed.self_context.binding_salt
+  const projectContext = parsed.project_context && typeof parsed.project_context === 'object' && !Array.isArray(parsed.project_context) ? parsed.project_context : null
+  return { projectKey: parsed.project_key, bindingSalt: typeof salt === 'string' && /^[0-9a-f]{32}$/.test(salt) ? salt : null, projectContext }
 }

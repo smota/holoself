@@ -89,6 +89,8 @@
           "mode": "metadata-link",
           "isLegacyMount": false,
           "self_context": {
+            "project_key": "hs-proj-<HEX:1>",
+            "self_id": "hs-self-<HEX:2>",
             "path": "<ROOT>/self",
             "access": "read",
             "proposals": "enabled",
@@ -18390,7 +18392,7 @@
       ],
       "status": 1,
       "stdout": "",
-      "stderr": "[!!] No self-side lens binding for <ROOT>/orphan-project. Run holoself lens bind --root <self-root> --project <project> --lens <lens> --yes\n"
+      "stderr": "[!!] self hs-self-<HEX:1> has no checkout registered on this machine; run 'holoself machine register --root <dir>' or 'holoself link setup'\n"
     },
     {
       "name": "linked context legacy mount",
@@ -23919,14 +23921,17 @@
         "json": {
           "schema_version": 1,
           "bindings": {
-            "<ROOT>/project": {
+            "hs-proj-<HEX:1>": {
               "default_lens": "general",
               "secondary_lenses": [
                 "leadership"
               ]
             }
           },
-          "hash": "<HEX:1>"
+          "hash": "<HEX:2>",
+          "projects": {
+            "hs-proj-<HEX:1>": "<ROOT>/project"
+          }
         }
       },
       "stderr": ""
@@ -23977,7 +23982,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "{\n  \"project\": \"<ROOT>/project\",\n  \"binding\": {\n    \"default_lens\": \"general\",\n    \"secondary_lenses\": [\n      \"leadership\",\n      \"professional\"\n    ]\n  }\n}\n{\n  \"schema_version\": 1,\n  \"bindings\": {\n    \"<ROOT>/project\": {\n      \"default_lens\": \"general\",\n      \"secondary_lenses\": [\n        \"leadership\",\n        \"professional\"\n      ]\n    }\n  },\n  \"hash\": \"<HEX:1>\"\n}\n",
+      "stdout": "{\n  \"project\": \"<ROOT>/project\",\n  \"binding\": {\n    \"default_lens\": \"general\",\n    \"secondary_lenses\": [\n      \"leadership\",\n      \"professional\"\n    ]\n  }\n}\n{\n  \"schema_version\": 1,\n  \"bindings\": {\n    \"hs-proj-<HEX:1>\": {\n      \"default_lens\": \"general\",\n      \"secondary_lenses\": [\n        \"leadership\",\n        \"professional\"\n      ]\n    }\n  },\n  \"hash\": \"<HEX:2>\",\n  \"projects\": {\n    \"hs-proj-<HEX:1>\": \"<ROOT>/project\"\n  }\n}\n",
       "stderr": ""
     },
     {
@@ -24016,6 +24021,8 @@
           "mode": "metadata-link",
           "isLegacyMount": false,
           "self_context": {
+            "project_key": "hs-proj-<HEX:1>",
+            "self_id": "hs-self-<HEX:2>",
             "path": "<ROOT>/self",
             "access": "read",
             "proposals": "enabled",
@@ -24135,6 +24142,7 @@
             "no activated adapters",
             "no public skill installation"
           ],
+          "path_keyed_bindings": 0,
           "project_skill_override_details": [],
           "project_skill_deployments": [],
           "session_start_hooks": []
@@ -24350,6 +24358,8 @@
           "mode": "metadata-link",
           "isLegacyMount": false,
           "self_context": {
+            "project_key": "hs-proj-<HEX:1>",
+            "self_id": "hs-self-<HEX:2>",
             "path": "<ROOT>/self",
             "access": "read",
             "proposals": "enabled",
@@ -26510,6 +26520,8 @@
           "mode": "metadata-link",
           "isLegacyMount": false,
           "self_context": {
+            "project_key": "hs-proj-<HEX:1>",
+            "self_id": "hs-self-<HEX:2>",
             "path": "<ROOT>/self",
             "access": "read",
             "proposals": "enabled",

@@ -25,7 +25,8 @@ export function spaceLinkConfiguration(
   const existing = !metadataAbsent && pathExists(linkPath(project)) ? readLink(project, { tolerant: true }) : null
   if (!metadataAbsent) inspectLinkCollisions(project)
   const registry = loadLensRegistry(self),
-    binding = readBindings(self, { registry }).bindings[canonicalProjectPath(project)]
+    bindings = readBindings(self, { registry }).bindings,
+    binding = (existing?.project_key && bindings[existing.project_key]) || bindings[canonicalProjectPath(project)]
   const desired = {
     path: self,
     access: 'read',
@@ -75,6 +76,7 @@ export function configureSpaceLink(project, self, configuration) {
         entry = {
           project_id,
           project_path,
+          ...(written.project_key ? { project_key: written.project_key } : {}),
           binding_salt: salt,
           allowed_lenses: [link.default_lens, ...link.secondary_lenses],
           status: 'active',

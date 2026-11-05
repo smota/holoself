@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readFileSync, rmSync } from 'node:fs'
 import { deactivateProject } from '../../../adapters.mjs'
 import { writeBinding } from '../../../bindings.mjs'
 import { isCanonicalSelf, linkPath } from '../../../link/config.mjs'
+import { linkSelfReference, resolveLinkedSelf } from '../../../link/self-resolution.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, registryFilePath, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { pathExists } from '../../../shared/fs.mjs'
 import { redactRootPaths } from '../../../shared/redact.mjs'
@@ -59,7 +60,17 @@ export async function linkRemove(o, sub, project) {
   } catch (e) {
     throw new Error(`cannot parse link at ${path}: ${e.message}`)
   }
+  const reference = linkSelfReference(parsedRaw)
   let selfRoot = o.self || parsedRaw?.self_context?.path || (o.rootExplicit ? o.root : null)
+  if (reference.selfId) {
+    // A portable link resolves its self like every other reader; an explicit self naming another self is refused.
+    try {
+      selfRoot = resolveLinkedSelf({ project, ...reference, explicitSelf: o.self || (o.rootExplicit ? o.root : null) }).path
+    } catch (error) {
+      if (error.code === 'SELF_ROOT_NOT_CANONICAL') throw error
+      selfRoot = null
+    }
+  }
   let selfReachable = false
   if (selfRoot) {
     try {
@@ -97,7 +108,7 @@ export async function linkRemove(o, sub, project) {
     console.log(`[dry-run] would remove ${path}; indexes, reports, and proposals preserved`)
     return true
   }
-  if (selfReachable) writeBinding(selfRoot, project, null)
+  if (selfReachable) writeBinding(selfRoot, project, null, { projectKey: reference.projectKey })
   rmSync(path)
   console.log(`[ok] removed ${path}; indexes, reports, and proposals preserved`)
   return true

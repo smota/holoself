@@ -67,7 +67,10 @@ try {
     ...process.env,
     TMPDIR: runRoot,
     TMP: runRoot,
-    TEMP: runRoot
+    TEMP: runRoot,
+    // The per-machine self map (selves.json) of every test lives in the run directory, never in the
+    // developer's real ~/.config/holoself; tests that need isolation set their own directory.
+    HOLOSELF_CONFIG_DIR: join(runRoot, 'holoself-config')
   }
   delete childEnv.NODE_TEST_CONTEXT
   const runnerFlags = ['--test']

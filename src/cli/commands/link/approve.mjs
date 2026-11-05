@@ -4,6 +4,7 @@ import { existsSync, lstatSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { isCanonicalSelf, linkPath, readLink, updateLinkBindingSaltInPlace } from '../../../link/config.mjs'
+import { registerSelf } from '../../../link/machine.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { assertContainedPath, safeRealpath, slash } from '../../../shared/fs.mjs'
 
@@ -33,16 +34,20 @@ export async function linkApprove(o, sub, project) {
   const lPath = linkPath(project)
   const hasLink = existsSync(lPath)
   let linkObj = null
+  const revokeMode = Boolean(o.revoke)
   if (hasLink) {
     assertContainedPath(project, lPath, 'project link file')
     if (lstatSync(lPath).isSymbolicLink()) throw new Error(`symlink detected at ${lPath}`)
     try {
-      linkObj = readLink(project, { tolerant: true })
+      // A portable link is approved only by the self it names (its self_id); revocation needs no match.
+      linkObj = readLink(project, { tolerant: true, explicitSelf: revokeMode ? null : selfRoot })
     } catch (e) {
+      if (e.code === 'SELF_ROOT_NOT_CANONICAL') throw Object.assign(new Error(`project link names a different self than ${selfRoot}; refusing to approve`), { code: e.code })
       throw new Error(`cannot read project link at ${lPath}: ${e.message}`)
     }
   }
-  const revokeMode = Boolean(o.revoke)
+  // Approval records this machine's checkout of the self (adding a self_id to it when missing).
+  if (!revokeMode) registerSelf(selfRoot)
   await withRegistryLock(selfRoot, () => {
     const currentReg = readRegistry(selfRoot)
     const nowIso = new Date().toISOString()
@@ -95,6 +100,7 @@ export async function linkApprove(o, sub, project) {
         const entry = {
           project_id: pId,
           project_path: canonicalProj,
+          ...(linkObj?.project_key ? { project_key: linkObj.project_key } : {}),
           binding_salt: salt,
           allowed_lenses: allowedLenses,
           status: 'active',

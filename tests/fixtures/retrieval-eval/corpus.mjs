@@ -1295,16 +1295,24 @@ const within = (parent, child) => {
   return rel !== '' && !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`)
 }
 
-async function quietRun(args) {
+// In-process CLI run with optional environment overrides restored afterwards (the fixture's self map directory must be
+// the one its subprocesses use, never the developer's real configuration directory).
+async function quietRun(args, envOverrides = {}) {
   const origLog = console.log
   const origErr = console.error
+  const savedEnv = Object.fromEntries(Object.keys(envOverrides).map(key => [key, process.env[key]]))
   console.log = () => {}
   console.error = () => {}
+  Object.assign(process.env, envOverrides)
   try {
     await run(args)
   } finally {
     console.log = origLog
     console.error = origErr
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
   }
 }
 
@@ -1434,7 +1442,7 @@ export async function createRetrievalEvalFixture({ baseDir } = {}) {
       '--no-mcp',
       '--no-hooks',
       '--yes'
-    ])
+    ], { HOLOSELF_CONFIG_DIR: join(home, '.config', 'holoself') })
 
     // Prime the on-disk catalog once so subsequent CLI subprocesses execute against a warm, deterministic catalog.
     const env = cleanSubprocessEnv(home)

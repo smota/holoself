@@ -94,7 +94,7 @@ test('MCP broken-state diagnostics redact bound private paths on successful and 
   const {self,project}=await fixture(),m=session(project);await rm(self,{recursive:true,force:true})
   const status=m.call(2,'holoself_status').result.structuredContent.data,search=m.call(3,'holoself_search',{query:'marker'}).result
   assert.equal(status.context.state,'broken');assert.doesNotMatch(JSON.stringify(status),new RegExp(self.replaceAll('\\','\\\\'),'i'))
-  assert.doesNotMatch(JSON.stringify(search),new RegExp(self.replaceAll('\\','\\\\'),'i'));if(search.isError)assert.match(search.structuredContent.error.message,/failed closed|lens bind/)
+  assert.doesNotMatch(JSON.stringify(search),new RegExp(self.replaceAll('\\','\\\\'),'i'));if(search.isError)assert.match(search.structuredContent.error.message,/failed closed|lens bind|has no checkout registered/)
 })
 
 test('MCP read tools do not create cache or index state',async()=>{

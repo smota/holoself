@@ -18,6 +18,8 @@ import {
 } from './ecosystem.mjs'
 import { seedLensDefinitions } from './lenses.mjs'
 import { LEGACY_MOUNT_DEPRECATION, ensureHoloselfGitignore } from './link/config.mjs'
+import { isSelfId, newSelfId } from './link/machine.mjs'
+import { pathKeyedBindingCount } from './bindings.mjs'
 import { VERSION } from './version.mjs'
 import { mcpPlatformSupport } from './mcp-verification.mjs'
 import { buildLensMigrationPlan, buildTransformationPlan, applyTransformationPlan } from './maintenance.mjs'
@@ -146,7 +148,8 @@ function help() {
       `data-root junction\n  unlink --target <dir>     Deprecated (removed in 0.13.0): remove legacy managed junction\n\nLinked ecosystem:\n  skill ` +
       `status|install --scope user [--platform <id>] [--skill-home <dir>]\n  lens ` +
       `list|show|validate|bind|unbind|bindings [id] [--root <self-root>]\n  link ` +
-      `add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  link deactivate ` +
+      `add|status|remove|setup|activate|deactivate|repair|doctor --project <dir> [--self <dir>]\n  machine ` +
+      `status [--json] | register [--root <self-root>] [--dry-run] | forget <self_id> --yes  Per-machine self map\n  link deactivate ` +
       `--project <dir> [--adapters all|<list>] [--dry-run|--yes]\n  link skill migrate-global --project <dir> ` +
       `[--skill-home <dir>] [--dry-run|--yes]
   context [--project <dir>] [--lens <lens>] [--task <text>] [--need required|helpful|not-needed] ` +
@@ -239,7 +242,7 @@ export async function run(argv, options = {}) {
           version: VERSION,
           interface: 'local-cli',
           contextSchemaVersion: 1,
-          commands: ['doctor', 'context', 'ledger', 'search', 'propose', 'proposals', 'instructions', 'knowledge', 'link', 'skill', 'mcp', 'client', 'coaching'],
+          commands: ['doctor', 'context', 'ledger', 'search', 'propose', 'proposals', 'instructions', 'knowledge', 'link', 'machine', 'skill', 'mcp', 'client', 'coaching'],
           coaching: {
             storage: 'self-root/coaching/sessions',
             commands: ['start', 'note', 'action', 'choose', 'review', 'material', 'resume'],
@@ -462,7 +465,14 @@ export async function run(argv, options = {}) {
     inject(root, 'AGENTS.md', false, rootSection(), ROOT_START, ROOT_END)
     const old = readConfig(root)
     const contribs = selectedContribs(o, old?.selectedContribs)
-    json(configPath(root), { schemaVersion: 1, product: 'holoself', selectedContribs: contribs, createdAt: old?.createdAt || new Date().toISOString() })
+    if (old?.self_id !== undefined && !isSelfId(old.self_id)) throw new Error('config.json self_id is invalid; expected hs-self-<32 lowercase hex>')
+    json(configPath(root), {
+      schemaVersion: 1,
+      product: 'holoself',
+      selectedContribs: contribs,
+      createdAt: old?.createdAt || new Date().toISOString(),
+      self_id: old?.self_id || newSelfId()
+    })
     console.log(`[ok] initialized ${root}`)
     console.log(`Contribs: ${contribs.join(', ') || '(none)'}`)
     return
@@ -479,6 +489,12 @@ export async function run(argv, options = {}) {
     const warnings = checks.every(([, ok]) => ok) ? catalogBuildWarnings(root) : []
     for (const w of warnings) console.log(`[warn] ${w}`)
     if (checks.every(([, ok]) => ok)) {
+      let pathKeyed = 0
+      try {
+        pathKeyed = pathKeyedBindingCount(root)
+      } catch {}
+      if (pathKeyed > 0)
+        console.log(`[warn] ${pathKeyed} lens binding(s) still keyed by absolute project path; run holoself link repair --project <dir> on each machine`)
       const excludedCount = excludedCanonicalDocuments(root).length
       if (excludedCount > 0) console.log(excludedIncompleteMetadataNotice(excludedCount))
     }
@@ -526,6 +542,7 @@ export async function run(argv, options = {}) {
       if (c.schemaVersion !== 1) errors.push('unsupported config schema')
       if (c.product !== 'holoself') errors.push('config product must be holoself')
       if (!Array.isArray(c.selectedContribs)) errors.push('selectedContribs must be an array')
+      if (c.self_id !== undefined && !isSelfId(c.self_id)) errors.push('config self_id must be hs-self-<32 lowercase hex>')
       else for (const id of c.selectedContribs) if (!availableContribs().includes(id)) errors.push(`unknown selected contrib: ${id}`)
       if (c.ledger !== undefined) {
         if (!c.ledger || Array.isArray(c.ledger) || typeof c.ledger !== 'object') errors.push('config ledger must be an object')

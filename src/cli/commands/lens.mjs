@@ -1,7 +1,9 @@
 // holoself lens command (moved verbatim from runEcosystem).
 import { existsSync, lstatSync, readFileSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { bindingsPath, readBindings, writeBinding } from '../../bindings.mjs'
+import { bindingProjects, bindingsPath, readBindings, writeBinding } from '../../bindings.mjs'
+import { linkProjectKey } from '../../link/config.mjs'
+import { isProjectKey } from '../../link/machine.mjs'
 import { loadLensRegistry, resolveLens } from '../../lenses.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../link/registry.mjs'
 import { atomicWrite, slash } from '../../shared/fs.mjs'
@@ -12,7 +14,7 @@ export async function runLens(o, sub) {
   if (!existsSync(root) || lstatSync(root).isSymbolicLink() || !lstatSync(root).isDirectory()) throw new Error(`invalid self root: ${root}`)
   const registry = loadLensRegistry(root)
   if (sub === 'bindings') {
-    console.log(JSON.stringify(readBindings(root), null, 2))
+    console.log(JSON.stringify(describeBindings(root), null, 2))
     return true
   }
   if (sub === 'bind' || sub === 'unbind') {
@@ -34,7 +36,7 @@ export async function runLens(o, sub) {
         const attestation = readRegistry(root),
           pId = canonicalSpaceId(o.project),
           cPath = canonicalProjectPath(o.project)
-        writeBinding(root, o.project, choice, { expectedHash: before.hash })
+        writeBinding(root, o.project, choice, { expectedHash: before.hash, projectKey: linkProjectKey(o.project) })
         writeRegistry(
           root,
           links =>
@@ -51,7 +53,7 @@ export async function runLens(o, sub) {
       else if (existsSync(file)) rmSync(file)
       throw error
     }
-    console.log(JSON.stringify(readBindings(root), null, 2))
+    console.log(JSON.stringify(describeBindings(root), null, 2))
     return true
   }
   if (sub === 'list') {
@@ -95,4 +97,16 @@ export async function runLens(o, sub) {
     return true
   }
   throw new Error('lens requires list, show, or validate')
+}
+
+// The bindings file, plus (only when project_key entries exist) the project path each key maps to on this machine
+// through the attestation registry; null for a key attested only on another machine.
+function describeBindings(root) {
+  const store = readBindings(root)
+  let links = []
+  try {
+    links = readRegistry(root).links
+  } catch {}
+  const keyed = bindingProjects(store.bindings, links).filter(item => isProjectKey(item.key))
+  return keyed.length ? { ...store, projects: Object.fromEntries(keyed.map(item => [item.key, item.project])) } : store
 }

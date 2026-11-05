@@ -204,6 +204,8 @@ async function prepareQualityFixture(fixture) {
   const markdown = entries.filter(entry => entry.isFile() && entry.name.endsWith('.md'))
   if (markdown.length !== 37) throw new Error(`quality fixture must contain 37 Markdown sources, found ${markdown.length}`)
   await Promise.all(markdown.map(entry => copyFile(join(fixture.qualityRoot, entry.name), join(fixture.self, 'context', entry.name))))
+  // Register the synthetic self in a self map inside the fixture (inherited by workers), never the user's configuration.
+  if (!process.env.HOLOSELF_CONFIG_DIR) process.env.HOLOSELF_CONFIG_DIR = join(fixture.root, 'holoself-config')
   await quietRun(['link', 'add', '--project', fixture.project, '--self', fixture.self, '--lens', 'general', '--secondary-lenses', 'professional', '--force', '--no-activate', '--yes'])
 }
 

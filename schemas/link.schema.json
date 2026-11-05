@@ -8,19 +8,29 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "project_key": {
+      "type": "string",
+      "pattern": "^hs-proj-[0-9a-f]{32}$",
+      "description": "Random, stable identifier of this linked project; keys the self-side lens binding. Preserved across rewrites."
+    },
     "self_context": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "path",
         "access",
         "proposals",
         "index"
       ],
       "properties": {
+        "self_id": {
+          "type": "string",
+          "pattern": "^hs-self-[0-9a-f]{32}$",
+          "description": "The self root config.json self_id; resolved to a checkout through HOLOSELF_HOME or the per-machine self map."
+        },
         "path": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "Legacy absolute self root path (machine-specific). New links omit it once the self resolves through the self map."
         },
         "access": {
           "const": "read"
@@ -53,7 +63,19 @@
         "ledger": {
           "$ref": "#/$defs/ledger"
         }
-      }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "self_id"
+          ]
+        },
+        {
+          "required": [
+            "path"
+          ]
+        }
+      ]
     },
     "ledger": {
       "$ref": "#/$defs/ledger"
@@ -121,5 +143,6 @@
         }
       }
     }
-  }
+  },
+  "description": "Project link (.holoself/link.yaml). A portable link names its self by self_context.self_id and carries a root project_key; a legacy link names its self by an absolute self_context.path (docs/decisions/portable-links.md)."
 }

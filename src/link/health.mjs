@@ -8,12 +8,13 @@ export function healthStatus(project, link, o = {}) {
   const holoselfDir = join(project, '.holoself')
   const isLegacyMount = existsSync(holoselfDir) && lstatSync(holoselfDir).isSymbolicLink()
   const activation = activationStatus(project, { skillHome: o.skillHome }),
-    selfExists = existsSync(link.path),
+    selfExists = Boolean(link.path) && existsSync(link.path),
     snapshot = existsSync(join(project, '.holoself', 'runtime', 'context-packet.md')),
     skillPolicy = activation.runtime?.skillInstallPolicy || 'auto',
     errors = []
   if (isLegacyMount) errors.push(`legacy filesystem junction mount detected; run holoself link setup to migrate to a bounded link; ${LEGACY_MOUNT_DEPRECATION}`)
   if (!selfExists) errors.push('self path missing')
+  if (link._selfError) errors.push(link._selfError.message)
   if (link._bindingError) errors.push(link._bindingError)
   if (!activation.bootstrap && !snapshot) errors.push('bootstrap missing')
   if (!activation.adapters.length && !snapshot) errors.push('no activated adapters')

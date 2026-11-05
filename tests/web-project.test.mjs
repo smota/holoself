@@ -10,6 +10,7 @@ import { request } from 'node:http'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { run } from '../src/cli.mjs'
+import { linkProjectKey } from '../src/link/config.mjs'
 import { startWebServer as startServer, scrubMessage } from '../src/web-server.mjs'
 
 const BIN=fileURLToPath(new URL('../bin/holoself.mjs',import.meta.url))
@@ -117,7 +118,7 @@ test('Workbench detects legacy mount, suggests migration setup, and migrates to 
 test('Workbench binding CRUD uses optimistic hashes and prunes the catalog after unbinding',async()=>{
  const self=await temp(),project=await temp();await run(['init','--root',self]);await run(['link','add','--project',project,'--self',self,'--lens','professional','--no-activate','--yes']);const app=await startWebServer({root:self,port:0})
  try{const session=(await(await fetch(app.url+'/api/session')).json()).data,headers={'content-type':'application/json','x-holoself-token':app.token},store=(await(await fetch(app.url+'/api/bindings')).json()).data
- const changed=await fetch(app.url+'/api/bindings',{method:'PUT',headers,body:JSON.stringify({project,default_lens:'public-voice',secondary_lenses:['general'],expectedHash:store.hash})});assert.equal(changed.status,200);const current=(await changed.json()).data;assert.equal(current.bindings[normalizeProjectPath(project)].default_lens,'public-voice')
+ const changed=await fetch(app.url+'/api/bindings',{method:'PUT',headers,body:JSON.stringify({project,default_lens:'public-voice',secondary_lenses:['general'],expectedHash:store.hash})});assert.equal(changed.status,200);const current=(await changed.json()).data;assert.equal(current.bindings[linkProjectKey(project)].default_lens,'public-voice')
  const stale=await fetch(app.url+'/api/bindings',{method:'DELETE',headers,body:JSON.stringify({project,expectedHash:store.hash})});assert.equal(stale.status,409);assert.equal((await(await fetch(app.url+'/api/spaces')).json()).data.length,1)
  const removed=await fetch(app.url+'/api/bindings',{method:'DELETE',headers,body:JSON.stringify({project,expectedHash:current.hash})});assert.equal(removed.status,200);assert.deepEqual((await(await fetch(app.url+'/api/spaces')).json()).data,[])
  }finally{await new Promise(done=>app.server.close(done))}

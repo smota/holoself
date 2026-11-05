@@ -6,6 +6,7 @@ import { activateProject, preflightActivation } from '../../../adapters.mjs'
 import { bindingsPath } from '../../../bindings.mjs'
 import { loadLensRegistry } from '../../../lenses.mjs'
 import { DEFAULT_PROJECT_EXCLUDES, createLinkDirs, inspectLinkCollisions, linkPath, linkSchemaErrors, writeLink } from '../../../link/config.mjs'
+import { ensureSelfId } from '../../../link/machine.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { atomicWrite, pathExists, safeRealpath, slash } from '../../../shared/fs.mjs'
 import { askConfirm, hookPlanSummary, mcpPlanSummary, printHookResults } from '../../link-helpers.mjs'
@@ -101,6 +102,7 @@ export async function linkAdd(o, sub, project) {
   const bindingFile = bindingsPath(selfRoot),
     previousBindings = existsSync(bindingFile) ? readFileSync(bindingFile) : null
   let link
+  ensureSelfId(selfRoot)
   try {
     createLinkDirs(project, { preserveReadme: o.force })
     link = writeLink(project, selfRoot, desired.default_lens, desired.secondary_lenses, o.projectContext || {}, resolvedBindingSalt)
@@ -114,6 +116,7 @@ export async function linkAdd(o, sub, project) {
           const entry = {
             project_id: pId,
             project_path: canonicalProj,
+            ...(link.project_key ? { project_key: link.project_key } : {}),
             binding_salt: resolvedBindingSalt,
             allowed_lenses: allowedLenses,
             status: 'active',

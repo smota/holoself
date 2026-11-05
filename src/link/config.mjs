@@ -6,6 +6,8 @@ import { atomicWriteFile, purgeLegacyIndex } from '../catalog.mjs'
 import { lensIdStructurallyValid, loadLensRegistry } from '../lenses.mjs'
 import { assertContainedPath, atomicWrite, ensureDir, pathExists, safeRealpath, slash } from '../shared/fs.mjs'
 import { parseYaml, quote, yamlObject } from '../shared/yaml.mjs'
+import { isCanonicalSelf, isProjectKey, isSelfId, newProjectKey, registerSelf, selfIdOf } from './machine.mjs'
+import { linkSelfReference, resolveLinkedSelf } from './self-resolution.mjs'
 
 export const DEFAULT_PROJECT_EXCLUDES = [
   '.git/**',
@@ -23,17 +25,7 @@ export const DEFAULT_PROJECT_EXCLUDES = [
   '**/Generated/**',
   '**/generated/**'
 ]
-export function isCanonicalSelf(path) {
-  if (!pathExists(path)) return false
-  const real = safeRealpath(path)
-  try {
-    const st = lstatSync(real)
-    if (!st.isDirectory() || st.isSymbolicLink()) return false
-  } catch {
-    return false
-  }
-  return existsSync(join(real, 'config.json')) && existsSync(join(real, 'profile')) && existsSync(join(real, 'context'))
-}
+export { isCanonicalSelf }
 export function findLinkUpwards(startDir) {
   let current = resolve(startDir)
   while (true) {
@@ -58,6 +50,18 @@ export function findLinkUpwards(startDir) {
 }
 export function linkPath(project) {
   return join(project, '.holoself', 'link.yaml')
+}
+// The project_key of a project's link.yaml, or null (absent, unreadable or invalid). Never resolves the self.
+export function linkProjectKey(project) {
+  try {
+    const path = assertContainedPath(project, linkPath(project), 'link configuration'),
+      info = lstatSync(path, { throwIfNoEntry: false })
+    if (!info || info.isSymbolicLink() || !info.isFile()) return null
+    const key = parseYaml(readFileSync(path, 'utf8'))?.project_key
+    return isProjectKey(key) ? key : null
+  } catch {
+    return null
+  }
 }
 export function updateLinkBindingSaltInPlace(projectDir, salt) {
   const filePath = assertContainedPath(projectDir, linkPath(projectDir), 'link configuration')
@@ -116,6 +120,7 @@ export function ledgerConfigErrors(value, prefix = 'ledger') {
 export function linkSchemaErrors(link, registry = null) {
   const errors = [],
     allowedKeys = new Set([
+      'self_id',
       'path',
       'access',
       'proposals',
@@ -130,7 +135,10 @@ export function linkSchemaErrors(link, registry = null) {
     known = id => (registry ? registry.byId.has(id) : lensIdStructurallyValid(id))
   if (!link || Array.isArray(link) || typeof link !== 'object') return ['self_context must be a mapping']
   for (const key of Object.keys(link)) if (!allowedKeys.has(key)) errors.push(`unknown self_context field: ${key}`)
-  if (typeof link.path !== 'string' || !link.path.trim()) errors.push('self_context.path must be a non-empty string')
+  // A portable link names its self by self_id; a legacy link by path. Either (or both) is required.
+  if (link.self_id !== undefined && !isSelfId(link.self_id)) errors.push('self_context.self_id must be hs-self-<32 lowercase hex>')
+  if (link.self_id === undefined || link.path !== undefined)
+    if (typeof link.path !== 'string' || !link.path.trim()) errors.push('self_context.path must be a non-empty string')
   if (link.access !== 'read') errors.push('self_context.access must be read')
   if (!['enabled', 'disabled'].includes(link.proposals)) errors.push('self_context.proposals must be enabled or disabled')
   if (link.index !== 'local') errors.push('self_context.index must be local')
@@ -165,7 +173,9 @@ export const LEGACY_MOUNT_REMOVAL_VERSION = '0.13.0'
 export const LEGACY_MOUNT_DEPRECATION =
   `the legacy live mount (link --target, unlink --target) is deprecated and will be removed in ${LEGACY_MOUNT_REMOVAL_VERSION}; ` +
   'use holoself link setup --project <dir> --self <path>'
-export function readLink(project, { tolerant = false } = {}) {
+// Reads and validates link.yaml and resolves its self through resolveLinkedSelf (explicitSelf is an explicit --self or
+// --root). Tolerant mode reports problems (including an unresolvable self: path null, _selfError) instead of throwing.
+export function readLink(project, { tolerant = false, explicitSelf = null, env = process.env } = {}) {
   const holoselfDir = join(project, '.holoself')
   if (existsSync(holoselfDir) && lstatSync(holoselfDir).isSymbolicLink()) {
     const error = new Error(`legacy filesystem junction mount detected at ${holoselfDir}; run holoself link setup to migrate to a bounded link; ${LEGACY_MOUNT_DEPRECATION}`)
@@ -183,15 +193,27 @@ export function readLink(project, { tolerant = false } = {}) {
   }
   if (!Object.hasOwn(parsed, 'self_context')) throw new Error(`malformed link configuration ${path}: self_context mapping missing`)
   for (const key of Object.keys(parsed))
-    if (!['self_context', 'project_context', 'ledger', 'cache_limit_entries', 'cache_limit_bytes'].includes(key))
+    if (!['project_key', 'self_context', 'project_context', 'ledger', 'cache_limit_entries', 'cache_limit_bytes'].includes(key))
       throw new Error(`malformed link configuration ${path}: unknown root field ${key}`)
   const structuralErrors = [
+    ...(parsed.project_key !== undefined && !isProjectKey(parsed.project_key) ? ['project_key must be hs-proj-<32 lowercase hex>'] : []),
     ...linkSchemaErrors(parsed.self_context),
     ...projectContextErrors(parsed.project_context),
     ...ledgerConfigErrors(parsed.ledger, 'ledger')
   ]
   if (structuralErrors.length && !tolerant) throw new Error(`invalid link configuration ${path}: ${structuralErrors.join('; ')}`)
-  const selfPath = resolve(project, parsed.self_context.path)
+  const reference = linkSelfReference(parsed)
+  let selfPath = null,
+    selfSource = null,
+    selfError = null
+  try {
+    const resolved = resolveLinkedSelf({ project, ...reference, explicitSelf, env })
+    selfPath = resolved.path
+    selfSource = resolved.source
+  } catch (error) {
+    if (!tolerant || error.code === 'SELF_ROOT_NOT_CANONICAL') throw error
+    selfError = { code: error.code || 'SELF_NOT_FOUND', message: error.message }
+  }
   let registry = null
   try {
     registry = loadLensRegistry(selfPath)
@@ -202,12 +224,13 @@ export function readLink(project, { tolerant = false } = {}) {
   if (errors.length && !tolerant) throw new Error(`invalid link configuration ${path}: ${errors.join('; ')}`)
   let binding = null,
     bindingError = null
-  try {
-    binding = resolveBinding(selfPath, project, { registry })
-  } catch (error) {
-    if (!tolerant) throw error
-    bindingError = error.message
-  }
+  if (!selfError)
+    try {
+      binding = resolveBinding(selfPath, project, { registry, projectKey: reference.projectKey })
+    } catch (error) {
+      if (!tolerant) throw error
+      bindingError = error.message
+    }
   const { cache_limit_entries: _cle, cache_limit_bytes: _clb, ledger: selfLedger, ...selfContextFields } = parsed.self_context
   const rawLedger = parsed.ledger && typeof parsed.ledger === 'object' ? parsed.ledger : selfLedger && typeof selfLedger === 'object' ? selfLedger : null
   const ledger = rawLedger
@@ -216,7 +239,10 @@ export function readLink(project, { tolerant = false } = {}) {
         record_task_text: rawLedger.record_task_text === true
       }
     : undefined
-  return {
+  const result = {
+    ...(reference.projectKey ? { project_key: reference.projectKey } : {}),
+    ...(reference.selfId ? { self_id: reference.selfId } : {}),
+    path: selfPath,
     ...selfContextFields,
     ...(binding || {}),
     path: selfPath,
@@ -235,21 +261,43 @@ export function readLink(project, { tolerant = false } = {}) {
       ? { default_lens: parsed.self_context.default_lens, secondary_lenses: parsed.self_context.secondary_lenses || [] }
       : null
   }
+  // Resolution diagnostics stay out of serialized link status (non-enumerable).
+  return Object.defineProperties(result, {
+    _selfSource: { value: selfSource },
+    _selfError: { value: selfError },
+    _legacyPath: { value: reference.legacyPath }
+  })
 }
-export function writeLink(project, self, lens = 'general', secondary = [], projectContext = {}, bindingSalt = null) {
+// Writes link.yaml and the self-side binding. A self with a self_id gets a portable link: self_context.self_id plus a
+// root project_key (kept across rewrites like binding_salt), this machine registered in the self map, and no
+// self_context.path once the self resolves through that map. A self without a self_id keeps the legacy path form.
+export function writeLink(project, self, lens = 'general', secondary = [], projectContext = {}, bindingSalt = null, { env = process.env } = {}) {
   const registry = loadLensRegistry(resolve(self))
-  let salt = bindingSalt
-  if (!salt) {
+  let salt = bindingSalt,
+    existingKey = null
+  try {
+    if (pathExists(linkPath(project))) {
+      const raw = parseYaml(readFileSync(assertContainedPath(project, linkPath(project), 'link configuration'), 'utf8'))
+      if (isProjectKey(raw?.project_key)) existingKey = raw.project_key
+      const existingSalt = raw?.self_context?.binding_salt
+      if (!salt && typeof existingSalt === 'string' && /^[0-9a-f]{32}$/.test(existingSalt)) salt = existingSalt
+    }
+  } catch {}
+  const selfId = selfIdOf(self),
+    projectKey = selfId ? existingKey || newProjectKey() : null
+  let portable = false
+  if (selfId) {
     try {
-      if (pathExists(linkPath(project))) {
-        const existing = readLink(project, { tolerant: true })
-        if (existing.binding_salt && /^[0-9a-f]{32}$/.test(existing.binding_salt)) salt = existing.binding_salt
-      }
+      registerSelf(self, { env })
+      portable = resolveLinkedSelf({ project, selfId, env: { ...env, HOLOSELF_HOME: '' } }).source === 'map'
     } catch {}
   }
-  const selfContext = { path: slash(resolve(self)), access: 'read', proposals: 'enabled', index: 'local' }
+  const selfContext = selfId
+    ? { self_id: selfId, ...(portable ? {} : { path: slash(resolve(self)) }), access: 'read', proposals: 'enabled', index: 'local' }
+    : { path: slash(resolve(self)), access: 'read', proposals: 'enabled', index: 'local' }
   if (salt) selfContext.binding_salt = salt
   const data = {
+      ...(projectKey ? { project_key: projectKey } : {}),
       self_context: selfContext,
       project_context: {
         include: projectContext.include || [],
@@ -260,9 +308,16 @@ export function writeLink(project, self, lens = 'general', secondary = [], proje
     },
     errors = [...linkSchemaErrors(data.self_context, registry), ...projectContextErrors(data.project_context)]
   if (errors.length) throw new Error(errors.join('; '))
-  writeBinding(self, project, { default_lens: lens, secondary_lenses: secondary })
+  writeBinding(self, project, { default_lens: lens, secondary_lenses: secondary }, { projectKey })
   atomicWrite(linkPath(project), yamlObject(data))
-  return { ...data.self_context, default_lens: lens, secondary_lenses: secondary, project_context: data.project_context }
+  return {
+    ...(projectKey ? { project_key: projectKey } : {}),
+    ...data.self_context,
+    path: slash(resolve(self)),
+    default_lens: lens,
+    secondary_lenses: secondary,
+    project_context: data.project_context
+  }
 }
 export const HOLOSELF_GITIGNORE_PATTERNS = [
   'ledger*.ndjson',

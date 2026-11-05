@@ -45,7 +45,7 @@ export function resolveCaller(o) {
       err.code = 'LINK_REQUIRED'
       throw err
     }
-    link = readLink(project)
+    link = readLink(project, { explicitSelf: o.self || (o.rootExplicit ? o.root : null) })
     self = link.path
     if (!existsSync(self)) {
       const err = new Error(`self path not found: ${self}`)
@@ -82,7 +82,7 @@ export function resolveCaller(o) {
     const found = explicitOwnerRoot ? null : findLinkUpwards(cwd)
     if (found) {
       project = found.projectDir
-      link = readLink(project)
+      link = readLink(project, { explicitSelf: o.self || (o.rootExplicit ? o.root : null) })
       self = link.path
       if (!existsSync(self)) {
         const err = new Error(`self path not found: ${self}`)

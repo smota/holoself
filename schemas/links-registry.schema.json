@@ -26,6 +26,11 @@
         "properties": {
           "project_id": { "type": "string", "pattern": "^hs-space-[0-9a-f]{16}$" },
           "project_path": { "type": "string", "minLength": 1 },
+          "project_key": {
+            "type": "string",
+            "pattern": "^hs-proj-[0-9a-f]{32}$",
+            "description": "The link's portable project_key when known; joins project_key-keyed lens bindings to this machine's project path."
+          },
           "binding_salt": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
           "allowed_lenses": {
             "type": "array",
