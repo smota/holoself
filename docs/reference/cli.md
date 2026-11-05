@@ -146,7 +146,7 @@ link add --project <dir> --self <dir> [--lens general] [--secondary-lenses a,b]
 link status|activate|deactivate|repair|doctor --project <dir> [--yes]
 link deactivate --project <dir> [--adapters all|<list>] [--dry-run|--yes]
 link skill migrate-global --project <dir> [--skill-home <dir>] [--dry-run] [--yes]
-link remove --project <dir> --yes
+link remove --project <dir> [--self <dir>] [--dry-run] --yes
 link setup --project <dir> [--self <dir> --yes]
 skill status --scope user [--platform <id>] [--skill-home <dir>]
 skill install --scope user [--platform <id>] [--skill-home <dir>] [--dry-run] [--force] [--yes]

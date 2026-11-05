@@ -2,6 +2,10 @@
 
 All notable Holoself releases are documented here.
 
+## Unreleased
+
+- `link remove --dry-run` no longer revokes the sovereign link or takes the registry lock (#43): the project and self root stay unchanged, and it prints `[dry-run] would revoke sovereign link for <project>` and `[dry-run] would remove <link.yaml>` instead of `[ok] removed`.
+
 ## [0.11.0] — 2026-11-05
 
 MCP-first delivery (verified MCP by default, session-start hooks, a non-blocking server, desktop clients without a project), claim corrections and a batch review inbox, directory privacy defaults with `validate --fix`, optional SQLite FTS5 ranking, a retrieval evaluation gate, and privacy and Workbench hardening. Requires Node.js 22; catalogs rebuild once on upgrade. See [release notes](docs/releases/0.11.0.md).

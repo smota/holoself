@@ -9,6 +9,29 @@ import { redactRootPaths } from '../../../shared/redact.mjs'
 import { parseYaml } from '../../../shared/yaml.mjs'
 import { askConfirm } from '../../link-helpers.mjs'
 
+// Revoke the matching registry entry, or on dry-run only report what would be revoked (no lock, no write).
+async function revokeSovereignLink(o, project, selfRoot, pId, canonicalProj) {
+  const matches = l => l.project_id === pId || l.project_path === canonicalProj
+  if (o.dryRun) {
+    const entry = readRegistry(selfRoot).links.find(matches)
+    if (entry && entry.status !== 'revoked') console.log(`[dry-run] would revoke sovereign link for ${project}`)
+    return
+  }
+  await withRegistryLock(selfRoot, () => {
+    const currentReg = readRegistry(selfRoot)
+    const nowIso = new Date().toISOString()
+    writeRegistry(
+      selfRoot,
+      links => {
+        const idx = links.findIndex(matches)
+        if (idx >= 0) links[idx] = { ...links[idx], status: 'revoked', revoked_at: nowIso, updated_at: nowIso }
+        return links
+      },
+      currentReg.registry_hash
+    )
+  })
+}
+
 export async function linkRemove(o, sub, project) {
   const path = linkPath(project)
   const canonicalProj = canonicalProjectPath(project)
@@ -20,21 +43,7 @@ export async function linkRemove(o, sub, project) {
       const cSelf = canonicalProjectPath(selfRoot)
       if (existsSync(cSelf) && isCanonicalSelf(cSelf)) {
         const regPath = registryFilePath(cSelf)
-        if (existsSync(regPath)) {
-          await withRegistryLock(cSelf, () => {
-            const currentReg = readRegistry(cSelf)
-            const nowIso = new Date().toISOString()
-            writeRegistry(
-              cSelf,
-              links => {
-                const idx = links.findIndex(l => l.project_id === pId || l.project_path === canonicalProj)
-                if (idx >= 0) links[idx] = { ...links[idx], status: 'revoked', revoked_at: nowIso, updated_at: nowIso }
-                return links
-              },
-              currentReg.registry_hash
-            )
-          })
-        }
+        if (existsSync(regPath)) await revokeSovereignLink(o, project, cSelf, pId, canonicalProj)
       }
     }
     return true
@@ -83,23 +92,13 @@ export async function linkRemove(o, sub, project) {
       `Warning: sovereign self at ${selfRoot || '(unspecified)'} is unreachable or invalid; local link configuration and adapters removed, ` +
         `but sovereign registry was NOT updated. Run 'holoself link approve --project <dir> --revoke' from self root to complete sovereign revocation.`
     )
-  } else {
-    await withRegistryLock(selfRoot, () => {
-      const currentReg = readRegistry(selfRoot)
-      const nowIso = new Date().toISOString()
-      writeRegistry(
-        selfRoot,
-        links => {
-          const idx = links.findIndex(l => l.project_id === pId || l.project_path === canonicalProj)
-          if (idx >= 0) links[idx] = { ...links[idx], status: 'revoked', revoked_at: nowIso, updated_at: nowIso }
-          return links
-        },
-        currentReg.registry_hash
-      )
-    })
+  } else await revokeSovereignLink(o, project, selfRoot, pId, canonicalProj)
+  if (o.dryRun) {
+    console.log(`[dry-run] would remove ${path}; indexes, reports, and proposals preserved`)
+    return true
   }
-  if (!o.dryRun && selfReachable) writeBinding(selfRoot, project, null)
-  if (!o.dryRun) rmSync(path)
+  if (selfReachable) writeBinding(selfRoot, project, null)
+  rmSync(path)
   console.log(`[ok] removed ${path}; indexes, reports, and proposals preserved`)
   return true
 }
