@@ -146,7 +146,7 @@ The plan writes the materialized target fields from section 2 and removes `visib
 
 **Corrections from the independent review of 0.12.0 (#108)**
 
-- A heading rule covers the claim blocks under it on every output path. The catalog used to lift a claim out of its section and apply only the claim's own rule, so `content` and the catalog paths disagreed. Content, sections, claims, tags, links and search now share one walk over the document. This corrects behaviour in released versions.
+- A heading rule covers the claim blocks under it on every output path. The catalog used to lift a claim out of its section and apply only the claim's own rule, and in `content` a heading inside a claim ended the rule around it, so the paths disagreed and a claim with its own heading was not covered on any of them. Content, sections, claims, tags, links and search now share one walk over the document. This corrects behaviour in released versions.
 - A heading rule covers deeper headings until the next heading of its level or above, and a heading inside a claim no longer ends the rule around that claim. Both narrow existing documents. A heading rule inside a claim stops at the claim's closing marker, so ordinary text after the claim, which `sections` already delivered, is now in `content` too.
 - Rule details are the owner's. On publication adapters, and for every non-owner caller, delivered markers keep only `disclosure`, and `field_access`, `field_visibility` and `access_rule` are removed from delivered metadata and index entries. A document's own `access_lenses` is still delivered.
 - A claim whose rule admits no lens is refused by replace, supersede and retire. Writing any marker for it would widen it.
