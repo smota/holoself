@@ -2,9 +2,11 @@
 
 All notable Holoself releases are documented here.
 
-## Unreleased
+## [0.11.1] — 2026-11-05
 
 - `link remove --dry-run` no longer revokes the sovereign link or takes the registry lock (#43): the project and self root stay unchanged, and it prints `[dry-run] would revoke sovereign link for <project>` and `[dry-run] would remove <link.yaml>` instead of `[ok] removed`.
+
+Previews of `link remove` are now read-only. See [release notes](docs/releases/0.11.1.md).
 
 ## [0.11.0] — 2026-11-05
 
