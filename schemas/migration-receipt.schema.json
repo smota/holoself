@@ -41,6 +41,10 @@
           "before_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
           "after_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
           "before_text": { "type": "string" },
+            "before_base64": {
+              "type": "string",
+              "contentEncoding": "base64"
+            },
           "after_text": { "type": "string" },
           "status": { "type": "string", "enum": ["applied", "reverted", "skipped"] }
         }

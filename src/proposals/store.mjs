@@ -410,8 +410,11 @@ export function applyClaimChange(text, rel, change, p, view = null, registry = n
   const old = targetedClaim(text, rel, change, view, registry),
     splice = replacement => text.slice(0, old.start) + replacement + text.slice(old.end),
     attrs = { ...old.attrs, id: old.claim_id },
-    oldRule = writable(old.rule),
-    rule = change.visibility ? writable(legacySubDocumentRule(change.visibility)) : oldRule,
+    oldRule = ruleForRegistry(old.rule, registry)
+  // No lens reads this claim, and that has no written form. Any marker written here would be wider, so it is refused.
+  if (!oldRule || oldRule.access_lenses?.length === 0)
+    throw claimError(`claim rule admits no lens; fix its marker by hand: ${change.claim_id} (${change.change_id})`, 'CLAIM_RULE_UNWRITABLE')
+  const rule = change.visibility ? writable(legacySubDocumentRule(change.visibility)) : oldRule,
     visibility = change.visibility || describeRule(old.rule),
     visibilityChange = visibility === describeRule(old.rule) ? null : { from: describeRule(old.rule), to: visibility }
   if (change.operation === 'replace_claim') {

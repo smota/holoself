@@ -13,7 +13,7 @@ der die das ein eine und ist mit von zu`
   ).split(/\s+/)
 )
 
-export function sections(text, { raw = false } = {}) {
+export function sections(text, { raw = false, empty = false } = {}) {
   if (raw) {
     const lines = String(text).split(/\r?\n/),
       out = []
@@ -30,16 +30,18 @@ export function sections(text, { raw = false } = {}) {
   }
   const result = []
   let heading = '(document)',
+    level = 0,
     lines = []
   const flush = () => {
     const content = lines.join('\n').trim()
-    if (content) result.push({ heading, content })
+    if (content || (empty && level)) result.push({ heading, level, content })
   }
   for (const line of String(text).split(/\r?\n/)) {
     const match = line.match(/^#{1,6}\s+(.+)$/)
     if (match) {
       flush()
       heading = match[1].trim()
+      level = line.match(/^#+/)[0].length
       lines = []
     } else lines.push(line)
   }

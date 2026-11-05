@@ -758,7 +758,7 @@ test('the catalog stores a rule with no deprecated name and validates against th
   const catalog = JSON.parse(await readFile(join(root, '.holoself', 'catalog', 'catalog.json'), 'utf8')),
     source = catalog.sources.find(item => item.file === 'context/paths.md')
   assert.deepEqual(validateCatalogSchema(catalog).errors, [])
-  assert.equal(catalog.schema_version, 4)
+  assert.equal(catalog.schema_version, 5)
   assert.deepEqual(source.frontmatter.field_access['Approved Notes'], { disclosure: 'publish-approved' })
   assert.deepEqual(source.frontmatter.field_access['Lens Notes'], { access_lenses: ['general', 'private'], disclosure: 'review-required' })
   const withRule = source.sections.find(section => section.heading === 'Technical Notes')
@@ -794,7 +794,7 @@ test('schemas and the annotation schema accept the new fields', async () => {
   const metadata = JSON.parse(await readFile(new URL('../schemas/document-metadata.schema.json', import.meta.url), 'utf8')),
     catalog = JSON.parse(await readFile(new URL('../schemas/catalog.schema.json', import.meta.url), 'utf8'))
   assert.deepEqual(Object.keys(metadata.properties.field_access.additionalProperties.properties), ['access_lenses', 'disclosure'])
-  assert.equal(catalog.properties.schema_version.const, 4)
+  assert.equal(catalog.properties.schema_version.const, 5)
   assert.ok(catalog.$defs.access_rule)
   assert.equal(annotationSchema([]).fields.field_access.type, 'field-rules')
   const base = { access_lenses: ['general'], disclosure: 'internal-only', sensitivity: 'personal', document_role: 'content' }

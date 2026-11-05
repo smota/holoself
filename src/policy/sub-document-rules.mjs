@@ -38,7 +38,7 @@ export function subDocumentRuleValid(value, registry = null) {
   return !Object.hasOwn(value, 'disclosure') || DISCLOSURES.includes(value.disclosure)
 }
 export function fieldRuleNameValid(name) {
-  return typeof name === 'string' && Boolean(name.trim()) && !RESERVED_FIELD_NAMES.has(name)
+  return typeof name === 'string' && Boolean(name) && name === name.trim() && !RESERVED_FIELD_NAMES.has(name)
 }
 export function fieldAccessValid(value, registry = null) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
@@ -153,4 +153,22 @@ export function fieldLineRule(line, table) {
 export function fieldHeadingRule(heading, table) {
   const key = String(heading).trim().toLowerCase()
   return matchFieldRule(table, name => key.includes(name))
+}
+// The field heading rules in force at one point of a document. A ruled heading covers everything under it, deeper
+// headings included, until the next heading of its level or above. `inherited` holds the matches around a claim block:
+// a heading inside the block can neither end those nor outlive the block.
+export function createHeadingScope(table, inherited = []) {
+  let open = []
+  return {
+    heading(level, text) {
+      open = open.filter(entry => entry.level < level)
+      const match = fieldHeadingRule(text, table)
+      if (match) open.push({ level, ...match })
+      return match
+    },
+    matches: () => [...inherited, ...open]
+  }
+}
+export function scopeRule(matches) {
+  return matches.length ? matches.map(match => match.rule).reduce(intersectRules) : null
 }

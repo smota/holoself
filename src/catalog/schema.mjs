@@ -2,7 +2,7 @@
 import { DISCLOSURES, VISIBILITIES } from '../annotations.mjs'
 import { catalogRuleValid, fieldAccessValid } from '../policy/sub-document-rules.mjs'
 
-export const CATALOG_SCHEMA_VERSION = 4
+export const CATALOG_SCHEMA_VERSION = 5
 export const HASH_RE = /^[0-9a-f]{64}$/
 export const SOURCE_ID_RE = /^hs-[0-9a-f]{20}$/
 export const NUM_RE = /^[0-9]+$/

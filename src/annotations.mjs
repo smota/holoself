@@ -68,6 +68,7 @@ function fieldAccessAnnotationErrors(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return ['field_access must map field or heading names to rules.']
   const errors = []
   for (const [name, rule] of Object.entries(value)) {
+    if (name !== name.trim()) errors.push(`field_access name ${JSON.stringify(name)} must not start or end with spaces.`)
     if (!rule || typeof rule !== 'object' || Array.isArray(rule) || Object.keys(rule).some(key => key !== 'access_lenses' && key !== 'disclosure'))
       errors.push(`field_access ${name} accepts only access_lenses and disclosure.`)
     else if (rule.access_lenses !== undefined && (!Array.isArray(rule.access_lenses) || !rule.access_lenses.length))

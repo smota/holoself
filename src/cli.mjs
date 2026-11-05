@@ -532,7 +532,7 @@ export async function run(argv, options = {}) {
         allowPublishApproved: Boolean(o.allowPublishApproved)
       })
       if (o.output) atomicWrite(o.output, JSON.stringify(plan, null, 2) + '\n', { mode: 0o600, exactMode: true })
-      // The deprecated-field report sits beside the plan, outside its digest: validate --fix never edits those fields.
+      // The deprecated-field report sits beside the plan, outside its digest: validate --fix does not migrate those fields.
       const deprecated = deprecatedFieldMappings(root)
       if (o.json) console.log(JSON.stringify({ ...plan, deprecated_fields: deprecated }, null, 2))
       else {

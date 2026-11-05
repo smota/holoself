@@ -6,11 +6,11 @@ import { canonicalSort, readSourceWithStat, slugHeading, sourceRef } from '../ca
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { claims, links, sections, tags } from '../markdown/text.mjs'
-import { privacyMetadata, visibility } from '../policy/access.mjs'
+import { privacyMetadata, scopedLines, visibility } from '../policy/access.mjs'
 import { resolveDocumentPolicy } from '../policy/policy-defaults.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
 import { SECRET_RE, secretFile } from '../policy/secrets.mjs'
-import { catalogRuleFields, fieldHeadingRule, fieldLineRule, fieldRuleTable, intersectRules, legacySubDocumentRule, narrowerDisclosure } from '../policy/sub-document-rules.mjs'
+import { catalogRuleFields, createHeadingScope, fieldHeadingRule, fieldLineRule, fieldRuleTable, intersectRules, legacySubDocumentRule, narrowerDisclosure, scopeRule } from '../policy/sub-document-rules.mjs'
 import { assertContainedPath, hash, slash } from '../shared/fs.mjs'
 
 export function catalogRoot(project) {
@@ -22,15 +22,21 @@ export function catalogFilePath(project) {
 // With a registry, a claim marker naming a lens it does not define is malformed, as in delivered content.
 export function privacySections(body, policy, registry = null) {
   const chunks = [],
-    table = fieldRuleTable(policy)
+    table = fieldRuleTable(policy),
+    enclosing = new Map()
+  // A claim block is lifted out of its section, so it takes the field heading rules around it from the same walk that
+  // filters content: a claim under a hidden heading stays hidden on the catalog paths too.
+  for (const { block, outer } of scopedLines(body, table)) if (block && !enclosing.has(block.start)) enclosing.set(block.start, outer)
   const ordinary = replaceClaimBlocks(
     body,
     block => {
-      const status = block.status
-      for (const section of sections(block.body)) {
-        // A field heading rule inside a claim block narrows that section too, as filterFieldVisibility does for content.
-        const headingRule = fieldHeadingRule(section.heading, table),
-          rule = headingRule ? intersectRules(block.rule, headingRule.rule) : block.rule
+      const status = block.status,
+        scope = createHeadingScope(table, enclosing.get(block.start) || [])
+      for (const section of sections(block.body, { empty: true })) {
+        if (section.level) scope.heading(section.level, section.heading)
+        if (!section.content) continue
+        const fieldRule = scopeRule(scope.matches()),
+          rule = fieldRule ? intersectRules(block.rule, fieldRule) : block.rule
         chunks.push({
           ...section,
           rule,
@@ -46,9 +52,12 @@ export function privacySections(body, policy, registry = null) {
   // Ordinary sections without a field rule inherit the document's own access and disclosure (the document gate already
   // decides who sees them), so they are delivered wherever the document is, including publication adapters when the
   // document is approved for publication. They no longer depend on the deprecated document `visibility`.
-  const inherited = { disclosure: policy.publication_allowed ? 'publish-approved' : 'review-required' }
-  for (const section of sections(ordinary)) {
-    const fieldRule = fieldHeadingRule(section.heading, table)?.rule
+  const inherited = { disclosure: policy.publication_allowed ? 'publish-approved' : 'review-required' },
+    scope = createHeadingScope(table)
+  for (const section of sections(ordinary, { empty: true })) {
+    if (section.level) scope.heading(section.level, section.heading)
+    if (!section.content) continue
+    const fieldRule = scopeRule(scope.matches())
     chunks.push({
       ...section,
       rule: fieldRule || inherited,

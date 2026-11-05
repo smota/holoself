@@ -310,7 +310,7 @@ test('MCP accepts the claim operations, never approves, and only exposes ids of 
 test('legacy claims get their deterministic id only when targeted, matching delivered context', async () => {
   const { project, claims } = await fixture(),
     delivered = await contextText(project)
-  assert.match(delivered, new RegExp(`<!-- holoself-claim visibility=professional id=${ids.visible} -->`))
+  assert.match(delivered, new RegExp(`<!-- holoself-claim disclosure=review-required id=${ids.visible} -->`))
   assert.doesNotMatch(await readFile(claims, 'utf8'), /id=/, 'delivery never rewrites canonical files')
   await approve(project, (await propose(project, ['--op', 'retire', '--claim-id', ids.visible, '--reason', 'r', '--evidence', 'e'])).proposal_id)
   const after = await readFile(claims, 'utf8')

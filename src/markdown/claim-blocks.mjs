@@ -8,6 +8,7 @@ import { hash, slash } from '../shared/fs.mjs'
 export const CLAIM_STATUSES = ['current', 'superseded', 'historical']
 // Marker attributes in their canonical write order; the access rule always comes first and is not listed here.
 export const CLAIM_MARKER_ATTRS = ['id', 'status', 'supersedes', 'superseded_by', 'superseded_at', 'retired_at']
+export const CLAIM_CLOSER = '<!-- /holoself-claim -->'
 export const CLAIM_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 // Any text that opens or closes a claim block, however it is spaced or cased.
 // Whitespace for marker matching also covers invisible format characters (\p{Cf}: BOM, ZWSP, ZWNJ, ZWJ, soft hyphen,
@@ -158,9 +159,23 @@ export function withClaimIds(body, target, { registry = null } = {}) {
     block => {
       if (block.malformed || block.attrs.id) return block.raw
       const legacyOnly = block.attrs.access_lenses === undefined && block.attrs.disclosure === undefined
-      return formatClaimMarker(legacyOnly ? block.visibility : block.rule, { ...block.attrs, id: block.claim_id }) + block.body + '<!-- /holoself-claim -->'
+      return formatClaimMarker(legacyOnly ? block.visibility : block.rule, { ...block.attrs, id: block.claim_id }) + block.body + CLAIM_CLOSER
     },
     { target, registry }
+  )
+}
+// Delivered markers for callers who are not reading their own rules: the lens list can name a custom lens, so only the
+// disclosure stays. The marker stays well formed, with its id and lifecycle, so a linked proposal can still target it.
+export function withoutClaimRuleDetails(body, { registry = null } = {}) {
+  return replaceClaimBlocks(
+    body,
+    block => {
+      const marker = block.malformed
+        ? formatClaimMarker({ disclosure: block.rule.disclosure }, { status: 'historical' })
+        : formatClaimMarker({ disclosure: block.rule.disclosure }, block.attrs)
+      return marker + block.body + CLAIM_CLOSER
+    },
+    { registry }
   )
 }
 // Removes marker comments from text, for comparing what two versions of a document deliver.

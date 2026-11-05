@@ -2,12 +2,11 @@
 import { DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES, effectiveDisclosure, publicationAllowed } from '../annotations.mjs'
 import { KNOWLEDGE_STATUSES, TEMPORAL_SCOPES, dateValue } from '../context-selection.mjs'
 import { DEFAULT_LENS_IDS } from '../lenses.mjs'
-import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
+import { CLAIM_CLOSER, parseClaimBlocks, replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
 import {
   LEGACY_LENS_SETS,
   PUBLICATION_ADAPTERS,
-  describeRule,
-  fieldHeadingRule,
+  createHeadingScope,
   fieldLineRule,
   fieldRuleTable,
   intersectRules,
@@ -129,7 +128,7 @@ export function filterClaimVisibility(body, lens, source, restrictions, resoluti
       if (identityKind === 'owner:direct')
         restrictions.push({
           source,
-          reason: block.malformed ? 'malformed claim marker excluded' : subDocumentExclusion(`claim visibility ${describeRule(block.rule)}`, block.rule, lens, adapter)
+          reason: block.malformed ? 'malformed claim marker excluded' : subDocumentExclusion(`claim visibility ${block.visibility}`, block.rule, lens, adapter)
         })
       return ''
     },
@@ -154,6 +153,33 @@ export function filterClaimStatus(body, temporal, source, restrictions, identity
     { registry }
   )
 }
+// Each line of a body with the field heading rules in force on it. filterFieldVisibility and the catalog share this
+// walk, so `content` and the catalog paths cannot disagree about what a heading rule covers. `outer` is what applies
+// around a claim block, and `matches` adds the headings inside it.
+export function* scopedLines(body, table) {
+  const source = String(body),
+    blocks = parseClaimBlocks(source),
+    parts = source.split(/(\r?\n)/),
+    outerScope = createHeadingScope(table)
+  let index = 0,
+    offset = 0,
+    innerScope = null
+  for (let i = 0; i < parts.length; i += 2) {
+    const line = parts[i]
+    while (blocks[index] && offset >= blocks[index].end) {
+      index++
+      innerScope = null
+    }
+    const block = blocks[index] && offset + line.length > blocks[index].start ? blocks[index] : null,
+      outer = outerScope.matches()
+    if (block && !innerScope) innerScope = createHeadingScope(table, outer)
+    const scope = block ? innerScope : outerScope,
+      heading = line.match(/^(#{1,6})\s+(.+)$/),
+      opened = heading ? scope.heading(heading[1].length, heading[2]) : null
+    yield { line, block, closes: Boolean(block) && offset + line.length >= block.end, heading: Boolean(heading), opened, matches: scope.matches(), outer }
+    offset += line.length + (parts[i + 1]?.length ?? 0)
+  }
+}
 export function filterFieldVisibility(
   body,
   metadata,
@@ -164,25 +190,20 @@ export function filterFieldVisibility(
   identityKind = 'owner:direct',
   adapter = 'generic'
 ) {
-  const table = fieldRuleTable(metadata)
-  let blockedHeading = false
-  const hidden = match => {
-    if (!match || subDocumentVisible(match.rule, lens, adapter)) return false
-    restrictions.push({ source, reason: subDocumentExclusion(`field ${match.name}`, match.rule, lens, adapter) })
-    return true
+  const table = fieldRuleTable(metadata),
+    visible = match => subDocumentVisible(match.rule, lens, adapter),
+    record = match => restrictions.push({ source, reason: subDocumentExclusion(`field ${match.name}`, match.rule, lens, adapter) }),
+    kept = []
+  for (const { line, block, closes, heading, opened, matches, outer } of scopedLines(body, table)) {
+    if (opened && !visible(opened)) record(opened)
+    const lineMatch = heading || !matches.every(visible) ? null : fieldLineRule(line, table),
+      hiddenLine = lineMatch && !visible(lineMatch)
+    if (hiddenLine) record(lineMatch)
+    if (matches.every(visible) && !hiddenLine) kept.push(line)
+    // A rule on a heading inside a claim hides the rest of that claim, not its closing marker.
+    else if (block && closes && outer.every(visible)) kept.push(CLAIM_CLOSER)
   }
-  return body
-    .split(/\r?\n/)
-    .filter(line => {
-      const heading = line.match(/^#{1,6}\s+(.+)$/)
-      if (heading) {
-        blockedHeading = hidden(fieldHeadingRule(heading[1], table))
-        return !blockedHeading
-      }
-      if (blockedHeading) return false
-      return !hidden(fieldLineRule(line, table))
-    })
-    .join('\n')
+  return kept.join('\n')
 }
 export function privacyMetadata(metadata, registry = null) {
   const rawSensitivity = typeof metadata.sensitivity === 'string' ? metadata.sensitivity : null,
