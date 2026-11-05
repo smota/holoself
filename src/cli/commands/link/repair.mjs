@@ -7,7 +7,7 @@ import { canonicalJson } from '../../../catalog.mjs'
 import { loadLensRegistry, resolveLens } from '../../../lenses.mjs'
 import { linkPath, linkProjectKeyTaken, readLink, renewLinkProjectKeyInPlace, writeLink } from '../../../link/config.mjs'
 import { ensureSelfId, registerSelf, selfIdOf } from '../../../link/machine.mjs'
-import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, isRegistryProject, nextAllowedLenses, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { canonicalPath, samePath } from '../../../path-guard.mjs'
 import { atomicWrite, slash } from '../../../shared/fs.mjs'
 import { activateLinkedProject, askConfirm, repairSelection, reportGrant } from '../../link-helpers.mjs'
@@ -33,7 +33,7 @@ export async function linkRepair(o, sub, project) {
         diagnostic.path,
         links =>
           links.map(entry =>
-            entry.project_id === canonicalSpaceId(project) || entry.project_path === canonicalProjectPath(project)
+            isRegistryProject(entry, project)
               ? { ...entry, project_key: renewed, updated_at: new Date().toISOString() }
               : entry
           ),
@@ -71,7 +71,7 @@ export async function linkRepair(o, sub, project) {
   // link.yaml field beyond this machine's grant is an add, and --yes alone never grants it.
   const attested =
       readRegistry(diagnostic.path).links.find(
-        entry => entry.status === 'active' && (entry.project_id === canonicalSpaceId(project) || entry.project_path === canonicalProjectPath(project))
+        entry => entry.status === 'active' && isRegistryProject(entry, project)
       ) || null,
     grantRequest = {
       lenses: [choice.default_lens, ...choice.secondary_lenses],
@@ -81,10 +81,12 @@ export async function linkRepair(o, sub, project) {
     },
     planned = attested ? nextAllowedLenses({ ...grantRequest, entry: attested }) : null,
     changesGrant = grant => canonicalJson(grant.allowed) !== canonicalJson(attested.allowed_lenses || [])
-  // A committed legacy field never creates a shared binding beyond what this machine's owner granted.
-  if (planned && !current && !o.lens && planned.pending.length) {
+  // A committed legacy field never creates a shared binding beyond what this machine's owner granted (nothing, when the
+  // project is not attested here).
+  const beyondGrant = planned ? planned.pending : grantRequest.lenses
+  if (!current && !o.lens && beyondGrant.length) {
     console.log(
-      `[note] legacy lens fields in link.yaml exceed this machine's grant: ${planned.pending.join(', ')}; no binding was created; ` +
+      `[note] legacy lens fields in link.yaml exceed this machine's grant: ${beyondGrant.join(', ')}; no binding was created; ` +
         `run 'holoself link repair --project <dir> --lens <id>' or 'holoself lens bind --root <self-root> --project <dir> --lens <id> --yes'`
     )
     return true

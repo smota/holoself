@@ -8,7 +8,7 @@ import { randomBytes } from 'node:crypto'
 import { closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import { defaultConfigDir } from '../cli/args.mjs'
-import { lstat } from '../path-guard.mjs'
+import { lstat, samePathIdentity } from '../path-guard.mjs'
 import { atomicWrite, fileModeOr, safeRealpath, slash, sleepSync } from '../shared/fs.mjs'
 
 export const SELF_ID_PATTERN = /^hs-self-[0-9a-f]{32}$/
@@ -264,7 +264,7 @@ export function registerSelf(root, { env = process.env, dryRun = false } = {}) {
   if (dryRun) {
     const map = readSelfMap(env),
       previous = existingId && Object.hasOwn(map.selves, existingId) ? map.selves[existingId] : null
-    return { self_id: existingId, path, adds_self_id: !existingId, changed: !previous || previous.path !== path, previous, diagnostics: map.diagnostics }
+    return { self_id: existingId, path, adds_self_id: !existingId, changed: !previous || !samePathIdentity(previous.path, path), previous, diagnostics: map.diagnostics }
   }
   const self_id = ensureSelfId(real)
   return {
@@ -273,7 +273,7 @@ export function registerSelf(root, { env = process.env, dryRun = false } = {}) {
     adds_self_id: !existingId,
     ...updateSelfMap(selves => {
       const previous = selves[self_id] || null
-      if (previous && previous.path === path) return { changed: false, previous }
+      if (previous && samePathIdentity(previous.path, path)) return { changed: false, previous }
       selves[self_id] = { path, updated_at: new Date().toISOString() }
       return { changed: true, previous }
     }, env),

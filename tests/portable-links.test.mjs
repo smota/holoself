@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url'
 import { bindingProjects, readBindings, resolveBinding, writeBinding } from '../src/bindings.mjs'
 import { linkProjectKey, readLink } from '../src/link/config.mjs'
 import { breakStaleFileLock, forgetSelf, readFileLockState, readSelfMap, registerSelf, selfIdOf, withFileLockSync } from '../src/link/machine.mjs'
-import { canonicalSpaceId, nextAllowedLenses, readRegistry, writeRegistry } from '../src/link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, readRegistry, writeRegistry } from '../src/link/registry.mjs'
+import { pathIdentity, samePathIdentity } from '../src/path-guard.mjs'
 import { configureSpaceLink, spaceLinkConfiguration } from '../src/link/workbench.mjs'
 import { resolveLinkedSelf } from '../src/link/self-resolution.mjs'
 import { parseYaml } from '../src/shared/yaml.mjs'
@@ -110,7 +111,7 @@ test('two machines share a self and a project through synced files; each attests
   for (const m of [a, b]) {
     const entries = readRegistry(m.self).links
     assert.equal(entries.length, 1)
-    assert.equal(entries[0].project_path, realpathSync(m.project).replaceAll('\\', '/'))
+    assert.equal(entries[0].project_path, canonicalProjectPath(m.project))
     assert.equal(entries[0].project_key, parsed.project_key)
   }
   const map = JSON.parse(readFileSync(join(b.config, 'selves.json'), 'utf8'))
@@ -337,9 +338,9 @@ test('a legacy link and path-keyed binding behave as before until link repair mi
 
   // Space discovery (Workbench catalog, lens bindings) still lists the project through the registry join.
   const bindings = JSON.parse(ok(m.cli(['lens', 'bindings', '--root', m.self]), 'lens bindings').stdout)
-  assert.equal(bindings.projects[migrated.project_key], realpathSync(m.project).replaceAll('\\', '/'))
+  assert.equal(bindings.projects[migrated.project_key], canonicalProjectPath(m.project))
   const catalog = reconcileCatalog(m.self)
-  assert.deepEqual(catalog.discovered, [realpathSync(m.project).replaceAll('\\', '/')])
+  assert.deepEqual(catalog.discovered, [canonicalProjectPath(m.project)])
   assert.equal(catalog.spaces[0].lens, 'professional')
 
   // lens bind/unbind and link remove act on the project_key entry.
@@ -449,7 +450,9 @@ test('bindingProjects skips revoked entries and fails closed when two active ent
   ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--no-activate', '--yes']), 'setup')
   const key = keyOf(m.project),
     [entry] = readRegistry(m.self).links,
-    other = { ...entry, project_id: 'hs-space-0000000000000000', project_path: '/elsewhere/other' }
+    copy = join(m.root, 'code', 'holder-copy')
+  copyProject(m.project, copy)
+  const other = { ...entry, project_id: canonicalSpaceId(copy), project_path: canonicalProjectPath(copy) }
   const bindings = readBindings(m.self).bindings
   assert.deepEqual(bindingProjects(bindings, [{ ...other, status: 'revoked' }, entry]).map(item => item.project), [entry.project_path])
   assert.deepEqual(bindingProjects(bindings, [other, entry]).map(item => item.project), [null])
@@ -607,7 +610,7 @@ test('link repair on the copy resolves a project_key conflict and keeps the orig
   const [entry] = readRegistry(m.self).links
   writeRegistry(m.self, links => [
     ...links,
-    { ...entry, project_id: canonicalSpaceId(copy), project_path: realpathSync(copy).replaceAll('\\', '/'), created_at: new Date(Date.now() + 1000).toISOString() }
+    { ...entry, project_id: canonicalSpaceId(copy), project_path: canonicalProjectPath(copy), created_at: new Date(Date.now() + 1000).toISOString() }
   ])
   assert.notEqual(m.cli(['context', '--project', m.project, '--json']).status, 0, 'both fail closed while the key is shared')
   const repaired = ok(m.cli(['link', 'repair', '--project', copy, '--no-activate', '--yes']), 'repair copy')
@@ -628,7 +631,9 @@ test('approve and backfill never rewrite a link that names another self', t => {
   ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--no-activate', '--yes']), 'setup')
   const [entry] = readRegistry(m.self).links
   // The other self's registry already holds this key for another path, so a renewal would be due if the self matched.
-  writeRegistry(other, [{ ...entry, project_id: 'hs-space-0000000000000000', project_path: '/elsewhere/project' }])
+  const holder = join(m.root, 'code', 'other-holder')
+  copyProject(m.project, holder)
+  writeRegistry(other, [{ ...entry, project_id: canonicalSpaceId(holder), project_path: canonicalProjectPath(holder) }])
   const before = linkText(m.project)
   assert.notEqual(m.cli(['link', 'approve', '--project', m.project, '--self', other]).status, 0)
   assert.equal(linkText(m.project), before)
@@ -705,7 +710,7 @@ test('link backfill never widens without the flag; with it, --all prints the add
   ok(m.cli(['link', 'backfill', '--all', '--self', m.self]), 'backfill --all')
   assert.deepEqual(allowedOf(m.self), ['general'])
   const accepted = ok(m.cli(['link', 'backfill', '--all', '--self', m.self, '--accept-shared-lenses']), 'accept')
-  assert.equal(grantBlock(accepted.stdout).project, realpathSync(m.project).replaceAll('\\', '/'))
+  assert.equal(grantBlock(accepted.stdout).project, canonicalProjectPath(m.project))
   assert.match(accepted.stdout, /adds: \[professional\] \/ removes: \[\]/)
   assert.deepEqual(allowedOf(m.self), ['general', 'professional'])
   ok(m.cli(['link', 'backfill', '--project', m.project, '--self', m.self, '--lenses', 'general']), 'explicit')
@@ -803,7 +808,7 @@ test('a recorded project_key always beats one known only through a link.yaml', t
   // An older entry with no recorded key whose link.yaml was crafted to carry the victim's key.
   writeRegistry(m.self, links =>
     links.map(entry => {
-      if (entry.project_path !== realpathSync(older).replaceAll('\\', '/')) return entry
+      if (entry.project_path !== canonicalProjectPath(older)) return entry
       const { project_key: _key, ...keyless } = entry
       return { ...keyless, created_at: '2000-01-01T00:00:00.000Z' }
     })
@@ -878,7 +883,7 @@ test('a link.yaml edited to carry another project_key gets no binding from it', 
   ok(m.cli(['link', 'setup', '--project', other, '--self', m.self, '--lens', 'general', '--secondary-lenses', 'professional', '--no-activate', '--yes']), 'setup other')
   writeBinding(m.self, other, { default_lens: 'general', secondary_lenses: [] }, { projectKey: keyOf(other) })
   // Keyless entries whose own link.yaml carries the key (written before project_key was recorded) keep working.
-  writeRegistry(m.self, links => links.map(({ project_key: _key, ...entry }) => (entry.project_path === realpathSync(other).replaceAll('\\', '/') ? entry : { ...entry, project_key: keyOf(m.project) })))
+  writeRegistry(m.self, links => links.map(({ project_key: _key, ...entry }) => (entry.project_path === canonicalProjectPath(other) ? entry : { ...entry, project_key: keyOf(m.project) })))
   ok(m.cli(['context', '--project', other, '--json']), 'own key, no recorded key')
   writeFileSync(join(other, '.holoself', 'link.yaml'), linkText(other).replace(/^project_key:.*$/m, `project_key: "${keyOf(m.project)}"`))
   for (const args of [[], ['--lens', 'professional']]) {
@@ -887,4 +892,53 @@ test('a link.yaml edited to carry another project_key gets no binding from it', 
     assert.match(refused.stderr, /is attested for another project on this machine/)
   }
   assert.equal(JSON.parse(ok(m.cli(['context', '--project', m.project, '--json']), 'victim').stdout).lens, 'professional')
+})
+
+test('path identity is one normalizer: slashes, NFC, and case-insensitive on win32', () => {
+  assert.equal(pathIdentity('C:\\Users\\RUNNER~1\\Temp\\Project', 'win32'), 'c:/users/runner~1/temp/project')
+  assert.equal(pathIdentity('/Users/Me/Project', 'darwin'), '/Users/Me/Project')
+  assert.ok(samePathIdentity('C:/USERS/runner~1/temp/PROJECT', 'c:\\Users\\RUNNER~1\\Temp\\Project', 'win32'))
+  assert.ok(!samePathIdentity('/a/Project', '/a/project', 'linux'))
+  assert.equal(pathIdentity('/a/e\u0301', 'linux'), '/a/\u00e9')
+  assert.ok(!samePathIdentity(null, '/a', 'linux'))
+})
+
+test('link repair creates no binding from legacy lens fields on an unattested or revoked project', t => {
+  const m = machine(sandbox(t), 'm')
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--lens', 'general', '--no-activate', '--yes']), 'setup')
+  const key = keyOf(m.project),
+    file = join(m.project, '.holoself', 'link.yaml'),
+    withLegacy = linkText(m.project).replace('  access:', '  default_lens: public-voice\n  access:')
+  writeBinding(m.self, m.project, null, { projectKey: key })
+  writeFileSync(file, withLegacy)
+  ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self, '--revoke']), 'revoke')
+  const revoked = ok(m.cli(['link', 'repair', '--project', m.project, '--no-activate', '--yes']), 'repair revoked')
+  assert.match(revoked.stdout, /no binding was created/)
+  assert.deepEqual(Object.keys(bindingsOf(m.self)), [])
+  writeRegistry(m.self, [])
+  ok(m.cli(['link', 'repair', '--project', m.project, '--no-activate', '--yes']), 'repair unattested')
+  assert.deepEqual(Object.keys(bindingsOf(m.self)), [])
+  assert.equal(linkText(m.project), withLegacy)
+})
+
+test('a moved project is not a copy: the old path no longer holds its project_key', t => {
+  const m = machine(sandbox(t), 'm'),
+    moved = join(m.root, 'code', 'moved-project')
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--lens', 'professional', '--no-activate', '--yes']), 'setup')
+  const key = keyOf(m.project)
+  renameSync(m.project, moved)
+  const unattested = m.cli(['context', '--project', moved, '--json'])
+  assert.notEqual(unattested.status, 0)
+  assert.doesNotMatch(unattested.stderr, /another project/)
+  const setup = ok(m.cli(['link', 'setup', '--project', moved, '--self', m.self, '--no-activate', '--yes']), 'setup moved')
+  assert.doesNotMatch(setup.stderr, /already used by another project/)
+  assert.equal(keyOf(moved), key)
+  assert.deepEqual(Object.keys(bindingsOf(m.self)), [key])
+  assert.equal(JSON.parse(ok(m.cli(['context', '--project', moved, '--json']), 'context moved').stdout).lens, 'professional')
+  // The same holds when the old path survives but its link.yaml no longer carries the key.
+  mkdirSync(join(m.project, '.holoself'), { recursive: true })
+  writeFileSync(join(m.project, '.holoself', 'link.yaml'), linkText(moved).replace(/^project_key:.*$/m, `project_key: "hs-proj-${'0'.repeat(32)}"`))
+  ok(m.cli(['context', '--project', moved, '--json']), 'still served')
 })

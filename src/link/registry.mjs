@@ -2,19 +2,19 @@
 import { closeSync, lstatSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { atomicWriteFile, canonicalSort } from '../catalog.mjs'
-import { ensureDir, hash, pathExists, safeRealpath, slash } from '../shared/fs.mjs'
+import { pathIdentity, samePathIdentity } from '../path-guard.mjs'
+import { ensureDir, hash, pathExists, safeRealpath } from '../shared/fs.mjs'
 import { parseYaml } from '../shared/yaml.mjs'
 
 export function canonicalSpaceId(projectDir) {
-  const real = safeRealpath(projectDir)
-  const norm = slash(real).normalize('NFC')
-  const canonical = process.platform === 'win32' ? norm.toLowerCase() : norm
-  return 'hs-space-' + hash('project\0' + canonical).slice(0, 16)
+  return 'hs-space-' + hash('project\0' + canonicalProjectPath(projectDir)).slice(0, 16)
 }
 export function canonicalProjectPath(projectDir) {
-  const real = safeRealpath(projectDir)
-  const norm = slash(real).normalize('NFC')
-  return process.platform === 'win32' ? norm.toLowerCase() : norm
+  return pathIdentity(safeRealpath(projectDir))
+}
+// Whether a registry entry is this project, by its path-derived id or its stored path in the one comparable form.
+export function isRegistryProject(entry, project) {
+  return entry?.project_id === canonicalSpaceId(project) || samePathIdentity(entry?.project_path, canonicalProjectPath(project))
 }
 // Active (non-revoked) entries in `links` that hold projectKey for a project other than `project` (docs/decisions/
 // portable-links.md: on one machine a project_key belongs to at most one project path, e.g. never to a copied folder).
@@ -23,12 +23,11 @@ export function canonicalProjectPath(projectDir) {
 // project_key its project's link.yaml carries now. When this project is itself attested with the same key, only stronger
 // claims count against it, so `link repair` on the copy resolves a conflict and the original keeps its key: a recorded
 // key always beats one known only through a link.yaml (a project file), and created_at breaks ties within a kind.
+// An entry whose project is gone, or whose link.yaml no longer carries the key (a moved project), holds nothing.
 export function projectKeyHolders(links, projectKey, project = null) {
   if (!projectKey) return []
-  const id = project ? canonicalSpaceId(project) : null,
-    path = project ? canonicalProjectPath(project) : null,
-    same = entry => entry.project_id === id || entry.project_path === path,
-    active = links.filter(entry => entry && entry.status !== 'revoked' && effectiveProjectKey(entry) === projectKey)
+  const same = entry => isRegistryProject(entry, project),
+    active = links.filter(entry => entry && entry.status !== 'revoked' && linkYamlProjectKey(entry) === projectKey)
   if (!project) return active
   const own = active.find(same),
     rank = entry => [entry.project_key === projectKey ? '0' : '1', String(entry.created_at || ''), String(entry.project_path || '')].join('\0')
@@ -37,7 +36,7 @@ export function projectKeyHolders(links, projectKey, project = null) {
 // The active entries a project_key stands for on this machine. Recorded keys win over keys known only through a project's
 // link.yaml, so a crafted link.yaml cannot put a recorded project into conflict. More than one means fail closed.
 export function activeProjectKeyHolders(links, projectKey) {
-  const active = links.filter(entry => entry && entry.status !== 'revoked' && effectiveProjectKey(entry) === projectKey),
+  const active = links.filter(entry => entry && entry.status !== 'revoked' && linkYamlProjectKey(entry) === projectKey),
     recorded = active.filter(entry => entry.project_key === projectKey)
   return recorded.length ? recorded : active
 }
@@ -61,9 +60,8 @@ export function nextAllowedLenses({ entry = null, lenses = [], named = [], expli
     allowed = accept ? wanted : wanted.filter(id => !pending.includes(id))
   return { allowed, adds, pending, removes, applied, mode: 'existing', reactivates }
 }
-// The project_key a registry entry stands for: its recorded key, else the key in its project's link.yaml (tolerant).
-export function effectiveProjectKey(entry) {
-  if (typeof entry?.project_key === 'string') return entry.project_key
+// The project_key the entry's project carries on disk now (tolerant): null when the project or its link is gone.
+function linkYamlProjectKey(entry) {
   if (typeof entry?.project_path !== 'string') return null
   try {
     const path = join(entry.project_path, '.holoself', 'link.yaml'),

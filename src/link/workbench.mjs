@@ -17,7 +17,7 @@ import {
   readLink,
   writeLink
 } from './config.mjs'
-import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, readRegistry, withRegistryLock, writeRegistry } from './registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, isRegistryProject, nextAllowedLenses, readRegistry, withRegistryLock, writeRegistry } from './registry.mjs'
 export function spaceLinkConfiguration(
   project,
   self,
@@ -52,7 +52,7 @@ export function spaceLinkConfiguration(
   const errors = [...linkSchemaErrors(selfContext, registry), ...projectContextErrors(project_context)]
   if (errors.length) throw new Error(errors.join('; '))
   const sovereign = readRegistry(self),
-    entry = sovereign.links.find(x => x.project_id === canonicalSpaceId(project) || x.project_path === canonicalProjectPath(project))
+    entry = sovereign.links.find(x => isRegistryProject(x, project))
   const grantRequest = {
       lenses: [desired.default_lens, ...desired.secondary_lenses],
       named: [explicitLens, ...(secondaryLenses || [])].filter(Boolean),

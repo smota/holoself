@@ -7,7 +7,7 @@ import { bindingsPath } from '../../../bindings.mjs'
 import { loadLensRegistry } from '../../../lenses.mjs'
 import { DEFAULT_PROJECT_EXCLUDES, createLinkDirs, inspectLinkCollisions, linkPath, linkSchemaErrors, writeLink } from '../../../link/config.mjs'
 import { ensureSelfId } from '../../../link/machine.mjs'
-import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, isRegistryProject, nextAllowedLenses, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { atomicWrite, pathExists, safeRealpath, slash } from '../../../shared/fs.mjs'
 import { askConfirm, hookPlanSummary, mcpPlanSummary, printHookResults, reportGrant } from '../../link-helpers.mjs'
 
@@ -87,7 +87,7 @@ export async function linkAdd(o, sub, project) {
       explicit: Boolean(o.lens && o.secondaryLenses),
       accept: Boolean(o.acceptSharedLenses)
     },
-    plannedGrant = nextAllowedLenses({ ...grantRequest, entry: readRegistry(selfRoot).links.find(l => l.project_id === pId || l.project_path === canonicalProj) || null })
+    plannedGrant = nextAllowedLenses({ ...grantRequest, entry: readRegistry(selfRoot).links.find(l => isRegistryProject(l, project)) || null })
   reportGrant(project, plannedGrant, 'add')
   if (o.dryRun) {
     const link = {

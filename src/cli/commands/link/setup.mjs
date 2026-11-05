@@ -8,7 +8,7 @@ import { bindingsPath, resolveBinding } from '../../../bindings.mjs'
 import { loadLensRegistry } from '../../../lenses.mjs'
 import { createLinkDirs, inspectLinkCollisions, linkPath, linkSchemaErrors, writeLink } from '../../../link/config.mjs'
 import { ensureSelfId, isProjectKey, selfIdOf } from '../../../link/machine.mjs'
-import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, projectKeyHolders, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, isRegistryProject, nextAllowedLenses, projectKeyHolders, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { lstat } from '../../../path-guard.mjs'
 import { assertContainedPath, atomicWrite, pathExists, safeRealpath, slash } from '../../../shared/fs.mjs'
 import { parseYaml } from '../../../shared/yaml.mjs'
@@ -140,7 +140,7 @@ export async function linkSetup(o, sub, project) {
       explicit: Boolean(o.lens && o.secondaryLenses),
       accept: Boolean(o.acceptSharedLenses)
     },
-    sameProject = l => l.project_id === canonicalSpaceId(project) || l.project_path === canonicalProjectPath(project),
+    sameProject = l => isRegistryProject(l, project),
     plannedGrant = nextAllowedLenses({ ...grantRequest, entry: readRegistry(selfRoot).links.find(sameProject) || null })
   reportGrant(project, plannedGrant, 'setup')
   const collisions = inspectLinkCollisions(project).filter(path => !(joined && path === linkPath(project)))

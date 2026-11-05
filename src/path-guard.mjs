@@ -42,6 +42,16 @@ export function canonicalPath(path) {
   }
 }
 
+// The one comparable form of an already-resolved path: forward slashes, NFC, lowercase on win32 (the form the attestation
+// registry stores). Every project and self path identity check in the portable-link code goes through it.
+export function pathIdentity(path, platform = process.platform) {
+  const norm = String(path).replaceAll('\\', '/').normalize('NFC')
+  return platform === 'win32' ? norm.toLowerCase() : norm
+}
+export function samePathIdentity(a, b, platform = process.platform) {
+  return typeof a === 'string' && typeof b === 'string' && pathIdentity(a, platform) === pathIdentity(b, platform)
+}
+
 export function samePath(a, b) {
   return fold(a) === fold(b)
 }

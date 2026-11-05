@@ -9,7 +9,11 @@ import { loadLensRegistry } from '../src/lenses.mjs'
 import { normalizeProjectPath, readBindings, resolveBinding, writeBinding } from '../src/bindings.mjs'
 import { readDocument } from '../src/documents.mjs'
 import { buildTransformationPlan } from '../src/maintenance.mjs'
+import { contextData } from '../src/ecosystem.mjs'
+import { linkProjectKey } from '../src/link/config.mjs'
+import { canonicalProjectPath } from '../src/link/registry.mjs'
 import { canonicalPath, linkBelow } from '../src/path-guard.mjs'
+import { reconcileCatalog } from '../src/web/server-helpers.mjs'
 import { clientMcpCreateProposal, clientMcpPreviewProposal } from '../src/retrieval/client-mcp.mjs'
 
 // Reproduces macOS, where os.tmpdir() lives under /var -> /private/var: the
@@ -20,6 +24,27 @@ function linkedParent(){
   try{symlinkSync(real,link,'junction')}catch(error){if(error.code==='EPERM')return null;throw error}
   return {base,real,link}
 }
+
+test('portable links and space discovery work below a symlinked parent',async t=>{
+  const env=linkedParent();if(!env)return t.skip('symlinks unavailable')
+  t.after(()=>rmSync(env.base,{recursive:true,force:true}))
+  const self=join(env.link,'portable-self'),project=join(env.link,'portable-proj');mkdirSync(project)
+  await capture(()=>run(['init','--root',self]))
+  await capture(()=>run(['link','setup','--project',project,'--self',self,'--lens','professional','--no-activate','--yes']))
+  const key=linkProjectKey(project),canonical=canonicalProjectPath(project)
+  assert.equal(canonical,canonicalProjectPath(join(env.real,'portable-proj')))
+  assert.deepEqual(Object.keys(readBindings(self).bindings),[key])
+  // Identity holds through either spelling; a project_key binding has no path, so spaces report the registry's canonical path.
+  for(const spelling of [project,join(env.real,'portable-proj')]){
+    assert.equal(resolveBinding(self,spelling,{projectKey:key}).default_lens,'professional')
+    assert.equal(contextData({project:spelling,noCache:true}).lens,'professional')
+  }
+  const catalog=reconcileCatalog(self)
+  assert.deepEqual(catalog.discovered,[canonical]);assert.equal(catalog.spaces[0].lens,'professional')
+  assert.equal(JSON.parse(await capture(()=>run(['lens','bindings','--root',self]))).projects[key],canonical)
+  await capture(()=>run(['link','repair','--project',project,'--no-activate','--yes']))
+  assert.equal(linkProjectKey(project),key)
+})
 
 test('self root and linked project below a symlinked ancestor work end to end',async t=>{
   const env=linkedParent();if(!env)return t.skip('symlinks unavailable')

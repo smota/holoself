@@ -12,7 +12,7 @@ import {
   renewLinkProjectKeyInPlace,
   updateLinkBindingSaltInPlace
 } from '../../../link/config.mjs'
-import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, isRegistryProject, nextAllowedLenses, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { assertContainedPath, safeRealpath, slash } from '../../../shared/fs.mjs'
 import { reportGrant } from '../../link-helpers.mjs'
 
@@ -51,7 +51,7 @@ export async function linkBackfill(o, sub, project) {
           const lPath = linkPath(proj)
           if (!existsSync(lPath)) continue
           // Backfill never reactivates a revoked link; only naming lenses for one project does.
-          const known = links.find(l => l.project_id === pId || l.project_path === canonicalProj)
+          const known = links.find(l => isRegistryProject(l, proj))
           if (known?.status === 'revoked' && (!project || !o.lenses?.length)) {
             console.log(`[note] skipped revoked link: ${proj}; run 'holoself link approve --project <dir>' to reactivate it`)
             continue

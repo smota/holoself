@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, resolve, win32 } from 'node:path'
 import { loadLensRegistry, resolveLens } from './lenses.mjs'
 import { assertNoLinkBelow, canonicalPath } from './path-guard.mjs'
 import { isProjectKey } from './link/machine.mjs'
-import { activeProjectKeyHolders, canonicalProjectPath, canonicalSpaceId, readRegistry } from './link/registry.mjs'
+import { activeProjectKeyHolders, isRegistryProject, readRegistry } from './link/registry.mjs'
 import { hash, slash } from './shared/fs.mjs'
 
 export function normalizeProjectPath(value) {
@@ -104,7 +104,7 @@ export function resolveBinding(root, project, { projectKey = null, ...options } 
   if (isProjectKey(projectKey) && Object.hasOwn(bindings, projectKey)) {
     const holders = activeKeyHolders(readRegistry(root).links, projectKey)
     // An edited link.yaml cannot borrow a binding: a key attested on this machine serves only the project attested for it.
-    if (holders.length === 1 && holders[0].project_id !== canonicalSpaceId(project) && holders[0].project_path !== canonicalProjectPath(project)) {
+    if (holders.length === 1 && !isRegistryProject(holders[0], project)) {
       const error = new Error(
         `project_key ${projectKey} is attested for another project on this machine (a copied folder?); ` +
           `run holoself link repair --project <dir> to give this project its own project_key`
