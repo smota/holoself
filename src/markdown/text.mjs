@@ -1,7 +1,7 @@
 // Markdown text helpers: sections, links, tags, claims and tokenization.
 import { frontmatter } from '../policy/privacy-fields.mjs'
 import { parseClaimBlocks, replaceClaimBlocks } from './claim-blocks.mjs'
-import { createLineClassifier } from './lines.mjs'
+import { classifyLines } from './lines.mjs'
 
 const STOPWORDS = new Set(
   (
@@ -15,19 +15,19 @@ der die das ein eine und ist mit von zu`
 )
 
 export function sections(text, { raw = false, empty = false } = {}) {
-  const classify = createLineClassifier()
+  const all = String(text).split(/\r?\n/),
+    kinds = classifyLines(all)
   if (raw) {
-    const lines = String(text).split(/\r?\n/),
-      out = []
+    const out = []
     let current = []
-    for (const line of lines) {
-      const { fenced, heading } = classify(line)
-      if (heading && !fenced && heading.level <= 4 && current.length) {
+    all.forEach((line, index) => {
+      const { real } = kinds[index]
+      if (real && real.level <= 4 && current.length) {
         out.push(current.join('\n'))
         current = []
       }
       current.push(line)
-    }
+    })
     if (current.length) out.push(current.join('\n'))
     return out
   }
@@ -35,24 +35,24 @@ export function sections(text, { raw = false, empty = false } = {}) {
   let heading = '(document)',
     level = 0,
     lines = [],
-    fencedHeadings = []
+    starts = []
   const flush = () => {
     const content = lines.join('\n').trim()
-    if (content || (empty && level)) result.push({ heading, level, content, ...(fencedHeadings.length ? { fenced_headings: fencedHeadings } : {}) })
+    if (content || (empty && level)) result.push({ heading, level, content, ...(starts.length ? { starts } : {}) })
   }
-  for (const line of String(text).split(/\r?\n/)) {
-    const kind = classify(line)
-    if (kind.heading && !kind.fenced) {
+  all.forEach((line, index) => {
+    const kind = kinds[index]
+    if (kind.real) {
       flush()
-      heading = kind.heading.text
-      level = kind.heading.level
+      heading = kind.real.text
+      level = kind.real.level
       lines = []
-      fencedHeadings = []
+      starts = []
     } else {
-      if (kind.heading) fencedHeadings.push(kind.heading)
+      starts.push(...kind.starts)
       lines.push(line)
     }
-  }
+  })
   flush()
   return result
 }

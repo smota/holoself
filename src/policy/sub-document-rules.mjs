@@ -157,14 +157,14 @@ export function fieldHeadingRule(heading, table) {
 // The field heading rules in force at one point of a document. A ruled heading covers everything under it, deeper
 // headings included, until the next heading of its level or above. `inherited` holds the matches around a claim block:
 // a heading inside the block can neither end those nor outlive the block.
-// A heading-shaped line inside a fenced block is code, so it ends nothing. It still opens a rule when it carries a ruled
-// name: a stray fence may be hiding a real heading, and the narrower reading wins. Fences therefore only ever remove
-// closers, never openers, so no fence, closed or not, can widen what a heading rule covers.
+// Rules start liberally and end conservatively (src/markdown/lines.mjs). A real heading ends the rules at its level and
+// below. Any other heading shape only opens a rule (`ends: false`). Nothing but a real heading removes a rule, so no
+// fence, raw HTML block or unusual shape can switch one off.
 export function createHeadingScope(table, inherited = []) {
   let open = []
   return {
-    heading(level, text, { fenced = false } = {}) {
-      if (!fenced) open = open.filter(entry => entry.level < level)
+    heading(level, text, { ends = true } = {}) {
+      if (ends) open = open.filter(entry => entry.level < level)
       const match = fieldHeadingRule(text, table)
       if (match) open.push({ level, ...match })
       return match

@@ -3,7 +3,7 @@ import { DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES, effectiveDisclosure, publi
 import { KNOWLEDGE_STATUSES, TEMPORAL_SCOPES, dateValue } from '../context-selection.mjs'
 import { DEFAULT_LENS_IDS } from '../lenses.mjs'
 import { CLAIM_CLOSER, parseClaimBlocks, replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
-import { createLineClassifier } from '../markdown/lines.mjs'
+import { classifyLines } from '../markdown/lines.mjs'
 import {
   LEGACY_LENS_SETS,
   PUBLICATION_ADAPTERS,
@@ -156,50 +156,68 @@ export function filterClaimStatus(body, temporal, source, restrictions, identity
 }
 // Each line of a body with the field heading rules in force on it. filterFieldVisibility and the catalog share this
 // walk, so `content` and the catalog paths cannot disagree about what a heading rule covers. `outer` is what applies
-// around a claim block, and `matches` adds the headings inside it. Text outside claim blocks and each claim body are
-// classified separately, exactly as the catalog splits them. So a fence cannot cross a marker, and hiding a claim from
-// one lens cannot change how the text around it reads.
+// around a claim block, and `matches` adds the headings inside it. The text outside claim blocks and each claim body are
+// classified separately, exactly as the catalog splits them. So nothing raw crosses a marker, hiding a claim from one
+// lens cannot change how the text around it reads, and pieces of a line split by a claim read as the line they join into.
 export function* scopedLines(body, table) {
   const source = String(body),
     blocks = parseClaimBlocks(source),
     parts = source.split(/(\r?\n)/),
-    outerScope = createHeadingScope(table),
-    classifyOuter = createLineClassifier(),
-    walk = (classify, scope, text) => {
-      const kind = classify(text)
-      return { heading: Boolean(kind.heading), opened: kind.heading ? scope.heading(kind.heading.level, kind.heading.text, { fenced: kind.fenced }) : null }
-    }
+    physical = [],
+    outerLines = ['']
   let index = 0,
-    offset = 0,
-    inner = null
+    offset = 0
   for (let i = 0; i < parts.length; i += 2) {
     const line = parts[i],
       end = offset + line.length
-    while (blocks[index] && offset >= blocks[index].end) {
-      index++
-      inner = null
-    }
+    while (blocks[index] && offset >= blocks[index].end) index++
     const touching = []
     for (let j = index; blocks[j] && blocks[j].start < end; j++) touching.push(blocks[j])
-    let outside = '',
-      cursor = offset
+    let cursor = offset
     for (const item of touching) {
-      outside += source.slice(cursor, Math.max(cursor, item.start))
+      outerLines[outerLines.length - 1] += source.slice(cursor, Math.max(cursor, item.start))
       cursor = Math.max(cursor, Math.min(item.end, end))
     }
-    outside += source.slice(cursor, end)
-    const outerStep = walk(classifyOuter, outerScope, outside),
-      outer = outerScope.matches(),
-      block = touching[0] || null
-    let step = outerStep
-    if (block) {
-      inner ||= { scope: createHeadingScope(table, outer), classify: createLineClassifier() }
-      const bodyStart = block.start + block.raw.indexOf('-->') + 3,
-        innerStep = walk(inner.classify, inner.scope, source.slice(Math.max(offset, bodyStart), Math.min(end, bodyStart + block.body.length)))
-      step = { heading: outerStep.heading || innerStep.heading, opened: innerStep.opened || outerStep.opened }
-    }
-    yield { line, block, blocks: touching, closes: Boolean(block) && end >= block.end, ...step, matches: block ? [...inner.scope.matches(), ...outer] : outer, outer }
+    outerLines[outerLines.length - 1] += source.slice(cursor, end)
+    physical.push({ line, offset, end, touching, outerIndex: outerLines.length - 1 })
+    // A line break inside a claim block is gone once the block is lifted out, so the outer line carries on.
+    if (!blocks.slice(index).some(item => item.start <= end && end < item.end)) outerLines.push('')
     offset = end + (parts[i + 1]?.length ?? 0)
+  }
+  const walk = (kind, scope) => {
+    let opened = kind.real ? scope.heading(kind.real.level, kind.real.text) : null
+    for (const start of kind.starts) opened = scope.heading(start.level, start.text, { ends: false }) || opened
+    return { heading: Boolean(kind.real || opened), opened }
+  }
+  const outerKinds = classifyLines(outerLines),
+    outerScope = createHeadingScope(table),
+    inner = new Map()
+  let walked = -1
+  for (const { line, offset: start, end, touching, outerIndex } of physical) {
+    let step = { heading: false, opened: null }
+    while (walked < outerIndex) step = walk(outerKinds[++walked], outerScope)
+    const outer = outerScope.matches()
+    for (const item of touching) {
+      if (!inner.has(item.start))
+        inner.set(item.start, { scope: createHeadingScope(table, outer), kinds: classifyLines(item.body.split(/\r?\n/)), next: 0 })
+      const state = inner.get(item.start),
+        bodyStart = item.start + item.raw.indexOf('-->') + 3,
+        lineIndex = end < bodyStart ? -1 : start <= bodyStart ? 0 : source.slice(bodyStart, start).split('\n').length - 1
+      while (state.next <= lineIndex && state.next < state.kinds.length) {
+        const innerStep = walk(state.kinds[state.next++], state.scope)
+        step = { heading: step.heading || innerStep.heading, opened: innerStep.opened || step.opened }
+      }
+    }
+    const block = touching[0] || null
+    yield {
+      line,
+      block,
+      blocks: touching,
+      closes: Boolean(block) && end >= block.end,
+      ...step,
+      matches: [...touching.flatMap(item => inner.get(item.start).scope.matches()), ...outer],
+      outer
+    }
   }
 }
 export function filterFieldVisibility(

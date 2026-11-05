@@ -27,10 +27,10 @@ export function privacySections(body, policy, registry = null) {
   // A claim block is lifted out of its section, so it takes the field heading rules around it from the same walk that
   // filters content: a claim under a hidden heading stays hidden on the catalog paths too.
   for (const { blocks, outer } of scopedLines(body, table)) for (const block of blocks) if (!enclosing.has(block.start)) enclosing.set(block.start, outer)
-  // A section takes the rules open where it starts. A ruled name on a fenced line opens its rule partway through a
-  // section: the lines after it are hidden line by line, and the rule carries on into the next sections.
+  // A section takes the rules open where it starts. Only real headings split sections, so any other heading shape opens
+  // its rule partway through one: the lines after it are hidden line by line, and the rule carries on into later sections.
   const afterSection = (scope, section) => {
-    for (const heading of section.fenced_headings || []) scope.heading(heading.level, heading.text, { fenced: true })
+    for (const start of section.starts || []) scope.heading(start.level, start.text, { ends: false })
   }
   const ordinary = replaceClaimBlocks(
     body,
@@ -81,7 +81,10 @@ export function buildCatalogSections(rawSections, defaults = {}) {
     const count = (seenSlugs.get(baseSlug) || 0) + 1
     seenSlugs.set(baseSlug, count)
     const section_id = count === 1 ? baseSlug : `${baseSlug}-${count}`
-    const snippet = (sec.content.length > 360 ? sec.content.slice(0, 357) + '...' : sec.content).trim()
+    // A heading shape can span lines, so a cut in a section that has any keeps whole paragraphs only.
+    const cut = sec.content.slice(0, 357),
+      kept = sec.starts ? cut.slice(0, Math.max(0, cut.lastIndexOf('\n\n'))) : cut,
+      snippet = (sec.content.length > 360 ? kept + '...' : sec.content).trim()
     return {
       section_id,
       heading: sec.heading,

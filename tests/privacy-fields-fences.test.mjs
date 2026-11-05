@@ -11,7 +11,7 @@ import { buildIndex, searchIndex } from '../src/catalog/index.mjs'
 import { buildCatalogSections, extractSectionAnnotations, privacySections } from '../src/catalog/source.mjs'
 import { run } from '../src/cli.mjs'
 import { contextData } from '../src/ecosystem.mjs'
-import { createLineClassifier } from '../src/markdown/lines.mjs'
+import { classifyLines } from '../src/markdown/lines.mjs'
 import { parseClaimBlocks } from '../src/markdown/claim-blocks.mjs'
 import { sections } from '../src/markdown/text.mjs'
 import { filterClaimVisibility, filterFieldVisibility, privacyMetadata } from '../src/policy/access.mjs'
@@ -133,14 +133,12 @@ test('CRLF files behave the same', async t => {
 })
 
 test('the line classifier follows CommonMark for fences and fails closed', () => {
-  const walk = lines => {
-    const classify = createLineClassifier()
-    return lines.map(line => {
-      const { fenced, heading } = classify(line)
-      return [fenced, heading ? `${heading.level}:${heading.text}` : null]
+  const walk = lines =>
+    classifyLines(lines).map(({ raw, real, starts }) => {
+      const heading = real || starts[0]
+      return [raw, heading ? `${heading.level}:${heading.text}` : null]
     })
-  }
-  assert.deepEqual(walk(['# Real', 'text', '####### seven', '#nospace']), [[false, '1:Real'], [false, null], [false, null], [false, null]])
+  assert.deepEqual(walk(['# Real', 'text', '####### seven', '#nospace']), [[false, '1:Real'], [false, null], [false, '1:seven'], [false, '1:nospace']])
   assert.deepEqual(walk(['```', '# In', '```', '# Out']), [[true, null], [true, '1:In'], [true, null], [false, '1:Out']])
   assert.deepEqual(walk(['~~~ info', '# In', '~~~', '# Out']), [[true, null], [true, '1:In'], [true, null], [false, '1:Out']])
   assert.deepEqual(walk(['   ```', '# In', '   ```', '# Out']), [[true, null], [true, '1:In'], [true, null], [false, '1:Out']])
@@ -252,14 +250,21 @@ function random(seed) {
     return state % n
   }
 }
-const PIECES = ['```', '~~~', '````', '``` js', '   ```', '# Top', '## Salary', '## Other', '### Salary band', '### Deep', '#### Deeper', '', 'plain']
+const PIECES = [
+  '```', '~~~', '````', '``` js', '   ```', '# Top', '## Salary', '## Other', '### Salary band', '### Deep', '#### Deeper', '', 'plain', 'plain',
+  '   ## Other', '    ## Other', '    ## Salary', '> ## Other', '> ## Salary', '- ## Other', '- ## Salary', '## Other ##', '## Salary ##', '<h2>Other</h2>', '<h2>Salary</h2>',
+  '##Other', '##Salary', '**Other**', '**Salary**', 'Other\n---', 'Salary\n---', 'Salary\n===', 'Other\n===', '<pre>', '</pre>', '<!--', '-->', '<div>', '</div>', '<!-- note -->'
+]
 function generate(next) {
   const lines = []
   let id = 0
-  const sentinel = () => `SENT${++id}X ${S}`
+  const sentinel = () => {
+    id++
+    return `SENT${id}X ${S} #sent${id}tag [l](https://sent${id}.example)`
+  }
   const emit = target => {
     const piece = PIECES[next(PIECES.length)]
-    target.push(piece === 'plain' ? sentinel() : piece)
+    target.push(...(piece === 'plain' ? sentinel() : piece).split('\n'))
   }
   for (let i = 0, count = 8 + next(18); i < count; i++) {
     if (next(6) === 0) {
@@ -285,7 +290,7 @@ function fenceBlindHidden(lines) {
       inner = null
       continue
     }
-    const heading = line.match(/^(#{1,6}) (.+)$/)
+    const heading = line.match(/^ {0,3}(#{1,6}) (.+)$/)
     if (heading) {
       const level = heading[1].length,
         scope = (inner ?? outer).filter(value => value < level)
@@ -298,7 +303,7 @@ function fenceBlindHidden(lines) {
   }
   return hidden
 }
-test('fence handling can only narrow: 2,000 generated documents against a fence-blind oracle, on content, sections and claims', () => {
+test('fences and unusual shapes can only narrow: 2,000 generated documents against the plain rule, on content, sections, claims, tags and links', () => {
   const metadata = { access_lenses: ['general', 'private'], disclosure: 'publish-approved', sensitivity: 'personal', document_role: 'content', read_scope: 'shared', field_access: { Salary: { access_lenses: ['private'] } } },
     policy = privacyMetadata(metadata)
   let hiddenChecked = 0
@@ -312,12 +317,17 @@ test('fence handling can only narrow: 2,000 generated documents against a fence-
       content = filter(body),
       visible = list => list.filter(item => catalogElementVisible(item, 'general', 'generic')),
       sectionText = visible(buildCatalogSections(raw)).map(section => filter(section.snippet)).join('\n'),
-      claimText = visible(annotations.claims).map(item => item.text).join('\n')
+      claimText = visible(annotations.claims).map(item => item.text).join('\n'),
+      tagText = visible(annotations.tags).map(item => item.value).join('\n'),
+      linkText = visible(annotations.links).map(item => item.value).join('\n')
     for (const sentinel of hidden) {
       hiddenChecked++
       assert.ok(!content.includes(`${sentinel} `), `seed ${seed}: ${sentinel} in content`)
       assert.ok(!sectionText.includes(`${sentinel} `), `seed ${seed}: ${sentinel} in sections`)
       assert.ok(!claimText.includes(`${sentinel} `), `seed ${seed}: ${sentinel} in claims`)
+      const id = sentinel.slice(4, -1)
+      assert.ok(!tagText.split('\n').includes(`sent${id}tag`), `seed ${seed}: ${sentinel} in tags`)
+      assert.ok(!linkText.split('\n').includes(`https://sent${id}.example`), `seed ${seed}: ${sentinel} in links`)
     }
     for (const line of sectionText.split('\n')) if (line.startsWith('SENT')) assert.ok(content.includes(line.replace(/\.\.\.$/, '')), `seed ${seed}: sections is a subset of content: ${line}`)
     for (const line of claimText.split('\n')) if (line.startsWith('SENT')) assert.ok(content.includes(line), `seed ${seed}: claims is a subset of content: ${line}`)
