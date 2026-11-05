@@ -39,6 +39,7 @@ export function reportGrant(project, grant, command) {
       )
     else console.log(`adds: [${grant.adds.join(', ')}] / removes: [${grant.removes.join(', ')}]`)
   }
+  if (grant.reactivates) console.log(`[ok] reactivating this link with lenses: ${grant.allowed.join(', ') || '(none)'}`)
   if (!grant.allowed.length)
     console.log(
       `[note] no lenses are granted to this project on this machine, so it is refused; ` +

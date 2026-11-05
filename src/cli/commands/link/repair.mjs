@@ -81,6 +81,14 @@ export async function linkRepair(o, sub, project) {
     },
     planned = attested ? nextAllowedLenses({ ...grantRequest, entry: attested }) : null,
     changesGrant = grant => canonicalJson(grant.allowed) !== canonicalJson(attested.allowed_lenses || [])
+  // A committed legacy field never creates a shared binding beyond what this machine's owner granted.
+  if (planned && !current && !o.lens && planned.pending.length) {
+    console.log(
+      `[note] legacy lens fields in link.yaml exceed this machine's grant: ${planned.pending.join(', ')}; no binding was created; ` +
+        `run 'holoself link repair --project <dir> --lens <id>' or 'holoself lens bind --root <self-root> --project <dir> --lens <id> --yes'`
+    )
+    return true
+  }
   if (planned) reportGrant(project, planned, 'repair')
   if (bindingMigration || portableMigration || (planned && changesGrant(planned))) {
     if (bindingMigration) console.log(JSON.stringify({ binding_migration: { project: slash(project), before: current, legacy, after: choice } }, null, 2))

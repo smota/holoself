@@ -50,6 +50,12 @@ export async function linkBackfill(o, sub, project) {
           const pId = canonicalSpaceId(proj)
           const lPath = linkPath(proj)
           if (!existsSync(lPath)) continue
+          // Backfill never reactivates a revoked link; only naming lenses for one project does.
+          const known = links.find(l => l.project_id === pId || l.project_path === canonicalProj)
+          if (known?.status === 'revoked' && (!project || !o.lenses?.length)) {
+            console.log(`[note] skipped revoked link: ${proj}; run 'holoself link approve --project <dir>' to reactivate it`)
+            continue
+          }
           assertContainedPath(proj, lPath, 'project link file')
           if (lstatSync(lPath).isSymbolicLink()) throw new Error(`symlink detected at ${lPath}`)
           let linkObj

@@ -745,9 +745,15 @@ test('legacy lens fields in link.yaml never choose a grant on an existing entry'
   writeBinding(m.self, m.project, null, { projectKey: keyOf(m.project) })
   writeFileSync(file, legacy('  default_lens: public-voice\n'))
   const second = ok(m.cli(['link', 'repair', '--project', m.project, '--no-activate', '--yes']), 'repair public-voice')
-  assert.deepEqual(allowedOf(m.self), [], 'the grant follows the rule: nothing beyond it, and general left the binding')
-  assert.match(second.stdout, /no lenses are granted to this project on this machine/)
+  assert.deepEqual(allowedOf(m.self), ['general'], 'the grant is untouched')
+  assert.deepEqual(Object.keys(bindingsOf(m.self)), [], 'a committed legacy field creates no shared binding beyond the grant')
+  assert.match(second.stdout, /legacy lens fields in link\.yaml exceed this machine's grant: public-voice; .*link repair --project <dir> --lens <id>.*lens bind/)
   assert.notEqual(m.cli(['context', '--project', m.project, '--lens', 'public-voice', '--json']).status, 0)
+  // Legacy fields within the grant migrate as before.
+  writeFileSync(file, legacy('  default_lens: general\n'))
+  ok(m.cli(['link', 'repair', '--project', m.project, '--no-activate', '--yes']), 'repair within the grant')
+  assert.deepEqual(bindingsOf(m.self)[keyOf(m.project)], { default_lens: 'general', secondary_lenses: [] })
+  assert.doesNotMatch(linkText(m.project), /default_lens/)
   // An explicit choice on the command sets the grant to exactly that choice.
   ok(m.cli(['link', 'repair', '--project', m.project, '--no-activate', '--yes', '--lens', 'general']), 'explicit repair')
   assert.deepEqual(allowedOf(m.self), ['general'])
@@ -764,11 +770,15 @@ test('new and revoked entries: lenses are listed, and re-attestation caps at the
   assert.equal(readRegistry(m.self).links[0].status, 'active')
   assert.deepEqual(allowedOf(m.self), ['general'], 're-attestation does not overwrite the old grant')
   assert.match(back.stdout, noteRe('approve'))
-  // Nothing of the old grant is still bound: the owner is attesting anew, with the lenses listed.
+  assert.match(back.stdout, /reactivating this link with lenses: general/)
+  // Nothing of the old grant is still bound: the targeted approval reactivates with an empty, fail-closed grant.
   ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self, '--revoke']), 'revoke again')
   writeBinding(m.self, m.project, { default_lens: 'leadership', secondary_lenses: [] }, { projectKey: keyOf(m.project) })
-  const fresh = ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self]), 're-attest anew')
-  assert.match(fresh.stdout, /granting lenses on this machine: leadership/)
+  const empty = ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self]), 're-attest')
+  assert.deepEqual(allowedOf(m.self), [])
+  assert.match(empty.stdout, /no lenses are granted to this project on this machine/)
+  assert.notEqual(m.cli(['context', '--project', m.project, '--json']).status, 0)
+  ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self, '--accept-shared-lenses']), 'accept')
   assert.deepEqual(allowedOf(m.self), ['leadership'])
 })
 
@@ -833,4 +843,48 @@ test('only lenses named on the command count as explicit', t => {
     nextAllowedLenses({ entry: { status: 'revoked', allowed_lenses: ['general'] }, lenses: ['leadership', 'professional'], named: ['leadership'] }).allowed,
     ['leadership']
   )
+})
+
+test('link backfill never reactivates a revoked link or grants it a lens', t => {
+  const m = machine(sandbox(t), 'm')
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--lens', 'general', '--no-activate', '--yes']), 'setup')
+  ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self, '--revoke']), 'revoke')
+  writeBinding(m.self, m.project, { default_lens: 'professional', secondary_lenses: [] }, { projectKey: keyOf(m.project) })
+  const state = () => {
+    const [entry] = readRegistry(m.self).links
+    return [entry.status, entry.allowed_lenses]
+  }
+  for (const args of [['--all'], ['--project', m.project], ['--all', '--lenses', 'professional'], ['--all', '--accept-shared-lenses']]) {
+    const result = ok(m.cli(['link', 'backfill', '--self', m.self, ...args]), `backfill ${args}`)
+    assert.match(result.stdout, /skipped revoked link/)
+    assert.deepEqual(state(), ['revoked', ['general']])
+  }
+  assert.notEqual(m.cli(['context', '--project', m.project, '--json']).status, 0)
+  // A named full set on one project is the owner's choice.
+  ok(m.cli(['link', 'backfill', '--project', m.project, '--self', m.self, '--lenses', 'professional']), 'backfill --lenses')
+  assert.deepEqual(state(), ['active', ['professional']])
+  // The rule itself has no "revoked behaves as new" branch.
+  const grant = nextAllowedLenses({ entry: { status: 'revoked', allowed_lenses: ['general'] }, lenses: ['professional'] })
+  assert.deepEqual([grant.allowed, grant.pending], [[], ['professional']])
+})
+
+test('a link.yaml edited to carry another project_key gets no binding from it', t => {
+  const m = machine(sandbox(t), 'm'),
+    other = join(m.root, 'code', 'other-project')
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--lens', 'professional', '--no-activate', '--yes']), 'setup victim')
+  mkdirSync(other, { recursive: true })
+  ok(m.cli(['link', 'setup', '--project', other, '--self', m.self, '--lens', 'general', '--secondary-lenses', 'professional', '--no-activate', '--yes']), 'setup other')
+  writeBinding(m.self, other, { default_lens: 'general', secondary_lenses: [] }, { projectKey: keyOf(other) })
+  // Keyless entries whose own link.yaml carries the key (written before project_key was recorded) keep working.
+  writeRegistry(m.self, links => links.map(({ project_key: _key, ...entry }) => (entry.project_path === realpathSync(other).replaceAll('\\', '/') ? entry : { ...entry, project_key: keyOf(m.project) })))
+  ok(m.cli(['context', '--project', other, '--json']), 'own key, no recorded key')
+  writeFileSync(join(other, '.holoself', 'link.yaml'), linkText(other).replace(/^project_key:.*$/m, `project_key: "${keyOf(m.project)}"`))
+  for (const args of [[], ['--lens', 'professional']]) {
+    const refused = m.cli(['context', '--project', other, ...args, '--json'])
+    assert.notEqual(refused.status, 0)
+    assert.match(refused.stderr, /is attested for another project on this machine/)
+  }
+  assert.equal(JSON.parse(ok(m.cli(['context', '--project', m.project, '--json']), 'victim').stdout).lens, 'professional')
 })
