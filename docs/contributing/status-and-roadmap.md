@@ -1,6 +1,6 @@
 # Status and roadmap
 
-Current version: 0.11.0. Install the npm package as `holoself-ai`, or run the product directly from a repository checkout.
+Current version: 0.11.1. Install the npm package as `holoself-ai`, or run the product directly from a repository checkout.
 
 ## Available
 
