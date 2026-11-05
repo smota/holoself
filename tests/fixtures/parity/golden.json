@@ -26490,7 +26490,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "[ok] removed <ROOT>/project/.holoself/link.yaml; indexes, reports, and proposals preserved\n",
+      "stdout": "[dry-run] would revoke sovereign link for <ROOT>/project\n[dry-run] would remove <ROOT>/project/.holoself/link.yaml; indexes, reports, and proposals preserved\n",
       "stderr": ""
     },
     {
@@ -26559,7 +26559,7 @@
             "assert_exclude": []
           },
           "binding_salt_present": true,
-          "registry_attested": false,
+          "registry_attested": true,
           "self_exists": true,
           "pending_proposals": 1,
           "proposal_health": {
