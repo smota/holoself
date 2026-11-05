@@ -7,8 +7,8 @@ import { loadLensRegistry } from '../lenses.mjs'
 import { readLink } from '../link/config.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { tokenize } from '../markdown/text.mjs'
-import { allowed, claimStatusIncluded, filterClaimVisibility, filterFieldVisibility } from '../policy/access.mjs'
-import { catalogElementVisible } from '../policy/sub-document-rules.mjs'
+import { allowed, claimStatusIncluded, deliveredSection, filterClaimVisibility, filterFieldVisibility } from '../policy/access.mjs'
+import { callerLenses, catalogElementVisible, publicationAdapter } from '../policy/sub-document-rules.mjs'
 import { hash, slash } from '../shared/fs.mjs'
 import { ensureFtsIndex, indexEngine, lexicalScores } from './fts.mjs'
 import { ensureCatalog } from './partitions.mjs'
@@ -103,18 +103,20 @@ export function searchIndex(index, query, lens = 'general', registry = null, res
       const sectionVisibility = VISIBILITIES.includes(section.visibility) ? section.visibility : 'private'
       if (!catalogElementVisible(section, lens, adapter) || !claimStatusIncluded(section.claim_status, temporal)) continue
       const restrictions = []
-      const filtered = filterFieldVisibility(
-        filterClaimVisibility(section.snippet || '', lens, entry.file, restrictions, resolution, 'owner:direct', adapter),
-        entry.frontmatter || {},
-        lens,
-        entry.file,
-        restrictions,
-        resolution,
-        'owner:direct',
-        adapter
+      const { snippet: filtered } = deliveredSection(section, text =>
+        filterFieldVisibility(
+          filterClaimVisibility(text, lens, entry.file, restrictions, resolution, 'owner:direct', adapter),
+          entry.frontmatter || {},
+          lens,
+          entry.file,
+          restrictions,
+          resolution,
+          'owner:direct',
+          adapter
+        )
       )
       if (!filtered.trim()) continue
-      eligible.push({ entry, section, filtered, sectionVisibility, entrySpaceId })
+      eligible.push({ entry, section, filtered, sectionVisibility, entrySpaceId, shownLenses: subj?.kind === 'client:linked' || subj?.kind === 'client:unlinked' || publicationAdapter(adapter) })
     }
   }
 
@@ -146,7 +148,7 @@ export function searchIndex(index, query, lens = 'general', registry = null, res
       .filter(item => item.score && item.score >= terms.length)
       .sort((a, b) => b.score - a.score || canonicalSort(a.entry.file, b.entry.file))
   }
-  const results = matches.map(({ entry, section, filtered, sectionVisibility, entrySpaceId, score, bm25 }) => {
+  const results = matches.map(({ entry, section, filtered, sectionVisibility, entrySpaceId, shownLenses, score, bm25 }) => {
     const policy = entry.frontmatter || {}
     const passage = filtered.length > 360 ? filtered.slice(0, 357) + '...' : filtered
     const provPrefix = entry.source_kind === 'canonical' ? 'self' : entry.source_project || entry.space_id || entry.source_ref?.space_id
@@ -158,7 +160,7 @@ export function searchIndex(index, query, lens = 'general', registry = null, res
       section: section.heading,
       matching_passage: passage,
       provenance: `${provPrefix}:${entry.file}#${section.heading}`,
-      access_lenses: policy.access_lenses || [],
+      access_lenses: shownLenses ? callerLenses(policy.access_lenses || [], lens) : policy.access_lenses || [],
       disclosure: section.disclosure || policy.disclosure || 'internal-only',
       sensitivity: policy.sensitivity || 'personal',
       document_role: policy.document_role || 'content',

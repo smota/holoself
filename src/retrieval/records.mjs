@@ -4,7 +4,7 @@ import { relevanceScore } from '../context-selection.mjs'
 import { DEFAULT_PROJECT_EXCLUDES } from '../link/config.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { matchesAny } from '../markdown/files.mjs'
-import { allowed, allowedDocument, claimStatusIncluded, filterClaimVisibility, filterFieldVisibility } from '../policy/access.mjs'
+import { allowed, allowedDocument, claimStatusIncluded, deliveredSection, filterClaimVisibility, filterFieldVisibility } from '../policy/access.mjs'
 import { catalogElementVisible } from '../policy/sub-document-rules.mjs'
 import { SECRET_RE } from '../policy/secrets.mjs'
 
@@ -60,22 +60,11 @@ export function catalogCandidateRecords(
     const dummyRes = []
     const visibleSections = (s.sections || [])
       .filter(sec => catalogElementVisible(sec, lens, adapter) && claimStatusIncluded(sec.claim_status, temporal))
-      .map(sec => {
-        const filtered = filterFieldVisibility(
-          filterClaimVisibility(sec.snippet || '', lens, rel, dummyRes, resolution, identityKind, adapter),
-          metadata,
-          lens,
-          rel,
-          dummyRes,
-          resolution,
-          identityKind,
-          adapter
+      .map(sec =>
+        deliveredSection(sec, text =>
+          filterFieldVisibility(filterClaimVisibility(text, lens, rel, dummyRes, resolution, identityKind, adapter), metadata, lens, rel, dummyRes, resolution, identityKind, adapter)
         )
-        return {
-          ...sec,
-          snippet: filtered
-        }
-      })
+      )
     for (const r of dummyRes) {
       if (isPeer && identityKind === 'client:linked') continue
       if (!restrictions.some(x => x.source === r.source && x.reason === r.reason)) {

@@ -1,6 +1,7 @@
 // Markdown text helpers: sections, links, tags, claims and tokenization.
 import { frontmatter } from '../policy/privacy-fields.mjs'
 import { parseClaimBlocks, replaceClaimBlocks } from './claim-blocks.mjs'
+import { classifyLines } from './lines.mjs'
 
 const STOPWORDS = new Set(
   (
@@ -13,36 +14,45 @@ der die das ein eine und ist mit von zu`
   ).split(/\s+/)
 )
 
-export function sections(text, { raw = false } = {}) {
+export function sections(text, { raw = false, empty = false } = {}) {
+  const all = String(text).split(/\r?\n/),
+    kinds = classifyLines(all)
   if (raw) {
-    const lines = String(text).split(/\r?\n/),
-      out = []
+    const out = []
     let current = []
-    for (const line of lines) {
-      if (/^#{1,4}\s+/.test(line) && current.length) {
+    all.forEach((line, index) => {
+      const { real } = kinds[index]
+      if (real && real.level <= 4 && current.length) {
         out.push(current.join('\n'))
         current = []
       }
       current.push(line)
-    }
+    })
     if (current.length) out.push(current.join('\n'))
     return out
   }
   const result = []
   let heading = '(document)',
-    lines = []
+    level = 0,
+    lines = [],
+    starts = []
   const flush = () => {
     const content = lines.join('\n').trim()
-    if (content) result.push({ heading, content })
+    if (content || (empty && level)) result.push({ heading, level, content, ...(starts.length ? { starts } : {}) })
   }
-  for (const line of String(text).split(/\r?\n/)) {
-    const match = line.match(/^#{1,6}\s+(.+)$/)
-    if (match) {
+  all.forEach((line, index) => {
+    const kind = kinds[index]
+    if (kind.real) {
       flush()
-      heading = match[1].trim()
+      heading = kind.real.text
+      level = kind.real.level
       lines = []
-    } else lines.push(line)
-  }
+      starts = []
+    } else {
+      starts.push(...kind.starts)
+      lines.push(line)
+    }
+  })
   flush()
   return result
 }

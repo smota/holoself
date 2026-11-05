@@ -7,6 +7,7 @@ import { CUSTOM_SENSITIVITY_CATEGORIES, DEFAULT_LENSES, DEFAULT_LENS_IDS, lensId
 import { CLAIM_MARKER_RE, claimMarkerRewrites, stripClaimMarkers } from './markdown/claim-blocks.mjs'
 import {
   allowedDocument,
+  deliveredSection,
   disclosure as runtimeDisclosure,
   filterClaimVisibility,
   filterFieldVisibility,
@@ -24,6 +25,7 @@ import {
   fieldRuleNameValid,
   intersectRules,
   legacySubDocumentRule,
+  normalizeFieldAccess,
   normalizeRule,
   ruleForRegistry
 } from './policy/sub-document-rules.mjs'
@@ -195,9 +197,9 @@ export function migrationChanges(rawMeta, meetMeta) {
 function fieldAccessFromLegacy(rawMeta, registry) {
   const legacy = rawMeta.field_visibility,
     existing = rawMeta.field_access
-  if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy)) return { fieldAccess: null, warning: null }
+  if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy)) return { keep: true, warning: 'field_visibility is not a mapping of names to values; fix it by hand' }
   if (existing !== undefined && !fieldAccessValid(existing, registry)) return { keep: true, warning: 'invalid field_access; fix it by hand before field_visibility can be rewritten' }
-  const merged = { ...(existing || {}) },
+  const merged = normalizeFieldAccess(existing),
     seen = new Set()
   for (const [name, value] of Object.entries(legacy)) {
     if (!fieldRuleNameValid(name)) return { keep: true, warning: `field_visibility name ${JSON.stringify(name)} cannot be written to field_access` }
@@ -211,6 +213,18 @@ function fieldAccessFromLegacy(rawMeta, registry) {
   return { fieldAccess: Object.keys(merged).length ? merged : null, warning: null }
 }
 
+// Field rules in frontmatter that does not parse cannot be read, so they cannot be mapped. Salvage keeps only part of
+// them, and removing the field would lose the rest. Such a document stays as it is for a fix by hand.
+function fieldRulesUnreadable(text, registry) {
+  const close = text.indexOf('\n---', 3)
+  if (!/^(?:field_visibility|field_access)\s*:/m.test(close < 0 ? text : text.slice(0, close))) return false
+  try {
+    frontmatter(text, { validatePrivacy: false, registry })
+    return false
+  } catch {
+    return true
+  }
+}
 // Frontmatter and marker changes for the sub-document rules of one document. Claim marker offsets are absolute.
 function subDocumentMigration(text, rawMeta, body, { registry, target }) {
   const changes = {},
@@ -234,12 +248,13 @@ function subDocumentMigration(text, rawMeta, body, { registry, target }) {
 
 const YAML_SAFE_FIELD_NAME = /^[\p{L}\p{N}](?:[\p{L}\p{N} _.()/&+-]*[\p{L}\p{N}_.()/&+-])?$/u
 function fieldAccessFrontmatterLines(fieldAccess) {
-  if (!Object.keys(fieldAccess).every(name => YAML_SAFE_FIELD_NAME.test(name))) return [`field_access: ${JSON.stringify(fieldAccess)}`]
+  const rules = normalizeFieldAccess(fieldAccess)
+  if (!Object.keys(rules).every(name => YAML_SAFE_FIELD_NAME.test(name))) return [`field_access: ${JSON.stringify(rules)}`]
   const lines = ['field_access:']
-  for (const [name, rule] of Object.entries(fieldAccess)) {
+  for (const [name, rule] of Object.entries(rules)) {
     lines.push(`  ${name}:`)
     if (rule.access_lenses) lines.push(`    access_lenses: [${rule.access_lenses.join(', ')}]`)
-    if (rule.disclosure) lines.push(`    disclosure: ${rule.disclosure}`)
+    lines.push(`    disclosure: ${rule.disclosure}`)
   }
   return lines
 }
@@ -468,7 +483,7 @@ function subDocumentOutputs(text, meta, lens, adapter, registry) {
   const raw = privacySections(body, policy, registry),
     annotations = extractSectionAnnotations(raw, policy),
     visible = list => list.filter(item => catalogElementVisible(item, lens, adapter))
-  for (const section of visible(buildCatalogSections(raw))) add('sections', section.heading, filtered(section.snippet || ''))
+  for (const section of visible(buildCatalogSections(raw))) add('sections', section.heading, deliveredSection(section, filtered).snippet)
   for (const claim of visible(annotations.claims)) add('claims', claim.text)
   for (const tag of visible(annotations.tags)) add('tags', tag.value)
   for (const link of visible(annotations.links)) add('links', link.value)
@@ -623,6 +638,11 @@ export function validateMigrationReceiptSchema(receipt) {
   return { valid: errors.length === 0, errors }
 }
 
+// The violation names an output path and a cell, never document text.
+function gateRefusal(path, violation) {
+  return `${path}: the non-amplification gate refused this rewrite (${violation}); left out of the migration, fix it by hand`
+}
+
 export function planPolicyMigration(selfRoot, options = {}) {
   const migrationsDir = join(selfRoot, '.holoself', 'migrations')
   if (!options.dryRun && !existsSync(migrationsDir)) mkdirSync(migrationsDir, { recursive: true })
@@ -684,7 +704,13 @@ export function planPolicyMigration(selfRoot, options = {}) {
   for (const item of filesToScan) {
     totalScanned++
     if (lstatSync(item.absPath).isSymbolicLink()) throw new Error(`symlink rejected: ${item.absPath}`)
-    const text = readFileSync(item.absPath, 'utf8')
+    const bytes = readFileSync(item.absPath),
+      text = bytes.toString('utf8')
+    // Text that is not valid UTF-8 would be rewritten with replacement characters, so the file stays out of the plan.
+    if (!Buffer.from(text, 'utf8').equals(bytes)) {
+      warnings.push(`${item.relPath}: not valid UTF-8; left out of the migration, convert it by hand`)
+      continue
+    }
     if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) {
       // No frontmatter to migrate, but the runtime still reads its claim markers.
       const { changes, warnings: markerWarnings } = subDocumentMigration(text, {}, text, { registry, target: item.relPath })
@@ -699,9 +725,9 @@ export function planPolicyMigration(selfRoot, options = {}) {
         confirmActivation: true
       })
       if (!nonAmp.valid) {
-        const err = new Error(`Non-amplification gate failed for ${item.relPath}: ${nonAmp.violation}`)
-        err.code = 'NON_AMPLIFICATION_VIOLATION'
-        throw err
+        // One document the gate refuses stays as it is. It must not take the rest of the plan with it.
+        warnings.push(gateRefusal(item.relPath, nonAmp.violation))
+        continue
       }
       for (const [lens, count] of Object.entries(nonAmp.coverageLoss)) coverageLossSummary[lens] = (coverageLossSummary[lens] || 0) + count
       entries.push({
@@ -716,6 +742,11 @@ export function planPolicyMigration(selfRoot, options = {}) {
         before_text: text,
         after_text: afterText
       })
+      continue
+    }
+
+    if (fieldRulesUnreadable(text, registry)) {
+      warnings.push(`${item.relPath}: frontmatter does not parse and carries field_visibility or field_access; left out of the migration, fix it by hand`)
       continue
     }
 
@@ -786,9 +817,9 @@ export function planPolicyMigration(selfRoot, options = {}) {
         afterText: proposedAfterText
       })
       if (!baselineNonAmp.valid) {
-        const err = new Error(`Non-amplification gate failed for ${item.relPath}: ${baselineNonAmp.violation}`)
-        err.code = 'NON_AMPLIFICATION_VIOLATION'
-        throw err
+        // One document the gate refuses stays as it is. It must not take the rest of the plan with it.
+        warnings.push(gateRefusal(item.relPath, baselineNonAmp.violation))
+        continue
       }
 
       const reach = migrationActivationReach(proposedAfterEffective, {
@@ -873,9 +904,9 @@ export function planPolicyMigration(selfRoot, options = {}) {
         sourceSpaceId: item.spaceId
       })
       if (!nonAmp.valid) {
-        const err = new Error(`Non-amplification gate failed for ${item.relPath}: ${nonAmp.violation}`)
-        err.code = 'NON_AMPLIFICATION_VIOLATION'
-        throw err
+        // One document the gate refuses stays as it is. It must not take the rest of the plan with it.
+        warnings.push(gateRefusal(item.relPath, nonAmp.violation))
+        continue
       }
 
       for (const [lens, count] of Object.entries(nonAmp.coverageLoss)) {
@@ -982,12 +1013,13 @@ export function deprecatedFieldMappings(selfRoot, options = {}) {
   return { files, warnings: plan.warnings, handoff }
 }
 export function formatDeprecatedFieldMappings(report) {
-  if (!report.files.length) return ''
-  const lines = ['Deprecated privacy fields (validate --fix never edits these):']
+  if (!report.files.length && !report.warnings?.length) return ''
+  const lines = ['Deprecated privacy fields (validate --fix does not migrate these; it only repairs invalid values, narrowing only):']
   for (const file of report.files) {
     lines.push(`  File: ${file.path}${file.needs_activation ? ' (needs --confirm-activation)' : ''}`)
     for (const mapping of file.mappings) lines.push(`    - ${mapping.field}: ${mapping.from} -> ${mapping.to}`)
   }
+  for (const warning of report.warnings || []) lines.push(`  [warn] ${warning}`)
   lines.push(`Next: ${report.handoff}`)
   return lines.join('\n')
 }
@@ -1024,7 +1056,8 @@ export function applyPolicyMigration(selfRoot, planInput, options = {}) {
     (plan.activations || []).map(a => [`${a.space_id}:${a.path}`, a])
   )
 
-  const receiptEntries = []
+  // Every entry is checked before the first write, so a stale plan changes nothing.
+  const pending = []
   for (const entry of plan.entries) {
     let effectiveEntry = entry
     if (!entry.needs_migration && entry.activation_skipped && activationConfirmed) {
@@ -1055,50 +1088,64 @@ export function applyPolicyMigration(selfRoot, planInput, options = {}) {
 
     if (lstatSync(absPath).isSymbolicLink()) throw new Error(`symlink detected at ${absPath}`)
 
-    // Anti-TOCTOU
+    // Anti-TOCTOU, on bytes: two files can decode to the same text.
     const s0 = statSync(absPath)
-    const currentText = readFileSync(absPath, 'utf8')
+    const before = readFileSync(absPath)
     const s1 = statSync(absPath)
-    if (s0.mtimeMs !== s1.mtimeMs || hash(currentText) !== effectiveEntry.before_sha256) {
+    if (s0.mtimeMs !== s1.mtimeMs || hash(before) !== effectiveEntry.before_sha256) {
       throw new Error(`TOCTOU violation: ${effectiveEntry.path} modified concurrently. Migration aborted fail-closed.`)
     }
 
-    const modifiedText = applyMigrationChanges(currentText, effectiveEntry.changes)
+    const modifiedText = applyMigrationChanges(before.toString('utf8'), effectiveEntry.changes)
     if (hash(modifiedText) !== effectiveEntry.after_sha256) {
       throw new Error(`Digest mismatch after frontmatter modification for ${effectiveEntry.path}`)
     }
+    pending.push({ entry: effectiveEntry, absPath, before, modifiedText })
+  }
 
-    atomicWrite(absPath, modifiedText, 0o600)
-
-    receiptEntries.push({
-      path: effectiveEntry.path,
-      space_id: effectiveEntry.space_id,
-      before_sha256: effectiveEntry.before_sha256,
-      after_sha256: effectiveEntry.after_sha256,
-      before_text: effectiveEntry.before_text || currentText,
+  const written = []
+  try {
+    for (const item of pending) {
+      if (!readFileSync(item.absPath).equals(item.before)) throw new Error(`TOCTOU violation: ${item.entry.path} modified concurrently.`)
+      atomicWrite(item.absPath, item.modifiedText, 0o600)
+      written.push(item)
+    }
+    const receiptEntries = pending.map(({ entry, before, modifiedText }) => ({
+      path: entry.path,
+      space_id: entry.space_id,
+      before_sha256: entry.before_sha256,
+      after_sha256: entry.after_sha256,
+      before_base64: before.toString('base64'),
       after_text: modifiedText,
       status: 'applied',
-      ...(effectiveEntry.activated ? { activated: true } : {})
-    })
+      ...(entry.activated ? { activated: true } : {})
+    }))
+    const receipt = {
+      schema_version: 1,
+      receipt_id: plan.plan_id,
+      plan_id: plan.plan_id,
+      status: 'applied',
+      applied_at: new Date().toISOString(),
+      reverted_at: null,
+      narrowing_confirmed: Boolean(options.confirmNarrowing),
+      activation_confirmed: activationConfirmed,
+      applied_entries_digest: hash(JSON.stringify(receiptEntries.map(e => [e.path, e.space_id, e.before_sha256, e.after_sha256]))),
+      entries: receiptEntries
+    }
+    atomicWrite(join(migrationsDir, `receipt-${plan.plan_id}.json`), JSON.stringify(receipt, null, 2) + '\n', 0o600)
+    return receipt
+  } catch (error) {
+    const unrestored = []
+    for (const item of written.reverse()) {
+      try {
+        atomicWrite(item.absPath, item.before, 0o600)
+      } catch {
+        unrestored.push(item.entry.path)
+      }
+    }
+    if (unrestored.length) throw new Error(`migration failed and these files could not be restored: ${unrestored.join(', ')}. Cause: ${error.message}`, { cause: error })
+    throw new Error(`migration failed and was rolled back; no file changed. Cause: ${error.message}`, { cause: error })
   }
-
-  const receipt = {
-    schema_version: 1,
-    receipt_id: plan.plan_id,
-    plan_id: plan.plan_id,
-    status: 'applied',
-    applied_at: new Date().toISOString(),
-    reverted_at: null,
-    narrowing_confirmed: Boolean(options.confirmNarrowing),
-    activation_confirmed: activationConfirmed,
-    applied_entries_digest: hash(JSON.stringify(receiptEntries.map(e => [e.path, e.space_id, e.before_sha256, e.after_sha256]))),
-    entries: receiptEntries
-  }
-
-  const receiptPath = join(migrationsDir, `receipt-${plan.plan_id}.json`)
-  atomicWrite(receiptPath, JSON.stringify(receipt, null, 2) + '\n', 0o600)
-
-  return receipt
 }
 
 export function revertPolicyMigration(selfRoot, receiptInput, options = {}) {
@@ -1138,8 +1185,7 @@ export function revertPolicyMigration(selfRoot, receiptInput, options = {}) {
       if (!foundLink) throw new Error(`linked space ${entry.space_id} not found in links.json`)
       absPath = join(foundLink.project_path, entry.path)
     }
-    const currentText = readFileSync(absPath, 'utf8')
-    if (hash(currentText) !== entry.after_sha256) {
+    if (hash(readFileSync(absPath)) !== entry.after_sha256) {
       anyModified = true
       if (!options.allowPartial) {
         throw new Error(`File ${entry.path} was modified after migration. Revert aborted. Use --allow-partial to revert unmodified files.`)
@@ -1158,15 +1204,16 @@ export function revertPolicyMigration(selfRoot, receiptInput, options = {}) {
       const foundLink = reg.links.find(l => l.project_id === entry.space_id)
       absPath = join(foundLink.project_path, entry.path)
     }
-    const currentText = readFileSync(absPath, 'utf8')
-    if (hash(currentText) !== entry.after_sha256) {
+    if (hash(readFileSync(absPath)) !== entry.after_sha256) {
       entry.status = 'skipped'
       skippedCount++
       continue
     }
 
-    if (entry.before_text) {
-      atomicWrite(absPath, entry.before_text, 0o600)
+    // Receipts written before 0.12.0 keep the prior content as text.
+    const prior = entry.before_base64 === undefined ? entry.before_text : Buffer.from(entry.before_base64, 'base64')
+    if (prior) {
+      atomicWrite(absPath, prior, 0o600)
       entry.status = 'reverted'
       revertedCount++
     }

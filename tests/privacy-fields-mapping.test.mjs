@@ -481,7 +481,7 @@ test('a catalog written with the previous schema version is rebuilt on first use
   contextJson('generic', false)
   const catalogPath = join(root, '.holoself', 'catalog', 'catalog.json')
   const current = JSON.parse(await readFile(catalogPath, 'utf8'))
-  assert.equal(current.schema_version, 4)
+  assert.equal(current.schema_version, 5)
   // Simulate a catalog left behind by the previous release: schema 2 with annotations built from the raw field line.
   const source = current.sources.find(s => s.file === 'context/stale.md')
   // Current builds keep the field line's annotations but mark them with the field rule (private).
@@ -498,7 +498,7 @@ test('a catalog written with the previous schema version is rebuilt on first use
     assert.match(outputs[0], /OPEN_STALE/)
   }
   const rebuilt = await readFile(catalogPath, 'utf8')
-  assert.equal(JSON.parse(rebuilt).schema_version, 4)
+  assert.equal(JSON.parse(rebuilt).schema_version, 5)
   const rebuiltSource = JSON.parse(rebuilt).sources.find(s => s.file === 'context/stale.md')
   assert.ok(governed(rebuiltSource).every(x => x.visibility === 'private'), 'the stale public-safe annotations are gone')
   assert.equal(governed(rebuiltSource).length, governed(source).length - 3)

@@ -4,13 +4,13 @@ import { join, relative } from 'node:path'
 import { VISIBILITIES } from '../annotations.mjs'
 import { canonicalSort, readSourceWithStat, slugHeading, sourceRef } from '../catalog.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
-import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
+import { replaceClaimBlocks, withoutRuleLines } from '../markdown/claim-blocks.mjs'
 import { claims, links, sections, tags } from '../markdown/text.mjs'
-import { privacyMetadata, visibility } from '../policy/access.mjs'
+import { privacyMetadata, scopedLines, visibility } from '../policy/access.mjs'
 import { resolveDocumentPolicy } from '../policy/policy-defaults.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
 import { SECRET_RE, secretFile } from '../policy/secrets.mjs'
-import { catalogRuleFields, fieldHeadingRule, fieldLineRule, fieldRuleTable, intersectRules, legacySubDocumentRule, narrowerDisclosure } from '../policy/sub-document-rules.mjs'
+import { catalogRuleFields, createHeadingScope, fieldHeadingRule, fieldLineRule, fieldRuleTable, intersectRules, legacySubDocumentRule, narrowerDisclosure, scopeRule } from '../policy/sub-document-rules.mjs'
 import { assertContainedPath, hash, slash } from '../shared/fs.mjs'
 
 export function catalogRoot(project) {
@@ -22,22 +22,36 @@ export function catalogFilePath(project) {
 // With a registry, a claim marker naming a lens it does not define is malformed, as in delivered content.
 export function privacySections(body, policy, registry = null) {
   const chunks = [],
-    table = fieldRuleTable(policy)
+    table = fieldRuleTable(policy),
+    ruled = table.legacy.length + table.modern.length > 0,
+    enclosing = new Map()
+  // A claim block is lifted out of its section, so it takes the field heading rules around it from the same walk that
+  // filters content: a claim under a hidden heading stays hidden on the catalog paths too.
+  for (const { blocks, outer } of scopedLines(body, table)) for (const block of blocks) if (!enclosing.has(block.start)) enclosing.set(block.start, outer)
+  // A section takes the rules open where it starts. Only real headings split sections, so any other heading shape opens
+  // its rule partway through one: the lines after it are hidden line by line, and the rule carries on into later sections.
+  const afterSection = (scope, section) => {
+    for (const start of section.starts || []) scope.heading(start.level, start.text, { ends: false })
+  }
   const ordinary = replaceClaimBlocks(
     body,
     block => {
-      const status = block.status
-      for (const section of sections(block.body)) {
-        // A field heading rule inside a claim block narrows that section too, as filterFieldVisibility does for content.
-        const headingRule = fieldHeadingRule(section.heading, table),
-          rule = headingRule ? intersectRules(block.rule, headingRule.rule) : block.rule
-        chunks.push({
-          ...section,
-          rule,
-          claim: true,
-          disclosure: rule.disclosure === 'publish-approved' ? 'publish-approved' : 'review-required',
-          ...(status === 'current' ? {} : { claim_status: status })
-        })
+      const status = block.status,
+        scope = createHeadingScope(table, enclosing.get(block.start) || [])
+      for (const section of sections(withoutRuleLines(block.body), { empty: true })) {
+        if (section.level) scope.heading(section.level, section.heading)
+        const fieldRule = scopeRule(scope.matches()),
+          rule = fieldRule ? intersectRules(block.rule, fieldRule) : block.rule
+        if (section.content)
+          chunks.push({
+            ...section,
+            ruled,
+            rule,
+            claim: true,
+            disclosure: rule.disclosure === 'publish-approved' ? 'publish-approved' : 'review-required',
+            ...(status === 'current' ? {} : { claim_status: status })
+          })
+        afterSection(scope, section)
       }
       return ''
     },
@@ -46,15 +60,20 @@ export function privacySections(body, policy, registry = null) {
   // Ordinary sections without a field rule inherit the document's own access and disclosure (the document gate already
   // decides who sees them), so they are delivered wherever the document is, including publication adapters when the
   // document is approved for publication. They no longer depend on the deprecated document `visibility`.
-  const inherited = { disclosure: policy.publication_allowed ? 'publish-approved' : 'review-required' }
-  for (const section of sections(ordinary)) {
-    const fieldRule = fieldHeadingRule(section.heading, table)?.rule
-    chunks.push({
-      ...section,
-      rule: fieldRule || inherited,
-      claim: false,
-      disclosure: fieldRule ? narrowerDisclosure(policy.disclosure, fieldRule.disclosure) : policy.disclosure
-    })
+  const inherited = { disclosure: policy.publication_allowed ? 'publish-approved' : 'review-required' },
+    scope = createHeadingScope(table)
+  for (const section of sections(ordinary, { empty: true })) {
+    if (section.level) scope.heading(section.level, section.heading)
+    const fieldRule = scopeRule(scope.matches())
+    if (section.content)
+      chunks.push({
+        ...section,
+        ruled,
+        rule: fieldRule || inherited,
+        claim: false,
+        disclosure: fieldRule ? narrowerDisclosure(policy.disclosure, fieldRule.disclosure) : policy.disclosure
+      })
+    afterSection(scope, section)
   }
   return chunks
 }
@@ -65,7 +84,10 @@ export function buildCatalogSections(rawSections, defaults = {}) {
     const count = (seenSlugs.get(baseSlug) || 0) + 1
     seenSlugs.set(baseSlug, count)
     const section_id = count === 1 ? baseSlug : `${baseSlug}-${count}`
-    const snippet = (sec.content.length > 360 ? sec.content.slice(0, 357) + '...' : sec.content).trim()
+    // Rules are applied per caller, and a cut could break the text they read, so these sections are cut after filtering.
+    const long = sec.content.length > 360,
+      keepFull = long && sec.ruled,
+      snippet = keepFull ? '' : (long ? sec.content.slice(0, 357) + '...' : sec.content).trim()
     return {
       section_id,
       heading: sec.heading,
@@ -73,7 +95,8 @@ export function buildCatalogSections(rawSections, defaults = {}) {
       disclosure: sec.disclosure ?? defaults.disclosure,
       claim: Boolean(sec.claim ?? defaults.claim),
       ...(sec.claim_status ? { claim_status: sec.claim_status } : {}),
-      snippet
+      snippet,
+      ...(keepFull ? { full_text: sec.content.trim() } : {})
     }
   })
 }
@@ -91,9 +114,10 @@ export function extractSectionAnnotations(rawSections, policy = {}) {
       headingRule = fieldHeadingRule(sec.heading || '', table),
       base = headingRule ? intersectRules(sectionRule, headingRule.rule) : sectionRule
     const byRule = new Map()
-    for (const line of String(sec.content).split(/\r?\n/)) {
+    for (const { line, matches } of scopedLines(sec.content, table)) {
       const lineRule = fieldLineRule(line, table),
-        rule = lineRule ? intersectRules(base, lineRule.rule) : base,
+        scoped = matches.length ? intersectRules(base, scopeRule(matches)) : base,
+        rule = lineRule ? intersectRules(scoped, lineRule.rule) : scoped,
         key = JSON.stringify(rule)
       if (!byRule.has(key)) byRule.set(key, { rule, lines: [] })
       byRule.get(key).lines.push(line)

@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { KNOWLEDGE_STATUSES, TEMPORAL_SCOPES } from './annotations.mjs'
 import { canonicalJson } from './catalog.mjs'
+import { realHeadings } from './markdown/lines.mjs'
 import { sections, tokenize } from './markdown/text.mjs'
 import { hash } from './shared/fs.mjs'
 export { KNOWLEDGE_STATUSES, TEMPORAL_SCOPES } from './annotations.mjs'
@@ -121,7 +122,8 @@ export function taskOverlapScore(record, task) {
     pathTokens = new Set(tokenize(record.path)),
     contentTokens = new Set(tokenize(text))
   const headingSource = record.sections ? record.sections.map(s => s.heading).join(' ') : text
-  const headingTokens = new Set(tokenize((headingSource.match(/^#{1,3}\s+.+$/gm) || headingSource.split(/\s+/)).join(' ')))
+  const realTopHeadings = realHeadings(headingSource, 3).map(heading => heading.text)
+  const headingTokens = new Set(tokenize((realTopHeadings.length ? realTopHeadings : headingSource.split(/\s+/)).join(' ')))
   let score = 0
   for (const token of wanted) {
     if (pathTokens.has(token)) score += 6
@@ -166,7 +168,7 @@ export function sourceId(record) {
 export function contradictionDigest(records) {
   const items = records.map(record => ({
       id: sourceId(record),
-      headings: (record.content.match(/^#{1,3}\s+(.+)$/gm) || []).map(x => x.replace(/^#+\s+/, '').toLowerCase()),
+      headings: realHeadings(record.content, 3).map(heading => heading.text.toLowerCase()),
       numbers: [...new Set(record.content.match(/\b\d+(?:\.\d+)?%?\b/g) || [])],
       supersedes: record.metadata?.supersedes || [],
       superseded_by: record.metadata?.superseded_by || null

@@ -310,7 +310,7 @@ test('MCP accepts the claim operations, never approves, and only exposes ids of 
 test('legacy claims get their deterministic id only when targeted, matching delivered context', async () => {
   const { project, claims } = await fixture(),
     delivered = await contextText(project)
-  assert.match(delivered, new RegExp(`<!-- holoself-claim visibility=professional id=${ids.visible} -->`))
+  assert.match(delivered, new RegExp(`<!-- holoself-claim disclosure=review-required id=${ids.visible} -->`))
   assert.doesNotMatch(await readFile(claims, 'utf8'), /id=/, 'delivery never rewrites canonical files')
   await approve(project, (await propose(project, ['--op', 'retire', '--claim-id', ids.visible, '--reason', 'r', '--evidence', 'e'])).proposal_id)
   const after = await readFile(claims, 'utf8')
@@ -407,7 +407,7 @@ test('MCP duplicate and ambiguity checks only consider claims the link can read'
   assert.ok(!twin.isError, JSON.stringify(twin))
   const preview = m.call(5, 'holoself_proposal_preview', { proposal_id: twin.structuredContent.data.proposal_id })
   assert.ok(!preview.isError)
-  assert.match(preview.structuredContent.data.changes[0].before_block, /visibility=professional/)
+  assert.match(preview.structuredContent.data.changes[0].before_block, /disclosure=review-required/)
   await assert.rejects(capture(() => run(['proposals', 'approve', twin.structuredContent.data.proposal_id, '--project', project, '--yes'])), error => error.code === 'CLAIM_AMBIGUOUS')
 })
 

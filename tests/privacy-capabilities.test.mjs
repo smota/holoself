@@ -77,7 +77,7 @@ test('incomplete or invalid canonical privacy metadata is excluded from context,
   }
   await run(['index','rebuild','--project',project])
   const index=JSON.parse(await readFile(join(self,'.holoself','catalog','catalog.json'),'utf8'))
-  assert.equal(index.schema_version,4)
+  assert.equal(index.schema_version,5)
   for(const [name] of cases){
     assert.ok(!index.sources.some(entry=>entry.file===`context/${name}.md`),`${name} index`)
   }
@@ -93,7 +93,7 @@ test('explicit public_safe false overrides and quarantines conflicting public-sa
   assert.ok(data.warnings.some(warning=>warning.includes('conflicting legacy privacy metadata')))
   await run(['index','rebuild','--project',project])
   const index=JSON.parse(await readFile(join(self,'.holoself','catalog','catalog.json'),'utf8'))
-  assert.equal(index.schema_version,4)
+  assert.equal(index.schema_version,5)
   assert.ok(!index.sources.some(entry=>entry.file==='context/legacy-conflict.md'))
   const search=JSON.parse(await capture(()=>run(['search','legacyconflictmarker','--project',project,'--lens','public-voice'])))
   assert.deepEqual(search.results,[])

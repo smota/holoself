@@ -28,6 +28,7 @@
       "additionalProperties": { "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] }
     },
     "field_access": {
+      "propertyNames": { "pattern": "^\\S(?:.*\\S)?$" },
       "description": "Rules for a field or heading name. Omitted access_lenses inherits the document; omitted disclosure is review-required.",
       "type": "object",
       "additionalProperties": {

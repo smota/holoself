@@ -5,7 +5,7 @@ import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, linkSync, mkdirSync, rmSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync, chmodSync } from 'node:fs'
+import { existsSync, linkSync, lstatSync, mkdirSync, openSync, renameSync, rmSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync, chmodSync } from 'node:fs'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -634,6 +634,66 @@ test('proposals inbox cap holds under concurrency: two processes creating at 49 
   const pending = readdirSync(join(self, 'proposals', 'inbox')).filter(name => name.endsWith('.yaml'))
   assert.equal(pending.length, CLIENT_INBOX_LIMIT)
   assert.equal(existsSync(clientInboxLockPath(self)), false)
+})
+
+const fsError = code => Object.assign(new Error(code), { code })
+for (const code of ['EPERM', 'EBUSY', 'EACCES'])
+  test(`client inbox lock retries ${code} during acquire and break, up to its wait limit`, async () => {
+    const self = await temp('inboxseam')
+    mkdirSync(join(self, '.holoself'), { recursive: true })
+    const lock = clientInboxLockPath(self)
+    // Acquire: the first attempts fail, then the real open succeeds.
+    let opens = 0
+    const flakyOpen = {
+      openSync: (...args) => {
+        if (++opens <= 3) throw fsError(code)
+        return openSync(...args)
+      }
+    }
+    assert.equal(withClientInboxLock(self, () => 'ran', { timeoutMs: 2000, ops: flakyOpen }), 'ran')
+    assert.ok(opens >= 4)
+    assert.equal(existsSync(lock), false)
+    // Waiting: inspecting a lock that is being deleted fails, then the lock goes.
+    writeFileSync(lock, JSON.stringify({ pid: process.pid, timestamp: Date.now() }) + '\n')
+    let looks = 0
+    const flakyLook = {
+      lstatSync: (...args) => {
+        if (++looks === 1) throw fsError(code)
+        rmSync(lock, { force: true })
+        return lstatSync(...args)
+      }
+    }
+    assert.equal(withClientInboxLock(self, () => 'ran', { timeoutMs: 2000, ops: flakyLook }), 'ran')
+    // Break: rename and every cleanup fail at first, and the break is retried.
+    writeFileSync(lock, JSON.stringify({ pid: 2147483646, timestamp: 1 }) + '\n')
+    let renames = 0,
+      removals = 0
+    const flakyBreak = {
+      renameSync: (...args) => {
+        if (++renames <= 2) throw fsError(code)
+        return renameSync(...args)
+      },
+      rmSync: (...args) => {
+        if (++removals <= 2) throw fsError(code)
+        return rmSync(...args)
+      }
+    }
+    assert.equal(withClientInboxLock(self, () => 'ran', { timeoutMs: 3000, ops: flakyBreak }), 'ran')
+    assert.ok(renames >= 3)
+    rmSync(`${lock}.break`, { force: true })
+    // An error that never clears ends as the lock timeout, not as a raw filesystem error.
+    const stuck = { openSync: () => { throw fsError(code) } }
+    assert.equal((await refusal(() => withClientInboxLock(self, () => 'never', { timeoutMs: 80, ops: stuck }))).code, 'CLIENT_INBOX_LOCK_TIMEOUT')
+    // Nothing but contention is retried.
+    assert.throws(() => withClientInboxLock(self, () => 'never', { timeoutMs: 80, ops: { openSync: () => { throw fsError('EIO') } } }), error => error.code === 'EIO')
+  })
+
+test('a stale lock that can never be broken ends at the wait limit instead of spinning', async () => {
+  const self = await temp('inboxspin')
+  mkdirSync(join(self, '.holoself'), { recursive: true })
+  writeFileSync(clientInboxLockPath(self), JSON.stringify({ pid: 2147483646, timestamp: 1 }) + '\n')
+  const stuck = { renameSync: () => { throw fsError('EPERM') } }
+  assert.equal((await refusal(() => withClientInboxLock(self, () => 'never', { timeoutMs: 80, ops: stuck }))).code, 'CLIENT_INBOX_LOCK_TIMEOUT')
 })
 
 test('client inbox lock: a live holder blocks until timeout; a dead holder is broken; concurrent stale-lock breakers never exceed the cap', async () => {

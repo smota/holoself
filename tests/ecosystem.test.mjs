@@ -128,12 +128,12 @@ test('index and search enforce claim, field, compensation, metadata, and secret 
   await writeFile(join(project,'Context','role.md'),'# Role\n\nMy annual compensation totals USD 200000 plus bonus and equity.\n')
   await writeFile(join(self,'context','credentials-notes.md'),'# Credentials\n\nfilename secret phrase\n');await writeFile(join(self,'context','.env.md'),'# Environment\n\ninternal credential phrase\n');await writeFile(join(self,'context','bearer.md'),'# Auth\n\nAuthorization: Bearer abcdefghijklmnopqrstuvwxyz\n')
   const built=JSON.parse(await capture(()=>run(['index','rebuild','--project',project])));assert.ok(built.skipped_secret_files>=3)
-  const raw=await readFile(join(project,'.holoself','catalog','catalog.json'),'utf8');assert.doesNotMatch(raw,/home_address|10 Secret Street|filename secret phrase|internal credential phrase|abcdefghijklmnopqrstuvwxyz/);assert.match(raw,/"schema_version": 4/)
+  const raw=await readFile(join(project,'.holoself','catalog','catalog.json'),'utf8');assert.doesNotMatch(raw,/home_address|10 Secret Street|filename secret phrase|internal credential phrase|abcdefghijklmnopqrstuvwxyz/);assert.match(raw,/"schema_version": 5/)
   const generalClaim=JSON.parse(await capture(()=>run(['search','private unicorn','--project',project,'--lens','general'])));assert.equal(generalClaim.results.length,0)
   await assert.rejects(run(['search','private unicorn','--project',project,'--lens','private']),/not granted/)
   const field=JSON.parse(await capture(()=>run(['search','golden package','--project',project,'--lens','general'])));assert.equal(field.results.length,0)
   const publishingSearch=JSON.parse(await capture(()=>run(['search','annual compensation bonus equity','--project',project,'--lens','public-voice'])));assert.equal(publishingSearch.results.length,0)
-  const publishingPacket=await capture(()=>run(['context','--project',project,'--lens','public-voice','--format','packet']));assert.doesNotMatch(publishingPacket,/200000|210,000|annual bonus|bonus and equity/);assert.match(publishingPacket,/compensation content excluded|field Compensation excluded/)
+  const publishingPacket=await capture(()=>run(['context','--project',project,'--lens','public-voice','--format','packet']));assert.doesNotMatch(publishingPacket,/200000|210,000|annual bonus|bonus and equity/);assert.match(publishingPacket,/compensation content excluded|field excluded by/)
 })
 
 test('metadata collisions, legacy export overwrite, and unknown flags fail safely',async()=>{

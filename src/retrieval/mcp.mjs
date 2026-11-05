@@ -131,7 +131,12 @@ function mcpClaimView(project) {
       const seen = get(rel)
       return !block.malformed && seen.ids.has(block.claim_id) && seen.lenses.some(lens => subDocumentVisible(block.rule, lens, 'generic'))
     },
-    delivered: rel => get(rel).contents
+    delivered: rel => get(rel).contents,
+    // The delivered text a change works on: the first lens's text that holds the targeted claim.
+    baseText: (rel, change) => {
+      const { contents } = get(rel)
+      return (change?.claim_id && contents.find(content => parseClaimBlocks(content, rel).some(block => block.claim_id === change.claim_id))) ?? contents[0] ?? null
+    }
   }
 }
 function assertMcpClaimTargets(project, changes, view) {

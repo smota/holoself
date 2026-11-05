@@ -3,7 +3,7 @@ import { closeSync, lstatSync, openSync, readFileSync, rmSync, writeFileSync } f
 import { dirname, join } from 'node:path'
 import { atomicWriteFile, canonicalSort } from '../catalog.mjs'
 import { pathIdentity, samePathIdentity } from '../path-guard.mjs'
-import { ensureDir, hash, pathExists, safeRealpath } from '../shared/fs.mjs'
+import { LOCK_CONTENTION_ERRORS, ensureDir, hash, pathExists, safeRealpath } from '../shared/fs.mjs'
 import { parseYaml } from '../shared/yaml.mjs'
 
 export function canonicalSpaceId(projectDir) {
@@ -90,29 +90,33 @@ export function isPidAlive(pid) {
     return err.code === 'EPERM'
   }
 }
-export async function withRegistryLock(selfRoot, fn) {
-  const lockPath = registryLockPath(selfRoot)
+// `ops` is a test seam for the file operations that meet contention.
+export async function withRegistryLock(selfRoot, fn, ops = {}) {
+  const fs = { openSync, readFileSync, ...ops },
+    lockPath = registryLockPath(selfRoot)
   ensureDir(dirname(lockPath))
   const backoffs = [50, 150, 450]
   let acquired = false
   for (let attempt = 0; attempt <= backoffs.length; attempt++) {
     try {
-      const fd = openSync(lockPath, 'wx')
+      const fd = fs.openSync(lockPath, 'wx')
       const payload = JSON.stringify({ pid: process.pid, timestamp: Date.now() }) + '\n'
       writeFileSync(fd, payload, 'utf8')
       closeSync(fd)
       acquired = true
       break
     } catch (err) {
+      if (err.code !== 'EEXIST' && !LOCK_CONTENTION_ERRORS.has(err.code)) throw err
       if (err.code === 'EEXIST') {
         let isStale = false
         try {
-          const raw = readFileSync(lockPath, 'utf8')
+          const raw = fs.readFileSync(lockPath, 'utf8')
           const parsed = JSON.parse(raw)
           const age = Date.now() - (parsed.timestamp || 0)
           if (age > 5000 || (parsed.pid && !isPidAlive(parsed.pid))) isStale = true
-        } catch {
-          isStale = true
+        } catch (readErr) {
+          // A lock that cannot be read for a moment is busy, not stale.
+          isStale = !LOCK_CONTENTION_ERRORS.has(readErr.code)
         }
         if (isStale) {
           try {
@@ -120,13 +124,8 @@ export async function withRegistryLock(selfRoot, fn) {
           } catch {}
           continue
         }
-        if (attempt < backoffs.length) {
-          await new Promise(r => setTimeout(r, backoffs[attempt]))
-          continue
-        }
-      } else {
-        throw err
       }
+      if (attempt < backoffs.length) await new Promise(r => setTimeout(r, backoffs[attempt]))
     }
   }
   if (!acquired) {

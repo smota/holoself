@@ -2,10 +2,11 @@
 import { readSourceWithStat } from '../catalog.mjs'
 import { buildCatalogSections, extractSectionAnnotations, privacySections } from '../catalog/source.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
-import { withClaimIds } from '../markdown/claim-blocks.mjs'
+import { withClaimIds, withoutClaimRuleDetails } from '../markdown/claim-blocks.mjs'
 import {
   allowed,
   claimStatusIncluded,
+  deliveredSection,
   filterClaimStatus,
   filterClaimVisibility,
   filterFieldVisibility,
@@ -13,7 +14,7 @@ import {
 } from '../policy/access.mjs'
 import { resolveDocumentPolicy } from '../policy/policy-defaults.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
-import { catalogElementVisible } from '../policy/sub-document-rules.mjs'
+import { catalogElementVisible, publicationAdapter } from '../policy/sub-document-rules.mjs'
 import { hash } from '../shared/fs.mjs'
 
 // Returns the deliver callback used by selection, the restrictions it records and its reconcile-read count.
@@ -77,8 +78,9 @@ export function createRecordDelivery(o, { project, self, identity, registry, len
       identity.kind,
       registry
     )
+    const identified = cand.kind === 'self' ? withClaimIds(visibleClaims, cand.path, { registry }) : visibleClaims
     const filteredBody = filterFieldVisibility(
-      cand.kind === 'self' ? withClaimIds(visibleClaims, cand.path, { registry }) : visibleClaims,
+      identity.kind === 'owner:direct' && !publicationAdapter(adapter) ? identified : withoutClaimRuleDetails(identified, { registry }),
       metadata,
       lens,
       cand.path,
@@ -104,19 +106,20 @@ export function createRecordDelivery(o, { project, self, identity, registry, len
       const catSecs = buildCatalogSections(rawSecs)
       sectionsList = catSecs
         .filter(sec => catalogElementVisible(sec, lens, adapter) && claimStatusIncluded(sec.claim_status, temporal))
-        .map(sec => {
-          const filtered = filterFieldVisibility(
-            filterClaimVisibility(sec.snippet || '', lens, cand.path, deliveryRestrictions, resolution, identity.kind, adapter, registry),
-            metadata,
-            lens,
-            cand.path,
-            deliveryRestrictions,
-            resolution,
-            identity.kind,
-            adapter
+        .map(sec =>
+          deliveredSection(sec, text =>
+            filterFieldVisibility(
+              filterClaimVisibility(text, lens, cand.path, deliveryRestrictions, resolution, identity.kind, adapter, registry),
+              metadata,
+              lens,
+              cand.path,
+              deliveryRestrictions,
+              resolution,
+              identity.kind,
+              adapter
+            )
           )
-          return { ...sec, snippet: filtered }
-        })
+        )
       const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSecs, safeMeta)
       claimsList = annotatedClaims.filter(c => catalogElementVisible(c, lens, adapter) && claimStatusIncluded(c.claim_status, temporal))
       tagsList = annotatedTags.filter(t => catalogElementVisible(t, lens, adapter))

@@ -16,7 +16,8 @@ import { resolveCaller, resolveLensAuthority } from './caller.mjs'
 import { getIdentityId, getOrCreateCursorSecret } from './cursor-identity.mjs'
 import { createRecordDelivery } from './delivery.mjs'
 import { fitEnvelope } from './envelope.mjs'
-import { documentProjection, sourceIndexEntry, withoutPrivatePaths } from './projection.mjs'
+import { publicationAdapter } from '../policy/sub-document-rules.mjs'
+import { documentProjection, sourceIndexEntry, withoutPrivatePaths, withoutRuleDetails } from './projection.mjs'
 import { buildReceiptPolicySources, catalogCandidateRecords, deduplicateCandidates, resolvedContextAssertions } from './records.mjs'
 
 export function contextData(o) {
@@ -173,10 +174,11 @@ function assembleResult(
   const isLinked = identity.kind === 'client:linked' || isUnlinkedClient,
     isMcp = surface === 'mcp'
   // Document bodies live only in the owning documents array; sources[] is a body-free provenance index.
+  const delivered = isLinked || publicationAdapter(adapter) ? view => withoutRuleDetails(view, lens) : view => view
   const projections = list => {
     const selfDocs = list.filter(r => r.kind === 'self').map(documentProjection),
       localDocs = list.filter(r => r.kind === 'project' && (!r.space_id || r.space_id === localSpaceId)).map(documentProjection)
-    return {
+    return delivered({
       self: isLinked ? { documents: selfDocs } : { path: slash(resolve(self)), documents: selfDocs },
       project: isUnlinkedClient
         ? { name: null, documents: [] }
@@ -186,7 +188,7 @@ function assembleResult(
       methods: { documents: list.filter(r => r.kind === 'contrib').map(r => ({ ...documentProjection(r), contrib: r.contrib })) },
       sources: list.map(sourceIndexEntry),
       source_hashes: list.map(r => ({ kind: r.kind, path: r.path, sha256: r.source_hash, freshness: r.freshness }))
-    }
+    })
   }
   const view = projections(records)
 

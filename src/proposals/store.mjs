@@ -369,10 +369,12 @@ function currentClaimLines(text, { skip = null, keep = () => true } = {}) {
     replaceClaimBlocks(text, block => (block.start === skip?.start || block.status !== 'current' || !keep(block) ? '' : block.raw), { failClosed: false })
   )
 }
+// A body names a visibility only when one word states it: a lens list is the owner's and stays in the marker.
 function claimBody(p, change, visibility) {
+  const named = visibility && !visibility.includes('=') ? `- Visibility: ${visibility}\n` : ''
   return (
     `## Approved proposal ${p.proposal_id}/${change.change_id}\n\n${change.claim}\n\n` +
-    `- Evidence: ${change.evidence}\n- Confidence: ${change.confidence}\n- Visibility: ${visibility}\n` +
+    `- Evidence: ${change.evidence}\n- Confidence: ${change.confidence}\n${named}` +
     `- Provenance: ${p.provenance.join('; ')}\n- Approved: ${commitTimeToken(p)}\n`
   )
 }
@@ -410,10 +412,14 @@ export function applyClaimChange(text, rel, change, p, view = null, registry = n
   const old = targetedClaim(text, rel, change, view, registry),
     splice = replacement => text.slice(0, old.start) + replacement + text.slice(old.end),
     attrs = { ...old.attrs, id: old.claim_id },
-    oldRule = writable(old.rule),
-    rule = change.visibility ? writable(legacySubDocumentRule(change.visibility)) : oldRule,
-    visibility = change.visibility || describeRule(old.rule),
-    visibilityChange = visibility === describeRule(old.rule) ? null : { from: describeRule(old.rule), to: visibility }
+    oldRule = ruleForRegistry(old.rule, registry)
+  // No lens reads this claim, and that has no written form. Any marker written here would be wider, so it is refused.
+  if (!oldRule || oldRule.access_lenses?.length === 0)
+    throw claimError(`claim rule admits no lens; fix its marker by hand: ${change.claim_id} (${change.change_id})`, 'CLAIM_RULE_UNWRITABLE')
+  const rule = change.visibility ? writable(legacySubDocumentRule(change.visibility)) : oldRule,
+    // Under a view the marker read here is the delivered one, which keeps no lens list, so its name would be wrong.
+    visibility = change.visibility || (view ? null : describeRule(old.rule)),
+    visibilityChange = !change.visibility || change.visibility === describeRule(old.rule) ? null : { from: describeRule(old.rule), to: change.visibility }
   if (change.operation === 'replace_claim') {
     if (normalize(old.text) === normalize(change.claim)) throw claimError(`replacement wording matches the existing claim: ${change.change_id}`, 'CLAIM_UNCHANGED')
     refuseDuplicate(text, rel, change, view, old)
@@ -474,23 +480,29 @@ export function planProposalChanges(p, self, view = null) {
       before = state?.before ?? (existed ? readFileSync(target, 'utf8') : emptyTarget(root)),
       current = state?.after ?? before
     if (!state && before.includes(time)) throw claimError(`target already contains this proposal's reserved placeholder: ${rel}`, 'INVALID_TARGET')
-    const applied = applyClaimChange(current, rel, { ...change, operation: change.operation || 'append_claim' }, p, view, registry),
-      viewCurrent = state?.viewAfter ?? view?.baseText?.(rel) ?? null,
-      viewAfter = viewCurrent === null ? null : applyClaimChange(viewCurrent, rel, { ...change, operation: change.operation || 'append_claim' }, p, view, registry).after
+    const operation = change.operation || 'append_claim',
+      applied = applyClaimChange(current, rel, { ...change, operation }, p, view, registry),
+      viewCurrent = state?.viewAfter ?? view?.baseText?.(rel, change) ?? null
+    // A caller with a view reads only what it was delivered. Without delivered text there is nothing it may be shown.
+    if (view && viewCurrent === null && operation !== 'append_claim') throw claimError(`claim not found in ${rel}: ${change.claim_id} (${change.change_id})`, 'CLAIM_NOT_FOUND')
+    const viewApplied = viewCurrent === null ? null : applyClaimChange(viewCurrent, rel, { ...change, operation }, p, view, registry),
+      viewAfter = viewApplied?.after ?? null,
+      shownChange = viewApplied ?? applied,
+      visibilityChange = view && applied.visibility_change ? { from: 'not shown', to: applied.visibility_change.to } : applied.visibility_change
     grouped.set(target, { target, before, after: applied.after, existed, viewAfter })
     steps.push({ before: current, after: applied.after })
     previews.push({
       change_id: change.change_id,
-      operation: change.operation || 'append_claim',
+      operation,
       target: rel,
       claim_id: applied.claim_id,
       evidence: change.evidence,
-      visibility_change: applied.visibility_change,
-      before_sha256: hash(viewCurrent ?? current),
-      after_sha256: hash(viewAfter ?? applied.after),
-      before_block: shown(applied.before_block),
-      after_block: shown(applied.after_block),
-      preview: shown(applied.preview)
+      visibility_change: visibilityChange,
+      before_sha256: hash(viewCurrent ?? (view ? '' : current)),
+      after_sha256: hash(viewAfter ?? (view ? shownChange.after_block : applied.after)),
+      before_block: shown(shownChange.before_block),
+      after_block: shown(shownChange.after_block),
+      preview: shown(shownChange.preview)
     })
   }
   return { grouped, previews, steps, commit_time_token: time }

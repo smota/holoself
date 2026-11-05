@@ -88,9 +88,9 @@ for (const adapter of PUBLICATION_ADAPTERS) {
       assert.equal(data.selection.total_bytes, Buffer.byteLength(JSON.stringify(data, null, 2) + '\n'))
       // Restrictions name the publication gate for elements the lens alone would show.
       const reasons = mixedRestrictions(data).map(r => r.reason)
-      assert.ok(reasons.includes(`field ${FIELD_NAMES.professional} not approved for publication on ${adapter} adapter`))
-      assert.ok(reasons.includes(`field ${LINE_NAMES['public-voice']} not approved for publication on ${adapter} adapter`))
-      assert.ok(reasons.includes(`field ${FIELD_NAMES.private} excluded by general lens`))
+      assert.ok(reasons.includes(`field not approved for publication on ${adapter} adapter`))
+      assert.ok(!reasons.some(reason => Object.values(FIELD_NAMES).some(name => reason.includes(name))), 'no field name in a reason')
+      assert.ok(reasons.includes('field excluded by general lens'))
       assert.ok(!reasons.some(reason => /Safe Notes|Motto/.test(reason)), 'public-safe fields are not reported')
       const claimReasons = reasons.filter(reason => reason.startsWith('claim '))
       if (who === 'linked') assert.deepEqual(claimReasons, [], 'hidden claims are not reported to linked callers')
