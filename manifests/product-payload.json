@@ -537,8 +537,23 @@
       "ownership": "managed"
     },
     {
+      "source": "lib/core/dispatch.mjs",
+      "target": "lib/core/dispatch.mjs",
+      "ownership": "managed"
+    },
+    {
       "source": "lib/core/run-state.mjs",
       "target": "lib/core/run-state.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/core/seat-lease.mjs",
+      "target": "lib/core/seat-lease.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/core/seat-prime.mjs",
+      "target": "lib/core/seat-prime.mjs",
       "ownership": "managed"
     },
     {
@@ -789,6 +804,16 @@
     {
       "source": "docs/execution-distributions.md",
       "target": "docs/execution-distributions.md",
+      "ownership": "managed"
+    },
+    {
+      "source": "lib/world/world-builder.mjs",
+      "target": "lib/world/world-builder.mjs",
+      "ownership": "managed"
+    },
+    {
+      "source": "adapters/openrig/agentflow-world/manifest.yaml",
+      "target": "adapters/openrig/agentflow-world/manifest.yaml",
       "ownership": "managed"
     }
   ]
