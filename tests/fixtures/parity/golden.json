@@ -24757,7 +24757,7 @@
           "status": "ready",
           "fresh": true,
           "path": "<ROOT>/project/.holoself/catalog/catalog.json",
-          "schema_version": 3,
+          "schema_version": 4,
           "privacy_policy_version": 4,
           "lens_registry_hash": "07c92f4fc4342fd9fe7b7a956eb990ed92dc4eb11feabdb8e36c691f51232127",
           "engine": "deterministic-json",
@@ -24830,7 +24830,7 @@
           "status": "ready",
           "fresh": true,
           "path": "<ROOT>/project/.holoself/catalog/catalog.json",
-          "schema_version": 3,
+          "schema_version": 4,
           "privacy_policy_version": 4,
           "lens_registry_hash": "07c92f4fc4342fd9fe7b7a956eb990ed92dc4eb11feabdb8e36c691f51232127",
           "engine": "deterministic-json",
@@ -24992,7 +24992,7 @@
         "<ROOT>/project"
       ],
       "status": 1,
-      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim visibility=private id=<UUID:2> -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n",
+      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim access_lenses=private disclosure=review-required id=<UUID:2> -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n",
       "stderr": "[!!] Approve proposal and apply grouped canonical self changes? Re-run with --yes to confirm.\n"
     },
     {
@@ -25006,7 +25006,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim visibility=private id=<UUID:2> -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n[ok] approved <UUID:1>; 1 change(s), validation passed\n",
+      "stdout": "Affected files: <ROOT>/self/context/claims.md\nPreview hash: <HEX:1>\n--- proposed diff ---\n--- claim: context/claims.md ---\n+<!-- holoself-claim access_lenses=private disclosure=review-required id=<UUID:2> -->\n+## Approved proposal <UUID:1>/claim\n+\n+Approve me: prefers reviewable refactors\n+\n+- Evidence: Source project files: NOTES.md\n+- Confidence: unverified\n+- Visibility: private\n+- Provenance: project:NOTES.md\n+- Approved: <commit-time>\n+<!-- /holoself-claim -->\n[ok] approved <UUID:1>; 1 change(s), validation passed\n",
       "stderr": ""
     },
     {
@@ -26613,7 +26613,7 @@
       ],
       "status": 0,
       "stdout": "[ok] <ROOT>/self is valid\n",
-      "stderr": "[warn] deprecated claim marker attribute visibility= in context/claims.md (1 marker): maps to access_lenses and disclosure marker attributes; rejected in 0.13.0; holoself migrate policy rewrites them from 0.12.0\n"
+      "stderr": ""
     }
   ]
 }

@@ -2,6 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://holoself.local/schemas/catalog.schema.json",
   "title": "Holoself deterministic incremental catalog",
+  "$defs": {
+    "access_rule": {
+      "description": "A sub-document rule. Set on an element only when no deprecated visibility name states it exactly.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "access_lenses": { "description": "Empty when two rules share no lens: no lens reads the element.", "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "disclosure": { "type": "string", "enum": ["internal-only", "review-required", "publish-approved"] }
+      }
+    }
+  },
   "type": "object",
   "required": [
     "schema_version",
@@ -13,7 +24,7 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "const": 3 },
+    "schema_version": { "const": 4 },
     "space_id": { "type": "string" },
     "lens_registry_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "project_context_hash": { "type": ["string", "null"] },
@@ -110,6 +121,10 @@
                 "type": "object",
                 "additionalProperties": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] }
               },
+              "field_access": {
+                "type": "object",
+                "additionalProperties": { "$ref": "#/$defs/access_rule" }
+              },
               "knowledge_status": { "type": "string", "enum": ["current", "historical", "superseded"] },
               "temporal_scope": { "type": "string", "enum": ["current", "time-bounded", "historical", "timeless"] },
               "valid_from": {
@@ -150,6 +165,7 @@
                 "section_id": { "type": "string" },
                 "heading": { "type": "string" },
                 "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] },
+                "access_rule": { "$ref": "#/$defs/access_rule" },
                 "disclosure": { "type": "string", "enum": ["internal-only", "review-required", "publish-approved"] },
                 "claim": { "type": "boolean" },
                 "claim_status": { "type": "string", "enum": ["superseded", "historical"] },
@@ -166,6 +182,7 @@
               "properties": {
                 "text": { "type": "string" },
                 "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] },
+                "access_rule": { "$ref": "#/$defs/access_rule" },
                 "claim_status": { "type": "string", "enum": ["superseded", "historical"] }
               }
             }
@@ -178,7 +195,8 @@
               "additionalProperties": false,
               "properties": {
                 "value": { "type": "string" },
-                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] }
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] },
+                "access_rule": { "$ref": "#/$defs/access_rule" }
               }
             }
           },
@@ -190,7 +208,8 @@
               "additionalProperties": false,
               "properties": {
                 "value": { "type": "string" },
-                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] }
+                "visibility": { "type": "string", "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] },
+                "access_rule": { "$ref": "#/$defs/access_rule" }
               }
             }
           },

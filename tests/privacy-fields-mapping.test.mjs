@@ -24,6 +24,7 @@ import {
 } from '../src/migration.mjs'
 import { PUBLICATION_ADAPTERS, allowedDocument, intersectVisibility, publicationAllowed, visibleUnderBehavior } from '../src/policy/access.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../src/policy/privacy-fields.mjs'
+import { stripClaimMarkers } from '../src/markdown/claim-blocks.mjs'
 
 const CUSTOM = Object.freeze({ id: 'custom-audit', sensitivity_access: ['personal', 'employer-confidential'] })
 const REGISTRY = { lenses: [...DEFAULT_LENSES, CUSTOM], byId: new Map([...DEFAULT_LENSES, CUSTOM].map(lens => [lens.id, lens])) }
@@ -285,8 +286,10 @@ test('planPolicyMigration reports zero coverage loss for the exact cases, and ap
   for (const path of Object.keys(files)) {
     const migrated = await readFile(path, 'utf8')
     assert.doesNotMatch(migrated, /^(visibility|public_safe):/m)
-    assert.match(migrated, /^field_visibility:\n {2}Pro Notes: professional$/m, 'field_visibility stays until 0.12.0')
-    assert.ok(migrated.endsWith(BODY), 'body and claim markers are untouched')
+    assert.doesNotMatch(migrated, /^field_visibility:/m)
+    assert.match(migrated, /^field_access:\n {2}Pro Notes:\n {4}access_lenses: \[general, professional, interview, private\]\n {4}disclosure: review-required$/m)
+    assert.doesNotMatch(migrated, /holoself-claim visibility=/)
+    assert.equal(stripClaimMarkers(migrated.slice(migrated.length - migrated.split('\n---\n')[1].length)), stripClaimMarkers(BODY), 'only marker comments change in the body')
     assert.ok(canonicalValid(migrated))
   }
   const reverted = revertPolicyMigration(self, receipt.receipt_id)
@@ -374,7 +377,7 @@ test('publication adapters: migrated documents deliver what legacy ones did, and
   applyPolicyMigration(root, plan.plan_id)
   const after = await snapshot()
   for (const [key, value] of Object.entries(after)) {
-    assert.equal(value.content, before[key].content, `${key}: content unchanged by migration`)
+    assert.equal(stripClaimMarkers(value.content ?? ''), stripClaimMarkers(before[key].content ?? ''), `${key}: content unchanged by migration, apart from marker comments`)
     assert.ok(value.content !== null, `${key}: delivered`)
     for (const passage of value.passages)
       for (const line of passage.replace(/\.\.\.$/, '').split('\n').filter(x => x.trim()))
@@ -478,7 +481,7 @@ test('a catalog written with the previous schema version is rebuilt on first use
   contextJson('generic', false)
   const catalogPath = join(root, '.holoself', 'catalog', 'catalog.json')
   const current = JSON.parse(await readFile(catalogPath, 'utf8'))
-  assert.equal(current.schema_version, 3)
+  assert.equal(current.schema_version, 4)
   // Simulate a catalog left behind by the previous release: schema 2 with annotations built from the raw field line.
   const source = current.sources.find(s => s.file === 'context/stale.md')
   // Current builds keep the field line's annotations but mark them with the field rule (private).
@@ -495,7 +498,7 @@ test('a catalog written with the previous schema version is rebuilt on first use
     assert.match(outputs[0], /OPEN_STALE/)
   }
   const rebuilt = await readFile(catalogPath, 'utf8')
-  assert.equal(JSON.parse(rebuilt).schema_version, 3)
+  assert.equal(JSON.parse(rebuilt).schema_version, 4)
   const rebuiltSource = JSON.parse(rebuilt).sources.find(s => s.file === 'context/stale.md')
   assert.ok(governed(rebuiltSource).every(x => x.visibility === 'private'), 'the stale public-safe annotations are gone')
   assert.equal(governed(rebuiltSource).length, governed(source).length - 3)

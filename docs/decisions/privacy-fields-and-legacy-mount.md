@@ -10,7 +10,7 @@ Separately, Holoself still ships a legacy live mount: `link --target` makes the 
 
 This record inventories the current fields, sets the target field set and an exact mapping from the deprecated fields, defines the migration and deprecation timeline, and plans the retirement of the legacy live mount.
 
-Commands written with the `holoself` prefix exist today. Commands written without the prefix are planned and do not exist yet. For example, `validate --fix` stands for a planned flag of `holoself validate`.
+Commands written with the `holoself` prefix existed when this record was accepted. Commands written without the prefix were planned then. `holoself validate --fix` now exists, and the timeline in section 3 shows which stages have shipped.
 
 ## 1. Inventory
 
@@ -126,12 +126,22 @@ The plan writes the materialized target fields from section 2 and removes `visib
 
 **Deprecation timeline**
 
-| Version | Change |
-|---|---|
-| 0.11.0 | `holoself validate` warns for every document carrying `visibility`, `public_safe`, `field_visibility` or a `visibility=` claim marker, and names the mapped fields. The gate fixes from section 1 ship first. |
-| 0.12.0 | `validate --fix` (planned) prints the exact mapping per file and hands off to `holoself migrate policy --dry-run`. It never edits files itself. Approved proposals write the new claim marker. Archived proposal records stay readable. |
-| 0.13.0 | Deprecated fields are rejected. A canonical document that carries them is excluded with a validation error. A tolerant project or contrib document is restricted to `private`, as invalid metadata is today. `_policy.yaml` already rejects them. |
-| 0.14.0 | They are removed from `schemas/document-metadata.schema.json`, from `VISIBILITIES` consumers, from the annotation schema and from catalog schemas. |
+| Version | Status | Change |
+|---|---|---|
+| 0.11.0 | Shipped | `holoself validate` warns for every document carrying `visibility`, `public_safe`, `field_visibility` or a `visibility=` claim marker, and names the mapped fields. The gate fixes from section 1 ship first. |
+| 0.12.0 | Implemented, not yet released | The runtime reads `field_access` and lens-vocabulary claim markers, and `holoself migrate policy` rewrites `field_visibility` and claim markers. `holoself validate --fix` prints the exact mapping per file and hands off to `holoself migrate policy --dry-run`. It never edits those fields itself. Approved proposals write the new claim marker. Archived proposal records stay readable. |
+| 0.13.0 | Planned | Deprecated fields are rejected. A canonical document that carries them is excluded with a validation error. A tolerant project or contrib document is restricted to `private`, as invalid metadata is today. `_policy.yaml` already rejects them. |
+| 0.14.0 | Planned | They are removed from `schemas/document-metadata.schema.json`, from `VISIBILITIES` consumers, from the annotation schema and from catalog schemas. |
+
+**Corrections from the 0.12.0 implementation (#108)**
+
+- The narrowing in flagged case 1 and the alignment in flagged case 2 shipped in 0.11.0 (#106 and the 0.11.0 stage of #108). 0.12.0 keeps them and adds no new runtime narrowing for legacy documents.
+- `validate --fix` already existed as a repair command when this stage was built. The mapping report sits beside its plan, outside the plan digest, so the repair flow is unchanged. A document with broken frontmatter that carries field rules is no longer repaired, because the repair rebuilds frontmatter from salvaged scalars and would lose them.
+- A claim marker needs at least one of `access_lenses`, `disclosure` or `visibility`. A marker with none stays malformed, as it was.
+- The catalog keeps `visibility` on sections, claims, tags and links as a label until 0.14.0. An element adds `access_rule` only when no label states its rule exactly, so a migrated document produces the same catalog as its legacy form.
+- `field_visibility` stops at the first matching name and `field_access` applies every match. Migration drops an old rule shadowed by a same-name rule, which is exact. A heading that matched two different old rules becomes narrower, and the plan reports that as coverage loss. Conflicts cannot widen.
+- When two lens lists overlap but neither contains the other, the combined rule fails closed to `private`. This keeps the behaviour of `professional` with `public-voice`, for new rules too.
+- The rewrite covers exactly the blocks the runtime parses, including complete blocks inside fenced code. Documents without frontmatter get their markers rewritten too, because the runtime reads them.
 
 **Interaction with `_policy.yaml` (#73).** Until 0.13.0, a document carrying `visibility` or `public_safe` receives no directory defaults (`policy_skipped: legacy-visibility`). After migration the legacy fields are gone, so the document inherits defaults for every field it does not set. Because the migration materializes `access_lenses`, `read_scope`, `disclosure`, `sensitivity` and `document_role`, inherited defaults can only add narrowing controls (`exclude_lenses`, task selectors, lifecycle). Without this materialization, a directory default such as `disclosure: publish-approved` or `document_role: policy` would widen a former legacy document. The rebuilt gate checks the inherited result. From 0.13.0 the skip rule has nothing left to trigger on and is removed.
 

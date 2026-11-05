@@ -677,12 +677,9 @@ test('regression (e): applyFrontmatterModifications anchors keys at column 0 to 
 
   const updated = await readFile(docPath, 'utf8')
 
-  // Assert the nested line is byte-unchanged
-  assert.ok(
-    updated.includes(nestedLine),
-    'nested field_visibility line must remain byte-unchanged'
-  )
-  assert.match(updated, /field_visibility:\r?\n  visibility: public-safe/)
+  // A field that happens to be named `visibility` is a field rule: it moves to field_access, under its own name
+  assert.match(updated, /^field_access:\r?\n  visibility:\r?\n    disclosure: publish-approved$/m)
+  assert.doesNotMatch(updated, /^field_visibility:/m)
 
   // Assert the deprecated top-level key is removed, not the nested one
   assert.doesNotMatch(updated, /^visibility:/m)

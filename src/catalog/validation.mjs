@@ -53,11 +53,11 @@ export function catalogBuildWarnings(root, project = null) {
 // Deprecated privacy fields (docs/decisions/privacy-fields-and-legacy-mount.md). 0.11.0 warns, 0.13.0 rejects them.
 export const DEPRECATED_FIELDS_REJECTED_IN = '0.13.0'
 const MIGRATE_NOW = 'run holoself migrate policy --dry-run'
-const MIGRATE_LATER = 'holoself migrate policy rewrites it from 0.12.0'
+const MIGRATE_REWRITE = 'holoself migrate policy rewrites it; run holoself migrate policy --dry-run'
 const DEPRECATED_FIELD_TARGETS = Object.freeze({
   visibility: ['access_lenses, read_scope and disclosure', MIGRATE_NOW],
   public_safe: ['disclosure', MIGRATE_NOW],
-  field_visibility: ['field_access', MIGRATE_LATER]
+  field_visibility: ['field_access', MIGRATE_REWRITE]
 })
 function deprecatedDocumentWarnings(file, rel) {
   let text
@@ -78,7 +78,7 @@ function deprecatedDocumentWarnings(file, rel) {
   const markers = parseClaimBlocks(parsed?.body ?? text).filter(block => block.attrs.visibility !== undefined).length
   if (markers)
     warnings.push(
-      `deprecated claim marker attribute visibility= in ${rel} (${markers} marker${markers === 1 ? '' : 's'}): maps to access_lenses and disclosure marker attributes; ${rejected}; ${MIGRATE_LATER.replace(' it ', ' them ')}`
+      `deprecated claim marker attribute visibility= in ${rel} (${markers} marker${markers === 1 ? '' : 's'}): maps to access_lenses and disclosure marker attributes; ${rejected}; ${MIGRATE_REWRITE.replace(' it;', ' them;')}`
     )
   return warnings
 }
@@ -139,8 +139,8 @@ export function ecosystemValidationErrors(root, project = null) {
         if (!/^(?:https?:|mailto:)/.test(match[1]) && !existsSync(resolve(dirname(path), match[1]))) errors.push(`broken reference ${match[1]}: ${rel}`)
       if (CLAIM_MARKER_RE.test(text)) {
         const claimIds = new Set()
-        for (const problem of claimMarkerProblems(text)) errors.push(`${problem}: ${rel}`)
-        for (const block of parseClaimBlocks(text, rel)) {
+        for (const problem of claimMarkerProblems(text, { registry })) errors.push(`${problem}: ${rel}`)
+        for (const block of parseClaimBlocks(text, rel, { registry })) {
           if (block.attrs.id && claimIds.has(block.attrs.id)) errors.push(`duplicate claim id ${block.attrs.id}: ${rel}`)
           if (block.attrs.id) claimIds.add(block.attrs.id)
         }

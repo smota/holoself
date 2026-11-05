@@ -9,7 +9,7 @@ import { readLink } from '../link/config.mjs'
 import { healthStatus } from '../link/health.mjs'
 import { parseClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { canonicalPath } from '../path-guard.mjs'
-import { visibleUnderBehavior } from '../policy/access.mjs'
+import { subDocumentVisible } from '../policy/sub-document-rules.mjs'
 import { createProposal, findProposal, listProposalData, proposalChanges, proposalPreviewData, safeTarget } from '../proposals/store.mjs'
 import { slash } from '../shared/fs.mjs'
 import { contextData } from './context.mjs'
@@ -129,7 +129,7 @@ function mcpClaimView(project) {
   return {
     visible: (rel, block) => {
       const seen = get(rel)
-      return !block.malformed && seen.ids.has(block.claim_id) && seen.lenses.some(lens => visibleUnderBehavior(block.visibility, lens, 'generic'))
+      return !block.malformed && seen.ids.has(block.claim_id) && seen.lenses.some(lens => subDocumentVisible(block.rule, lens, 'generic'))
     },
     delivered: rel => get(rel).contents
   }

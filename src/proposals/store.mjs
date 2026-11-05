@@ -7,6 +7,7 @@ import { canonicalSort } from '../catalog.mjs'
 import { loadLensRegistry } from '../lenses.mjs'
 import { createLinkDirs, readLink } from '../link/config.mjs'
 import { CLAIM_ID_RE, CLAIM_MARKER_RE, formatClaimMarker, normalize, parseClaimBlocks, proposalClaimId, replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
+import { PRIVATE_RULE, describeRule, legacySubDocumentRule, ruleForRegistry } from '../policy/sub-document-rules.mjs'
 import { claims } from '../markdown/text.mjs'
 import { canonicalPath, samePath } from '../path-guard.mjs'
 import { assertContainedPath, atomicWrite, ensureDir, hash, slash } from '../shared/fs.mjs'
@@ -375,9 +376,9 @@ function claimBody(p, change, visibility) {
     `- Provenance: ${p.provenance.join('; ')}\n- Approved: ${commitTimeToken(p)}\n`
   )
 }
-function targetedClaim(text, rel, change, view) {
+function targetedClaim(text, rel, change, view, registry) {
   // Under an MCP view, blocks the caller cannot read behave as absent, so errors never reveal hidden claims.
-  const found = parseClaimBlocks(text, rel).filter(block => block.claim_id === change.claim_id && (!view || view.visible(rel, block)))
+  const found = parseClaimBlocks(text, rel, { registry }).filter(block => block.claim_id === change.claim_id && (!view || view.visible(rel, block)))
   if (!found.length) throw claimError(`claim not found in ${rel}: ${change.claim_id} (${change.change_id})`, 'CLAIM_NOT_FOUND')
   if (found.length > 1) throw claimError(`claim id is ambiguous in ${rel}: ${change.claim_id} (${change.change_id})`, 'CLAIM_AMBIGUOUS')
   const block = found[0]
@@ -394,32 +395,37 @@ function refuseDuplicate(text, rel, change, view, skip = null) {
 }
 const diffLines = (removed, added) => [...removed.map(x => x.split('\n').map(line => `-${line}`).join('\n')), ...added.map(x => x.split('\n').map(line => `+${line}`).join('\n'))].join('\n')
 // Applies one change to the current text of its target. The approval time stays a placeholder until approval commits.
-export function applyClaimChange(text, rel, change, p, view = null) {
+// Proposals keep their `visibility` field, so archived records stay readable; what lands in the document is the lens
+// vocabulary (decision record, "Mapping: claim and field level"), limited to the lenses this self defines.
+export function applyClaimChange(text, rel, change, p, view = null, registry = null) {
   const close = '<!-- /holoself-claim -->',
-    time = commitTimeToken(p)
+    time = commitTimeToken(p),
+    writable = rule => ruleForRegistry(rule, registry) || PRIVATE_RULE
   if (change.operation === 'append_claim') {
     refuseDuplicate(text, rel, change, view)
     const claimId = proposalClaimId(p.proposal_id, change.change_id),
-      block = `\n\n${formatClaimMarker(change.visibility, { id: claimId })}\n${claimBody(p, change, change.visibility)}${close}\n`
+      block = `\n\n${formatClaimMarker(writable(legacySubDocumentRule(change.visibility)), { id: claimId })}\n${claimBody(p, change, change.visibility)}${close}\n`
     return { after: text.trimEnd() + block, claim_id: claimId, before_block: null, after_block: block.trim(), preview: block.trim(), visibility_change: null }
   }
-  const old = targetedClaim(text, rel, change, view),
+  const old = targetedClaim(text, rel, change, view, registry),
     splice = replacement => text.slice(0, old.start) + replacement + text.slice(old.end),
     attrs = { ...old.attrs, id: old.claim_id },
-    visibility = change.visibility || old.visibility,
-    visibilityChange = visibility === old.visibility ? null : { from: old.visibility, to: visibility }
+    oldRule = writable(old.rule),
+    rule = change.visibility ? writable(legacySubDocumentRule(change.visibility)) : oldRule,
+    visibility = change.visibility || describeRule(old.rule),
+    visibilityChange = visibility === describeRule(old.rule) ? null : { from: describeRule(old.rule), to: visibility }
   if (change.operation === 'replace_claim') {
     if (normalize(old.text) === normalize(change.claim)) throw claimError(`replacement wording matches the existing claim: ${change.change_id}`, 'CLAIM_UNCHANGED')
     refuseDuplicate(text, rel, change, view, old)
-    const block = `${formatClaimMarker(visibility, { id: old.claim_id, supersedes: old.attrs.supersedes })}\n${claimBody(p, change, visibility)}${close}`
+    const block = `${formatClaimMarker(rule, { id: old.claim_id, supersedes: old.attrs.supersedes })}\n${claimBody(p, change, visibility)}${close}`
     return { after: splice(block), claim_id: old.claim_id, before_block: old.raw, after_block: block, preview: diffLines([old.raw], [block]), visibility_change: visibilityChange }
   }
   if (change.operation === 'supersede_claim') {
     if (normalize(old.text) === normalize(change.claim)) throw claimError(`superseding wording matches the existing claim: ${change.change_id}`, 'CLAIM_UNCHANGED')
     refuseDuplicate(text, rel, change, view, old)
     const claimId = proposalClaimId(p.proposal_id, change.change_id),
-      marked = `${formatClaimMarker(old.visibility, { ...attrs, status: 'superseded', superseded_by: claimId, superseded_at: time })}${old.body}${close}`,
-      block = `${formatClaimMarker(visibility, { id: claimId, supersedes: old.claim_id })}\n${claimBody(p, change, visibility)}${close}`
+      marked = `${formatClaimMarker(oldRule, { ...attrs, status: 'superseded', superseded_by: claimId, superseded_at: time })}${old.body}${close}`,
+      block = `${formatClaimMarker(rule, { id: claimId, supersedes: old.claim_id })}\n${claimBody(p, change, visibility)}${close}`
     return {
       after: `${splice(marked).trimEnd()}\n\n${block}\n`,
       claim_id: claimId,
@@ -430,7 +436,7 @@ export function applyClaimChange(text, rel, change, p, view = null) {
     }
   }
   const marked =
-    `${formatClaimMarker(old.visibility, { ...attrs, status: 'historical', retired_at: time })}${old.body.trimEnd()}\n` +
+    `${formatClaimMarker(oldRule, { ...attrs, status: 'historical', retired_at: time })}${old.body.trimEnd()}\n` +
     `- Retired: ${time} by proposal ${p.proposal_id}/${change.change_id}\n- Retirement reason: ${change.reason}\n` +
     `- Retirement evidence: ${change.evidence}\n- Retirement provenance: ${p.provenance.join('; ')}\n${close}`
   return { after: splice(marked), claim_id: old.claim_id, before_block: old.raw, after_block: marked, preview: diffLines([old.raw], [marked]), visibility_change: null }
@@ -439,6 +445,14 @@ export function emptyTarget(self) {
   return `---\naccess_lenses: [${loadLensRegistry(self)
     .lenses.map(lens => lens.id)
     .join(', ')}]\ndisclosure: review-required\nsensitivity: personal\ndocument_role: evidence\n---\n`
+}
+// The self's lenses for writing and reading claim markers; null when they cannot be loaded (markers still validate).
+export function claimLensRegistry(root) {
+  try {
+    return loadLensRegistry(root)
+  } catch {
+    return null
+  }
 }
 // Applies every change in order, grouping by target so several changes to one file compose deterministically.
 // Each preview entry hashes the file as that change found and left it, so hashes chain across changes to one file.
@@ -450,7 +464,8 @@ export function planProposalChanges(p, self, view = null) {
     previews = [],
     steps = [],
     time = commitTimeToken(p),
-    shown = text => (text === null ? null : text.replaceAll(time, '<commit-time>'))
+    shown = text => (text === null ? null : text.replaceAll(time, '<commit-time>')),
+    registry = claimLensRegistry(root)
   for (const change of proposalChanges(p)) {
     const target = safeTarget(root, change.target),
       rel = slash(relative(root, target)),
@@ -459,9 +474,9 @@ export function planProposalChanges(p, self, view = null) {
       before = state?.before ?? (existed ? readFileSync(target, 'utf8') : emptyTarget(root)),
       current = state?.after ?? before
     if (!state && before.includes(time)) throw claimError(`target already contains this proposal's reserved placeholder: ${rel}`, 'INVALID_TARGET')
-    const applied = applyClaimChange(current, rel, { ...change, operation: change.operation || 'append_claim' }, p, view),
+    const applied = applyClaimChange(current, rel, { ...change, operation: change.operation || 'append_claim' }, p, view, registry),
       viewCurrent = state?.viewAfter ?? view?.baseText?.(rel) ?? null,
-      viewAfter = viewCurrent === null ? null : applyClaimChange(viewCurrent, rel, { ...change, operation: change.operation || 'append_claim' }, p, view).after
+      viewAfter = viewCurrent === null ? null : applyClaimChange(viewCurrent, rel, { ...change, operation: change.operation || 'append_claim' }, p, view, registry).after
     grouped.set(target, { target, before, after: applied.after, existed, viewAfter })
     steps.push({ before: current, after: applied.after })
     previews.push({

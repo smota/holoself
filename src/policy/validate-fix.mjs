@@ -292,6 +292,9 @@ function vfComputeDocumentFix(absPath, baseRoot, registry) {
   const splitInfo = vfSplitFrontmatter(text, registry)
   const { docMetadata, parseError } = splitInfo
   if (['secret', 'credential', 'credentials'].includes(docMetadata.sensitivity)) return null
+  // Repairing broken frontmatter rewrites it from the fields it can salvage, and nested field rules are not among them.
+  // Losing one could widen the document, so a document that carries them stays excluded for a repair by hand.
+  if (parseError && /^(?:field_access|field_visibility)\s*:/m.test(splitInfo.rawFrontmatter || '')) return null
 
   const resolvedPolicy = resolveDocumentPolicy(absPath, baseRoot, docMetadata, registry)
   const effectiveMetadata = resolvedPolicy.effectiveMetadata

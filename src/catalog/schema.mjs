@@ -1,7 +1,8 @@
 // Catalog schema validation: the allowed shape of catalog.json partitions and their source records.
 import { DISCLOSURES, VISIBILITIES } from '../annotations.mjs'
+import { catalogRuleValid, fieldAccessValid } from '../policy/sub-document-rules.mjs'
 
-export const CATALOG_SCHEMA_VERSION = 3
+export const CATALOG_SCHEMA_VERSION = 4
 export const HASH_RE = /^[0-9a-f]{64}$/
 export const SOURCE_ID_RE = /^hs-[0-9a-f]{20}$/
 export const NUM_RE = /^[0-9]+$/
@@ -34,10 +35,10 @@ export const ALLOWED_SOURCE_KEYS = new Set([
   'estimated_tokens'
 ])
 export const ALLOWED_SOURCE_REF_KEYS = new Set(['space_id', 'source_id', 'revision', 'section_id'])
-export const ALLOWED_SECTION_KEYS = new Set(['section_id', 'heading', 'visibility', 'disclosure', 'claim', 'claim_status', 'snippet'])
-export const ALLOWED_CLAIM_KEYS = new Set(['text', 'visibility', 'claim_status'])
-export const ALLOWED_TAG_KEYS = new Set(['value', 'visibility'])
-export const ALLOWED_LINK_KEYS = new Set(['value', 'visibility'])
+export const ALLOWED_SECTION_KEYS = new Set(['section_id', 'heading', 'visibility', 'access_rule', 'disclosure', 'claim', 'claim_status', 'snippet'])
+export const ALLOWED_CLAIM_KEYS = new Set(['text', 'visibility', 'access_rule', 'claim_status'])
+export const ALLOWED_TAG_KEYS = new Set(['value', 'visibility', 'access_rule'])
+export const ALLOWED_LINK_KEYS = new Set(['value', 'visibility', 'access_rule'])
 export const ALLOWED_FRONTMATTER_KEYS = new Set([
   'access_lenses',
   'disclosure',
@@ -52,6 +53,7 @@ export const ALLOWED_FRONTMATTER_KEYS = new Set([
   'confidence',
   'exclude_lenses',
   'field_visibility',
+  'field_access',
   'knowledge_status',
   'temporal_scope',
   'valid_from',
@@ -144,6 +146,8 @@ export function validateCatalogSchema(catalog) {
         for (const k of reqFm) {
           if (!Object.hasOwn(s.frontmatter, k)) errors.push(`${prefix}.frontmatter.${k} is required`)
         }
+        if (s.frontmatter.field_access !== undefined && !fieldAccessValid(s.frontmatter.field_access))
+          errors.push(`${prefix}.frontmatter.field_access must map names to access rules`)
         if (s.frontmatter.read_scope !== undefined && !['shared', 'local', 'restricted'].includes(s.frontmatter.read_scope)) {
           errors.push(`${prefix}.frontmatter.read_scope must be one of: shared, local, restricted`)
         }
@@ -165,6 +169,7 @@ export function validateCatalogSchema(catalog) {
           if (typeof sec.heading !== 'string') errors.push(`${sp}.heading must be a string`)
           if (typeof sec.visibility !== 'string' || !VISIBILITIES.includes(sec.visibility))
             errors.push(`${sp}.visibility must be one of: ${VISIBILITIES.join(', ')}`)
+          if (sec.access_rule !== undefined && !catalogRuleValid(sec.access_rule)) errors.push(`${sp}.access_rule is invalid`)
           if (typeof sec.disclosure !== 'string' || !DISCLOSURES.includes(sec.disclosure))
             errors.push(`${sp}.disclosure must be one of: ${DISCLOSURES.join(', ')}`)
           if (typeof sec.claim !== 'boolean') errors.push(`${sp}.claim must be a boolean`)
@@ -191,6 +196,7 @@ export function validateCatalogSchema(catalog) {
             errors.push(`${cp}.claim_status must be one of: superseded, historical`)
           if (typeof cl.visibility !== 'string' || !VISIBILITIES.includes(cl.visibility))
             errors.push(`${cp}.visibility must be one of: ${VISIBILITIES.join(', ')}`)
+          if (cl.access_rule !== undefined && !catalogRuleValid(cl.access_rule)) errors.push(`${cp}.access_rule is invalid`)
         }
       }
       if (!Array.isArray(s.tags)) {
@@ -209,6 +215,7 @@ export function validateCatalogSchema(catalog) {
           if (typeof tg.value !== 'string') errors.push(`${tp}.value must be a string`)
           if (typeof tg.visibility !== 'string' || !VISIBILITIES.includes(tg.visibility))
             errors.push(`${tp}.visibility must be one of: ${VISIBILITIES.join(', ')}`)
+          if (tg.access_rule !== undefined && !catalogRuleValid(tg.access_rule)) errors.push(`${tp}.access_rule is invalid`)
         }
       }
       if (!Array.isArray(s.links)) {
@@ -227,6 +234,7 @@ export function validateCatalogSchema(catalog) {
           if (typeof lk.value !== 'string') errors.push(`${lp}.value must be a string`)
           if (typeof lk.visibility !== 'string' || !VISIBILITIES.includes(lk.visibility))
             errors.push(`${lp}.visibility must be one of: ${VISIBILITIES.join(', ')}`)
+          if (lk.access_rule !== undefined && !catalogRuleValid(lk.access_rule)) errors.push(`${lp}.access_rule is invalid`)
         }
       }
       if (typeof s.estimated_tokens !== 'number' || s.estimated_tokens < 0) errors.push(`${prefix}.estimated_tokens must be a non-negative integer`)

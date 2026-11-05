@@ -10,9 +10,9 @@ Proposed D00 contracts, not active runtime interfaces: [evidence v1](../../schem
 - [`schemas/links-registry.schema.json`](../../schemas/links-registry.schema.json): per-machine attestation registry (`.holoself/links.json`), with `project_key` when known
 - [`schemas/adapter-capability.schema.json`](../../schemas/adapter-capability.schema.json): startup adapter capability evidence
 - [`schemas/context.schema.json`](../../schemas/context.schema.json): resolved runtime context
-- [`schemas/document-metadata.schema.json`](../../schemas/document-metadata.schema.json): canonical Markdown frontmatter
+- [`schemas/document-metadata.schema.json`](../../schemas/document-metadata.schema.json): canonical Markdown frontmatter, including `field_access` rules (`field_visibility` is deprecated)
 - [`schemas/policy-defaults.schema.json`](../../schemas/policy-defaults.schema.json): directory-level privacy policy defaults (`_policy.yaml`)
-- [`schemas/catalog.schema.json`](../../schemas/catalog.schema.json): deterministic incremental catalog
+- [`schemas/catalog.schema.json`](../../schemas/catalog.schema.json): deterministic incremental catalog, schema version 4. An element keeps its deprecated `visibility` label and carries `access_rule` only when no label states its rule exactly
 - [`schemas/context-decision-cache.schema.json`](../../schemas/context-decision-cache.schema.json): content-free context decision cache (deprecated; on-disk decision cache removed)
 - [`schemas/proposal.schema.json`](../../schemas/proposal.schema.json): proposal lifecycle
 

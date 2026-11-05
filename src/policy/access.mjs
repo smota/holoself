@@ -3,6 +3,20 @@ import { DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES, effectiveDisclosure, publi
 import { KNOWLEDGE_STATUSES, TEMPORAL_SCOPES, dateValue } from '../context-selection.mjs'
 import { DEFAULT_LENS_IDS } from '../lenses.mjs'
 import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
+import {
+  LEGACY_LENS_SETS,
+  PUBLICATION_ADAPTERS,
+  describeRule,
+  fieldHeadingRule,
+  fieldLineRule,
+  fieldRuleTable,
+  intersectRules,
+  legacySubDocumentRule,
+  normalizeFieldAccess,
+  publicationAdapter,
+  ruleVisibility,
+  subDocumentVisible
+} from './sub-document-rules.mjs'
 
 export const LENSES = DEFAULT_LENS_IDS
 export const SENSITIVITY_LENSES = {
@@ -18,10 +32,7 @@ export function visibility(meta) {
 }
 export function legacyAccessLenses(meta) {
   const v = visibility(meta)
-  if (v === 'private') return ['private']
-  if (v === 'professional') return ['general', 'professional', 'interview', 'private']
-  if (v === 'public-voice') return ['general', 'public-voice', 'private']
-  return [...LENSES]
+  return [...(LEGACY_LENS_SETS[v] || LENSES)]
 }
 export function accessLenses(meta) {
   return Array.isArray(meta.access_lenses) ? meta.access_lenses : legacyAccessLenses(meta)
@@ -40,43 +51,16 @@ export function taskAllowed(meta, task) {
   if (include.length && (!value || !include.some(pattern => value.includes(pattern.toLowerCase())))) return false
   return !value || !exclude.some(pattern => value.includes(pattern.toLowerCase()))
 }
-export const PUBLICATION_ADAPTERS = ['obsidian-public', 'public', 'restricted-host']
-export function publicationAdapter(adapter) {
-  return PUBLICATION_ADAPTERS.includes(adapter)
-}
-// A sub-document visibility (section, claim, field, tag, link) under a lens and adapter. On publication adapters only
-// `public-safe` is delivered: the sub-document equivalent of `disclosure: publish-approved` (see publicationAllowed).
+export { PUBLICATION_ADAPTERS, publicationAdapter }
+// A deprecated sub-document visibility under a lens and adapter: its exact rule (see sub-document-rules.mjs). On
+// publication adapters only `public-safe` is delivered, the equivalent of `disclosure: publish-approved`.
 export function visibleUnderBehavior(visibility, behaviorLens, adapter = 'generic') {
-  const v = VISIBILITIES.includes(visibility) ? visibility : 'private'
-  if (publicationAdapter(adapter)) return v === 'public-safe'
-  if (v === 'linked-projects' || v === 'public-safe') return true
-  return legacyAccessLenses({ visibility: v }).includes(behaviorLens)
+  return subDocumentVisible(legacySubDocumentRule(visibility), behaviorLens, adapter)
 }
 // The narrowest single visibility admitted wherever both a and b are (an element governed by two rules, such as a
-// field line inside a claim block). public-safe adds only publication to linked-projects (every lens). The one
-// intersection with no exact name, professional with public-voice ({general, private}), fails closed to private.
+// field line inside a claim block).
 export function intersectVisibility(a, b) {
-  const x = VISIBILITIES.includes(a) ? a : 'private',
-    y = VISIBILITIES.includes(b) ? b : 'private'
-  if (x === y) return x
-  if (x === 'public-safe') return y
-  if (y === 'public-safe') return x
-  if (x === 'linked-projects') return y
-  if (y === 'linked-projects') return x
-  return 'private'
-}
-// The rule filterFieldVisibility applies to one line: `Field: value` lines whose field name equals a rule.
-export function fieldLineRule(line, fieldVisibility = {}) {
-  const field = String(line).match(/^\s*[-*]?\s*([^:]{2,40}):\s*(.+)$/)
-  if (!field) return null
-  const rule = Object.entries(fieldVisibility || {}).find(([name]) => field[1].trim().toLowerCase() === name.toLowerCase())
-  return rule ? rule[1] : null
-}
-// The rule filterFieldVisibility applies to a whole section through its heading.
-export function fieldHeadingRule(heading, fieldVisibility = {}) {
-  const key = String(heading).trim().toLowerCase()
-  const rule = Object.entries(fieldVisibility || {}).find(([name]) => key.includes(name.toLowerCase()))
-  return rule ? rule[1] : null
+  return ruleVisibility(intersectRules(legacySubDocumentRule(a), legacySubDocumentRule(b)))
 }
 export function allowedDocument(meta, lens, adapter = 'generic', task = null, resolution = null, subject = null, sourceSpaceId = null) {
   const subj = subject || { kind: 'owner:direct', accessible_spaces: ['self', 'contrib'] }
@@ -132,36 +116,43 @@ export function allowed(meta, lens, adapter = 'generic', task = null, resolution
   return allowedDocument(meta, lens, adapter, task, resolution, subject, sourceSpaceId).allowed
 }
 // Why a sub-document element was hidden: the lens, or (when the lens alone would show it) the publication adapter.
-function subDocumentExclusion(subject, value, lens, adapter) {
-  return publicationAdapter(adapter) && visibleUnderBehavior(value, lens, 'generic')
+function subDocumentExclusion(subject, rule, lens, adapter) {
+  return publicationAdapter(adapter) && subDocumentVisible(rule, lens, 'generic')
     ? `${subject} not approved for publication on ${adapter} adapter`
     : `${subject} excluded by ${lens} lens`
 }
-export function filterClaimVisibility(body, lens, source, restrictions, resolution = null, identityKind = 'owner:direct', adapter = 'generic') {
-  const behaviorLens = lens
-  return replaceClaimBlocks(body, block => {
-    if (visibleUnderBehavior(block.visibility, behaviorLens, adapter)) return block.raw
-    if (identityKind === 'owner:direct')
-      restrictions.push({
-        source,
-        reason: block.malformed ? 'malformed claim marker excluded' : subDocumentExclusion(`claim visibility ${block.visibility}`, block.visibility, lens, adapter)
-      })
-    return ''
-  })
+export function filterClaimVisibility(body, lens, source, restrictions, resolution = null, identityKind = 'owner:direct', adapter = 'generic', registry = null) {
+  return replaceClaimBlocks(
+    body,
+    block => {
+      if (subDocumentVisible(block.rule, lens, adapter)) return block.raw
+      if (identityKind === 'owner:direct')
+        restrictions.push({
+          source,
+          reason: block.malformed ? 'malformed claim marker excluded' : subDocumentExclusion(`claim visibility ${describeRule(block.rule)}`, block.rule, lens, adapter)
+        })
+      return ''
+    },
+    { registry }
+  )
 }
 // A claim block's own lifecycle status narrows its document's: current claims follow the document, while superseded
 // and retired (historical) claims appear only when the temporal selector asks for that status or for `all`.
 export function claimStatusIncluded(status = 'current', temporal = 'current') {
   return status === 'current' || temporal === 'all' || temporal === status
 }
-export function filterClaimStatus(body, temporal, source, restrictions, identityKind = 'owner:direct') {
-  return replaceClaimBlocks(body, block => {
-    const status = block.status
-    if (claimStatusIncluded(status, temporal || 'current')) return block.raw
-    if (identityKind === 'owner:direct' && !restrictions.some(x => x.source === source && x.reason === `claim status ${status} excluded by temporal selector`))
-      restrictions.push({ source, reason: `claim status ${status} excluded by temporal selector` })
-    return ''
-  })
+export function filterClaimStatus(body, temporal, source, restrictions, identityKind = 'owner:direct', registry = null) {
+  return replaceClaimBlocks(
+    body,
+    block => {
+      const status = block.status
+      if (claimStatusIncluded(status, temporal || 'current')) return block.raw
+      if (identityKind === 'owner:direct' && !restrictions.some(x => x.source === source && x.reason === `claim status ${status} excluded by temporal selector`))
+        restrictions.push({ source, reason: `claim status ${status} excluded by temporal selector` })
+      return ''
+    },
+    { registry }
+  )
 }
 export function filterFieldVisibility(
   body,
@@ -173,31 +164,23 @@ export function filterFieldVisibility(
   identityKind = 'owner:direct',
   adapter = 'generic'
 ) {
-  const behaviorLens = lens,
-    configured =
-      metadata.field_visibility && typeof metadata.field_visibility === 'object' && !Array.isArray(metadata.field_visibility) ? metadata.field_visibility : {}
-  const policies = { ...configured }
-  let blockedHeading = false,
-    reportedCompensation = false
+  const table = fieldRuleTable(metadata)
+  let blockedHeading = false
+  const hidden = match => {
+    if (!match || subDocumentVisible(match.rule, lens, adapter)) return false
+    restrictions.push({ source, reason: subDocumentExclusion(`field ${match.name}`, match.rule, lens, adapter) })
+    return true
+  }
   return body
     .split(/\r?\n/)
     .filter(line => {
       const heading = line.match(/^#{1,6}\s+(.+)$/)
       if (heading) {
-        const key = heading[1].trim().toLowerCase(),
-          rule = Object.entries(policies).find(([field]) => key.includes(field.toLowerCase()))
-        blockedHeading = Boolean(rule && !visibleUnderBehavior(rule[1], behaviorLens, adapter))
-        if (blockedHeading) restrictions.push({ source, reason: subDocumentExclusion(`field ${rule[0]}`, rule[1], lens, adapter) })
+        blockedHeading = hidden(fieldHeadingRule(heading[1], table))
         return !blockedHeading
       }
       if (blockedHeading) return false
-      const field = line.match(/^\s*[-*]?\s*([^:]{2,40}):\s*(.+)$/),
-        rule = field && Object.entries(policies).find(([name]) => field[1].trim().toLowerCase() === name.toLowerCase())
-      if (rule && !visibleUnderBehavior(rule[1], behaviorLens, adapter)) {
-        restrictions.push({ source, reason: subDocumentExclusion(`field ${rule[0]}`, rule[1], lens, adapter) })
-        return false
-      }
-      return true
+      return !hidden(fieldLineRule(line, table))
     })
     .join('\n')
 }
@@ -235,6 +218,8 @@ export function privacyMetadata(metadata, registry = null) {
   }
   if (metadata.field_visibility && typeof metadata.field_visibility === 'object' && !Array.isArray(metadata.field_visibility))
     for (const [key, value] of Object.entries(metadata.field_visibility)) result.field_visibility[key] = VISIBILITIES.includes(value) ? value : 'private'
+  const fieldAccess = normalizeFieldAccess(metadata.field_access)
+  if (Object.keys(fieldAccess).length) result.field_access = fieldAccess
   if (result.valid_until) result.valid_until_epoch_ms = dateValue(result.valid_until, true)
   return result
 }

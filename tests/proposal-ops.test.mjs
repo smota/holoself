@@ -95,7 +95,7 @@ test('replace_claim rewrites the targeted claim in place, keeps its id, and reco
   assert.match(shown, new RegExp(`# claim: replace claim ${ids.visible} in context/claims.md`))
   const preview = await approve(project, made.proposal_id)
   assert.match(preview.changes[0].preview, /^-<!-- holoself-claim visibility=professional -->/m)
-  assert.match(preview.changes[0].preview, new RegExp(`^\\+<!-- holoself-claim visibility=professional id=${ids.visible} -->`, 'm'))
+  assert.match(preview.changes[0].preview, new RegExp(`^\\+<!-- holoself-claim access_lenses=general,professional,interview,private disclosure=review-required id=${ids.visible} -->`, 'm'))
   assert.equal(preview.changes[0].before_sha256, sha(before))
   const after = await readFile(claims, 'utf8'),
     block = blockById(after, ids.visible)

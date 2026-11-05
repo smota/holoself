@@ -6,10 +6,11 @@ import { canonicalSort, readSourceWithStat, slugHeading, sourceRef } from '../ca
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { claims, links, sections, tags } from '../markdown/text.mjs'
-import { fieldHeadingRule, fieldLineRule, intersectVisibility, privacyMetadata, visibility } from '../policy/access.mjs'
+import { privacyMetadata, visibility } from '../policy/access.mjs'
 import { resolveDocumentPolicy } from '../policy/policy-defaults.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter } from '../policy/privacy-fields.mjs'
 import { SECRET_RE, secretFile } from '../policy/secrets.mjs'
+import { catalogRuleFields, fieldHeadingRule, fieldLineRule, fieldRuleTable, intersectRules, legacySubDocumentRule, narrowerDisclosure } from '../policy/sub-document-rules.mjs'
 import { assertContainedPath, hash, slash } from '../shared/fs.mjs'
 
 export function catalogRoot(project) {
@@ -18,33 +19,42 @@ export function catalogRoot(project) {
 export function catalogFilePath(project) {
   return join(catalogRoot(project), 'catalog.json')
 }
-export function privacySections(body, policy) {
-  const chunks = []
-  const ordinary = replaceClaimBlocks(body, block => {
-    const status = block.status
-    for (const section of sections(block.body)) {
-      // A field heading rule inside a claim block narrows that section too, as filterFieldVisibility does for content.
-      const headingRule = fieldHeadingRule(section.heading, policy.field_visibility || {}),
-        v = headingRule ? intersectVisibility(block.visibility, headingRule) : block.visibility
-      chunks.push({
-        ...section,
-        visibility: v,
-        claim: true,
-        disclosure: v === 'public-safe' ? 'publish-approved' : 'review-required',
-        ...(status === 'current' ? {} : { claim_status: status })
-      })
-    }
-    return ''
-  })
+// With a registry, a claim marker naming a lens it does not define is malformed, as in delivered content.
+export function privacySections(body, policy, registry = null) {
+  const chunks = [],
+    table = fieldRuleTable(policy)
+  const ordinary = replaceClaimBlocks(
+    body,
+    block => {
+      const status = block.status
+      for (const section of sections(block.body)) {
+        // A field heading rule inside a claim block narrows that section too, as filterFieldVisibility does for content.
+        const headingRule = fieldHeadingRule(section.heading, table),
+          rule = headingRule ? intersectRules(block.rule, headingRule.rule) : block.rule
+        chunks.push({
+          ...section,
+          rule,
+          claim: true,
+          disclosure: rule.disclosure === 'publish-approved' ? 'publish-approved' : 'review-required',
+          ...(status === 'current' ? {} : { claim_status: status })
+        })
+      }
+      return ''
+    },
+    { registry }
+  )
   // Ordinary sections without a field rule inherit the document's own access and disclosure (the document gate already
   // decides who sees them), so they are delivered wherever the document is, including publication adapters when the
   // document is approved for publication. They no longer depend on the deprecated document `visibility`.
-  const inherited = policy.publication_allowed ? 'public-safe' : 'linked-projects'
+  const inherited = { disclosure: policy.publication_allowed ? 'publish-approved' : 'review-required' }
   for (const section of sections(ordinary)) {
-    const heading = section.heading.toLowerCase(),
-      fieldRule = Object.entries(policy.field_visibility || {}).find(([field]) => heading.includes(field.toLowerCase())),
-      v = fieldRule?.[1] || inherited
-    chunks.push({ ...section, visibility: v, claim: false, disclosure: policy.disclosure })
+    const fieldRule = fieldHeadingRule(section.heading, table)?.rule
+    chunks.push({
+      ...section,
+      rule: fieldRule || inherited,
+      claim: false,
+      disclosure: fieldRule ? narrowerDisclosure(policy.disclosure, fieldRule.disclosure) : policy.disclosure
+    })
   }
   return chunks
 }
@@ -59,7 +69,7 @@ export function buildCatalogSections(rawSections, defaults = {}) {
     return {
       section_id,
       heading: sec.heading,
-      visibility: sec.visibility ?? defaults.visibility,
+      ...(sec.rule ? catalogRuleFields(sec.rule) : { visibility: sec.visibility ?? defaults.visibility }),
       disclosure: sec.disclosure ?? defaults.disclosure,
       claim: Boolean(sec.claim ?? defaults.claim),
       ...(sec.claim_status ? { claim_status: sec.claim_status } : {}),
@@ -67,32 +77,35 @@ export function buildCatalogSections(rawSections, defaults = {}) {
     }
   })
 }
-// Claims, links and tags of each section carry the visibility of the text they come from: the section's (claim or
-// ordinary) visibility, narrowed by any field_visibility heading or `Field: value` line rule, exactly as
-// filterFieldVisibility narrows delivered content and snippets. A field line hidden from a lens or adapter therefore
-// never surfaces through claims, tags, links or search text either.
+// Claims, links and tags of each section carry the rule of the text they come from: the section's (claim or ordinary)
+// rule, narrowed by any field heading or `Field: value` line rule, exactly as filterFieldVisibility narrows delivered
+// content and snippets. A field line hidden from a lens or adapter therefore never surfaces through claims, tags, links
+// or search text either.
 export function extractSectionAnnotations(rawSections, policy = {}) {
-  const fieldVisibility = policy?.field_visibility || {}
+  const table = fieldRuleTable(policy)
   const annotatedClaims = [],
     annotatedLinks = [],
     annotatedTags = []
   for (const sec of rawSections) {
-    const headingRule = fieldHeadingRule(sec.heading || '', fieldVisibility)
-    const base = headingRule ? intersectVisibility(sec.visibility, headingRule) : sec.visibility
-    const byVisibility = new Map()
+    const sectionRule = sec.rule ?? legacySubDocumentRule(sec.visibility),
+      headingRule = fieldHeadingRule(sec.heading || '', table),
+      base = headingRule ? intersectRules(sectionRule, headingRule.rule) : sectionRule
+    const byRule = new Map()
     for (const line of String(sec.content).split(/\r?\n/)) {
-      const lineRule = fieldLineRule(line, fieldVisibility),
-        v = lineRule ? intersectVisibility(base, lineRule) : base
-      if (!byVisibility.has(v)) byVisibility.set(v, [])
-      byVisibility.get(v).push(line)
+      const lineRule = fieldLineRule(line, table),
+        rule = lineRule ? intersectRules(base, lineRule.rule) : base,
+        key = JSON.stringify(rule)
+      if (!byRule.has(key)) byRule.set(key, { rule, lines: [] })
+      byRule.get(key).lines.push(line)
     }
     const status = sec.claim_status ? { claim_status: sec.claim_status } : {}
     const sectionClaims = []
-    for (const [visibility, lines] of byVisibility) {
-      const text = lines.join('\n')
-      sectionClaims.push(...claims(text).map(value => ({ text: value, visibility, ...status })))
-      annotatedLinks.push(...links(text).map(value => ({ value, visibility })))
-      annotatedTags.push(...tags(text).map(value => ({ value, visibility })))
+    for (const { rule, lines } of byRule.values()) {
+      const text = lines.join('\n'),
+        fields = catalogRuleFields(rule)
+      sectionClaims.push(...claims(text).map(value => ({ text: value, ...fields, ...status })))
+      annotatedLinks.push(...links(text).map(value => ({ value, ...fields })))
+      annotatedTags.push(...tags(text).map(value => ({ value, ...fields })))
     }
     annotatedClaims.push(...sectionClaims.slice(0, 50))
   }
@@ -126,7 +139,7 @@ export function buildCatalogSource(file, sourceKind, root, registry, tolerant = 
   if (!VISIBILITIES.includes(visibility(effectiveMetadata))) return null
 
   const policy = privacyMetadata(effectiveMetadata, registry)
-  const rawSections = privacySections(body, policy)
+  const rawSections = privacySections(body, policy, registry)
   const catalogSections = buildCatalogSections(rawSections)
   const { claims: annotatedClaims, links: annotatedLinks, tags: annotatedTags } = extractSectionAnnotations(rawSections, policy)
 

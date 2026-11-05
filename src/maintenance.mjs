@@ -71,7 +71,8 @@ function renamedTokens(value) {
 export function renameLensMetadata(text) {
   let value = text.replace(/^(---\r?\n)([\s\S]*?)(\r?\n---)(?=\r?\n|$)/, (all, start, meta, end) => {
     let listKey = null,
-      mapKey = null
+      mapKey = null,
+      ruleKey = false
     const next = meta
       .split(/(?<=\n)/)
       .map(line => {
@@ -79,9 +80,13 @@ export function renameLensMetadata(text) {
         if (field) {
           listKey = ['access_lenses', 'exclude_lenses'].includes(field[1]) ? field[1] : null
           mapKey = field[1] === 'field_visibility' ? 'field_visibility' : null
+          ruleKey = field[1] === 'field_access'
           if (['access_lenses', 'exclude_lenses', 'visibility'].includes(field[1])) return renamedTokens(line)
+          if (ruleKey) return line.replace(/"access_lenses"\s*:\s*\[[^\]]*\]/g, renamedTokens)
           if (mapKey) return line.replace(/(:\s*["']?)(career|publishing)(["']?\s*[,}])/g, (_, a, id, b) => a + renamedLens(id) + b)
         }
+        if (ruleKey && /^\s+access_lenses\s*:/.test(line)) return renamedTokens(line)
+        if (ruleKey && /^\s+-\s*/.test(line)) return line.replace(/^(\s+-\s*["']?)(career|publishing)(["']?\s*)$/, (_, a, id, b) => a + renamedLens(id) + b)
         if (listKey && /^\s+-\s*/.test(line)) return line.replace(/^(\s+-\s*["']?)(career|publishing)(["']?\s*)$/, (_, a, id, b) => a + renamedLens(id) + b)
         if (mapKey && /^\s+[^:]+:/.test(line)) return line.replace(/(:\s*["']?)(career|publishing)(["']?\s*)$/, (_, a, id, b) => a + renamedLens(id) + b)
         return line
@@ -91,12 +96,16 @@ export function renameLensMetadata(text) {
   })
   value = replaceClaimBlocks(
     value,
-    block =>
-      ['career', 'publishing'].includes(block.rawVisibility)
-        ? block.raw
-            .replace(/(visibility=)(career|publishing)/, (_, prefix, id) => prefix + renamedLens(id))
-            .replace(/^(- Visibility: )(career|publishing)$/gm, (_, prefix, id) => prefix + renamedLens(id))
-        : block.raw,
+    block => {
+      const raw = ['career', 'publishing'].includes(block.rawVisibility)
+          ? block.raw
+              .replace(/(visibility=)(career|publishing)/, (_, prefix, id) => prefix + renamedLens(id))
+              .replace(/^(- Visibility: )(career|publishing)$/gm, (_, prefix, id) => prefix + renamedLens(id))
+          : block.raw,
+        lenses = block.attrs.access_lenses
+      if (lenses === undefined || !/\b(career|publishing)\b/.test(lenses)) return raw
+      return raw.replace(`access_lenses=${lenses}`, `access_lenses=${[...new Set(lenses.split(',').map(id => renamedTokens(id)))].join(',')}`)
+    },
     { failClosed: false }
   )
   return value
