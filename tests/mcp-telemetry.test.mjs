@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { createServer } from 'node:http'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { fileURLToPath } from 'node:url'
 import { createMcpSession, createMcpToolPool, executeToolJob } from '../src/mcp-server.mjs'
 
 const PRIVATE = 'PRIVATE_MCP_TELEMETRY_SENTINEL'
@@ -49,8 +50,8 @@ async function fixture(t, { stalled = false } = {}) {
   const base = await mkdtemp(join(tmpdir(), 'holoself-mcp-telemetry-'))
   const self = join(base, 'self'), project = join(base, 'project'), home = join(base, 'home')
   await mkdir(project); await mkdir(home)
-  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, '.config'), HOLOSELF_HOME: self, HOLOSELF_TELEMETRY: 'off', OTEL_SDK_DISABLED: 'true' }
-  const cli = new URL('../bin/holoself.mjs', import.meta.url).pathname
+  const env = { ...process.env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), HOLOSELF_HOME: self, HOLOSELF_TELEMETRY: 'off', OTEL_SDK_DISABLED: 'true' }
+  const cli = fileURLToPath(new URL('../bin/holoself.mjs', import.meta.url))
   const run = args => promisify(execFile)(process.execPath, [cli, ...args], { env })
   await run(['init', '--root', self])
   await writeFile(join(self, 'profile/identity.md'), `---\naccess_lenses: [general, professional]\ndisclosure: internal-only\nsensitivity: personal\ndocument_role: content\n---\n# Identity\n\n${PRIVATE} refactoring.\n`)
