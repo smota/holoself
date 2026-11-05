@@ -42,21 +42,24 @@ export function activeProjectKeyHolders(links, projectKey) {
   return recorded.length ? recorded : active
 }
 // The one rule for a registry entry's allowed_lenses; every writer goes through it (docs/decisions/portable-links.md).
-// - explicit (an owner lens choice on this command): exactly that choice.
-// - existing active entry: existing grant intersected with `lenses` (narrowing is automatic); anything beyond the grant
-//   is an add, granted only with accept (--accept-shared-lenses).
-// - revoked entry: the same, capped at its old grant, unless nothing of that grant remains (then as a new entry).
+// - explicit (the command names the full lens set): exactly that choice.
+// - existing active entry: (existing grant intersected with `lenses`) plus the `named` lenses this command names, so
+//   narrowing is automatic; any other lens beyond the grant is pending, granted only with accept (--accept-shared-lenses).
+// - revoked entry: the same, capped at its old grant, unless nothing of that grant remains and nothing is named (then as
+//   a new entry).
 // - no entry: the owner is attesting now; `lenses` is granted and listed.
-export function nextAllowedLenses({ entry = null, lenses = [], explicit = false, accept = false }) {
+export function nextAllowedLenses({ entry = null, lenses = [], named = [], explicit = false, accept = false }) {
   const wanted = [...new Set(lenses.filter(id => typeof id === 'string' && id && id !== 'private'))],
     previous = Array.isArray(entry?.allowed_lenses) ? entry.allowed_lenses : [],
     kept = previous.filter(id => wanted.includes(id)),
     adds = wanted.filter(id => !previous.includes(id)),
-    removes = previous.filter(id => !wanted.includes(id))
-  if (!entry || (!explicit && entry.status === 'revoked' && !kept.length)) return { allowed: wanted, adds: wanted, removes: [], applied: true, mode: 'new' }
-  if (explicit) return { allowed: wanted, adds, removes, applied: true, mode: 'explicit' }
-  const applied = !adds.length || accept
-  return { allowed: accept ? wanted : kept, adds, removes, applied, mode: 'existing' }
+    removes = previous.filter(id => !wanted.includes(id)),
+    pending = adds.filter(id => !named.includes(id))
+  if (!entry || (!explicit && entry.status === 'revoked' && !kept.length && pending.length === adds.length))
+    return { allowed: wanted, adds: wanted, pending: [], removes: [], applied: true, mode: 'new' }
+  if (explicit) return { allowed: wanted, adds, pending: [], removes, applied: true, mode: 'explicit' }
+  const applied = !pending.length || accept
+  return { allowed: accept ? wanted : wanted.filter(id => !pending.includes(id)), adds, pending, removes, applied, mode: 'existing' }
 }
 // The project_key a registry entry stands for: its recorded key, else the key in its project's link.yaml (tolerant).
 export function effectiveProjectKey(entry) {

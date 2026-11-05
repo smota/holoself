@@ -67,13 +67,18 @@ export async function linkRepair(o, sub, project) {
     bindingMigration = Boolean(legacy || o.lens || !current),
     // Portable form: self_id and project_key in link.yaml, no machine path, binding keyed by project_key.
     portableMigration = !diagnostic.self_id || !diagnostic.project_key || Boolean(diagnostic._legacyPath) || pathBinding
-  // The grant follows the one rule (nextAllowedLenses): only --lens is an explicit choice here. A binding or legacy
+  // The grant follows the one rule (nextAllowedLenses): only lenses named here are explicit. A binding or legacy
   // link.yaml field beyond this machine's grant is an add, and --yes alone never grants it.
   const attested =
       readRegistry(diagnostic.path).links.find(
         entry => entry.status === 'active' && (entry.project_id === canonicalSpaceId(project) || entry.project_path === canonicalProjectPath(project))
       ) || null,
-    grantRequest = { lenses: [choice.default_lens, ...choice.secondary_lenses], explicit: Boolean(o.lens), accept: Boolean(o.acceptSharedLenses) },
+    grantRequest = {
+      lenses: [choice.default_lens, ...choice.secondary_lenses],
+      named: o.lens ? [o.lens, ...(o.secondaryLenses || [])] : [],
+      explicit: Boolean(o.lens && o.secondaryLenses),
+      accept: Boolean(o.acceptSharedLenses)
+    },
     planned = attested ? nextAllowedLenses({ ...grantRequest, entry: attested }) : null,
     changesGrant = grant => canonicalJson(grant.allowed) !== canonicalJson(attested.allowed_lenses || [])
   if (planned) reportGrant(project, planned, 'repair')
@@ -104,8 +109,8 @@ export async function linkRepair(o, sub, project) {
       if (!(await askConfirm(o, bindingMigration ? 'Migrate lens choice into self-side bindings?' : 'Migrate link to portable self_id and project_key?')))
         return true
     // Widening always has its own question, even when a migration question was asked.
-    if (planned?.mode === 'existing' && planned.adds.length && o.acceptSharedLenses)
-      if (!(await askConfirm(o, `Grant this machine's link the shared lenses ${planned.adds.join(', ')}?`))) grantRequest.accept = false
+    if (planned?.pending.length && o.acceptSharedLenses)
+      if (!(await askConfirm(o, `Grant this machine's link the shared lenses ${planned.pending.join(', ')}?`))) grantRequest.accept = false
     const grant = attested ? nextAllowedLenses({ ...grantRequest, entry: attested }) : null
     const file = bindingsPath(diagnostic.path),
       before = existsSync(file) ? readFileSync(file) : null,

@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { bindingProjects, readBindings, resolveBinding, writeBinding } from '../src/bindings.mjs'
 import { linkProjectKey, readLink } from '../src/link/config.mjs'
 import { breakStaleFileLock, forgetSelf, readFileLockState, readSelfMap, registerSelf, selfIdOf, withFileLockSync } from '../src/link/machine.mjs'
-import { canonicalSpaceId, readRegistry, writeRegistry } from '../src/link/registry.mjs'
+import { canonicalSpaceId, nextAllowedLenses, readRegistry, writeRegistry } from '../src/link/registry.mjs'
 import { configureSpaceLink, spaceLinkConfiguration } from '../src/link/workbench.mjs'
 import { resolveLinkedSelf } from '../src/link/self-resolution.mjs'
 import { parseYaml } from '../src/shared/yaml.mjs'
@@ -805,4 +805,32 @@ test('a recorded project_key always beats one known only through a link.yaml', t
   ok(m.cli(['link', 'repair', '--project', older, '--no-activate', '--yes']), 'repair older')
   assert.notEqual(keyOf(older), victimKey, 'repair on the keyless entry renews its key')
   assert.equal(keyOf(m.project), victimKey)
+})
+
+test('only lenses named on the command count as explicit', t => {
+  const m = machine(sandbox(t), 'm'),
+    setup = (...extra) => m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--no-activate', '--yes', ...extra])
+  narrowed(m)
+  ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self, '--lenses', 'professional']), 'narrow away from the default')
+  // --secondary-lenses alone: the named lenses are granted, the inherited default stays an add.
+  const named = ok(setup('--secondary-lenses', 'professional,leadership'), 'secondary only')
+  assert.deepEqual(allowedOf(m.self), ['professional', 'leadership'])
+  assert.match(named.stdout, /shared binding adds lenses not granted on this machine: general;/)
+  assert.deepEqual(grantBlock(named.stdout).adds, ['general', 'leadership'])
+  assert.equal(grantBlock(named.stdout).applied, false)
+  ok(setup('--secondary-lenses', 'professional,leadership', '--accept-shared-lenses'), 'accepted')
+  assert.deepEqual(allowedOf(m.self), ['general', 'professional', 'leadership'])
+  // The full set named replaces the grant.
+  ok(setup('--lens', 'general', '--secondary-lenses', 'leadership'), 'full set')
+  assert.deepEqual(allowedOf(m.self), ['general', 'leadership'])
+  // --lens alone with inherited secondaries (the Workbench keeps them): the secondaries stay adds.
+  const entry = { status: 'active', allowed_lenses: ['general'] }
+  assert.deepEqual(nextAllowedLenses({ entry, lenses: ['leadership', 'professional'], named: ['leadership'] }).allowed, ['leadership'])
+  assert.deepEqual(nextAllowedLenses({ entry, lenses: ['general', 'professional'], named: ['general'] }).pending, ['professional'])
+  // A named lens outside the binding is not granted, and a partly named revoked entry stays capped.
+  assert.deepEqual(nextAllowedLenses({ entry, lenses: ['general'], named: ['leadership'] }).allowed, ['general'])
+  assert.deepEqual(
+    nextAllowedLenses({ entry: { status: 'revoked', allowed_lenses: ['general'] }, lenses: ['leadership', 'professional'], named: ['leadership'] }).allowed,
+    ['leadership']
+  )
 })

@@ -7,7 +7,7 @@ import { isProjectKey } from '../../link/machine.mjs'
 import { loadLensRegistry, resolveLens } from '../../lenses.mjs'
 import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, readRegistry, withRegistryLock, writeRegistry } from '../../link/registry.mjs'
 import { atomicWrite, slash } from '../../shared/fs.mjs'
-import { askConfirm } from '../link-helpers.mjs'
+import { askConfirm, reportGrant } from '../link-helpers.mjs'
 
 export async function runLens(o, sub) {
   const root = resolve(o.root)
@@ -44,8 +44,15 @@ export async function runLens(o, sub) {
           links =>
             links.map(entry => {
               if (entry.project_id !== pId && entry.project_path !== cPath) return entry
-              // lens bind and unbind are this owner's explicit choice on this machine.
-              const grant = nextAllowedLenses({ entry, lenses: choice ? [choice.default_lens, ...choice.secondary_lenses] : [], explicit: true })
+              // lens unbind and a lens bind that names its lenses are this owner's explicit choice on this machine; a default
+              // the command did not name stays an add.
+              const grant = nextAllowedLenses({
+                entry,
+                lenses: choice ? [choice.default_lens, ...choice.secondary_lenses] : [],
+                named: [o.lens, ...(o.secondaryLenses || [])].filter(Boolean),
+                explicit: sub === 'unbind' || Boolean(o.lens)
+              })
+              if (!grant.applied) reportGrant(o.project, grant, 'repair')
               return {
                 ...entry,
                 allowed_lenses: grant.allowed,

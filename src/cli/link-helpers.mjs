@@ -34,7 +34,7 @@ export function reportGrant(project, grant, command) {
     console.log(JSON.stringify({ grant_update: { project: slash(project), adds: grant.adds, removes: grant.removes, applied: grant.applied } }, null, 2))
     if (!grant.applied)
       console.log(
-        `[note] shared binding adds lenses not granted on this machine: ${grant.adds.join(', ')}; ` +
+        `[note] shared binding adds lenses not granted on this machine: ${grant.pending.join(', ')}; ` +
           `run 'holoself link ${command} --project <dir> --accept-shared-lenses' to grant them`
       )
     else console.log(`adds: [${grant.adds.join(', ')}] / removes: [${grant.removes.join(', ')}]`)

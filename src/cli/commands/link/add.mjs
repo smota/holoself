@@ -83,7 +83,8 @@ export async function linkAdd(o, sub, project) {
   const pId = canonicalSpaceId(project)
   const grantRequest = {
       lenses: [desired.default_lens, ...desired.secondary_lenses],
-      explicit: Boolean(o.lens || o.secondaryLenses),
+      named: [o.lens, ...(o.secondaryLenses || [])].filter(Boolean),
+      explicit: Boolean(o.lens && o.secondaryLenses),
       accept: Boolean(o.acceptSharedLenses)
     },
     plannedGrant = nextAllowedLenses({ ...grantRequest, entry: readRegistry(selfRoot).links.find(l => l.project_id === pId || l.project_path === canonicalProj) || null })
@@ -97,8 +98,8 @@ export async function linkAdd(o, sub, project) {
     return true
   }
   // Widening an existing grant always has its own question.
-  if (plannedGrant.mode === 'existing' && plannedGrant.adds.length && o.acceptSharedLenses)
-    if (!(await askConfirm(o, `Grant this machine's link the shared lenses ${plannedGrant.adds.join(', ')}?`))) grantRequest.accept = false
+  if (plannedGrant.pending.length && o.acceptSharedLenses)
+    if (!(await askConfirm(o, `Grant this machine's link the shared lenses ${plannedGrant.pending.join(', ')}?`))) grantRequest.accept = false
   let existingReg = readRegistry(selfRoot)
   let prevEntrySnapshot = existingReg.links.find(l => l.project_id === pId || l.project_path === canonicalProj) || null
   let resolvedBindingSalt = null

@@ -55,7 +55,8 @@ export function spaceLinkConfiguration(
     entry = sovereign.links.find(x => x.project_id === canonicalSpaceId(project) || x.project_path === canonicalProjectPath(project))
   const grantRequest = {
       lenses: [desired.default_lens, ...desired.secondary_lenses],
-      explicit: Boolean(explicitLens || secondaryLenses),
+      named: [explicitLens, ...(secondaryLenses || [])].filter(Boolean),
+      explicit: Boolean(explicitLens && secondaryLenses),
       accept: Boolean(acceptSharedLenses)
     },
     planned = nextAllowedLenses({ ...grantRequest, entry: entry || null })
