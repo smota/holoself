@@ -3,6 +3,7 @@ import { DOCUMENT_ROLES, SENSITIVITIES, VISIBILITIES, effectiveDisclosure, publi
 import { KNOWLEDGE_STATUSES, TEMPORAL_SCOPES, dateValue } from '../context-selection.mjs'
 import { DEFAULT_LENS_IDS } from '../lenses.mjs'
 import { CLAIM_CLOSER, parseClaimBlocks, replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
+import { createLineClassifier } from '../markdown/lines.mjs'
 import {
   LEGACY_LENS_SETS,
   PUBLICATION_ADAPTERS,
@@ -155,29 +156,50 @@ export function filterClaimStatus(body, temporal, source, restrictions, identity
 }
 // Each line of a body with the field heading rules in force on it. filterFieldVisibility and the catalog share this
 // walk, so `content` and the catalog paths cannot disagree about what a heading rule covers. `outer` is what applies
-// around a claim block, and `matches` adds the headings inside it.
+// around a claim block, and `matches` adds the headings inside it. Text outside claim blocks and each claim body are
+// classified separately, exactly as the catalog splits them. So a fence cannot cross a marker, and hiding a claim from
+// one lens cannot change how the text around it reads.
 export function* scopedLines(body, table) {
   const source = String(body),
     blocks = parseClaimBlocks(source),
     parts = source.split(/(\r?\n)/),
-    outerScope = createHeadingScope(table)
+    outerScope = createHeadingScope(table),
+    classifyOuter = createLineClassifier(),
+    walk = (classify, scope, text) => {
+      const kind = classify(text)
+      return { heading: Boolean(kind.heading), opened: kind.heading ? scope.heading(kind.heading.level, kind.heading.text, { fenced: kind.fenced }) : null }
+    }
   let index = 0,
     offset = 0,
-    innerScope = null
+    inner = null
   for (let i = 0; i < parts.length; i += 2) {
-    const line = parts[i]
+    const line = parts[i],
+      end = offset + line.length
     while (blocks[index] && offset >= blocks[index].end) {
       index++
-      innerScope = null
+      inner = null
     }
-    const block = blocks[index] && offset + line.length > blocks[index].start ? blocks[index] : null,
-      outer = outerScope.matches()
-    if (block && !innerScope) innerScope = createHeadingScope(table, outer)
-    const scope = block ? innerScope : outerScope,
-      heading = line.match(/^(#{1,6})\s+(.+)$/),
-      opened = heading ? scope.heading(heading[1].length, heading[2]) : null
-    yield { line, block, closes: Boolean(block) && offset + line.length >= block.end, heading: Boolean(heading), opened, matches: scope.matches(), outer }
-    offset += line.length + (parts[i + 1]?.length ?? 0)
+    const touching = []
+    for (let j = index; blocks[j] && blocks[j].start < end; j++) touching.push(blocks[j])
+    let outside = '',
+      cursor = offset
+    for (const item of touching) {
+      outside += source.slice(cursor, Math.max(cursor, item.start))
+      cursor = Math.max(cursor, Math.min(item.end, end))
+    }
+    outside += source.slice(cursor, end)
+    const outerStep = walk(classifyOuter, outerScope, outside),
+      outer = outerScope.matches(),
+      block = touching[0] || null
+    let step = outerStep
+    if (block) {
+      inner ||= { scope: createHeadingScope(table, outer), classify: createLineClassifier() }
+      const bodyStart = block.start + block.raw.indexOf('-->') + 3,
+        innerStep = walk(inner.classify, inner.scope, source.slice(Math.max(offset, bodyStart), Math.min(end, bodyStart + block.body.length)))
+      step = { heading: outerStep.heading || innerStep.heading, opened: innerStep.opened || outerStep.opened }
+    }
+    yield { line, block, blocks: touching, closes: Boolean(block) && end >= block.end, ...step, matches: block ? [...inner.scope.matches(), ...outer] : outer, outer }
+    offset = end + (parts[i + 1]?.length ?? 0)
   }
 }
 export function filterFieldVisibility(

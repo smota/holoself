@@ -114,6 +114,7 @@ field_access:
 - A marker needs at least one of `access_lenses` and `disclosure`.
 - A `Field: value` line matches a rule with the same name, and a heading matches a rule whose name it contains, ignoring case. When several `field_access` rules match, all of them apply.
 - A heading rule covers everything under that heading until the next heading of its level or above: its text, deeper headings and claim blocks, on every output path. A claim under a hidden heading stays hidden whatever its own rule says. A heading rule inside a claim block stops at the end of that block.
+- A `#` line inside fenced code is code: it ends no rule and creates no section. An unclosed fence runs to the end of the file, or of its claim block. A fenced line that carries a ruled name still opens that rule, so a stray fence cannot switch a rule off.
 - `_policy.yaml` cannot carry these rules.
 
 Rules are the owner's. On publication adapters, and for every non-owner caller, delivered claim markers keep only `disclosure`, and `field_access`, `field_visibility` and `access_rule` are left out of delivered metadata and index entries, because a lens list can name a custom lens. A document's own `access_lenses` is still delivered.

@@ -1,6 +1,7 @@
 // Markdown text helpers: sections, links, tags, claims and tokenization.
 import { frontmatter } from '../policy/privacy-fields.mjs'
 import { parseClaimBlocks, replaceClaimBlocks } from './claim-blocks.mjs'
+import { createLineClassifier } from './lines.mjs'
 
 const STOPWORDS = new Set(
   (
@@ -14,12 +15,14 @@ der die das ein eine und ist mit von zu`
 )
 
 export function sections(text, { raw = false, empty = false } = {}) {
+  const classify = createLineClassifier()
   if (raw) {
     const lines = String(text).split(/\r?\n/),
       out = []
     let current = []
     for (const line of lines) {
-      if (/^#{1,4}\s+/.test(line) && current.length) {
+      const { fenced, heading } = classify(line)
+      if (heading && !fenced && heading.level <= 4 && current.length) {
         out.push(current.join('\n'))
         current = []
       }
@@ -31,19 +34,24 @@ export function sections(text, { raw = false, empty = false } = {}) {
   const result = []
   let heading = '(document)',
     level = 0,
-    lines = []
+    lines = [],
+    fencedHeadings = []
   const flush = () => {
     const content = lines.join('\n').trim()
-    if (content || (empty && level)) result.push({ heading, level, content })
+    if (content || (empty && level)) result.push({ heading, level, content, ...(fencedHeadings.length ? { fenced_headings: fencedHeadings } : {}) })
   }
   for (const line of String(text).split(/\r?\n/)) {
-    const match = line.match(/^#{1,6}\s+(.+)$/)
-    if (match) {
+    const kind = classify(line)
+    if (kind.heading && !kind.fenced) {
       flush()
-      heading = match[1].trim()
-      level = line.match(/^#+/)[0].length
+      heading = kind.heading.text
+      level = kind.heading.level
       lines = []
-    } else lines.push(line)
+      fencedHeadings = []
+    } else {
+      if (kind.heading) fencedHeadings.push(kind.heading)
+      lines.push(line)
+    }
   }
   flush()
   return result

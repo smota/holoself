@@ -26,7 +26,12 @@ export function privacySections(body, policy, registry = null) {
     enclosing = new Map()
   // A claim block is lifted out of its section, so it takes the field heading rules around it from the same walk that
   // filters content: a claim under a hidden heading stays hidden on the catalog paths too.
-  for (const { block, outer } of scopedLines(body, table)) if (block && !enclosing.has(block.start)) enclosing.set(block.start, outer)
+  for (const { blocks, outer } of scopedLines(body, table)) for (const block of blocks) if (!enclosing.has(block.start)) enclosing.set(block.start, outer)
+  // A section takes the rules open where it starts. A ruled name on a fenced line opens its rule partway through a
+  // section: the lines after it are hidden line by line, and the rule carries on into the next sections.
+  const afterSection = (scope, section) => {
+    for (const heading of section.fenced_headings || []) scope.heading(heading.level, heading.text, { fenced: true })
+  }
   const ordinary = replaceClaimBlocks(
     body,
     block => {
@@ -34,16 +39,17 @@ export function privacySections(body, policy, registry = null) {
         scope = createHeadingScope(table, enclosing.get(block.start) || [])
       for (const section of sections(block.body, { empty: true })) {
         if (section.level) scope.heading(section.level, section.heading)
-        if (!section.content) continue
         const fieldRule = scopeRule(scope.matches()),
           rule = fieldRule ? intersectRules(block.rule, fieldRule) : block.rule
-        chunks.push({
-          ...section,
-          rule,
-          claim: true,
-          disclosure: rule.disclosure === 'publish-approved' ? 'publish-approved' : 'review-required',
-          ...(status === 'current' ? {} : { claim_status: status })
-        })
+        if (section.content)
+          chunks.push({
+            ...section,
+            rule,
+            claim: true,
+            disclosure: rule.disclosure === 'publish-approved' ? 'publish-approved' : 'review-required',
+            ...(status === 'current' ? {} : { claim_status: status })
+          })
+        afterSection(scope, section)
       }
       return ''
     },
@@ -56,14 +62,15 @@ export function privacySections(body, policy, registry = null) {
     scope = createHeadingScope(table)
   for (const section of sections(ordinary, { empty: true })) {
     if (section.level) scope.heading(section.level, section.heading)
-    if (!section.content) continue
     const fieldRule = scopeRule(scope.matches())
-    chunks.push({
-      ...section,
-      rule: fieldRule || inherited,
-      claim: false,
-      disclosure: fieldRule ? narrowerDisclosure(policy.disclosure, fieldRule.disclosure) : policy.disclosure
-    })
+    if (section.content)
+      chunks.push({
+        ...section,
+        rule: fieldRule || inherited,
+        claim: false,
+        disclosure: fieldRule ? narrowerDisclosure(policy.disclosure, fieldRule.disclosure) : policy.disclosure
+      })
+    afterSection(scope, section)
   }
   return chunks
 }
@@ -100,9 +107,10 @@ export function extractSectionAnnotations(rawSections, policy = {}) {
       headingRule = fieldHeadingRule(sec.heading || '', table),
       base = headingRule ? intersectRules(sectionRule, headingRule.rule) : sectionRule
     const byRule = new Map()
-    for (const line of String(sec.content).split(/\r?\n/)) {
+    for (const { line, matches } of scopedLines(sec.content, table)) {
       const lineRule = fieldLineRule(line, table),
-        rule = lineRule ? intersectRules(base, lineRule.rule) : base,
+        scoped = matches.length ? intersectRules(base, scopeRule(matches)) : base,
+        rule = lineRule ? intersectRules(scoped, lineRule.rule) : scoped,
         key = JSON.stringify(rule)
       if (!byRule.has(key)) byRule.set(key, { rule, lines: [] })
       byRule.get(key).lines.push(line)
