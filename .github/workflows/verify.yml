@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         node: ['22']
     steps:
       - name: Check out repository
@@ -32,25 +32,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
-
-      - name: Run repository verification
-        run: npm run verify
-
-  # macOS is temporarily advisory on pull requests (GitHub arm64 runner capacity
-  # outage, 2026-11-04). It still runs and reports, but the required Verify check
-  # does not wait for it. The release workflow keeps macOS required.
-  test-macos:
-    name: Test (macos-latest, Node 22, advisory)
-    runs-on: macos-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Use Node.js 22
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
 
       - name: Run repository verification
         run: npm run verify
