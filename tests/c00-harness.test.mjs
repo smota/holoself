@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import { promises as fsp } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { spawnSync } from 'node:child_process'
 import { createFixture } from './helpers/c00-fixture.mjs'
 import { installIoMeter } from './helpers/c00-io.mjs'
 
@@ -98,13 +99,51 @@ test('IO meter reports unsupported raw fd reads and restores after errors', asyn
     try { const buffer = Buffer.alloc(2); fs.readSync(fd, buffer, 0, 2, 0) } finally { fs.closeSync(fd) }
     assert.throws(() => fs.readFileSync(join(fixture.self, 'missing.md')), /ENOENT/)
     const result = meter.stop()
-    assert.ok(result.unsupported.some(item => item.api === 'openSync' || item.api === 'readSync'))
+    assert.ok(result.unsupported.some(item => item.api === 'openSync'))
+    assert.ok(result.unsupported.some(item => item.api === 'readSync'))
     assert.equal(result.bodyReads, 0)
   } finally { meter.restore() }
   const original = fs.readFileSync
   const check = installIoMeter({ roots: { self: fixture.self } })
   check.start(); check.restore()
   assert.equal(fs.readFileSync, original)
+})
+
+test('IO meter counts failed path opens as metadata without claiming body reads', () => {
+  const path = join(fixture.self, 'missing-consumer.env')
+  const meter = installIoMeter({ roots: { self: fixture.self } })
+  meter.start()
+  try {
+    assert.throws(() => fs.openSync(path, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK), { code: 'ENOENT' })
+    const result = meter.stop()
+    assert.deepEqual(result.unsupported, [])
+    assert.equal(result.metadataOps, 1)
+    assert.equal(result.byApi.openSync, 1)
+    assert.equal(result.byPath['derived:missing-consumer.env'].reads, 0)
+    assert.equal(result.bodyReads, 0)
+    assert.equal(result.bodyBytes, 0)
+  } finally { meter.restore() }
+})
+
+test('test runner isolates the home used for machine telemetry configuration', async () => {
+  const home = join(fixture.root, 'inherited-home')
+  const probe = join(fixture.root, 'home-probe.test.mjs')
+  await fsp.mkdir(home)
+  await fsp.writeFile(probe, `import { homedir, tmpdir } from 'node:os'
+import { existsSync } from 'node:fs'
+import { join, relative, isAbsolute, sep } from 'node:path'
+import assert from 'node:assert/strict'
+const rel = relative(tmpdir(), homedir())
+assert.ok(rel && rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel))
+assert.ok(existsSync(homedir()))
+assert.equal(existsSync(join(homedir(), 'machine-marker')), false)
+`)
+  await fsp.writeFile(join(home, 'machine-marker'), 'synthetic machine state')
+  const result = spawnSync(process.execPath, ['scripts/run-tests.mjs', probe], {
+    encoding: 'utf8', timeout: 30_000,
+    env: { ...process.env, HOME: home, USERPROFILE: home }
+  })
+  assert.equal(result.status, 0, result.stderr + result.stdout)
 })
 
 test('IO meter marks numeric descriptors and handles opened before start as unsupported', async () => {

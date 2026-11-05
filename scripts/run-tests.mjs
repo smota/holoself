@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,6 +21,8 @@ if (process.env.TMPDIR) {
 }
 
 const runRoot = mkdtempSync(join(os.tmpdir(), 'holoself-test-run-'))
+const testHome = join(runRoot, 'home')
+mkdirSync(testHome)
 const args = process.argv.slice(2)
 const testArgs =
   args.length > 0
@@ -68,6 +70,9 @@ try {
     TMPDIR: runRoot,
     TMP: runRoot,
     TEMP: runRoot,
+    // Machine telemetry configuration and other home lookups must stay synthetic.
+    HOME: testHome,
+    USERPROFILE: testHome,
     // The per-machine self map (selves.json) of every test lives in the run directory, never in the
     // developer's real ~/.config/holoself; tests that need isolation set their own directory.
     HOLOSELF_CONFIG_DIR: join(runRoot, 'holoself-config')

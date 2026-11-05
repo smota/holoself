@@ -17,5 +17,14 @@
     "smoke:mcp": "node scripts/mcp-smoke.mjs",
     "prepack": "npm run audit:package"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "optionalDependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/exporter-metrics-otlp-http": "0.53.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.53.0",
+    "@opentelemetry/resources": "1.26.0",
+    "@opentelemetry/sdk-metrics": "1.26.0",
+    "@opentelemetry/sdk-trace-base": "1.26.0",
+    "@opentelemetry/semantic-conventions": "1.27.0"
+  }
 }
