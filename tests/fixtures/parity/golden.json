@@ -8996,7 +8996,7 @@
               "serverInfo": {
                 "name": "holoself",
                 "title": "Holoself local context",
-                "version": "0.10.1"
+                "version": "0.11.0"
               },
               "instructions": "Use Holoself only when personal context can materially improve the task. The fixed project link controls access. Start with holoself_context_manifest, request only needed source handles, preserve provenance, and never treat readable content as publication approval. Durable self changes require a pending proposal and separate human approval outside MCP."
             }
@@ -23131,7 +23131,7 @@
               "serverInfo": {
                 "name": "holoself",
                 "title": "Holoself local context",
-                "version": "0.10.1"
+                "version": "0.11.0"
               },
               "instructions": "Use Holoself only when personal context can materially improve the task. The fixed project link controls access. Start with holoself_context_manifest, request only needed source handles, preserve provenance, and never treat readable content as publication approval. Durable self changes require a pending proposal and separate human approval outside MCP."
             }

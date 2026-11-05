@@ -22,7 +22,7 @@ holoself <command> [options]
 | `--version --json` | Print machine-readable product and version information |
 
 <!-- generated:start -->
-Generated from `holoself capabilities --json` (product `holoself`, version `0.10.1`, context schema `v1`, index schema `v5`, proposal schemas `v1, v2`) and the CLI flag contract:
+Generated from `holoself capabilities --json` (product `holoself`, version `0.11.0`, context schema `v1`, index schema `v5`, proposal schemas `v1, v2`) and the CLI flag contract:
 
 - Capability command groups (13): `doctor`, `context`, `ledger`, `search`, `propose`, `proposals`, `instructions`, `knowledge`, `link`, `skill`, `mcp`, `client`, `coaching`
 - Coaching subcommands (7): `coaching start`, `coaching note`, `coaching action`, `coaching choose`, `coaching review`, `coaching material`, `coaching resume`
