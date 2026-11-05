@@ -52,6 +52,7 @@ export function annotationSchema(lenses = []) {
       confidence: { type: 'editable-select', required: false, suggestions: CONFIDENCE_SUGGESTIONS },
       visibility: { type: 'single-select', required: false, legacy: true, options: VISIBILITIES },
       public_safe: { type: 'derived-override', required: false, legacy: true },
+      field_access: { type: 'field-rules', required: false, rule_fields: ['access_lenses', 'disclosure'], disclosure_options: DISCLOSURES },
       knowledge_status: { type: 'single-select', required: false, options: KNOWLEDGE_STATUSES },
       temporal_scope: { type: 'single-select', required: false, options: TEMPORAL_SCOPES },
       valid_from: { type: 'date', required: false },
@@ -63,6 +64,18 @@ export function annotationSchema(lenses = []) {
   }
 }
 
+function fieldAccessAnnotationErrors(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return ['field_access must map field or heading names to rules.']
+  const errors = []
+  for (const [name, rule] of Object.entries(value)) {
+    if (!rule || typeof rule !== 'object' || Array.isArray(rule) || Object.keys(rule).some(key => key !== 'access_lenses' && key !== 'disclosure'))
+      errors.push(`field_access ${name} accepts only access_lenses and disclosure.`)
+    else if (rule.access_lenses !== undefined && (!Array.isArray(rule.access_lenses) || !rule.access_lenses.length))
+      errors.push(`field_access ${name} access_lenses must list at least one lens.`)
+    else if (rule.disclosure !== undefined && !DISCLOSURES.includes(rule.disclosure)) errors.push(`field_access ${name} disclosure must be one of: ${DISCLOSURES.join(', ')}.`)
+  }
+  return errors
+}
 export function validateAnnotationMetadata(metadata = {}, knownLenses = [], { allowLegacy = false } = {}) {
   const errors = [],
     warnings = [],
@@ -82,6 +95,7 @@ export function validateAnnotationMetadata(metadata = {}, knownLenses = [], { al
     if (modern && !values.includes(metadata[field])) errors.push(`${field} must be one of: ${values.join(', ')}.`)
     else if (metadata[field] !== undefined && !values.includes(metadata[field])) errors.push(`${field} must be one of: ${values.join(', ')}.`)
   if (metadata.visibility !== undefined && !VISIBILITIES.includes(metadata.visibility)) errors.push(`visibility must be one of: ${VISIBILITIES.join(', ')}.`)
+  if (metadata.field_access !== undefined) errors.push(...fieldAccessAnnotationErrors(metadata.field_access))
   if (metadata.confidence !== undefined && (typeof metadata.confidence !== 'string' || !metadata.confidence.trim()))
     errors.push('confidence must be non-empty when set.')
   if (metadata.public_safe !== undefined && metadata.public_safe !== null && typeof metadata.public_safe !== 'boolean')

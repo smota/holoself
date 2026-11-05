@@ -7,7 +7,7 @@ import { attestClient } from '../clients/attestation.mjs'
 import { loadLensRegistry, resolveLens } from '../lenses.mjs'
 import { parseClaimBlocks } from '../markdown/claim-blocks.mjs'
 import { canonicalPath } from '../path-guard.mjs'
-import { visibleUnderBehavior } from '../policy/access.mjs'
+import { subDocumentVisible } from '../policy/sub-document-rules.mjs'
 import { createInboxProposal, inboxPreviewData, pendingInboxCount } from '../proposals/client-inbox.mjs'
 import { findInboxProposal } from '../proposals/client-inbox.mjs'
 import { safeTarget } from '../proposals/store.mjs'
@@ -115,7 +115,7 @@ function clientClaimView(client, lens, delivered) {
   return {
     visible: (rel, block) => {
       const docs = delivered.get(rel) || []
-      return !block.malformed && docs.some(content => parseClaimBlocks(content, rel).some(b => b.claim_id === block.claim_id)) && visibleUnderBehavior(block.visibility, lens, 'generic')
+      return !block.malformed && docs.some(content => parseClaimBlocks(content, rel).some(b => b.claim_id === block.claim_id)) && subDocumentVisible(block.rule, lens, 'generic')
     },
     delivered: rel => delivered.get(rel) || [],
     baseText: rel => delivered.get(rel)?.[0] ?? null

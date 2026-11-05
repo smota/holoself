@@ -8,6 +8,7 @@ import { contradictionDigest } from '../context-selection.mjs'
 import { readLink } from '../link/config.mjs'
 import { readRegistry, withRegistryLock } from '../link/registry.mjs'
 import { normalize, parseClaimBlocks, replaceClaimBlocks } from '../markdown/claim-blocks.mjs'
+import { describeRule } from '../policy/sub-document-rules.mjs'
 import { sections, tokenize } from '../markdown/text.mjs'
 import { canonicalPath, samePath } from '../path-guard.mjs'
 import { frontmatter } from '../policy/privacy-fields.mjs'
@@ -17,6 +18,7 @@ import { similarity } from './analysis.mjs'
 import {
   UUID_PREFIX_RE,
   applyClaimChange,
+  claimLensRegistry,
   commitTimeToken,
   emptyTarget,
   findProposal,
@@ -550,8 +552,8 @@ export function buildReviewInbox(root, { space = 'all', spaces = null, limit = D
           const relTarget = slash(c.target || 'context/claims.md'),
             targetData = loadTargetAnalysis(canonicalRoot, targetCache, relTarget),
             found = targetData.allById.get(c.claim_id) || []
-          if (found.length === 1 && found[0].visibility && found[0].visibility !== c.visibility) {
-            visibilityChanges.push({ from: found[0].visibility, to: c.visibility })
+          if (found.length === 1 && describeRule(found[0].rule) !== c.visibility) {
+            visibilityChanges.push({ from: describeRule(found[0].rule), to: c.visibility })
           }
         }
       }
@@ -931,7 +933,7 @@ export async function applyInboxBatch(
             throw inboxError(`target already contains this proposal's reserved placeholder: ${rel}`, 'INVALID_TARGET')
           }
           const beforeChange = snap.current,
-            applied = applyClaimChange(beforeChange, rel, { ...change, operation: op }, p, null),
+            applied = applyClaimChange(beforeChange, rel, { ...change, operation: op }, p, null, claimLensRegistry(canonicalRoot)),
             stampedBefore = stamp(beforeChange),
             stampedAfter = stamp(applied.after)
           chainedPreviews.push({

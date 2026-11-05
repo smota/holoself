@@ -2,6 +2,7 @@
 import { DISCLOSURES, DOCUMENT_ROLES, KNOWLEDGE_STATUSES, SENSITIVITIES, TEMPORAL_SCOPES, VISIBILITIES } from '../annotations.mjs'
 import { lensIdStructurallyValid } from '../lenses.mjs'
 import { parseScalar, parseYaml } from '../shared/yaml.mjs'
+import { fieldAccessValid } from './sub-document-rules.mjs'
 
 export const PRIVACY_FIELDS = new Set([
   'access_lenses',
@@ -16,6 +17,7 @@ export const PRIVACY_FIELDS = new Set([
   'confidence',
   'exclude_lenses',
   'field_visibility',
+  'field_access',
   'knowledge_status',
   'temporal_scope',
   'valid_from',
@@ -43,6 +45,7 @@ export function privacyValueValid(key, value, registry = null) {
     return (
       value && typeof value === 'object' && !Array.isArray(value) && Object.values(value).every(item => typeof item === 'string' && VISIBILITIES.includes(item))
     )
+  if (key === 'field_access') return fieldAccessValid(value, registry)
   if (key === 'knowledge_status') return typeof value === 'string' && KNOWLEDGE_STATUSES.includes(value)
   if (key === 'temporal_scope') return typeof value === 'string' && TEMPORAL_SCOPES.includes(value)
   if (['valid_from', 'valid_until', 'review_after'].includes(key))
@@ -124,6 +127,11 @@ export function salvagePrivacyFrontmatter(raw, { forcePrivate = false, registry 
       if (!recognized.has(key)) continue
       if (seen.has(key)) malformed = true
       seen.add(key)
+      // Nested rules cannot be salvaged line by line, so a document that needs salvage and carries them fails closed.
+      if (key === 'field_access') {
+        malformed = true
+        continue
+      }
       if ((key === 'access_lenses' || key === 'exclude_lenses' || key === 'task_include' || key === 'task_exclude' || key === 'field_visibility') && !scalar) {
         metadata[key] = key === 'field_visibility' ? {} : []
         block = { key, items: 0 }

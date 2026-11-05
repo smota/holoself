@@ -116,8 +116,8 @@ Generated from `holoself capabilities --json` (product `holoself`, version `0.11
 | `init` | Create private data root and starter files |
 | `doctor` | Check runtime and required layout |
 | `validate` | Validate root, links, proposals, visibility, provenance, references, and markers; warn on stderr for each document and deprecated privacy field (`visibility`, `public_safe`, `field_visibility`, claim-marker `visibility=`) |
-| `migrate policy` | Plan (`--dry-run`), apply (`--apply <plan_id>`, `--confirm-narrowing` only when the plan reports coverage loss) or revert (`--revert <receipt_id>`) the exact migration of deprecated `visibility` / `public_safe` to `access_lenses`, `read_scope`, `disclosure`, `sensitivity` and `document_role` |
-| `validate --fix` | Build or apply (`--apply --digest <sha256> --yes`, optional `--with-policy-files`, `--allow-publish-approved`, `--out <plan>`, `--json`) a digest-bound conservative privacy metadata repair plan for excluded canonical documents |
+| `migrate policy` | Plan (`--dry-run`), apply (`--apply <plan_id>`, `--confirm-narrowing` only when the plan reports coverage loss) or revert (`--revert <receipt_id>`) the exact migration of deprecated `visibility` / `public_safe` to `access_lenses`, `read_scope`, `disclosure`, `sensitivity` and `document_role`, of `field_visibility` to `field_access`, and of claim-marker `visibility=` to `access_lenses=` / `disclosure=`. Plans list these rewrites in `sub_document_rewrites` |
+| `validate --fix` | Build or apply (`--apply --digest <sha256> --yes`, optional `--with-policy-files`, `--allow-publish-approved`, `--out <plan>`, `--json`) a digest-bound conservative privacy metadata repair plan for excluded canonical documents. Also prints the exact mapping of each file's deprecated fields (`deprecated_fields` with `--json`, outside the digest) and hands off to `migrate policy --dry-run`; it never edits those fields |
 | `migrate --from <dir>` | Copy supported PersonalOS data after confirmation |
 | `export --target <dir>` | Create reviewable project packet snapshot |
 | `upgrade` | Refresh selected public contrib availability; method files remain package-owned |

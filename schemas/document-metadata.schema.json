@@ -23,8 +23,26 @@
       "items": { "description": "Structurally valid lens id; runtime semantic validation requires a built-in or registry-known id.", "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40 }
     },
     "field_visibility": {
+      "description": "Deprecated. holoself migrate policy rewrites it to field_access; rejected in 0.13.0.",
       "type": "object",
       "additionalProperties": { "enum": ["private", "linked-projects", "professional", "public-voice", "public-safe"] }
+    },
+    "field_access": {
+      "description": "Rules for a field or heading name. Omitted access_lenses inherits the document; omitted disclosure is review-required.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "access_lenses": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "description": "Structurally valid lens id; runtime semantic validation requires a built-in or registry-known id.", "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 40 }
+          },
+          "disclosure": { "enum": ["internal-only", "review-required", "publish-approved"] }
+        }
+      }
     },
     "read_scope": {
       "description": "Access scope decoupling access grant from perspective lens.",

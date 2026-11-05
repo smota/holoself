@@ -2,7 +2,7 @@
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { isCanonicalSelf } from '../../link/config.mjs'
-import { applyPolicyMigration, planPolicyMigration, revertPolicyMigration } from '../../migration.mjs'
+import { applyPolicyMigration, planPolicyMigration, revertPolicyMigration, subDocumentRewrites } from '../../migration.mjs'
 import { safeRealpath, slash } from '../../shared/fs.mjs'
 
 export async function runMigratePolicy(o, sub) {
@@ -46,6 +46,7 @@ export async function runMigratePolicy(o, sub) {
   for (const w of plan.warnings || []) {
     console.error(`[warn] ${w}`)
   }
+  const rewrites = subDocumentRewrites(plan)
   console.log(
     JSON.stringify(
       {
@@ -61,6 +62,7 @@ export async function runMigratePolicy(o, sub) {
               ...(plan.warnings.length > 0 ? { warnings: plan.warnings } : {})
             }
           : {}),
+        ...(rewrites.length > 0 ? { sub_document_rewrites: rewrites } : {}),
         summary: plan.summary,
         plan_file: o.dryRun ? null : slash(join(selfRoot, '.holoself', 'migrations', `plan-${plan.plan_id}.json`))
       },

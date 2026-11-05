@@ -74,7 +74,7 @@ Se o seu repositório utiliza metadados legados com campos `visibility: linked-p
    ```bash
    holoself migrate policy --root ~/.holoself --apply <plan_id> --confirm-narrowing
    ```
-   - A partir da 0.11.0 o mapeamento é exato (sem alargamento nem estreitamento); `--confirm-narrowing` só é exigido quando o plano reporta `coverage_loss`, por exemplo quando um `_policy.yaml` com `exclude_lenses` passa a valer após a remoção de `visibility`. O plano remove `visibility` e `public_safe`; `field_visibility` e os marcadores de claim são reescritos a partir da 0.12.0.
+   - A partir da 0.11.0 o mapeamento é exato (sem alargamento nem estreitamento); `--confirm-narrowing` só é exigido quando o plano reporta `coverage_loss`, por exemplo quando um `_policy.yaml` com `exclude_lenses` passa a valer após a remoção de `visibility`. O plano remove `visibility` e `public_safe`. A partir da 0.12.0 também reescreve `field_visibility` para `field_access` e os marcadores de claim para `access_lenses=` / `disclosure=`, sem alterar os ids dos claims; a saída do `--dry-run` lista essas reescritas em `sub_document_rewrites`. Marcadores malformados e regras sem forma escrita ficam como estão, com um aviso no plano.
    - Assegura atomicidade em cada arquivo via buffers temporários (`atomicWriteFile`).
    - Grava um recibo assinado por hash em `.holoself/migrations/receipt-<id>.json`.
 

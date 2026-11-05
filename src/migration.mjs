@@ -2,11 +2,33 @@ import { existsSync, lstatSync, statSync, readFileSync, writeFileSync, mkdirSync
 import { join, relative } from 'node:path'
 import { canonicalJson } from './catalog.mjs'
 import { HASH_RE } from './catalog/schema.mjs'
+import { buildCatalogSections, extractSectionAnnotations, privacySections } from './catalog/source.mjs'
 import { CUSTOM_SENSITIVITY_CATEGORIES, DEFAULT_LENSES, DEFAULT_LENS_IDS, lensIdStructurallyValid, loadLensRegistry } from './lenses.mjs'
-import { allowedDocument, disclosure as runtimeDisclosure, legacyAccessLenses, publicationAllowed, PUBLICATION_ADAPTERS, visibility as legacyVisibility } from './policy/access.mjs'
+import { CLAIM_MARKER_RE, claimMarkerRewrites, stripClaimMarkers } from './markdown/claim-blocks.mjs'
+import {
+  allowedDocument,
+  disclosure as runtimeDisclosure,
+  filterClaimVisibility,
+  filterFieldVisibility,
+  legacyAccessLenses,
+  privacyMetadata,
+  publicationAllowed,
+  PUBLICATION_ADAPTERS,
+  visibility as legacyVisibility
+} from './policy/access.mjs'
 import { resolveDocumentPolicy } from './policy/policy-defaults.mjs'
 import { canonicalPrivacyMetadataErrors, frontmatter, privacyMetadataErrors, restrictPrivacyMetadata } from './policy/privacy-fields.mjs'
+import {
+  catalogElementVisible,
+  fieldAccessValid,
+  fieldRuleNameValid,
+  intersectRules,
+  legacySubDocumentRule,
+  normalizeRule,
+  ruleForRegistry
+} from './policy/sub-document-rules.mjs'
 import { atomicWrite, hash, slash } from './shared/fs.mjs'
+import { redactRootPaths } from './shared/redact.mjs'
 
 // Fields every migrated document carries explicitly (the four required canonical fields plus read_scope).
 const MIGRATION_REQUIRED_FIELDS = Object.freeze(['access_lenses', 'disclosure', 'sensitivity', 'document_role', 'read_scope'])
@@ -89,10 +111,10 @@ function migrationInspectBefore(input, { registry = null, tolerant = true, selfR
   }
 }
 
-// Deprecated document-level fields (docs/decisions/privacy-fields-and-legacy-mount.md). `migrate policy` removes them
-// in the same edit that materializes their exact runtime meaning as target fields. `field_visibility` and claim-marker
-// `visibility=` stay until the runtime reads their replacements (`field_access`, lens-vocabulary claim markers).
-export const DEPRECATED_DOCUMENT_FIELDS = Object.freeze(['visibility', 'public_safe'])
+// Deprecated frontmatter fields (docs/decisions/privacy-fields-and-legacy-mount.md). `migrate policy` removes them in
+// the same edit that materializes their exact runtime meaning as target fields. `field_visibility` becomes
+// `field_access`, and claim-marker `visibility=` becomes lens-vocabulary attributes (see subDocumentMigration).
+export const DEPRECATED_DOCUMENT_FIELDS = Object.freeze(['visibility', 'public_safe', 'field_visibility'])
 
 // The exact, non-widening target metadata for a document (decision record, section 2, "Mapping: document level").
 // `meta` is the metadata the runtime serves (runtime-parsed, so invalid privacy values are already restricted). Every
@@ -166,65 +188,140 @@ export function migrationChanges(rawMeta, meetMeta) {
   return changes
 }
 
+// The `field_access` that replaces a document's `field_visibility`, using the exact mapping table. A name carried by
+// both fields gets the narrower of the two. A later name that differs only in case was never reachable (the deprecated
+// field stops at the first match), so it is dropped rather than made live. Returns null with a warning when a rule has
+// no valid written form; the deprecated field then stays, and keeps working until it is fixed by hand.
+function fieldAccessFromLegacy(rawMeta, registry) {
+  const legacy = rawMeta.field_visibility,
+    existing = rawMeta.field_access
+  if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy)) return { fieldAccess: null, warning: null }
+  if (existing !== undefined && !fieldAccessValid(existing, registry)) return { keep: true, warning: 'invalid field_access; fix it by hand before field_visibility can be rewritten' }
+  const merged = { ...(existing || {}) },
+    seen = new Set()
+  for (const [name, value] of Object.entries(legacy)) {
+    if (!fieldRuleNameValid(name)) return { keep: true, warning: `field_visibility name ${JSON.stringify(name)} cannot be written to field_access` }
+    if (seen.has(name.toLowerCase())) continue
+    seen.add(name.toLowerCase())
+    let rule = ruleForRegistry(legacySubDocumentRule(value), registry)
+    if (rule && Object.hasOwn(merged, name)) rule = intersectRules(rule, normalizeRule(merged[name]))
+    if (!rule || rule.access_lenses?.length === 0) return { keep: true, warning: `field_visibility rule ${JSON.stringify(name)} admits no lens` }
+    merged[name] = rule
+  }
+  return { fieldAccess: Object.keys(merged).length ? merged : null, warning: null }
+}
+
+// Frontmatter and marker changes for the sub-document rules of one document. Claim marker offsets are absolute.
+function subDocumentMigration(text, rawMeta, body, { registry, target }) {
+  const changes = {},
+    warnings = []
+  let keepFieldVisibility = false
+  if (Object.hasOwn(rawMeta, 'field_visibility')) {
+    const { fieldAccess, keep, warning } = fieldAccessFromLegacy(rawMeta, registry)
+    if (warning) warnings.push(warning)
+    if (keep) keepFieldVisibility = true
+    else {
+      if (fieldAccess) changes.field_access = fieldAccess
+      changes.field_visibility = null
+    }
+  }
+  const offset = text.length - body.length,
+    { rewrites, skipped } = claimMarkerRewrites(body, { registry, target })
+  if (rewrites.length) changes.claim_markers = rewrites.map(rewrite => ({ ...rewrite, start: rewrite.start + offset }))
+  for (const item of skipped) warnings.push(`claim ${item.claim_id} left unchanged: ${item.reason}`)
+  return { changes, warnings, keepFieldVisibility }
+}
+
+const YAML_SAFE_FIELD_NAME = /^[\p{L}\p{N}](?:[\p{L}\p{N} _.()/&+-]*[\p{L}\p{N}_.()/&+-])?$/u
+function fieldAccessFrontmatterLines(fieldAccess) {
+  if (!Object.keys(fieldAccess).every(name => YAML_SAFE_FIELD_NAME.test(name))) return [`field_access: ${JSON.stringify(fieldAccess)}`]
+  const lines = ['field_access:']
+  for (const [name, rule] of Object.entries(fieldAccess)) {
+    lines.push(`  ${name}:`)
+    if (rule.access_lenses) lines.push(`    access_lenses: [${rule.access_lenses.join(', ')}]`)
+    if (rule.disclosure) lines.push(`    disclosure: ${rule.disclosure}`)
+  }
+  return lines
+}
+
+// The key line plus every more-indented line under it, including blank lines between them.
+function frontmatterBlockEnd(lines, start) {
+  let end = start + 1
+  for (let i = start + 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue
+    if (lines[i].length === lines[i].trimStart().length) break
+    end = i + 1
+  }
+  return end
+}
+
+// Edits only the lines of the changed keys. Every other line keeps its own bytes, including its line ending, and new
+// lines use the ending of the opening delimiter.
 export function applyFrontmatterModifications(text, changes) {
   if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) {
     return text
   }
-  const isCrlf = text.includes('\r\n')
-  const nl = isCrlf ? '\r\n' : '\n'
-  const endIdx = text.indexOf(`${nl}---`, 3)
-  if (endIdx < 0) return text
-
+  const nl = text.startsWith('---\r\n') ? '\r\n' : '\n'
   const openLen = 3 + nl.length
-  const frontmatterContent = endIdx > openLen ? text.slice(openLen, endIdx) : ''
-  const bodyContent = text.slice(endIdx)
+  const closeIdx = text.indexOf('\n---', 3)
+  if (closeIdx < 0) return text
 
-  const lines = frontmatterContent ? frontmatterContent.split(/\r?\n/) : []
-  for (const [key, value] of Object.entries(changes)) {
+  const lines = text.slice(openLen, closeIdx + 1).split(/(?<=\n)/).filter(Boolean)
+  const lineEnding = line => line.match(/\r?\n$/)?.[0] ?? nl
+  // field_access goes first so it can take the place of the field_visibility it replaces.
+  const ordered = Object.entries(changes).sort(([a], [b]) => (b === 'field_access') - (a === 'field_access'))
+  for (const [key, value] of ordered) {
     // Top-level keys only: never rewrite a nested key such as field_visibility.visibility.
-    const keyRegex = new RegExp(`^()${key}\\s*:`)
+    const keyRegex = new RegExp(`^${key}\\s*:`)
     const existingLineIdx = lines.findIndex(l => keyRegex.test(l))
-    let formattedVal = ''
-    if (Array.isArray(value)) {
-      formattedVal = `[${value.join(', ')}]`
-    } else {
-      formattedVal = String(value)
-    }
 
     if (value === null) {
       // Removal: the key line and any more-indented continuation lines (block lists or nested mappings).
-      if (existingLineIdx < 0) continue
-      let removeCount = 1
-      while (existingLineIdx + removeCount < lines.length) {
-        const nextLine = lines[existingLineIdx + removeCount]
-        if (!nextLine.trim() || nextLine.length === nextLine.trimStart().length) break
-        removeCount++
-      }
-      lines.splice(existingLineIdx, removeCount)
+      if (existingLineIdx >= 0) lines.splice(existingLineIdx, frontmatterBlockEnd(lines, existingLineIdx) - existingLineIdx)
       continue
     }
+    if (key === 'field_access') {
+      const written = fieldAccessFrontmatterLines(value).map(line => line + nl)
+      if (existingLineIdx >= 0) lines.splice(existingLineIdx, frontmatterBlockEnd(lines, existingLineIdx) - existingLineIdx, ...written)
+      else {
+        const replaced = lines.findIndex(l => /^field_visibility\s*:/.test(l))
+        lines.splice(replaced >= 0 ? replaced : lines.length, 0, ...written)
+      }
+      continue
+    }
+    const formattedVal = Array.isArray(value) ? `[${value.join(', ')}]` : String(value)
     if (existingLineIdx >= 0) {
-      const match = lines[existingLineIdx].match(keyRegex)
-      const baseIndent = match[1].length
       let removeCount = 1
       while (existingLineIdx + removeCount < lines.length) {
         const nextLine = lines[existingLineIdx + removeCount]
         const trimmed = nextLine.trim()
         if (!trimmed || trimmed.startsWith('#')) break
         const nextIndent = nextLine.length - nextLine.trimStart().length
-        if (nextIndent > baseIndent && trimmed.startsWith('-')) {
+        if (nextIndent > 0 && trimmed.startsWith('-')) {
           removeCount++
         } else {
           break
         }
       }
-      lines.splice(existingLineIdx, removeCount, `${match[1]}${key}: ${formattedVal}`)
+      lines.splice(existingLineIdx, removeCount, `${key}: ${formattedVal}${lineEnding(lines[existingLineIdx])}`)
     } else {
-      lines.push(`${key}: ${formattedVal}`)
+      lines.push(`${key}: ${formattedVal}${nl}`)
     }
   }
 
-  return `---${nl}${lines.join(nl)}${bodyContent}`
+  return text.slice(0, openLen) + lines.join('') + text.slice(closeIdx + 1)
+}
+
+// Applies a plan entry's changes: claim markers by offset, last first, then frontmatter. Only the bytes of those
+// markers and keys change, and the plan's after_sha256 checks the result.
+export function applyMigrationChanges(text, changes) {
+  const { claim_markers: markers = [], ...fields } = changes
+  let result = text
+  for (const marker of [...markers].sort((a, b) => b.start - a.start)) {
+    if (!result.startsWith(marker.before, marker.start)) throw new Error(`claim marker moved since planning: ${marker.claim_id}`)
+    result = result.slice(0, marker.start) + marker.after + result.slice(marker.start + marker.before.length)
+  }
+  return applyFrontmatterModifications(result, fields)
 }
 
 function collectMigrationLenses(registry, beforeMeta, afterMeta) {
@@ -354,6 +451,49 @@ function computeMigrationPlanDigest(entries, confirmActivation = false, activati
   )
 }
 
+// Everything one document delivers to a lens and adapter below the document gate, through the runtime parser and
+// filters: content lines (without marker comments, which a rewrite changes) and catalog sections, claims, tags and links.
+function subDocumentOutputs(text, meta, lens, adapter, registry) {
+  const { body } = frontmatter(text, { tolerant: true, validatePrivacy: false, registry }),
+    policy = privacyMetadata(meta, registry),
+    scratch = [],
+    filtered = value =>
+      filterFieldVisibility(filterClaimVisibility(value, lens, '', scratch, null, 'owner:direct', adapter, registry), meta, lens, '', scratch, null, 'owner:direct', adapter),
+    outputs = new Map(),
+    add = (kind, ...parts) => {
+      const key = [kind, ...parts].join('\0')
+      outputs.set(key, (outputs.get(key) || 0) + 1)
+    }
+  for (const line of stripClaimMarkers(filtered(body)).split(/\r?\n/)) if (line.trim()) add('content', line.trim())
+  const raw = privacySections(body, policy, registry),
+    annotations = extractSectionAnnotations(raw, policy),
+    visible = list => list.filter(item => catalogElementVisible(item, lens, adapter))
+  for (const section of visible(buildCatalogSections(raw))) add('sections', section.heading, filtered(section.snippet || ''))
+  for (const claim of visible(annotations.claims)) add('claims', claim.text)
+  for (const tag of visible(annotations.tags)) add('tags', tag.value)
+  for (const link of visible(annotations.links)) add('links', link.value)
+  return outputs
+}
+
+// A lens outside every registry, so a rule that would reach "any other lens" is always exercised.
+const SUB_DOCUMENT_PROBE_LENS = 'custom-lens-probe'
+
+// Compares sub-document delivery before and after across every lens and adapter. Reports the output kind, never text.
+function compareSubDocuments(beforeText, afterText, beforeMeta, afterMeta, lenses, adapters, registry, coverageLoss) {
+  const hasRules = (text, meta) => CLAIM_MARKER_RE.test(text) || Boolean(meta.field_visibility) || Boolean(meta.field_access)
+  if (!hasRules(beforeText, beforeMeta) && !hasRules(afterText, afterMeta)) return null
+  for (const lens of [...lenses.map(item => item.id), SUB_DOCUMENT_PROBE_LENS]) {
+    for (const adapter of adapters) {
+      const before = subDocumentOutputs(beforeText, beforeMeta, lens, adapter, registry),
+        after = subDocumentOutputs(afterText, afterMeta, lens, adapter, registry)
+      for (const [key, count] of after)
+        if (count > (before.get(key) || 0)) return `Sub-document ${key.split('\0')[0]} cell (${lens}, ${adapter}) transited DENY -> ALLOW`
+      if ([...before].some(([key, count]) => count > (after.get(key) || 0))) coverageLoss[lens] = (coverageLoss[lens] || 0) + 1
+    }
+  }
+  return null
+}
+
 export function verifyNonAmplification(beforeInput, afterInput, options = {}) {
   const registry = options.registry || (options.selfRoot ? loadMigrationRegistry(options.selfRoot) : null)
   const tolerant = options.tolerant ?? true
@@ -442,6 +582,14 @@ export function verifyNonAmplification(beforeInput, afterInput, options = {}) {
       violation: 'Publication gate transited DENY -> ALLOW',
       coverageLoss
     }
+  }
+
+  // Sub-document rules are compared when the document text is available. Metadata-only callers have no body to compare.
+  const beforeText = options.beforeText ?? (typeof beforeInput === 'string' ? beforeInput : null),
+    afterText = options.afterText ?? (typeof afterInput === 'string' ? afterInput : null)
+  if (beforeText !== null && afterText !== null && !beforeExcluded) {
+    const violation = compareSubDocuments(beforeText, afterText, beforeMeta, afterMeta, lenses, adapters, registry, coverageLoss)
+    if (violation) return { valid: false, violation, coverageLoss }
   }
 
   return { valid: true, violation: null, coverageLoss }
@@ -537,7 +685,39 @@ export function planPolicyMigration(selfRoot, options = {}) {
     totalScanned++
     if (lstatSync(item.absPath).isSymbolicLink()) throw new Error(`symlink rejected: ${item.absPath}`)
     const text = readFileSync(item.absPath, 'utf8')
-    if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) continue
+    if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) {
+      // No frontmatter to migrate, but the runtime still reads its claim markers.
+      const { changes, warnings: markerWarnings } = subDocumentMigration(text, {}, text, { registry, target: item.relPath })
+      warnings.push(...markerWarnings.map(warning => `${item.relPath}: ${warning}`))
+      if (!changes.claim_markers) continue
+      const afterText = applyMigrationChanges(text, changes)
+      const nonAmp = verifyNonAmplification(text, afterText, {
+        registry,
+        selfRoot,
+        docPath: item.kind === 'self' ? item.absPath : null,
+        sourceSpaceId: item.spaceId,
+        confirmActivation: true
+      })
+      if (!nonAmp.valid) {
+        const err = new Error(`Non-amplification gate failed for ${item.relPath}: ${nonAmp.violation}`)
+        err.code = 'NON_AMPLIFICATION_VIOLATION'
+        throw err
+      }
+      for (const [lens, count] of Object.entries(nonAmp.coverageLoss)) coverageLossSummary[lens] = (coverageLossSummary[lens] || 0) + count
+      entries.push({
+        path: item.relPath,
+        space_id: item.spaceId,
+        before_sha256: hash(text),
+        after_sha256: hash(afterText),
+        needs_migration: true,
+        changes,
+        before_metadata: {},
+        after_metadata: {},
+        before_text: text,
+        after_text: afterText
+      })
+      continue
+    }
 
     const beforeState = migrationInspectBefore(text, {
       registry,
@@ -581,6 +761,11 @@ export function planPolicyMigration(selfRoot, options = {}) {
     // read_scope, so no required field is left to inheritance) and lose their deprecated fields in the same edit.
     // Catalog-excluded documents get the same changes but go through the activation review below.
     const proposedChanges = governedByDirectoryPolicy ? {} : migrationChanges(rawMeta, meetMeta)
+    // Field rules and claim markers are rewritten in the same edit, whatever governs the document's own fields.
+    const subDocument = subDocumentMigration(text, rawMeta, parsed.body, { registry, target: item.relPath })
+    Object.assign(proposedChanges, subDocument.changes)
+    if (subDocument.keepFieldVisibility) delete proposedChanges.field_visibility
+    warnings.push(...subDocument.warnings.map(warning => `${item.relPath}: ${warning}`))
 
     const beforeSha256 = hash(text)
 
@@ -588,7 +773,7 @@ export function planPolicyMigration(selfRoot, options = {}) {
     // would newly expose them ('activations'). They are skipped by default with a warning and applied only with
     // --confirm-activation.
     if (beforeState.catalogExcluded && Object.keys(proposedChanges).length > 0) {
-      const proposedAfterText = applyFrontmatterModifications(text, proposedChanges)
+      const proposedAfterText = applyMigrationChanges(text, proposedChanges)
       const proposedAfterSha256 = hash(proposedAfterText)
       const proposedAfterParsed = frontmatter(proposedAfterText, { tolerant: true, registry })
       const proposedAfterEffective = effectiveOf(proposedAfterParsed.metadata)
@@ -596,7 +781,9 @@ export function planPolicyMigration(selfRoot, options = {}) {
       const baselineNonAmp = verifyNonAmplification(beforeEffective, proposedAfterEffective, {
         registry,
         sourceSpaceId: item.spaceId,
-        confirmActivation: true
+        confirmActivation: true,
+        beforeText: text,
+        afterText: proposedAfterText
       })
       if (!baselineNonAmp.valid) {
         const err = new Error(`Non-amplification gate failed for ${item.relPath}: ${baselineNonAmp.violation}`)
@@ -672,7 +859,7 @@ export function planPolicyMigration(selfRoot, options = {}) {
     let afterEffective = beforeEffective
 
     if (needsMigration) {
-      afterText = applyFrontmatterModifications(text, changes)
+      afterText = applyMigrationChanges(text, changes)
       afterSha256 = hash(afterText)
       const afterParsed = frontmatter(afterText, { tolerant: true, registry })
       // AFTER is resolved with inheritance too: an edit that turns policy inheritance on (or off) is judged on the
@@ -738,6 +925,71 @@ export function planPolicyMigration(selfRoot, options = {}) {
   if (!options.dryRun) writeFileSync(planPath, JSON.stringify(plan, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 })
 
   return plan
+}
+
+// What a plan rewrites below document level, for the dry-run report.
+export function subDocumentRewrites(plan) {
+  return plan.entries
+    .concat(plan.activations || [])
+    .filter(entry => entry.changes?.field_access || entry.changes?.claim_markers)
+    .map(entry => ({
+      path: entry.path,
+      space_id: entry.space_id,
+      ...(entry.changes.field_access ? { field_access: entry.changes.field_access } : {}),
+      ...(entry.changes.claim_markers ? { claim_markers: entry.changes.claim_markers.map(({ claim_id, before, after }) => ({ claim_id, before, after })) } : {})
+    }))
+}
+
+function ruleText(rule) {
+  const lenses = rule.access_lenses ? `access_lenses: [${rule.access_lenses.join(', ')}], ` : ''
+  return `{ ${lenses}disclosure: ${rule.disclosure} }`
+}
+function fileMappings(entry) {
+  const { changes } = entry,
+    meta = frontmatter(entry.before_text, { tolerant: true, validatePrivacy: false }).metadata,
+    mappings = [],
+    legacy = ['visibility', 'public_safe'].filter(key => changes[key] === null)
+  if (legacy.length)
+    mappings.push({
+      field: legacy.join(', '),
+      from: legacy.map(key => `${key}: ${meta[key]}`).join(', '),
+      to: MIGRATION_REQUIRED_FIELDS.filter(key => changes[key] !== undefined)
+        .map(key => `${key}: ${Array.isArray(changes[key]) ? `[${changes[key].join(', ')}]` : changes[key]}`)
+        .join(', ') || 'kept explicit fields'
+    })
+  const fieldVisibility = meta.field_visibility && typeof meta.field_visibility === 'object' ? meta.field_visibility : {}
+  for (const [name, rule] of Object.entries(changes.field_access || {}))
+    if (Object.hasOwn(fieldVisibility, name))
+      mappings.push({ field: `field_visibility.${name}`, from: String(fieldVisibility[name]), to: `field_access.${name}: ${ruleText(rule)}` })
+  for (const marker of changes.claim_markers || []) mappings.push({ field: `claim ${marker.claim_id}`, from: marker.before, to: marker.after })
+  return mappings
+}
+// The exact mapping for every document carrying deprecated fields, taken from a dry-run plan so that `validate --fix`
+// reports what `migrate policy` would write. It reads and writes nothing else.
+export function deprecatedFieldMappings(selfRoot, options = {}) {
+  const handoff = 'holoself migrate policy --dry-run'
+  let plan
+  try {
+    plan = planPolicyMigration(selfRoot, { ...options, dryRun: true })
+  } catch (error) {
+    return { files: [], warnings: [], handoff, error: redactRootPaths(error.message, [selfRoot]) }
+  }
+  const files = plan.entries
+    .map(entry => plan.activations.find(item => entry.activation_skipped && item.path === entry.path && item.space_id === entry.space_id) || entry)
+    .filter(entry => Object.keys(entry.changes).length)
+    .map(entry => ({ path: entry.path, space_id: entry.space_id, needs_activation: Boolean(entry.skipped), mappings: fileMappings(entry) }))
+    .filter(file => file.mappings.length)
+  return { files, warnings: plan.warnings, handoff }
+}
+export function formatDeprecatedFieldMappings(report) {
+  if (!report.files.length) return ''
+  const lines = ['Deprecated privacy fields (validate --fix never edits these):']
+  for (const file of report.files) {
+    lines.push(`  File: ${file.path}${file.needs_activation ? ' (needs --confirm-activation)' : ''}`)
+    for (const mapping of file.mappings) lines.push(`    - ${mapping.field}: ${mapping.from} -> ${mapping.to}`)
+  }
+  lines.push(`Next: ${report.handoff}`)
+  return lines.join('\n')
 }
 
 export function applyPolicyMigration(selfRoot, planInput, options = {}) {
@@ -811,7 +1063,7 @@ export function applyPolicyMigration(selfRoot, planInput, options = {}) {
       throw new Error(`TOCTOU violation: ${effectiveEntry.path} modified concurrently. Migration aborted fail-closed.`)
     }
 
-    const modifiedText = applyFrontmatterModifications(currentText, effectiveEntry.changes)
+    const modifiedText = applyMigrationChanges(currentText, effectiveEntry.changes)
     if (hash(modifiedText) !== effectiveEntry.after_sha256) {
       throw new Error(`Digest mismatch after frontmatter modification for ${effectiveEntry.path}`)
     }

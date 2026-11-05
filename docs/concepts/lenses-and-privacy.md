@@ -62,7 +62,7 @@ Document, claim and field access rules apply to every lens. Documents tagged wit
 | `public-voice` | all five |
 | `private` | all five plus `restricted` |
 
-`public-voice` has no extra publication filter: a document that grants `public-voice` access is returned even if it holds compensation details or unapproved evidence. Narrow it by editing the lens's `sensitivity_access` or the document's `access_lenses`. `disclosure` is descriptive on standard adapters; public and restricted-host adapters additionally require `disclosure: publish-approved` and a non-confidential sensitivity (`publicationAllowed`; the Workbench "derived public-safe" status is the same decision). On those adapters claims and `field_visibility` fields are delivered only when marked `public-safe`. Ordinary sections without a field rule follow the document: wherever the document is delivered, so are its ordinary sections, including on publication adapters when the document is approved for publication. Reading context never authorizes external actions.
+`public-voice` has no extra publication filter: a document that grants `public-voice` access is returned even if it holds compensation details or unapproved evidence. Narrow it by editing the lens's `sensitivity_access` or the document's `access_lenses`. `disclosure` is descriptive on standard adapters; public and restricted-host adapters additionally require `disclosure: publish-approved` and a non-confidential sensitivity (`publicationAllowed`; the Workbench "derived public-safe" status is the same decision). On those adapters a claim or field rule is delivered only when its own `disclosure` is `publish-approved`, on every output path (`content`, `sections`, `claims`, `tags` and `links`). Ordinary sections without a field rule follow the document: wherever the document is delivered, so are its ordinary sections, including on publication adapters when the document is approved for publication. Reading context never authorizes external actions.
 
 Legacy `visibility`, `public_safe`, `exclude_lenses`, and `field_visibility` remain readable. Canonical documents need modern controls or valid legacy visibility. `knowledge migrate-lenses` previews exact conversion from `career` to `professional` and `publishing` to `public-voice`, including claim markers. Ordinary prose and proposal archives remain intact. See [CLI](../reference/cli.md) and [migration](../guides/migration.md).
 
@@ -73,7 +73,7 @@ Legacy `visibility`, `public_safe`, `exclude_lenses`, and `field_visibility` rem
 | Version | Change |
 |---|---|
 | 0.11.0 | `holoself validate` prints one `[warn] deprecated …` line on stderr per document and deprecated field (claim markers are counted per document), with root-relative paths. `holoself migrate policy` rewrites `visibility` and `public_safe` with the exact mapping below and removes them. |
-| 0.12.0 | `migrate policy` also rewrites `field_visibility` (to `field_access`) and claim markers (to `access_lenses=` / `disclosure=`); approved proposals write the new claim marker. |
+| 0.12.0 | The runtime reads `field_access` and lens-vocabulary claim markers. `migrate policy` also rewrites `field_visibility` and claim markers, `validate --fix` prints the exact mapping per file and hands off to `migrate policy --dry-run`, and approved proposals write the new claim marker. |
 | 0.13.0 | Deprecated fields are rejected: a canonical document carrying them is excluded with a validation error; a project or contrib document is restricted to `private`. |
 | 0.14.0 | They are removed from the schemas. |
 
@@ -90,6 +90,52 @@ Legacy `visibility`, `public_safe`, `exclude_lenses`, and `field_visibility` rem
 | `public_safe: false` | — | — | `review-required`, overriding `publish-approved`; an explicit `internal-only` is kept |
 
 A missing `sensitivity` becomes `personal` and a missing `document_role` becomes `content` (the runtime defaults). A restricted `read_scope` or `sensitivity` keeps only the `private` lens, which is the only one it ever admitted. Invalid legacy values are written as the restricted metadata the runtime already applies. The mapping is exact: a synthetic proof over every combination of the legacy and modern fields shows no access or publication decision changes, for every lens (including custom), caller and adapter. Coverage loss, and with it `--confirm-narrowing`, appears only when removing the legacy field lets a `_policy.yaml` default such as `exclude_lenses` narrow the document. A canonical document the catalog currently excludes (for example `visibility: public-safe` with `public_safe: false`) is an activation: it is listed under the plan's `activations`, skipped unless `--confirm-activation` is given, and mapped with the narrower rules (conflicting or restricted metadata becomes fully restricted, a missing `visibility` counts as `private`).
+
+### Field and claim rules
+
+`field_access` maps a field or heading name to a rule. A claim marker carries the same rule as attributes:
+
+```yaml
+field_access:
+  Salary:
+    access_lenses: [private]
+  Public bio:
+    disclosure: publish-approved
+```
+
+```markdown
+<!-- holoself-claim access_lenses=general,professional disclosure=review-required -->
+...
+<!-- /holoself-claim -->
+```
+
+- Omitted `access_lenses` means "inherit": no restriction beyond the document. A rule can only narrow the document, so listing a lens does not open a document closed to it.
+- Omitted `disclosure` means `review-required`. A rule never inherits `publish-approved`, even in a publish-approved document.
+- A marker needs at least one of `access_lenses` and `disclosure`.
+- A `Field: value` line matches a rule with the same name, and a heading matches a rule whose name it contains, ignoring case. When several `field_access` rules match, all of them apply.
+- `_policy.yaml` cannot carry these rules.
+
+Mistakes fail closed. An unknown attribute, lens or `disclosure` makes a claim block private and historical. Malformed `field_access` excludes a canonical document with a validation error and restricts a project document to `private`.
+
+`field_visibility` and `visibility=` keep working in 0.12.0. When both vocabularies apply to one field or marker, the narrower result wins.
+
+`migrate policy` uses this mapping, which matches the old behaviour exactly for every lens and adapter, including custom lenses:
+
+| `field_visibility` or `visibility=` value | `access_lenses` | `disclosure` |
+|---|---|---|
+| `private`, or any unknown value (`career`, `publishing`, …) | `[private]` | `review-required` |
+| `linked-projects` | inherit | `review-required` |
+| `professional` | `[general, professional, interview, private]` | `review-required` |
+| `public-voice` | `[general, public-voice, private]` | `review-required` |
+| `public-safe` | inherit | `publish-approved` |
+
+The rewrite changes only the targeted bytes and never changes a claim's id, so pending proposals still resolve. It rewrites exactly the blocks the runtime reads, which includes a complete block inside a fenced code block, because the runtime enforces those too. Some items are left as they are, each with a plan warning, and keep working until 0.13.0:
+
+- A malformed marker, which keeps failing closed.
+- A marker or field rule whose conflicting vocabularies admit no lens, because that has no written form.
+- `field_visibility` beside an invalid `field_access`.
+
+`field_visibility` stops at the first rule that matches, while `field_access` applies every match. A heading that matches two old rules can therefore become narrower after migration. The plan reports that as coverage loss, so it needs `--confirm-narrowing`.
 
 ### Directory policy defaults (`_policy.yaml`)
 
@@ -113,6 +159,8 @@ Resolution and rules:
 - **Provenance and catalog freshness**: Each effective field records its source (`frontmatter` or `policy:<relative-path>`) in `catalog.json` (`policy_sources`), `holoself validate`, the Workbench document editor, and owner-direct `context_receipt.policy_sources`. Linked callers never receive `policy_sources`. Adding, editing, or removing a `_policy.yaml` file automatically invalidates affected catalog entries, and `_policy.yaml` itself is never indexed or delivered as content.
 
 ### Fixing excluded documents (`holoself validate --fix`)
+
+`validate --fix` never edits deprecated fields. Beside its repair plan, and outside the plan digest, it prints the exact mapping of each file's deprecated fields and hands off to `holoself migrate policy --dry-run`. With `--json` the report is the `deprecated_fields` key. A document with broken frontmatter that carries `field_access` or `field_visibility` stays excluded for a repair by hand, because rebuilding the frontmatter would lose those rules.
 
 Canonical Markdown documents under `profile/`, `context/`, `topics/`, and `history/` that lack complete or valid privacy metadata (`access_lenses`, `disclosure`, `sensitivity`, `document_role`) after `_policy.yaml` inheritance fail closed and are excluded from context.
 

@@ -35,6 +35,7 @@ import {
   migrationPlan,
   printMigrationReport
 } from './cli/data-root-migration.mjs'
+import { deprecatedFieldMappings, formatDeprecatedFieldMappings } from './migration.mjs'
 import { PACKAGE_ROOT } from './shared/package-root.mjs'
 export { COMMAND_FLAGS, commandKey, parseArguments, validateFlags } from './cli/args.mjs'
 
@@ -531,8 +532,14 @@ export async function run(argv, options = {}) {
         allowPublishApproved: Boolean(o.allowPublishApproved)
       })
       if (o.output) atomicWrite(o.output, JSON.stringify(plan, null, 2) + '\n', { mode: 0o600, exactMode: true })
-      if (o.json) console.log(JSON.stringify(plan, null, 2))
-      else console.log(formatValidateFixPlanText(plan, { outputPath: o.output || null }))
+      // The deprecated-field report sits beside the plan, outside its digest: validate --fix never edits those fields.
+      const deprecated = deprecatedFieldMappings(root)
+      if (o.json) console.log(JSON.stringify({ ...plan, deprecated_fields: deprecated }, null, 2))
+      else {
+        console.log(formatValidateFixPlanText(plan, { outputPath: o.output || null }))
+        const report = deprecated.error ? `[warn] deprecated field mapping unavailable: ${deprecated.error}` : formatDeprecatedFieldMappings(deprecated)
+        if (report) console.log(`\n${report}`)
+      }
       return
     }
     const errors = []

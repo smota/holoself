@@ -1,11 +1,11 @@
 // Candidate records for context retrieval: catalog candidates, assertions and de-duplication.
 import { join } from 'node:path'
-import { VISIBILITIES } from '../annotations.mjs'
 import { relevanceScore } from '../context-selection.mjs'
 import { DEFAULT_PROJECT_EXCLUDES } from '../link/config.mjs'
 import { canonicalSpaceId } from '../link/registry.mjs'
 import { matchesAny } from '../markdown/files.mjs'
-import { allowed, allowedDocument, claimStatusIncluded, filterClaimVisibility, filterFieldVisibility, visibleUnderBehavior } from '../policy/access.mjs'
+import { allowed, allowedDocument, claimStatusIncluded, filterClaimVisibility, filterFieldVisibility } from '../policy/access.mjs'
+import { catalogElementVisible } from '../policy/sub-document-rules.mjs'
 import { SECRET_RE } from '../policy/secrets.mjs'
 
 export function catalogCandidateRecords(
@@ -27,8 +27,7 @@ export function catalogCandidateRecords(
   const unmigratedWarnings = []
   if (!catalog || !Array.isArray(catalog.sources)) return { records, restrictions, unauthorized_sources_omitted: 0, warnings: [] }
   const sources = catalog.sources
-  const behaviorLens = lens,
-    temporal = options?.temporal || 'current'
+  const temporal = options?.temporal || 'current'
   const subj = subject || { kind: identityKind, accessible_spaces: identityKind === 'owner:direct' ? ['self', 'contrib'] : [] }
   const spaceId = catalog.space_id || (kind === 'self' ? 'self' : kind === 'contrib' ? 'contrib' : canonicalSpaceId(root))
   for (const s of sources) {
@@ -60,10 +59,7 @@ export function catalogCandidateRecords(
 
     const dummyRes = []
     const visibleSections = (s.sections || [])
-      .filter(sec => {
-        const secVis = VISIBILITIES.includes(sec.visibility) ? sec.visibility : 'private'
-        return visibleUnderBehavior(secVis, behaviorLens, adapter) && claimStatusIncluded(sec.claim_status, temporal)
-      })
+      .filter(sec => catalogElementVisible(sec, lens, adapter) && claimStatusIncluded(sec.claim_status, temporal))
       .map(sec => {
         const filtered = filterFieldVisibility(
           filterClaimVisibility(sec.snippet || '', lens, rel, dummyRes, resolution, identityKind, adapter),
@@ -86,9 +82,9 @@ export function catalogCandidateRecords(
         restrictions.push(r)
       }
     }
-    const visibleClaims = (s.claims || []).filter(c => visibleUnderBehavior(c.visibility, behaviorLens, adapter) && claimStatusIncluded(c.claim_status, temporal))
-    const visibleTags = (s.tags || []).filter(t => visibleUnderBehavior(t.visibility, behaviorLens, adapter))
-    const visibleLinks = (s.links || []).filter(l => visibleUnderBehavior(l.visibility, behaviorLens, adapter))
+    const visibleClaims = (s.claims || []).filter(c => catalogElementVisible(c, lens, adapter) && claimStatusIncluded(c.claim_status, temporal))
+    const visibleTags = (s.tags || []).filter(t => catalogElementVisible(t, lens, adapter))
+    const visibleLinks = (s.links || []).filter(l => catalogElementVisible(l, lens, adapter))
     const searchText = [
       rel,
       ...visibleSections.map(sec => `${sec.heading} ${sec.snippet}`),

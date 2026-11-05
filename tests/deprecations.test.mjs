@@ -47,8 +47,8 @@ test('validate warns once per document and deprecated field, with root-relative 
   assert.deepEqual(lines, [
     '[warn] deprecated field visibility in context/legacy.md: maps to access_lenses, read_scope and disclosure; rejected in 0.13.0; run holoself migrate policy --dry-run',
     '[warn] deprecated field public_safe in context/legacy.md: maps to disclosure; rejected in 0.13.0; run holoself migrate policy --dry-run',
-    '[warn] deprecated field field_visibility in context/legacy.md: maps to field_access; rejected in 0.13.0; holoself migrate policy rewrites it from 0.12.0',
-    '[warn] deprecated claim marker attribute visibility= in context/legacy.md (2 markers): maps to access_lenses and disclosure marker attributes; rejected in 0.13.0; holoself migrate policy rewrites them from 0.12.0',
+    '[warn] deprecated field field_visibility in context/legacy.md: maps to field_access; rejected in 0.13.0; holoself migrate policy rewrites it; run holoself migrate policy --dry-run',
+    '[warn] deprecated claim marker attribute visibility= in context/legacy.md (2 markers): maps to access_lenses and disclosure marker attributes; rejected in 0.13.0; holoself migrate policy rewrites them; run holoself migrate policy --dry-run',
     '[warn] deprecated field visibility in topics/deep/note.md: maps to access_lenses, read_scope and disclosure; rejected in 0.13.0; run holoself migrate policy --dry-run'
   ])
   assert.ok(!lines.join('\n').includes(root), 'no absolute paths')
