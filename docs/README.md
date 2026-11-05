@@ -109,6 +109,7 @@ The D00–D03 evidence documents below record earlier research and experiments. 
 
 ## Releases
 
+- [Holoself 0.12.0](releases/0.12.0.md)
 - [Holoself 0.11.1](releases/0.11.1.md)
 - [Holoself 0.11.0](releases/0.11.0.md)
 - [Holoself 0.10.1](releases/0.10.1.md)
