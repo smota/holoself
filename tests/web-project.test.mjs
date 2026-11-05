@@ -12,6 +12,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { run } from '../src/cli.mjs'
 import { linkProjectKey } from '../src/link/config.mjs'
+import { canonicalSpaceId } from '../src/link/registry.mjs'
 import { startWebServer as startServer, scrubMessage } from '../src/web-server.mjs'
 
 const BIN=fileURLToPath(new URL('../bin/holoself.mjs',import.meta.url))
@@ -366,4 +367,40 @@ test('Workbench repair preview shows a shared-lens grant update and apply never 
   }finally{await new Promise(done=>app.server.close(done))}
   const ui=readFileSync(fileURLToPath(new URL('../web/app.mjs',import.meta.url)),'utf8')
   assert.match(ui,/grant_update/);assert.match(ui,/--accept-shared-lenses/)
+})
+
+test('Workbench repair never performs a project_key renewal and never widens through a legacy lens migration',async()=>{
+  const self=await temp(),project=await temp(),copy=await temp()
+  await run(['init','--root',self])
+  await run(['link','add','--project',project,'--self',self,'--lens','general','--secondary-lenses','professional','--no-activate','--yes'])
+  await run(['link','approve','--project',project,'--self',self,'--lenses','general'])
+  const key=linkProjectKey(project),file=join(project,'.holoself','link.yaml'),linkBody=await readFile(file,'utf8')
+  // A committed legacy field equal to the binding triggers binding_migration on repair.
+  await writeFile(file,linkBody.replace('  access:','  default_lens: general\n  secondary_lenses: [professional]\n  access:'))
+  const registryFile=join(self,'.holoself','links.json'),registry=()=>readFile(registryFile,'utf8').then(JSON.parse)
+  const app=await startWebServer({root:self,port:0})
+  try{
+    const headers={'content-type':'application/json','x-holoself-token':app.token}
+    const spaces=async()=>(await(await fetch(`${app.url}/api/spaces`,{headers})).json()).data
+    const post=(id,payload)=>fetch(`${app.url}/api/spaces/${id}/repair`,{method:'POST',headers,body:JSON.stringify(payload)})
+    const space=(await spaces()).find(item=>normalizeProjectPath(item.path)===normalizeProjectPath(realpathSync(project)))
+    const preview=(await(await post(space.id,{})).json()).data.preview
+    assert.ok(preview.plan.binding_migration);assert.deepEqual(preview.plan.grant_update.adds,['professional'])
+    assert.equal((await post(space.id,{apply:true,plan_hash:preview.plan_hash})).status,200)
+    assert.deepEqual((await registry()).links[0].allowed_lenses,['general'])
+    // A copy attested later under the same key: the plan shows the renewal, and Apply refuses it.
+    mkdirSync(join(copy,'.holoself'),{recursive:true});writeFileSync(join(copy,'.holoself','link.yaml'),await readFile(file,'utf8'))
+    const stored=await registry(),[entry]=stored.links,copyPath=realpathSync(copy).replaceAll('\\','/')
+    stored.links.push({...entry,project_id:canonicalSpaceId(copy),project_path:copyPath,created_at:new Date(Date.now()+1000).toISOString()})
+    writeFileSync(registryFile,JSON.stringify(stored,null,2))
+    const catalogFile=join(self,'ui','catalog.json'),catalog=JSON.parse(await readFile(catalogFile,'utf8'))
+    catalog.spaces.push({id:'copy-space',path:copy,addedAt:new Date().toISOString()});writeFileSync(catalogFile,JSON.stringify(catalog,null,2))
+    const renewal=(await(await post('copy-space',{})).json()).data.preview
+    assert.ok(renewal.plan.project_key_renewal)
+    const refused=await post('copy-space',{apply:true,plan_hash:renewal.plan_hash})
+    assert.equal(refused.status,409);assert.equal((await refused.json()).error.code,'PROJECT_KEY_RENEWAL_REQUIRES_CLI')
+    assert.equal(linkProjectKey(copy),key)
+  }finally{await new Promise(done=>app.server.close(done))}
+  const ui=readFileSync(fileURLToPath(new URL('../web/app.mjs',import.meta.url)),'utf8')
+  assert.match(ui,/project_key_renewal/);assert.match(ui,/portable_migration/)
 })

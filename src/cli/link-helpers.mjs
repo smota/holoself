@@ -27,6 +27,24 @@ export async function askValue(message) {
     rl.close()
   }
 }
+// Reports a nextAllowedLenses result the same way on every attestation command.
+export function reportGrant(project, grant, command) {
+  if (grant.mode === 'new') console.log(`[ok] granting lenses on this machine: ${grant.allowed.join(', ') || '(none)'}`)
+  else if (grant.adds.length || grant.removes.length) {
+    console.log(JSON.stringify({ grant_update: { project: slash(project), adds: grant.adds, removes: grant.removes, applied: grant.applied } }, null, 2))
+    if (!grant.applied)
+      console.log(
+        `[note] shared binding adds lenses not granted on this machine: ${grant.adds.join(', ')}; ` +
+          `run 'holoself link ${command} --project <dir> --accept-shared-lenses' to grant them`
+      )
+    else console.log(`adds: [${grant.adds.join(', ')}] / removes: [${grant.removes.join(', ')}]`)
+  }
+  if (!grant.allowed.length)
+    console.log(
+      `[note] no lenses are granted to this project on this machine, so it is refused; ` +
+        `run 'holoself link repair --project <dir> --accept-shared-lenses' or 'holoself link approve --project <dir> --lenses <a,b>'`
+    )
+}
 export function setupFindings(project) {
   const files = markdownFiles(project)
   const names = files.map(path => slash(relative(project, path)))

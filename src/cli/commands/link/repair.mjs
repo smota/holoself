@@ -7,10 +7,10 @@ import { canonicalJson } from '../../../catalog.mjs'
 import { loadLensRegistry, resolveLens } from '../../../lenses.mjs'
 import { linkPath, linkProjectKeyTaken, readLink, renewLinkProjectKeyInPlace, writeLink } from '../../../link/config.mjs'
 import { ensureSelfId, registerSelf, selfIdOf } from '../../../link/machine.mjs'
-import { canonicalProjectPath, canonicalSpaceId, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { canonicalPath, samePath } from '../../../path-guard.mjs'
 import { atomicWrite, slash } from '../../../shared/fs.mjs'
-import { activateLinkedProject, askConfirm, repairSelection } from '../../link-helpers.mjs'
+import { activateLinkedProject, askConfirm, repairSelection, reportGrant } from '../../link-helpers.mjs'
 
 export async function linkRepair(o, sub, project) {
   let diagnostic = readLink(project, { tolerant: true, explicitSelf: o.self || null })
@@ -67,32 +67,17 @@ export async function linkRepair(o, sub, project) {
     bindingMigration = Boolean(legacy || o.lens || !current),
     // Portable form: self_id and project_key in link.yaml, no machine path, binding keyed by project_key.
     portableMigration = !diagnostic.self_id || !diagnostic.project_key || Boolean(diagnostic._legacyPath) || pathBinding
-  // A portable binding is shared: lens bind/unbind on another machine changes it. This machine's attestation grant
-  // (allowed_lenses) follows a narrowed binding automatically (serving already intersects), but is widened only with
-  // --accept-shared-lenses (and its own confirmation): --yes alone never grants a lens.
-  const choiceLenses = [choice.default_lens, ...choice.secondary_lenses].filter(id => id !== 'private'),
-    attested = diagnostic.project_key
-      ? readRegistry(diagnostic.path).links.find(
-          entry => entry.status === 'active' && (entry.project_id === canonicalSpaceId(project) || entry.project_path === canonicalProjectPath(project))
-        )
-      : null,
-    granted = attested?.allowed_lenses || [],
-    adds = attested && !bindingMigration ? choiceLenses.filter(id => !granted.includes(id)) : [],
-    removes = attested && !bindingMigration ? granted.filter(id => !choiceLenses.includes(id)) : [],
-    acceptAdds = adds.length > 0 && Boolean(o.acceptSharedLenses),
-    grantUpdate =
-      adds.length || removes.length ? { project: slash(project), adds, removes, applied: !adds.length || acceptAdds } : null,
-    grantWrite = Boolean(removes.length || acceptAdds)
-  if (grantUpdate) {
-    console.log(JSON.stringify({ grant_update: grantUpdate }, null, 2))
-    if (acceptAdds) console.log(`adds: [${adds.join(', ')}] / removes: [${removes.join(', ')}]`)
-    else if (adds.length)
-      console.log(
-        `[note] shared binding adds lenses not granted on this machine: ${adds.join(', ')}; ` +
-          `run 'holoself link repair --project <dir> --accept-shared-lenses' to grant them`
-      )
-  }
-  if (bindingMigration || portableMigration || grantWrite) {
+  // The grant follows the one rule (nextAllowedLenses): only --lens is an explicit choice here. A binding or legacy
+  // link.yaml field beyond this machine's grant is an add, and --yes alone never grants it.
+  const attested =
+      readRegistry(diagnostic.path).links.find(
+        entry => entry.status === 'active' && (entry.project_id === canonicalSpaceId(project) || entry.project_path === canonicalProjectPath(project))
+      ) || null,
+    grantRequest = { lenses: [choice.default_lens, ...choice.secondary_lenses], explicit: Boolean(o.lens), accept: Boolean(o.acceptSharedLenses) },
+    planned = attested ? nextAllowedLenses({ ...grantRequest, entry: attested }) : null,
+    changesGrant = grant => canonicalJson(grant.allowed) !== canonicalJson(attested.allowed_lenses || [])
+  if (planned) reportGrant(project, planned, 'repair')
+  if (bindingMigration || portableMigration || (planned && changesGrant(planned))) {
     if (bindingMigration) console.log(JSON.stringify({ binding_migration: { project: slash(project), before: current, legacy, after: choice } }, null, 2))
     if (portableMigration)
       console.log(
@@ -119,8 +104,9 @@ export async function linkRepair(o, sub, project) {
       if (!(await askConfirm(o, bindingMigration ? 'Migrate lens choice into self-side bindings?' : 'Migrate link to portable self_id and project_key?')))
         return true
     // Widening always has its own question, even when a migration question was asked.
-    const widen = acceptAdds && (await askConfirm(o, `Grant this machine's link the shared lenses ${adds.join(', ')}?`)),
-      nextGrant = widen ? choiceLenses : granted.filter(id => !removes.includes(id))
+    if (planned?.mode === 'existing' && planned.adds.length && o.acceptSharedLenses)
+      if (!(await askConfirm(o, `Grant this machine's link the shared lenses ${planned.adds.join(', ')}?`))) grantRequest.accept = false
+    const grant = attested ? nextAllowedLenses({ ...grantRequest, entry: attested }) : null
     const file = bindingsPath(diagnostic.path),
       before = existsSync(file) ? readFileSync(file) : null,
       linkBefore = readFileSync(linkPath(project))
@@ -142,8 +128,7 @@ export async function linkRepair(o, sub, project) {
                 ? {
                     ...entry,
                     ...(written.project_key ? { project_key: written.project_key } : {}),
-                    ...(bindingMigration ? { allowed_lenses: [choice.default_lens, ...choice.secondary_lenses] } : {}),
-                    ...(grantWrite ? { allowed_lenses: nextGrant } : {}),
+                    ...(grant && entry.status === 'active' ? { allowed_lenses: grant.allowed } : {}),
                     updated_at: new Date().toISOString()
                   }
                 : entry

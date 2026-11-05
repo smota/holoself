@@ -5,7 +5,7 @@ import { bindingProjects, bindingsPath, readBindings, writeBinding } from '../..
 import { linkProjectKey, linkProjectKeyTaken, projectKeyTakenError } from '../../link/config.mjs'
 import { isProjectKey } from '../../link/machine.mjs'
 import { loadLensRegistry, resolveLens } from '../../lenses.mjs'
-import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, readRegistry, withRegistryLock, writeRegistry } from '../../link/registry.mjs'
 import { atomicWrite, slash } from '../../shared/fs.mjs'
 import { askConfirm } from '../link-helpers.mjs'
 
@@ -42,11 +42,16 @@ export async function runLens(o, sub) {
         writeRegistry(
           root,
           links =>
-            links.map(entry =>
-              entry.project_id === pId || entry.project_path === cPath
-                ? { ...entry, allowed_lenses: choice ? [choice.default_lens, ...choice.secondary_lenses] : [], updated_at: new Date().toISOString() }
-                : entry
-            ),
+            links.map(entry => {
+              if (entry.project_id !== pId && entry.project_path !== cPath) return entry
+              // lens bind and unbind are this owner's explicit choice on this machine.
+              const grant = nextAllowedLenses({ entry, lenses: choice ? [choice.default_lens, ...choice.secondary_lenses] : [], explicit: true })
+              return {
+                ...entry,
+                allowed_lenses: grant.allowed,
+                updated_at: new Date().toISOString()
+              }
+            }),
           attestation.registry_hash
         )
       })

@@ -90,7 +90,7 @@ When the host exposes project-bound Holoself MCP tools, prefer `holoself_context
 - **validate:** use `holoself link doctor --project .` and surface degraded activation;
 - **snapshot:** when external paths are inaccessible, use reviewed `.holoself/runtime/context-packet.md`, clearly marked as non-live.
 
-`link add` normally creates `.holoself/BOOTSTRAP.md`, bounded startup sections, runtime metadata, and managed full public skill installations. Bounded startup sections are pointers, not copies of personal data. If activation is missing, recommend `holoself link repair --project .`; do not silently rewrite project instructions. Repair never grants a lens on its own: if it reports `shared binding adds lenses not granted on this machine`, tell the owner, and leave `--accept-shared-lenses` for the owner to run.
+`link add` normally creates `.holoself/BOOTSTRAP.md`, bounded startup sections, runtime metadata, and managed full public skill installations. Bounded startup sections are pointers, not copies of personal data. If activation is missing, recommend `holoself link repair --project .`; do not silently rewrite project instructions. Repair, setup, approve and backfill never widen an existing grant on their own: without an explicit lens choice the grant can only narrow to the binding, and legacy `link.yaml` lens fields never choose it. If a command reports `shared binding adds lenses not granted on this machine`, tell the owner, and leave `--accept-shared-lenses` for the owner to run.
 
 ### End of session
 

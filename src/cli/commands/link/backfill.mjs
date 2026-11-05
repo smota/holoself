@@ -12,8 +12,9 @@ import {
   renewLinkProjectKeyInPlace,
   updateLinkBindingSaltInPlace
 } from '../../../link/config.mjs'
-import { canonicalProjectPath, canonicalSpaceId, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { assertContainedPath, safeRealpath, slash } from '../../../shared/fs.mjs'
+import { reportGrant } from '../../link-helpers.mjs'
 
 export async function linkBackfill(o, sub, project) {
   let selfRoot = o.self || o.root
@@ -68,21 +69,22 @@ export async function linkBackfill(o, sub, project) {
             console.warn(projectKeyReusedNotice(previous, proj))
             linkObj = readLink(proj, { tolerant: true, explicitSelf: selfRoot })
           }
-          const allowedLenses = (
-            o.lenses && o.lenses.length ? o.lenses : renewedKey ? ['general'] : [linkObj.default_lens, ...(linkObj.secondary_lenses || [])]
-          ).filter(l => l !== 'private')
           let salt = renewedKey ? null : linkObj.binding_salt
           if (!salt || typeof salt !== 'string' || salt.length !== 32) {
             salt = randomBytes(16).toString('hex')
             updateLinkBindingSaltInPlace(proj, salt)
           }
           const idx = links.findIndex(l => l.project_id === pId || l.project_path === canonicalProj)
+          const explicit = Boolean(o.lenses && o.lenses.length),
+            lenses = explicit ? o.lenses : renewedKey ? ['general'] : [linkObj.default_lens, ...(linkObj.secondary_lenses || [])],
+            grant = nextAllowedLenses({ entry: idx >= 0 ? links[idx] : null, lenses, explicit, accept: Boolean(o.acceptSharedLenses) })
+          reportGrant(proj, grant, 'backfill')
           const entry = {
             project_id: pId,
             project_path: canonicalProj,
             ...(linkObj.project_key ? { project_key: linkObj.project_key } : {}),
             binding_salt: salt,
-            allowed_lenses: allowedLenses,
+            allowed_lenses: grant.allowed,
             status: 'active',
             attested_by: 'owner:direct',
             created_at: idx >= 0 ? links[idx].created_at : nowIso,

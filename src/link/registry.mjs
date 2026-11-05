@@ -20,9 +20,9 @@ export function canonicalProjectPath(projectDir) {
 // portable-links.md: on one machine a project_key belongs to at most one project path, e.g. never to a copied folder).
 //
 // An entry attested before project_key was recorded (or before this machine repaired a synced link) counts by the
-// project_key its project's link.yaml carries now. When this project is itself attested with the same key, only entries
-// attested earlier count against it (the later one is the copy), so `link repair` on the copy resolves a conflict and
-// the original keeps its key.
+// project_key its project's link.yaml carries now. When this project is itself attested with the same key, only stronger
+// claims count against it, so `link repair` on the copy resolves a conflict and the original keeps its key: a recorded
+// key always beats one known only through a link.yaml (a project file), and created_at breaks ties within a kind.
 export function projectKeyHolders(links, projectKey, project = null) {
   if (!projectKey) return []
   const id = project ? canonicalSpaceId(project) : null,
@@ -31,13 +31,32 @@ export function projectKeyHolders(links, projectKey, project = null) {
     active = links.filter(entry => entry && entry.status !== 'revoked' && effectiveProjectKey(entry) === projectKey)
   if (!project) return active
   const own = active.find(same),
-    rank = entry => [String(entry.created_at || ''), String(entry.project_path || '')]
-  return active.filter(entry => {
-    if (same(entry)) return false
-    if (!own) return true
-    const [a, b] = [rank(entry), rank(own)]
-    return a[0] < b[0] || (a[0] === b[0] && a[1] < b[1])
-  })
+    rank = entry => [entry.project_key === projectKey ? '0' : '1', String(entry.created_at || ''), String(entry.project_path || '')].join('\0')
+  return active.filter(entry => !same(entry) && (!own || rank(entry) < rank(own)))
+}
+// The active entries a project_key stands for on this machine. Recorded keys win over keys known only through a project's
+// link.yaml, so a crafted link.yaml cannot put a recorded project into conflict. More than one means fail closed.
+export function activeProjectKeyHolders(links, projectKey) {
+  const active = links.filter(entry => entry && entry.status !== 'revoked' && effectiveProjectKey(entry) === projectKey),
+    recorded = active.filter(entry => entry.project_key === projectKey)
+  return recorded.length ? recorded : active
+}
+// The one rule for a registry entry's allowed_lenses; every writer goes through it (docs/decisions/portable-links.md).
+// - explicit (an owner lens choice on this command): exactly that choice.
+// - existing active entry: existing grant intersected with `lenses` (narrowing is automatic); anything beyond the grant
+//   is an add, granted only with accept (--accept-shared-lenses).
+// - revoked entry: the same, capped at its old grant, unless nothing of that grant remains (then as a new entry).
+// - no entry: the owner is attesting now; `lenses` is granted and listed.
+export function nextAllowedLenses({ entry = null, lenses = [], explicit = false, accept = false }) {
+  const wanted = [...new Set(lenses.filter(id => typeof id === 'string' && id && id !== 'private'))],
+    previous = Array.isArray(entry?.allowed_lenses) ? entry.allowed_lenses : [],
+    kept = previous.filter(id => wanted.includes(id)),
+    adds = wanted.filter(id => !previous.includes(id)),
+    removes = previous.filter(id => !wanted.includes(id))
+  if (!entry || (!explicit && entry.status === 'revoked' && !kept.length)) return { allowed: wanted, adds: wanted, removes: [], applied: true, mode: 'new' }
+  if (explicit) return { allowed: wanted, adds, removes, applied: true, mode: 'explicit' }
+  const applied = !adds.length || accept
+  return { allowed: accept ? wanted : kept, adds, removes, applied, mode: 'existing' }
 }
 // The project_key a registry entry stands for: its recorded key, else the key in its project's link.yaml (tolerant).
 export function effectiveProjectKey(entry) {

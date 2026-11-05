@@ -8,12 +8,12 @@ import { bindingsPath, resolveBinding } from '../../../bindings.mjs'
 import { loadLensRegistry } from '../../../lenses.mjs'
 import { createLinkDirs, inspectLinkCollisions, linkPath, linkSchemaErrors, writeLink } from '../../../link/config.mjs'
 import { ensureSelfId, isProjectKey, selfIdOf } from '../../../link/machine.mjs'
-import { canonicalProjectPath, canonicalSpaceId, projectKeyHolders, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, projectKeyHolders, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { lstat } from '../../../path-guard.mjs'
 import { assertContainedPath, atomicWrite, pathExists, safeRealpath, slash } from '../../../shared/fs.mjs'
 import { parseYaml } from '../../../shared/yaml.mjs'
 import { applySpaceAction, planSpaceAction } from '../../../space-actions.mjs'
-import { askConfirm, askValue, setupFindings, hookPlanSummary, mcpPlanSummary, printHookResults } from '../../link-helpers.mjs'
+import { askConfirm, askValue, reportGrant, setupFindings, hookPlanSummary, mcpPlanSummary, printHookResults } from '../../link-helpers.mjs'
 
 async function migrateLegacyMount(o, project) {
   const findings = setupFindings(project),
@@ -24,6 +24,7 @@ async function migrateLegacyMount(o, project) {
       lens: o.lens || findings.suggested_lens || 'general',
       explicitLens: o.lens,
       secondaryLenses: o.secondaryLenses,
+      acceptSharedLenses: o.acceptSharedLenses,
       projectContext: o.projectContext,
       activate: o.activate,
       platforms: o.platforms,
@@ -133,6 +134,14 @@ export async function linkSetup(o, sub, project) {
   }
   const desiredErrors = linkSchemaErrors(desired, setupRegistry)
   if (desiredErrors.length) throw new Error(desiredErrors.join('; '))
+  const grantRequest = {
+      lenses: [chosenDefaultLens, ...chosenSecondary],
+      explicit: Boolean(o.lens || o.secondaryLenses),
+      accept: Boolean(o.acceptSharedLenses)
+    },
+    sameProject = l => l.project_id === canonicalSpaceId(project) || l.project_path === canonicalProjectPath(project),
+    plannedGrant = nextAllowedLenses({ ...grantRequest, entry: readRegistry(selfRoot).links.find(sameProject) || null })
+  reportGrant(project, plannedGrant, 'setup')
   const collisions = inspectLinkCollisions(project).filter(path => !(joined && path === linkPath(project)))
   if (collisions.length && !o.force) throw new Error(`existing Holoself metadata collision: ${collisions.join(', ')}; use --force with explicit confirmation`)
   if (!o.noActivate) {
@@ -170,9 +179,11 @@ export async function linkSetup(o, sub, project) {
     console.log('[dry-run] setup complete; no files deleted or relocated')
     return true
   }
+  // Widening an existing grant always has its own question.
+  if (plannedGrant.mode === 'existing' && plannedGrant.adds.length && o.acceptSharedLenses)
+    if (!(await askConfirm(o, `Grant this machine's link the shared lenses ${plannedGrant.adds.join(', ')}?`))) grantRequest.accept = false
   const canonicalProj = canonicalProjectPath(project)
   const pId = canonicalSpaceId(project)
-  const allowedLenses = [chosenDefaultLens, ...chosenSecondary].filter(l => l !== 'private')
   let existingReg = readRegistry(selfRoot)
   let prevEntrySnapshot = existingReg.links.find(l => l.project_id === pId || l.project_path === canonicalProj) || null
   let resolvedBindingSalt = null
@@ -198,12 +209,13 @@ export async function linkSetup(o, sub, project) {
         selfRoot,
         links => {
           const idx = links.findIndex(l => l.project_id === pId || l.project_path === canonicalProj)
+          const grant = nextAllowedLenses({ ...grantRequest, entry: idx >= 0 ? links[idx] : null })
           const entry = {
             project_id: pId,
             project_path: canonicalProj,
             ...(link.project_key ? { project_key: link.project_key } : {}),
             binding_salt: resolvedBindingSalt,
-            allowed_lenses: allowedLenses,
+            allowed_lenses: grant.allowed,
             status: 'active',
             attested_by: 'owner:direct',
             created_at: idx >= 0 ? links[idx].created_at : nowIso,

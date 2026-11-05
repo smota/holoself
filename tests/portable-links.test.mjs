@@ -658,3 +658,151 @@ test('the self map lock retries transient filesystem errors instead of failing',
   const noLinks = { linkSync: () => { throw Object.assign(new Error('no links'), { code: 'ENOTSUP' }) } }
   assert.equal(breakStaleFileLock(lock, judged, noLinks), false)
 })
+
+// ---- Third review round (PR #132): one grant rule for every attestation path ----
+
+const grantBlock = stdout => JSON.parse(stdout.match(/^\{\n  "grant_update"[\s\S]*?^\}$/m)[0]).grant_update
+// A project whose shared binding is general + professional while this machine's grant was narrowed to general.
+function narrowed(m) {
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--lens', 'general', '--secondary-lenses', 'professional', '--no-activate', '--yes']), 'setup')
+  ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self, '--lenses', 'general']), 'narrow')
+  assert.deepEqual(allowedOf(m.self), ['general'])
+}
+const noteRe = command => new RegExp(`\\[note\\] shared binding adds lenses not granted on this machine: professional; run 'holoself link ${command} --project <dir> --accept-shared-lenses' to grant them`)
+
+test('link approve keeps a narrowed grant unless --accept-shared-lenses or --lenses says otherwise', t => {
+  const m = machine(sandbox(t), 'm')
+  narrowed(m)
+  const again = ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self]), 'approve')
+  assert.deepEqual(allowedOf(m.self), ['general'])
+  assert.match(again.stdout, noteRe('approve'))
+  assert.deepEqual(grantBlock(again.stdout).adds, ['professional'])
+  ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self, '--accept-shared-lenses']), 'accept')
+  assert.deepEqual(allowedOf(m.self), ['general', 'professional'])
+  ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self, '--lenses', 'professional']), 'explicit')
+  assert.deepEqual(allowedOf(m.self), ['professional'])
+})
+
+test('link setup keeps a narrowed grant unless --accept-shared-lenses or --lens says otherwise', t => {
+  const m = machine(sandbox(t), 'm'),
+    setup = (...extra) => m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--no-activate', '--yes', ...extra])
+  narrowed(m)
+  assert.match(ok(setup(), 'setup again').stdout, noteRe('setup'))
+  assert.deepEqual(allowedOf(m.self), ['general'])
+  ok(setup('--accept-shared-lenses'), 'accept')
+  assert.deepEqual(allowedOf(m.self), ['general', 'professional'])
+  ok(setup('--lens', 'leadership'), 'explicit')
+  assert.deepEqual(allowedOf(m.self), ['leadership'])
+})
+
+test('link backfill never widens without the flag; with it, --all prints the adds per project', t => {
+  const m = machine(sandbox(t), 'm')
+  narrowed(m)
+  const single = ok(m.cli(['link', 'backfill', '--project', m.project, '--self', m.self]), 'backfill')
+  assert.match(single.stdout, noteRe('backfill'))
+  assert.deepEqual(allowedOf(m.self), ['general'])
+  ok(m.cli(['link', 'backfill', '--all', '--self', m.self]), 'backfill --all')
+  assert.deepEqual(allowedOf(m.self), ['general'])
+  const accepted = ok(m.cli(['link', 'backfill', '--all', '--self', m.self, '--accept-shared-lenses']), 'accept')
+  assert.equal(grantBlock(accepted.stdout).project, realpathSync(m.project).replaceAll('\\', '/'))
+  assert.match(accepted.stdout, /adds: \[professional\] \/ removes: \[\]/)
+  assert.deepEqual(allowedOf(m.self), ['general', 'professional'])
+  ok(m.cli(['link', 'backfill', '--project', m.project, '--self', m.self, '--lenses', 'general']), 'explicit')
+  assert.deepEqual(allowedOf(m.self), ['general'])
+})
+
+test('the Workbench configuration keeps a narrowed grant', t => {
+  const m = machine(sandbox(t), 'm'),
+    saved = process.env.HOLOSELF_CONFIG_DIR
+  narrowed(m)
+  process.env.HOLOSELF_CONFIG_DIR = m.config
+  t.after(() => {
+    if (saved === undefined) delete process.env.HOLOSELF_CONFIG_DIR
+    else process.env.HOLOSELF_CONFIG_DIR = saved
+  })
+  const self = realpathSync(m.self)
+  const configuration = spaceLinkConfiguration(m.project, self, {})
+  assert.deepEqual(configuration.grant_update.adds, ['professional'])
+  configureSpaceLink(m.project, self, configuration)
+  assert.deepEqual(allowedOf(m.self), ['general'])
+  configureSpaceLink(m.project, self, spaceLinkConfiguration(m.project, self, { explicitLens: 'general', secondaryLenses: ['professional'] }))
+  assert.deepEqual(allowedOf(m.self), ['general', 'professional'])
+})
+
+test('legacy lens fields in link.yaml never choose a grant on an existing entry', t => {
+  const m = machine(sandbox(t), 'm')
+  narrowed(m)
+  const file = join(m.project, '.holoself', 'link.yaml'),
+    original = readFileSync(file, 'utf8'),
+    legacy = fields => original.replace('  access:', `${fields}  access:`)
+  // Repro 1: legacy fields equal to the binding, narrowed grant.
+  writeFileSync(file, legacy('  default_lens: general\n  secondary_lenses: [professional]\n'))
+  const first = ok(m.cli(['link', 'repair', '--project', m.project, '--no-activate', '--yes']), 'repair legacy fields')
+  assert.match(first.stdout, noteRe('repair'))
+  assert.deepEqual(allowedOf(m.self), ['general'])
+  // Repro 2: a committed client file names a lens the owner never granted, and no binding exists.
+  writeBinding(m.self, m.project, null, { projectKey: keyOf(m.project) })
+  writeFileSync(file, legacy('  default_lens: public-voice\n'))
+  const second = ok(m.cli(['link', 'repair', '--project', m.project, '--no-activate', '--yes']), 'repair public-voice')
+  assert.deepEqual(allowedOf(m.self), [], 'the grant follows the rule: nothing beyond it, and general left the binding')
+  assert.match(second.stdout, /no lenses are granted to this project on this machine/)
+  assert.notEqual(m.cli(['context', '--project', m.project, '--lens', 'public-voice', '--json']).status, 0)
+  // An explicit choice on the command sets the grant to exactly that choice.
+  ok(m.cli(['link', 'repair', '--project', m.project, '--no-activate', '--yes', '--lens', 'general']), 'explicit repair')
+  assert.deepEqual(allowedOf(m.self), ['general'])
+})
+
+test('new and revoked entries: lenses are listed, and re-attestation caps at the old grant', t => {
+  const m = machine(sandbox(t), 'm')
+  seedSelf(m)
+  const first = ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--lens', 'general', '--secondary-lenses', 'professional', '--no-activate', '--yes']), 'setup')
+  assert.match(first.stdout, /granting lenses on this machine: general, professional/)
+  ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self, '--lenses', 'general']), 'narrow')
+  ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self, '--revoke']), 'revoke')
+  const back = ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self]), 're-attest')
+  assert.equal(readRegistry(m.self).links[0].status, 'active')
+  assert.deepEqual(allowedOf(m.self), ['general'], 're-attestation does not overwrite the old grant')
+  assert.match(back.stdout, noteRe('approve'))
+  // Nothing of the old grant is still bound: the owner is attesting anew, with the lenses listed.
+  ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self, '--revoke']), 'revoke again')
+  writeBinding(m.self, m.project, { default_lens: 'leadership', secondary_lenses: [] }, { projectKey: keyOf(m.project) })
+  const fresh = ok(m.cli(['link', 'approve', '--project', m.project, '--self', m.self]), 're-attest anew')
+  assert.match(fresh.stdout, /granting lenses on this machine: leadership/)
+  assert.deepEqual(allowedOf(m.self), ['leadership'])
+})
+
+test('every registry allowed_lenses writer goes through nextAllowedLenses', () => {
+  const root = fileURLToPath(new URL('../src/', import.meta.url))
+  for (const rel of ['cli/commands/link/add.mjs', 'cli/commands/link/approve.mjs', 'cli/commands/link/backfill.mjs', 'cli/commands/link/repair.mjs', 'cli/commands/link/setup.mjs', 'cli/commands/lens.mjs', 'link/workbench.mjs']) {
+    const text = readFileSync(join(root, rel), 'utf8')
+    assert.match(text, /nextAllowedLenses/, rel)
+    for (const [line] of text.matchAll(/^.*\ballowed_lenses:.*$/gm)) assert.match(line, /allowed_lenses: (grant\.allowed|\[\],)/, `${rel}: ${line.trim()}`)
+  }
+})
+
+test('a recorded project_key always beats one known only through a link.yaml', t => {
+  const m = machine(sandbox(t), 'm'),
+    older = join(m.root, 'code', 'older-keyless')
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--lens', 'general', '--no-activate', '--yes']), 'setup victim')
+  mkdirSync(older, { recursive: true })
+  ok(m.cli(['link', 'setup', '--project', older, '--self', m.self, '--lens', 'general', '--no-activate', '--yes']), 'setup older')
+  const victimKey = keyOf(m.project),
+    file = join(older, '.holoself', 'link.yaml')
+  // An older entry with no recorded key whose link.yaml was crafted to carry the victim's key.
+  writeRegistry(m.self, links =>
+    links.map(entry => {
+      if (entry.project_path !== realpathSync(older).replaceAll('\\', '/')) return entry
+      const { project_key: _key, ...keyless } = entry
+      return { ...keyless, created_at: '2000-01-01T00:00:00.000Z' }
+    })
+  )
+  writeFileSync(file, linkText(older).replace(/^project_key:.*$/m, `project_key: "${victimKey}"`))
+  ok(m.cli(['context', '--project', m.project, '--json']), 'the victim keeps working')
+  ok(m.cli(['link', 'repair', '--project', m.project, '--no-activate', '--yes']), 'repair victim')
+  assert.equal(keyOf(m.project), victimKey, 'repair on the recorded holder keeps its key')
+  ok(m.cli(['link', 'repair', '--project', older, '--no-activate', '--yes']), 'repair older')
+  assert.notEqual(keyOf(older), victimKey, 'repair on the keyless entry renews its key')
+  assert.equal(keyOf(m.project), victimKey)
+})

@@ -17,11 +17,11 @@ import {
   readLink,
   writeLink
 } from './config.mjs'
-import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from './registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, readRegistry, withRegistryLock, writeRegistry } from './registry.mjs'
 export function spaceLinkConfiguration(
   project,
   self,
-  { lens = 'general', explicitLens, secondaryLenses, projectContext, force = false, metadataAbsent = false } = {}
+  { lens = 'general', explicitLens, secondaryLenses, acceptSharedLenses = false, projectContext, force = false, metadataAbsent = false } = {}
 ) {
   const linked = !metadataAbsent && pathExists(linkPath(project)) ? readLink(project, { tolerant: true }) : null,
     // A copied folder whose project_key another project on this machine holds inherits neither its binding nor salt.
@@ -53,8 +53,16 @@ export function spaceLinkConfiguration(
   if (errors.length) throw new Error(errors.join('; '))
   const sovereign = readRegistry(self),
     entry = sovereign.links.find(x => x.project_id === canonicalSpaceId(project) || x.project_path === canonicalProjectPath(project))
+  const grantRequest = {
+      lenses: [desired.default_lens, ...desired.secondary_lenses],
+      explicit: Boolean(explicitLens || secondaryLenses),
+      accept: Boolean(acceptSharedLenses)
+    },
+    planned = nextAllowedLenses({ ...grantRequest, entry: entry || null })
   return {
     link: desired,
+    grant_request: grantRequest,
+    grant_update: { adds: planned.adds, removes: planned.removes, applied: planned.applied, mode: planned.mode },
     registry_hash: sovereign.registry_hash,
     lens_registry_hash: registry.registry_hash,
     binding_salt: (!force && (entry?.binding_salt || existing?.binding_salt)) || null
@@ -76,12 +84,13 @@ export function configureSpaceLink(project, self, configuration) {
       const project_id = canonicalSpaceId(project),
         project_path = canonicalProjectPath(project),
         index = links.findIndex(x => x.project_id === project_id || x.project_path === project_path),
+        grant = nextAllowedLenses({ ...configuration.grant_request, entry: index >= 0 ? links[index] : null }),
         entry = {
           project_id,
           project_path,
           ...(written.project_key ? { project_key: written.project_key } : {}),
           binding_salt: salt,
-          allowed_lenses: [link.default_lens, ...link.secondary_lenses],
+          allowed_lenses: grant.allowed,
           status: 'active',
           attested_by: 'owner:direct',
           created_at: index >= 0 ? links[index].created_at : now,

@@ -7,9 +7,9 @@ import { bindingsPath } from '../../../bindings.mjs'
 import { loadLensRegistry } from '../../../lenses.mjs'
 import { DEFAULT_PROJECT_EXCLUDES, createLinkDirs, inspectLinkCollisions, linkPath, linkSchemaErrors, writeLink } from '../../../link/config.mjs'
 import { ensureSelfId } from '../../../link/machine.mjs'
-import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { atomicWrite, pathExists, safeRealpath, slash } from '../../../shared/fs.mjs'
-import { askConfirm, hookPlanSummary, mcpPlanSummary, printHookResults } from '../../link-helpers.mjs'
+import { askConfirm, hookPlanSummary, mcpPlanSummary, printHookResults, reportGrant } from '../../link-helpers.mjs'
 
 export async function linkAdd(o, sub, project) {
   if (!o.self) throw new Error('link add requires --self <path>')
@@ -81,7 +81,13 @@ export async function linkAdd(o, sub, project) {
   }
   const canonicalProj = canonicalProjectPath(project)
   const pId = canonicalSpaceId(project)
-  const allowedLenses = [desired.default_lens, ...desired.secondary_lenses].filter(l => l !== 'private')
+  const grantRequest = {
+      lenses: [desired.default_lens, ...desired.secondary_lenses],
+      explicit: Boolean(o.lens || o.secondaryLenses),
+      accept: Boolean(o.acceptSharedLenses)
+    },
+    plannedGrant = nextAllowedLenses({ ...grantRequest, entry: readRegistry(selfRoot).links.find(l => l.project_id === pId || l.project_path === canonicalProj) || null })
+  reportGrant(project, plannedGrant, 'add')
   if (o.dryRun) {
     const link = {
       ...desired,
@@ -90,6 +96,9 @@ export async function linkAdd(o, sub, project) {
     console.log(`[dry-run] linked ${project} -> ${link.path}`)
     return true
   }
+  // Widening an existing grant always has its own question.
+  if (plannedGrant.mode === 'existing' && plannedGrant.adds.length && o.acceptSharedLenses)
+    if (!(await askConfirm(o, `Grant this machine's link the shared lenses ${plannedGrant.adds.join(', ')}?`))) grantRequest.accept = false
   let existingReg = readRegistry(selfRoot)
   let prevEntrySnapshot = existingReg.links.find(l => l.project_id === pId || l.project_path === canonicalProj) || null
   let resolvedBindingSalt = null
@@ -113,12 +122,13 @@ export async function linkAdd(o, sub, project) {
         selfRoot,
         links => {
           const idx = links.findIndex(l => l.project_id === pId || l.project_path === canonicalProj)
+          const grant = nextAllowedLenses({ ...grantRequest, entry: idx >= 0 ? links[idx] : null })
           const entry = {
             project_id: pId,
             project_path: canonicalProj,
             ...(link.project_key ? { project_key: link.project_key } : {}),
             binding_salt: resolvedBindingSalt,
-            allowed_lenses: allowedLenses,
+            allowed_lenses: grant.allowed,
             status: 'active',
             attested_by: 'owner:direct',
             created_at: idx >= 0 ? links[idx].created_at : nowIso,

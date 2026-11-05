@@ -168,6 +168,7 @@ export const COMMAND_FLAGS = {
         '--project-exclude',
         '--project-assert-include',
         '--project-assert-exclude',
+        '--accept-shared-lenses',
         ...ACTIVATION_FLAGS
       ]
     ])
@@ -178,8 +179,8 @@ export const COMMAND_FLAGS = {
   'link status': [...PROJECT_FLAGS, '--skill-home', ...JSON_FLAGS],
   'link doctor': [...PROJECT_FLAGS, '--skill-home', ...CONTEXT_FLAGS.filter(flag => !['--output', '--yes', '--confirm'].includes(flag))],
   'link remove': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--force', '--dry-run', ...CONFIRM_FLAGS],
-  'link approve': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--revoke', '--lenses'],
-  'link backfill': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--all', '--lenses'],
+  'link approve': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--revoke', '--lenses', '--accept-shared-lenses'],
+  'link backfill': [...PROJECT_FLAGS, ...ROOT_FLAGS, '--self', '--all', '--lenses', '--accept-shared-lenses'],
   'link prune': [...ROOT_FLAGS, '--self'],
   machine: [],
   'machine status': JSON_FLAGS,

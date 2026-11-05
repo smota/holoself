@@ -13,8 +13,9 @@ import {
   updateLinkBindingSaltInPlace
 } from '../../../link/config.mjs'
 import { registerSelf } from '../../../link/machine.mjs'
-import { canonicalProjectPath, canonicalSpaceId, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { assertContainedPath, safeRealpath, slash } from '../../../shared/fs.mjs'
+import { reportGrant } from '../../link-helpers.mjs'
 
 export async function linkApprove(o, sub, project) {
   if (!project) throw new Error('link approve requires --project <dir>')
@@ -100,14 +101,10 @@ export async function linkApprove(o, sub, project) {
           }
           return links
         }
-        let allowedLenses = []
-        if (o.lenses && o.lenses.length) {
-          allowedLenses = o.lenses.filter(l => l !== 'private')
-        } else if (linkObj && !renewedKey) {
-          allowedLenses = [linkObj.default_lens, ...(linkObj.secondary_lenses || [])].filter(l => l !== 'private')
-        } else {
-          allowedLenses = ['general']
-        }
+        const explicit = Boolean(o.lenses && o.lenses.length),
+          lenses = explicit ? o.lenses : linkObj && !renewedKey ? [linkObj.default_lens, ...(linkObj.secondary_lenses || [])] : ['general'],
+          grant = nextAllowedLenses({ entry: idx >= 0 ? links[idx] : null, lenses, explicit, accept: Boolean(o.acceptSharedLenses) })
+        reportGrant(project, grant, 'approve')
         let salt = null
         if (idx >= 0 && typeof links[idx].binding_salt === 'string' && links[idx].binding_salt.length === 32) {
           salt = links[idx].binding_salt
@@ -124,7 +121,7 @@ export async function linkApprove(o, sub, project) {
           project_path: canonicalProj,
           ...(linkObj?.project_key ? { project_key: linkObj.project_key } : {}),
           binding_salt: salt,
-          allowed_lenses: allowedLenses,
+          allowed_lenses: grant.allowed,
           status: 'active',
           attested_by: 'owner:direct',
           created_at: idx >= 0 ? links[idx].created_at : nowIso,
