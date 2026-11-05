@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { closeSync, constants as fsConstants, lstatSync, openSync, readFileSync, renameSync, rmSync, writeSync } from 'node:fs'
 import { isPidAlive } from '../link/registry.mjs'
 import { SECRET_RE } from '../policy/secrets.mjs'
-import { ensureDir, hash, sleepSync } from '../shared/fs.mjs'
+import { LOCK_CONTENTION_ERRORS, ensureDir, hash, sleepSync } from '../shared/fs.mjs'
 import { INBOX_EVIDENCE_MAX, findProposal, inboxDir, planProposalChanges, saveProposal, scanProposalStore, validateProposal } from './store.mjs'
 import { join } from 'node:path'
 
@@ -29,45 +29,59 @@ function sameStaleLock(raw, held, staleRaw) {
   }
   return staleRaw !== null && raw === staleRaw
 }
-function breakStaleLock(lockPath, held, staleRaw) {
+const inboxLockOps = { openSync, lstatSync, renameSync, rmSync }
+// Cleanup of a lock's side files never fails the caller: a file left behind is picked up on the next attempt.
+function quietRemove(fs, path) {
+  try {
+    fs.rmSync(path, { force: true })
+  } catch {}
+}
+function breakStaleLock(lockPath, held, staleRaw, fs) {
   const breakGuard = `${lockPath}.break`
   try {
-    closeSync(openSync(breakGuard, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | (fsConstants.O_NOFOLLOW || 0), 0o600))
+    closeSync(fs.openSync(breakGuard, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | (fsConstants.O_NOFOLLOW || 0), 0o600))
   } catch (error) {
     if (error.code === 'EEXIST') {
-      const info = lstatSync(breakGuard, { throwIfNoEntry: false })
-      if (info && Date.now() - info.mtimeMs > 2000) rmSync(breakGuard, { force: true })
+      try {
+        const info = fs.lstatSync(breakGuard, { throwIfNoEntry: false })
+        if (info && Date.now() - info.mtimeMs > 2000) quietRemove(fs, breakGuard)
+      } catch {}
     }
     return
   }
   const tempPath = `${lockPath}.stale-${process.pid}-${randomUUID()}`
   try {
     if (!sameStaleLock(readFileSync(lockPath, 'utf8'), held, staleRaw)) return
-    renameSync(lockPath, tempPath)
+    fs.renameSync(lockPath, tempPath)
     if (!sameStaleLock(readFileSync(tempPath, 'utf8'), held, staleRaw)) {
       try {
-        renameSync(tempPath, lockPath)
+        fs.renameSync(tempPath, lockPath)
       } catch {}
-      return
     }
-    rmSync(tempPath, { force: true })
   } catch {
   } finally {
-    rmSync(tempPath, { force: true })
-    rmSync(breakGuard, { force: true })
+    quietRemove(fs, tempPath)
+    quietRemove(fs, breakGuard)
   }
 }
 // Synchronous exclusive lock for the cap check and the write (tool calls run synchronously on a worker thread, and
 // several server processes may serve clients of one self root). A lock older than the stale limit or held by a dead
-// process is broken safely via rename+verify; a symlinked lock path is refused.
-export function withClientInboxLock(self, fn, { timeoutMs = 15000 } = {}) {
-  const lockPath = clientInboxLockPath(self)
+// process is broken safely via rename+verify; a symlinked lock path is refused. Contention errors (EPERM, EBUSY, EACCES,
+// common on Windows while another process deletes the lock) mean "busy" and are retried up to the wait limit. `ops` is a
+// test seam for those file operations.
+export function withClientInboxLock(self, fn, { timeoutMs = 15000, ops = {} } = {}) {
+  const fs = { ...inboxLockOps, ...ops },
+    lockPath = clientInboxLockPath(self)
   ensureDir(join(self, '.holoself'))
   const deadline = Date.now() + timeoutMs
   let ourToken = null
   for (let attempt = 0; ; attempt++) {
+    const wait = () => {
+      if (Date.now() > deadline) throw clientInboxError('timed out waiting for the client inbox lock', 'CLIENT_INBOX_LOCK_TIMEOUT')
+      sleepSync(Math.min(50, 5 + attempt * 5))
+    }
     try {
-      const fd = openSync(lockPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | (fsConstants.O_NOFOLLOW || 0), 0o600)
+      const fd = fs.openSync(lockPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | (fsConstants.O_NOFOLLOW || 0), 0o600)
       try {
         ourToken = JSON.stringify({ pid: process.pid, timestamp: Date.now(), token: randomUUID() }) + '\n'
         writeSync(fd, ourToken)
@@ -76,8 +90,19 @@ export function withClientInboxLock(self, fn, { timeoutMs = 15000 } = {}) {
       }
       break
     } catch (error) {
+      if (LOCK_CONTENTION_ERRORS.has(error.code)) {
+        wait()
+        continue
+      }
       if (error.code !== 'EEXIST') throw error
-      const info = lstatSync(lockPath, { throwIfNoEntry: false })
+      let info
+      try {
+        info = fs.lstatSync(lockPath, { throwIfNoEntry: false })
+      } catch (lstatError) {
+        if (!LOCK_CONTENTION_ERRORS.has(lstatError.code)) throw lstatError
+        wait()
+        continue
+      }
       if (info?.isSymbolicLink()) throw clientInboxError('client inbox lock is a symlink; refusing', 'CLIENT_INBOX_LOCK_UNSAFE')
       let stale = false,
         held = null,
@@ -87,22 +112,19 @@ export function withClientInboxLock(self, fn, { timeoutMs = 15000 } = {}) {
         const parsed = JSON.parse(staleRaw)
         held = { pid: parsed.pid, timestamp: parsed.timestamp }
         stale = Date.now() - Number(held.timestamp || 0) > CLIENT_INBOX_LOCK_STALE_MS || (Number.isInteger(held.pid) && !isPidAlive(held.pid))
-      } catch {
-        stale = info ? Date.now() - info.mtimeMs > 2000 : false
+      } catch (readError) {
+        // A lock that cannot be read for a moment is busy, not stale.
+        stale = !LOCK_CONTENTION_ERRORS.has(readError.code) && (info ? Date.now() - info.mtimeMs > 2000 : false)
       }
-      if (stale) {
-        breakStaleLock(lockPath, held, staleRaw)
-        continue
-      }
-      if (Date.now() > deadline) throw clientInboxError('timed out waiting for the client inbox lock', 'CLIENT_INBOX_LOCK_TIMEOUT')
-      sleepSync(Math.min(50, 5 + attempt * 5))
+      if (stale) breakStaleLock(lockPath, held, staleRaw, fs)
+      wait()
     }
   }
   try {
     return fn()
   } finally {
     try {
-      if (ourToken && readFileSync(lockPath, 'utf8') === ourToken) rmSync(lockPath, { force: true })
+      if (ourToken && readFileSync(lockPath, 'utf8') === ourToken) fs.rmSync(lockPath, { force: true })
     } catch {}
   }
 }

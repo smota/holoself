@@ -9,7 +9,7 @@ import { closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFi
 import { isAbsolute, join, resolve } from 'node:path'
 import { defaultConfigDir } from '../cli/args.mjs'
 import { lstat, samePathIdentity } from '../path-guard.mjs'
-import { atomicWrite, fileModeOr, safeRealpath, slash, sleepSync } from '../shared/fs.mjs'
+import { LOCK_CONTENTION_ERRORS, atomicWrite, fileModeOr, safeRealpath, slash, sleepSync } from '../shared/fs.mjs'
 
 export const SELF_ID_PATTERN = /^hs-self-[0-9a-f]{32}$/
 export const PROJECT_KEY_PATTERN = /^hs-proj-[0-9a-f]{32}$/
@@ -62,7 +62,7 @@ export function selfIdOf(root) {
 // third takes a fresh lock in between, the fresh lock can be lost; a lock only goes stale when its holder crashed.
 export const LOCK_STALE_MS = 30000
 const LOCK_WAIT_MS = LOCK_STALE_MS + 10000
-const TRANSIENT_LOCK_ERRORS = new Set(['EPERM', 'EBUSY', 'EACCES', 'ENOTSUP', 'ENOSYS', 'EXDEV', 'EMLINK'])
+const TRANSIENT_LOCK_ERRORS = new Set([...LOCK_CONTENTION_ERRORS, 'ENOTSUP', 'ENOSYS', 'EXDEV', 'EMLINK'])
 const lockOps = { openSync, renameSync, linkSync, rmSync }
 
 // The lock's current content and identity, and whether it is stale; null when there is no lock.

@@ -5,14 +5,14 @@ import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { bindingProjects, readBindings, resolveBinding, writeBinding } from '../src/bindings.mjs'
 import { linkProjectKey, readLink } from '../src/link/config.mjs'
 import { breakStaleFileLock, forgetSelf, readFileLockState, readSelfMap, registerSelf, selfIdOf, withFileLockSync } from '../src/link/machine.mjs'
-import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, readRegistry, writeRegistry } from '../src/link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, nextAllowedLenses, readRegistry, registryLockPath, withRegistryLock, writeRegistry } from '../src/link/registry.mjs'
 import { pathIdentity, samePathIdentity } from '../src/path-guard.mjs'
 import { configureSpaceLink, spaceLinkConfiguration } from '../src/link/workbench.mjs'
 import { resolveLinkedSelf } from '../src/link/self-resolution.mjs'
@@ -663,6 +663,30 @@ test('the self map lock retries transient filesystem errors instead of failing',
   const noLinks = { linkSync: () => { throw Object.assign(new Error('no links'), { code: 'ENOTSUP' }) } }
   assert.equal(breakStaleFileLock(lock, judged, noLinks), false)
 })
+
+for (const code of ['EPERM', 'EBUSY', 'EACCES'])
+  test(`the registry lock retries ${code} and ends as its own timeout`, async t => {
+    const self = sandbox(t),
+      lock = registryLockPath(self),
+      busy = () => { throw Object.assign(new Error('busy'), { code }) }
+    let opens = 0
+    const flaky = {
+      openSync: (...args) => {
+        if (++opens <= 2) busy()
+        return openSync(...args)
+      }
+    }
+    assert.equal(await withRegistryLock(self, () => 'held', flaky), 'held')
+    assert.equal(opens, 3)
+    assert.equal(existsSync(lock), false)
+    await assert.rejects(withRegistryLock(self, () => 'never', { openSync: busy }), error => error.code === 'REGISTRY_LOCK_TIMEOUT')
+    await assert.rejects(withRegistryLock(self, () => 'never', { openSync: () => { throw Object.assign(new Error('io'), { code: 'EIO' }) } }), error => error.code === 'EIO')
+    // A live holder's lock that cannot be read for a moment is not taken for stale.
+    writeFileSync(lock, JSON.stringify({ pid: process.pid, timestamp: Date.now() }) + '\n')
+    await assert.rejects(withRegistryLock(self, () => 'never', { readFileSync: busy }), error => error.code === 'REGISTRY_LOCK_TIMEOUT')
+    assert.equal(existsSync(lock), true)
+    rmSync(lock, { force: true })
+  })
 
 // ---- Third review round (PR #132): one grant rule for every attestation path ----
 

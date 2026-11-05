@@ -72,6 +72,11 @@ export function ruleKey(text) {
     .trim()
     .toLowerCase()
 }
+// The part of a line a scan limit applies to: leading whitespace and invisible characters come off first, so filler can
+// never push a name out of reach.
+export function scanHead(line, limit = SHAPE_SCAN_LIMIT) {
+  return String(line).replace(/^[\s\p{Cf}]+/u, '').slice(0, limit)
+}
 export function stripLinePrefixes(text) {
   let value = text
   for (let next = value.replace(PREFIX, ''); next !== value; next = value.replace(PREFIX, '')) value = next
@@ -99,7 +104,7 @@ function advanceRaw(line, current) {
 }
 // Heading shapes readable from one line, without looking at the lines around it.
 function lineShapes(line) {
-  let text = stripLinePrefixes(foldText(line.slice(0, SHAPE_SCAN_LIMIT)).trim())
+  let text = stripLinePrefixes(foldText(scanHead(line)).trim())
   text = text.replace(/^<!--\s*/, '').replace(/\s*-->$/, '')
   const shapes = [],
     atx = text.match(LOOSE_ATX)
@@ -121,10 +126,10 @@ function lineShapes(line) {
 // For each line, the level of the Setext heading whose paragraph holds it, or 0.
 function setextLevels(lines) {
   const levels = new Array(lines.length).fill(0),
-    breaks = line => !line.trim() || SETEXT_UNDERLINE.test(line) || REAL_ATX.test(line)
+    breaks = line => !line.trim() || SETEXT_UNDERLINE.test(scanHead(line)) || REAL_ATX.test(line)
   for (let i = lines.length - 2; i >= 0; i--) {
     if (breaks(lines[i])) continue
-    const underline = lines[i + 1].match(SETEXT_UNDERLINE)
+    const underline = scanHead(lines[i + 1]).match(SETEXT_UNDERLINE)
     if (underline) levels[i] = underline[1][0] === '=' ? 1 : 2
     else if (lines[i + 1].trim()) levels[i] = levels[i + 1]
   }
@@ -154,10 +159,10 @@ function fenceOpener(line) {
   const prefix = line.match(FENCE_PREFIX)[0],
     marker = line.slice(prefix.length).match(FENCE)
   if (!marker || (marker[1][0] === '`' && marker[2].includes('`'))) return null
-  return { char: marker[1][0], length: marker[1].length, width: prefix.length }
+  return { char: marker[1][0], length: marker[1].length, width: prefix.length, quoted: prefix.includes('>') }
 }
 function closesFence(line, fence) {
-  const rest = line.replace(QUOTE_PREFIX, ''),
+  const rest = fence.quoted ? line.replace(QUOTE_PREFIX, '') : line,
     indent = rest.length - rest.trimStart().length,
     marker = rest.trimStart().match(FENCE_CLOSER)
   return Boolean(marker) && indent <= fence.width + 3 && marker[1][0] === fence.char && marker[1].length >= fence.length
@@ -181,11 +186,11 @@ export function classifyLines(lines) {
       else {
         if (!raw && !untilBlank && HTML_BLOCK_START.test(line)) untilBlank = true
         else if (!line.trim()) untilBlank = false
-        raw = advanceRaw(line.slice(0, RAW_SCAN_LIMIT), raw)
+        raw = advanceRaw(scanHead(line, RAW_SCAN_LIMIT), raw)
       }
     }
     const isRaw = wasRaw || Boolean(fence || raw),
-      head = line.slice(0, SHAPE_SCAN_LIMIT),
+      head = scanHead(line),
       shapes = lineShapes(line)
     // An unclosed HTML heading runs on, so every line up to its closing tag presents a name.
     if (htmlHeading && plain(head)) shapes.push({ level: htmlHeading, text: plain(head), fixed: true })
@@ -200,7 +205,7 @@ export function classifyLines(lines) {
     if (spans.has(index)) shapes.push(...spans.get(index))
     if (setext[index]) shapes.push({ level: setext[index], text: head.trim() })
     const next = texts[index + 1]
-    if (next !== undefined && head.includes('|') && TABLE_DELIMITER.test(next.slice(0, SHAPE_SCAN_LIMIT)))
+    if (next !== undefined && head.includes('|') && TABLE_DELIMITER.test(scanHead(next)))
       for (const cell of foldText(head).split('|')) if (cell.trim()) shapes.push({ level: ANY_HEADING, text: cell.trim() })
     const atx = line.match(REAL_ATX),
       real = atx && !isRaw && shapes.every(shape => shape.atx) ? { level: atx[1].length, text: atx[2].trim() } : null

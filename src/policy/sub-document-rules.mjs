@@ -3,7 +3,7 @@
 // A rule is `{ access_lenses?, disclosure }`. Omitted `access_lenses` inherits the document; `disclosure` is always set.
 import { DISCLOSURES, VISIBILITIES } from '../annotations.mjs'
 import { DEFAULT_LENS_IDS, lensIdStructurallyValid } from '../lenses.mjs'
-import { foldText, ruleKey, stripLinePrefixes } from '../markdown/lines.mjs'
+import { foldText, ruleKey, scanHead, stripLinePrefixes } from '../markdown/lines.mjs'
 
 export const PUBLICATION_ADAPTERS = ['obsidian-public', 'public', 'restricted-host']
 export function publicationAdapter(adapter) {
@@ -151,7 +151,7 @@ function matchFieldRule(table, matches) {
 // The names a line presents as `Field: value`, read through list and quote prefixes, emphasis, HTML and table cells.
 function fieldLineKeys(line) {
   const text = stripLinePrefixes(
-    foldText(String(line).slice(0, 2000))
+    foldText(scanHead(line))
       .replace(/<\/?t[dh]\b[^>]{0,200}>/gi, '|')
       .replace(/<[^>]{0,200}>/g, '')
       .trim()

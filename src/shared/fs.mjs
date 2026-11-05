@@ -34,6 +34,9 @@ export function fileModeOr(path, fallback) {
     return fallback
   }
 }
+// Errors a lock file gives under contention, on Windows above all, where a file being deleted refuses new opens. They
+// mean "busy", so a lock retries them up to its wait limit.
+export const LOCK_CONTENTION_ERRORS = new Set(['EPERM', 'EBUSY', 'EACCES'])
 export function atomicWrite(targetPath, content, options = {}) {
   const mode = typeof options === 'number' ? options : (options?.mode ?? 0o600)
   const targetDir = dirname(targetPath)

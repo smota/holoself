@@ -409,6 +409,42 @@ test('N7: `## Education:` stays a real heading with no rules, and with a rule on
   assertEveryPath(fixture, ['SECRETTEXT', 'AFTERTEXT'], ['AFTERTEXT'])
 })
 
+// F1. The scan limits apply after leading filler, so filler cannot push a name out of reach.
+const FILLERS = { spaces: ' '.repeat(3000), tabs: '\t'.repeat(3000), 'zero-width characters': '\u200b'.repeat(3000) }
+for (const [label, filler] of Object.entries(FILLERS)) {
+  test(`F1: a field line behind ${label} is still hidden`, async t => {
+    const body = `# Doc\n\nOPENTEXT ${S}\n\n${filler}Salary: 200000\n\nMORETEXT ${S}\n`,
+      fixture = await linked(t, { [REL]: doc(body) })
+    assertEveryPath(fixture, ['OPENTEXT', '200000', 'MORETEXT'], ['OPENTEXT', 'MORETEXT'])
+  })
+  test(`F1: a heading shape behind ${label} still opens the rule`, async t => {
+    const shapes = ['## Salary', '<h2>Salary</h2>', '**Salary**', 'Salary:']
+    for (const shape of shapes) {
+      const out = filterFieldVisibility(`${filler}${shape}\n\nSECRETTEXT\n\n# After\n\nAFTERTEXT\n`, { field_visibility: { Salary: 'private' } }, 'general', 'x', [])
+      assert.ok(!out.includes('SECRETTEXT') && out.includes('AFTERTEXT'), shape)
+    }
+    const out = filterFieldVisibility(`Salary\n${filler}---\n\nSECRETTEXT\n\n# After\n\nAFTERTEXT\n`, { field_visibility: { Salary: 'private' } }, 'general', 'x', [])
+    assert.ok(!out.includes('SECRETTEXT') && out.includes('AFTERTEXT'), 'a Setext underline')
+  })
+  test(`F1: raw HTML behind ${label} still stops a heading from ending a rule`, () => {
+    const out = filterFieldVisibility(`## Salary\n\n${' '.repeat(30000)}<!--\n# x\n-->\nSECRETTEXT\n`, { field_visibility: { Salary: 'private' } }, 'general', 'x', [])
+    assert.ok(!out.includes('SECRETTEXT'))
+  })
+}
+
+// F4. A quote prefix closes only a fence that was opened with one.
+const QUOTE_FENCES = {
+  'a quoted line does not close a plain fence': { fence: `\`\`\`\n> \`\`\`\n# x\n${SECRET}\n\`\`\`\n`, expected: ['OPENTEXT', 'AFTERTEXT'] },
+  'a nested quoted line does not close a plain fence': { fence: `~~~\n> > ~~~\n# x\n${SECRET}\n~~~\n`, expected: ['OPENTEXT', 'AFTERTEXT'] },
+  'a quoted closer closes a quoted fence': { fence: `> \`\`\`\n> # x\n> \`\`\`\n\n## Next\n\n${SECRET}\n`, expected: ['OPENTEXT', 'SECRETTEXT', 'AFTERTEXT'] }
+}
+for (const [label, { fence, expected }] of Object.entries(QUOTE_FENCES))
+  test(`F4: ${label}`, async t => {
+    const body = `# Doc\n\nOPENTEXT ${S}\n\n## Salary\n\n${fence}\n## After\n\nAFTERTEXT ${S}\n`,
+      fixture = await linked(t, { [REL]: doc(body) })
+    assertEveryPath(fixture, ['OPENTEXT', 'SECRETTEXT', 'AFTERTEXT'], expected)
+  })
+
 // N9. The walk is linear in the size of a claim.
 test('N9: a 30,000-line claim is filtered quickly', () => {
   const body = claim('disclosure=publish-approved', Array.from({ length: 30000 }, (_, i) => `line ${i}`).join('\n')),
