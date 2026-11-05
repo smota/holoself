@@ -1,3 +1,4 @@
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, writeFile, readFile, mkdir, rm } from 'node:fs/promises'

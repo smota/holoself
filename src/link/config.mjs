@@ -8,6 +8,7 @@ import { assertContainedPath, atomicWrite, ensureDir, pathExists, safeRealpath, 
 import { parseYaml, quote, yamlObject } from '../shared/yaml.mjs'
 import { isCanonicalSelf, isProjectKey, isSelfId, newProjectKey, registerSelf, selfIdOf } from './machine.mjs'
 import { linkSelfReference, resolveLinkedSelf } from './self-resolution.mjs'
+import { projectKeyHolders, projectKeyReusedNotice, readRegistry } from './registry.mjs'
 
 export const DEFAULT_PROJECT_EXCLUDES = [
   '.git/**',
@@ -62,6 +63,33 @@ export function linkProjectKey(project) {
   } catch {
     return null
   }
+}
+// Whether the project's link.yaml carries a project_key that an active registry entry of this self holds for another
+// project on this machine (a copied folder). Such a key is never joined, inherited or bound.
+export function linkProjectKeyTaken(self, project, links = readRegistry(self).links) {
+  const key = linkProjectKey(project)
+  return Boolean(key && projectKeyHolders(links, key, project).length)
+}
+export function projectKeyTakenError(project) {
+  return Object.assign(
+    new Error(
+      `the project_key in ${linkPath(project)} is already used by another project on this machine (a copied folder?); ` +
+        `run holoself link setup --project <dir> --self <dir> on this project first to give it its own project_key`
+    ),
+    { code: 'PROJECT_KEY_CONFLICT' }
+  )
+}
+// Gives a copied project its own project_key in place (other bytes of link.yaml unchanged). Returns the new key.
+export function renewLinkProjectKeyInPlace(project) {
+  const filePath = assertContainedPath(project, linkPath(project), 'link configuration')
+  if (!pathExists(filePath) || lstatSync(filePath).isSymbolicLink() || !lstatSync(filePath).isFile())
+    throw new Error(`cannot update link configuration in-place: invalid file ${filePath}`)
+  const raw = readFileSync(filePath, 'utf8'),
+    key = newProjectKey(),
+    next = raw.replace(/^project_key:.*$/m, `project_key: ${quote(key)}`)
+  if (next === raw) throw new Error('cannot renew project_key: project_key line missing')
+  atomicWriteFile(filePath, next)
+  return key
 }
 export function updateLinkBindingSaltInPlace(projectDir, salt) {
   const filePath = assertContainedPath(projectDir, linkPath(projectDir), 'link configuration')
@@ -274,15 +302,23 @@ export function readLink(project, { tolerant = false, explicitSelf = null, env =
 export function writeLink(project, self, lens = 'general', secondary = [], projectContext = {}, bindingSalt = null, { env = process.env } = {}) {
   const registry = loadLensRegistry(resolve(self))
   let salt = bindingSalt,
-    existingKey = null
+    existingKey = null,
+    existingSalt = null
   try {
     if (pathExists(linkPath(project))) {
       const raw = parseYaml(readFileSync(assertContainedPath(project, linkPath(project), 'link configuration'), 'utf8'))
       if (isProjectKey(raw?.project_key)) existingKey = raw.project_key
-      const existingSalt = raw?.self_context?.binding_salt
-      if (!salt && typeof existingSalt === 'string' && /^[0-9a-f]{32}$/.test(existingSalt)) salt = existingSalt
+      if (typeof raw?.self_context?.binding_salt === 'string' && /^[0-9a-f]{32}$/.test(raw.self_context.binding_salt)) existingSalt = raw.self_context.binding_salt
     }
   } catch {}
+  // A key that an active registry entry on this machine already holds for another project (a copied folder) is never
+  // reused: the copy gets a new key, and neither the other project's binding nor its salt.
+  if (existingKey && projectKeyHolders(readRegistry(self).links, existingKey, project).length) {
+    console.warn(projectKeyReusedNotice(existingKey, project))
+    existingKey = null
+    existingSalt = null
+  }
+  if (!salt) salt = existingSalt
   const selfId = selfIdOf(self),
     projectKey = selfId ? existingKey || newProjectKey() : null
   let portable = false

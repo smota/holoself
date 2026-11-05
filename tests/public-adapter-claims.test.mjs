@@ -1,5 +1,6 @@
 // Issue #106: claim- and field-level restrictions on publication adapters. A publish-approved document delivers only
 // its `public-safe` claims and fields on `public`, `obsidian-public` and `restricted-host`; standard adapters are unchanged.
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, writeFile } from 'node:fs/promises'

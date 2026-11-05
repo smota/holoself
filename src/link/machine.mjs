@@ -5,7 +5,8 @@
 // `selves.json` under the configuration directory. Reading never writes, and an unsafe or malformed map fails closed:
 // it yields no entries and a diagnostic, never an exception.
 import { randomBytes } from 'node:crypto'
-import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { hostname } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { defaultConfigDir } from '../cli/args.mjs'
 import { lstat } from '../path-guard.mjs'
@@ -53,36 +54,78 @@ export function selfIdOf(root) {
   return config && isSelfId(config.self_id) ? config.self_id : null
 }
 
-// Short synchronous lock (exclusive create) shared by the self map and the config.json self_id writer.
+// Short synchronous lock (exclusive create) shared by the self map and the config.json self_id writer. The lock records
+// pid, hostname, creation time and a nonce. It is stale only when older than LOCK_STALE_MS, or when it was taken on this
+// host by a process that no longer exists (PIDs are never compared across hosts or PID namespaces).
+export const LOCK_STALE_MS = 30000
+const LOCK_WAIT_MS = LOCK_STALE_MS + 10000
+
+// The lock's current content and identity, and whether it is stale; null when there is no lock.
+export function readFileLockState(lockPath, now = Date.now()) {
+  let info, raw
+  try {
+    info = lstatSync(lockPath)
+    raw = readFileSync(lockPath, 'utf8')
+  } catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }
+  let held = null
+  try {
+    held = JSON.parse(raw)
+  } catch {}
+  const created = Number.isFinite(held?.created) ? held.created : info.mtimeMs
+  let holderGone = false
+  if (held && held.hostname === hostname() && Number.isInteger(held.pid) && held.pid !== process.pid)
+    try {
+      process.kill(held.pid, 0)
+    } catch (probe) {
+      holderGone = probe.code === 'ESRCH'
+    }
+  return { raw, ino: info.ino, stale: holderGone || now - created > LOCK_STALE_MS }
+}
+
+// Breaks a lock judged stale without ever deleting a different (fresh) lock: the lock is first renamed aside, and only
+// unlinked when the renamed file is exactly the one judged stale; otherwise it is put back. Returns whether it broke it.
+export function breakStaleFileLock(lockPath, judged) {
+  const aside = `${lockPath}.stale-${process.pid}-${randomBytes(4).toString('hex')}`
+  try {
+    renameSync(lockPath, aside)
+  } catch (error) {
+    if (error.code === 'ENOENT') return false
+    throw error
+  }
+  let same = false
+  try {
+    same = lstatSync(aside).ino === judged.ino && readFileSync(aside, 'utf8') === judged.raw
+  } catch {}
+  if (!same)
+    try {
+      linkSync(aside, lockPath)
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error
+    }
+  rmSync(aside, { force: true })
+  return same
+}
+
 export function withFileLockSync(lockPath, fn) {
-  const deadline = Date.now() + 5000
+  const deadline = Date.now() + LOCK_WAIT_MS,
+    content = JSON.stringify({ pid: process.pid, hostname: hostname(), created: Date.now(), nonce: randomBytes(8).toString('hex') }) + '\n'
   while (true) {
     try {
       const fd = openSync(lockPath, 'wx', 0o600)
       try {
-        writeFileSync(fd, JSON.stringify({ pid: process.pid, timestamp: Date.now() }) + '\n')
+        writeFileSync(fd, content)
       } finally {
         closeSync(fd)
       }
       break
     } catch (error) {
       if (error.code !== 'EEXIST') throw error
-      let stale = false
-      try {
-        const held = JSON.parse(readFileSync(lockPath, 'utf8'))
-        let holderGone = false
-        if (Number.isInteger(held.pid) && held.pid !== process.pid)
-          try {
-            process.kill(held.pid, 0)
-          } catch (probe) {
-            holderGone = probe.code === 'ESRCH'
-          }
-        stale = holderGone || Date.now() - (held.timestamp || 0) > 10000
-      } catch {
-        stale = Date.now() - (lstat(lockPath)?.mtimeMs || Date.now()) > 10000
-      }
-      if (stale) {
-        rmSync(lockPath, { force: true })
+      const judged = readFileLockState(lockPath)
+      if (judged?.stale) {
+        breakStaleFileLock(lockPath, judged)
         continue
       }
       if (Date.now() > deadline) throw machineError(`timed out waiting for lock ${lockPath}`, 'LOCK_TIMEOUT')
@@ -92,7 +135,10 @@ export function withFileLockSync(lockPath, fn) {
   try {
     return fn()
   } finally {
-    rmSync(lockPath, { force: true })
+    // Release only our own lock: a lock broken as stale and retaken by another process is left alone.
+    try {
+      if (readFileSync(lockPath, 'utf8') === content) rmSync(lockPath, { force: true })
+    } catch {}
   }
 }
 

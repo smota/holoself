@@ -1,3 +1,4 @@
+import './helpers/isolated-config.mjs'
 import fs from 'node:fs'
 import { syncBuiltinESMExports } from 'node:module'
 import test from 'node:test'

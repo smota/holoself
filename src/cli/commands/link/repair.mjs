@@ -39,7 +39,20 @@ export async function linkRepair(o, sub, project) {
     bindingMigration = Boolean(legacy || o.lens || !current),
     // Portable form: self_id and project_key in link.yaml, no machine path, binding keyed by project_key.
     portableMigration = !diagnostic.self_id || !diagnostic.project_key || Boolean(diagnostic._legacyPath) || pathBinding
-  if (bindingMigration || portableMigration) {
+  // A portable binding is shared: lens bind on another machine changes it, and this machine's attestation grant
+  // (allowed_lenses) is brought in line here, after preview and confirmation.
+  const choiceLenses = [choice.default_lens, ...choice.secondary_lenses].filter(id => id !== 'private'),
+    attested = diagnostic.project_key
+      ? readRegistry(diagnostic.path).links.find(
+          entry => entry.status === 'active' && (entry.project_id === canonicalSpaceId(project) || entry.project_path === canonicalProjectPath(project))
+        )
+      : null,
+    grantUpdate =
+      !bindingMigration && attested && canonicalJson([...(attested.allowed_lenses || [])].sort()) !== canonicalJson([...choiceLenses].sort())
+        ? { project: slash(project), before: attested.allowed_lenses || [], after: choiceLenses }
+        : null
+  if (bindingMigration || portableMigration || grantUpdate) {
+    if (grantUpdate) console.log(JSON.stringify({ grant_update: grantUpdate }, null, 2))
     if (bindingMigration) console.log(JSON.stringify({ binding_migration: { project: slash(project), before: current, legacy, after: choice } }, null, 2))
     if (portableMigration)
       console.log(
@@ -62,7 +75,12 @@ export async function linkRepair(o, sub, project) {
       if (!o.noActivate) await activateLinkedProject(o, project, diagnostic, 'Repair', repairSelection(project))
       return true
     }
-    if (!(await askConfirm(o, bindingMigration ? 'Migrate lens choice into self-side bindings?' : 'Migrate link to portable self_id and project_key?'))) return true
+    const question = bindingMigration
+      ? 'Migrate lens choice into self-side bindings?'
+      : portableMigration
+        ? 'Migrate link to portable self_id and project_key?'
+        : `Grant this machine's link the bound lenses ${choiceLenses.join(', ')}?`
+    if (!(await askConfirm(o, question))) return true
     const file = bindingsPath(diagnostic.path),
       before = existsSync(file) ? readFileSync(file) : null,
       linkBefore = readFileSync(linkPath(project))
@@ -72,7 +90,10 @@ export async function linkRepair(o, sub, project) {
         const attestation = readRegistry(diagnostic.path),
           pId = canonicalSpaceId(project),
           cPath = canonicalProjectPath(project)
-        const written = writeLink(project, diagnostic.path, choice.default_lens, choice.secondary_lenses, diagnostic.project_context, diagnostic.binding_salt)
+        const written =
+          bindingMigration || portableMigration
+            ? writeLink(project, diagnostic.path, choice.default_lens, choice.secondary_lenses, diagnostic.project_context, diagnostic.binding_salt)
+            : { project_key: diagnostic.project_key }
         writeRegistry(
           diagnostic.path,
           links =>
@@ -82,6 +103,7 @@ export async function linkRepair(o, sub, project) {
                     ...entry,
                     ...(written.project_key ? { project_key: written.project_key } : {}),
                     ...(bindingMigration ? { allowed_lenses: [choice.default_lens, ...choice.secondary_lenses] } : {}),
+                    ...(grantUpdate ? { allowed_lenses: choiceLenses } : {}),
                     updated_at: new Date().toISOString()
                   }
                 : entry

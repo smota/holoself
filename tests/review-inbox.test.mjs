@@ -1,4 +1,5 @@
 // Workbench review inbox: cross-space pending inbox, deterministic duplicate grouping, conflict hints and atomic batch actions (issue #71).
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { chmodSync, existsSync, rmSync, symlinkSync } from 'node:fs'

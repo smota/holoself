@@ -21,9 +21,12 @@ export function linkSelfReference(parsed) {
   }
 }
 
-export function selfNotFoundError(selfId) {
+// mapDiagnostics explain an unusable self map (malformed, unsafe, stale entry); they carry no paths. Hook mode prints no
+// error text at all, so they only reach the CLI and path-redacted MCP errors.
+export function selfNotFoundError(selfId, mapDiagnostics = []) {
   return resolutionError(
-    `self ${selfId} has no checkout registered on this machine; run 'holoself machine register --root <dir>' or 'holoself link setup'`,
+    `self ${selfId} has no checkout registered on this machine; run 'holoself machine register --root <dir>' or 'holoself link setup'` +
+      (mapDiagnostics.length ? ` (${mapDiagnostics.join('; ')})` : ''),
     'SELF_NOT_FOUND'
   )
 }
@@ -44,15 +47,14 @@ export function resolveLinkedSelf({ project, selfId = null, legacyPath = null, e
   const home = typeof env.HOLOSELF_HOME === 'string' && env.HOLOSELF_HOME.trim() ? resolve(env.HOLOSELF_HOME) : null
   if (home && matches(home)) return { path: safeRealpath(home), source: 'env', diagnostics }
   if (home) diagnostics.push('HOLOSELF_HOME is not the self this link names; skipped')
-  const mapped = selfMapEntry(selfId, env)
-  diagnostics.push(...mapped.diagnostics)
-  if (mapped.entry) {
-    if (matches(mapped.entry.path)) return { path: safeRealpath(mapped.entry.path), source: 'map', diagnostics }
-    diagnostics.push(`self map entry for ${selfId} is stale (path missing or config.json carries another id); ignored`)
-  }
+  const mapped = selfMapEntry(selfId, env),
+    mapDiagnostics = [...mapped.diagnostics]
+  if (mapped.entry && !matches(mapped.entry.path)) mapDiagnostics.push('the self map entry is stale: its path is missing or its config.json carries another id')
+  diagnostics.push(...mapDiagnostics)
+  if (mapped.entry && !mapDiagnostics.length) return { path: safeRealpath(mapped.entry.path), source: 'map', diagnostics }
   if (legacyPath) {
     const candidate = resolve(project, legacyPath)
     if (matches(candidate)) return { path: safeRealpath(candidate), source: 'legacy-path', diagnostics }
   }
-  throw Object.assign(selfNotFoundError(selfId), { diagnostics })
+  throw Object.assign(selfNotFoundError(selfId, mapDiagnostics), { diagnostics })
 }

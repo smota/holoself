@@ -18392,7 +18392,7 @@
       ],
       "status": 1,
       "stdout": "",
-      "stderr": "[!!] self hs-self-<HEX:1> has no checkout registered on this machine; run 'holoself machine register --root <dir>' or 'holoself link setup'\n"
+      "stderr": "[!!] self hs-self-<HEX:1> has no checkout registered on this machine; run 'holoself machine register --root <dir>' or 'holoself link setup' (the self map entry is stale: its path is missing or its config.json carries another id)\n"
     },
     {
       "name": "linked context legacy mount",
@@ -26500,7 +26500,7 @@
         "--yes"
       ],
       "status": 0,
-      "stdout": "[dry-run] would revoke sovereign link for <ROOT>/project\n[dry-run] would remove <ROOT>/project/.holoself/link.yaml; indexes, reports, and proposals preserved\n",
+      "stdout": "[dry-run] would revoke sovereign link for <ROOT>/project\n[dry-run] would remove <ROOT>/project/.holoself/link.yaml; indexes, reports, and proposals preserved\n[dry-run] lens binding kept for other machines; run 'holoself lens unbind' to remove it everywhere\n",
       "stderr": ""
     },
     {

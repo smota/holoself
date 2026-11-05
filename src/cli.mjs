@@ -542,8 +542,8 @@ export async function run(argv, options = {}) {
       if (c.schemaVersion !== 1) errors.push('unsupported config schema')
       if (c.product !== 'holoself') errors.push('config product must be holoself')
       if (!Array.isArray(c.selectedContribs)) errors.push('selectedContribs must be an array')
-      if (c.self_id !== undefined && !isSelfId(c.self_id)) errors.push('config self_id must be hs-self-<32 lowercase hex>')
       else for (const id of c.selectedContribs) if (!availableContribs().includes(id)) errors.push(`unknown selected contrib: ${id}`)
+      if (c.self_id !== undefined && !isSelfId(c.self_id)) errors.push('config self_id must be hs-self-<32 lowercase hex>')
       if (c.ledger !== undefined) {
         if (!c.ledger || Array.isArray(c.ledger) || typeof c.ledger !== 'object') errors.push('config ledger must be an object')
         else {

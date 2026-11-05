@@ -70,6 +70,8 @@ holoself link setup --project ~/code/my-project --self ~/code/my-self --yes
 
    Because the project's `link.yaml` already names this self, setup keeps its `project_key`, `binding_salt`, project context filters and lens binding (unless you pass `--lens` or the project filters) and does not ask for `--force`; the file's content stays the same. It registers the self in this machine's map and attests the project in this machine's registry. Avoid `--force` on a project that other machines already use: it creates a new `binding_salt`, which no other machine's registry attests.
 
+   When setup inherits the synced lens binding it prints `joining existing project <project_key>: lenses <default>, <secondary…>` before it asks for confirmation. Review those lenses, especially for a project you did not create: this machine will grant them. Passing `--lens` (and `--secondary-lenses`) chooses the lenses instead.
+
    Equivalent without activation changes:
 
    ```bash
@@ -113,11 +115,23 @@ In each **client project**:
 | `.holoself/README.md`, `.holoself/.gitignore`, `.holoself/proposals/` | `.codex/config.toml` and `.agents/mcp_config.json` Holoself entries: they embed the absolute project path |
 | `.mcp.json` (Claude's entry uses `--claude-project-dir`, no path) | `.claude/settings.local.json`, `.codex/hooks.json`, `.agents/hooks.json`: per-machine host settings (see [Activated project links](activated-links.md#session-start-hooks)) |
 
-A legacy `link.yaml` that still has `self_context.path` contains a personal absolute path; run `link repair` before committing it. Committing `link.yaml` never grants access by itself: the self map and the registry on each machine decide.
+A legacy `link.yaml` that still has `self_context.path` contains a personal absolute path; run `link repair` before committing it. Committing `link.yaml` grants nothing by itself: each machine's self map and registry decide, and the owner confirms the lenses when setting the project up there.
+
+## Copying a project folder
+
+A copied project folder (`cp -r`, a second worktree, a template) carries the original's `project_key`. On one machine a `project_key` belongs to one project path, so `link setup` (or `link add`, `link approve`, the Workbench) on the copy notices that another project already holds the key, gives the copy a new `project_key` and a new `binding_salt`, and prints `[note] project_key … is already used by another project on this machine (a copied folder?)`. The copy does not inherit the original's lens binding: pass `--lens`, or bind it afterwards with `holoself lens bind --root <self-root> --project <copy> --lens <id> --yes`. Until the copy is set up, `lens bind` refuses it so that it cannot change the original's binding.
+
+## Changing or removing a shared binding
+
+A `project_key` binding in `lenses/bindings.json` is shared by every machine that has the project:
+
+- `holoself lens bind --root <self-root> --project <dir> --lens <id> --yes` and `holoself lens unbind --root <self-root> --project <dir> --yes` change it for all machines once the self repository syncs.
+- Each machine still grants only the lenses its own registry entry allows. After a lens is bound on another machine, run `holoself link repair --project <dir> --yes` on this machine; it prints the `grant_update` (use `--dry-run` to preview only) and updates this machine's `allowed_lenses`. Until then this machine serves only lenses in both the binding and its grant, and refuses a newly bound default lens with `LENS_NOT_GRANTED`.
+- `holoself link remove --project <dir> --yes` revokes this machine's attestation and removes `link.yaml` here, but keeps the shared binding and says `lens binding kept for other machines; run 'holoself lens unbind' to remove it everywhere`. A legacy path-keyed entry, which only this machine used, is still removed.
 
 ## Troubleshooting `SELF_NOT_FOUND`
 
-`self hs-self-… has no checkout registered on this machine` means none of the candidates above is a self with that id. Check:
+`self hs-self-… has no checkout registered on this machine` means none of the candidates above is a self with that id. When the self map itself is the cause (malformed, a symlink, or a stale entry), the CLI and MCP error add it in parentheses; hooks still print nothing. Check:
 
 - `holoself machine status`: is the self registered, does its path exist, and does its `config.json` still carry the id (`id_matches`)? A stale entry is ignored, never served.
 - Did the self move? Run `holoself machine register --root <dir>` at the new path.

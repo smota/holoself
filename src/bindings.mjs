@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, resolve, win32 } from 'node:path'
 import { loadLensRegistry, resolveLens } from './lenses.mjs'
 import { assertNoLinkBelow, canonicalPath } from './path-guard.mjs'
 import { isProjectKey } from './link/machine.mjs'
+import { readRegistry } from './link/registry.mjs'
 import { hash, slash } from './shared/fs.mjs'
 
 export function normalizeProjectPath(value) {
@@ -100,7 +101,17 @@ function bindingKey(bindings, project) {
 // A project with a project_key is looked up by that key first, then by its legacy path entry.
 export function resolveBinding(root, project, { projectKey = null, ...options } = {}) {
   const bindings = readBindings(root, options).bindings
-  if (isProjectKey(projectKey) && Object.hasOwn(bindings, projectKey)) return bindings[projectKey]
+  if (isProjectKey(projectKey) && Object.hasOwn(bindings, projectKey)) {
+    if (activeKeyHolders(readRegistry(root).links, projectKey).length > 1) {
+      const error = new Error(
+        `project_key ${projectKey} is attested for more than one project on this machine (a copied folder?); ` +
+          `run holoself link setup --project <dir> on the copy to give it its own project_key`
+      )
+      error.code = 'PROJECT_KEY_CONFLICT'
+      throw error
+    }
+    return bindings[projectKey]
+  }
   const { key } = bindingKey(bindings, project),
     binding = bindings[key]
   if (!binding) {
@@ -146,10 +157,14 @@ export function pathKeyedBindingCount(root) {
 }
 // Each binding with the project path it applies to on this machine: a path key is its own path; a project_key is joined
 // through this machine's attestation registry entries (project_key -> project_path), else project is null.
+// Revoked entries are skipped; a key that two active entries hold (which setup prevents) maps to no project at all.
 export function bindingProjects(bindings, registryLinks = []) {
   return Object.entries(bindings).map(([key, binding]) => {
     if (!isProjectKey(key)) return { key, project: key, binding }
-    const entry = registryLinks.find(item => item?.project_key === key && typeof item.project_path === 'string')
-    return { key, project: entry ? entry.project_path : null, binding }
+    const holders = activeKeyHolders(registryLinks, key)
+    return { key, project: holders.length === 1 && typeof holders[0].project_path === 'string' ? holders[0].project_path : null, binding }
   })
+}
+function activeKeyHolders(links, key) {
+  return links.filter(item => item?.project_key === key && item.status !== 'revoked')
 }

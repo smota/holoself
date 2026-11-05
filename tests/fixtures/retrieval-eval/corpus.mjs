@@ -1326,6 +1326,7 @@ export function cleanSubprocessEnv(homeDir) {
     HOME: homeDir,
     USERPROFILE: homeDir,
     XDG_CONFIG_HOME: join(homeDir, '.config'),
+    HOLOSELF_CONFIG_DIR: join(homeDir, '.config', 'holoself'),
     NO_COLOR: '1',
     TZ: 'UTC'
   }

@@ -1,3 +1,4 @@
+import './helpers/isolated-config.mjs'
 import { indexEngine } from '../src/catalog/fts.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'

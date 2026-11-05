@@ -11,6 +11,7 @@ import {
   createLinkDirs,
   inspectLinkCollisions,
   linkPath,
+  linkProjectKeyTaken,
   linkSchemaErrors,
   projectContextErrors,
   readLink,
@@ -22,7 +23,9 @@ export function spaceLinkConfiguration(
   self,
   { lens = 'general', explicitLens, secondaryLenses, projectContext, force = false, metadataAbsent = false } = {}
 ) {
-  const existing = !metadataAbsent && pathExists(linkPath(project)) ? readLink(project, { tolerant: true }) : null
+  const linked = !metadataAbsent && pathExists(linkPath(project)) ? readLink(project, { tolerant: true }) : null,
+    // A copied folder whose project_key another project on this machine holds inherits neither its binding nor salt.
+    existing = linked && !linkProjectKeyTaken(self, project) ? linked : null
   if (!metadataAbsent) inspectLinkCollisions(project)
   const registry = loadLensRegistry(self),
     bindings = readBindings(self, { registry }).bindings,
@@ -41,7 +44,7 @@ export function spaceLinkConfiguration(
           assert_include: projectContext.assert_include || [],
           assert_exclude: projectContext.assert_exclude || []
         }
-      : existing
+      : linked
         ? parseYaml(readFileSync(linkPath(project), 'utf8')).project_context || {}
         : { include: [], exclude: DEFAULT_PROJECT_EXCLUDES, assert_include: [], assert_exclude: [] }
   }

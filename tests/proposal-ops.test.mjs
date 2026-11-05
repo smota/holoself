@@ -1,4 +1,5 @@
 // Proposal operations that replace, supersede and retire existing claims through the review flow (issue #70).
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'

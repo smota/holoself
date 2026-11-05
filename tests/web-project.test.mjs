@@ -1,3 +1,4 @@
+import './helpers/isolated-config.mjs'
 import { planSpaceAction, applySpaceAction } from '../src/space-actions.mjs'
 import { readdirSync, lstatSync, readFileSync, readlinkSync, realpathSync, mkdirSync, writeFileSync, unlinkSync, symlinkSync } from 'node:fs'
 import { normalizeProjectPath, writeBinding } from '../src/bindings.mjs'

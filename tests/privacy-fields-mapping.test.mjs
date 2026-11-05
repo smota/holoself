@@ -1,6 +1,7 @@
 // Issue #108 (0.11.0 stage of docs/decisions/privacy-fields-and-legacy-mount.md): the exact, non-widening mapping from
 // the deprecated privacy fields to the target field set, proved exhaustively on synthetic fixtures through the runtime
 // frontmatter parser, allowedDocument and publicationAllowed. No personal data.
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'

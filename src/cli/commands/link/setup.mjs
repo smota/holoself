@@ -8,7 +8,7 @@ import { bindingsPath, resolveBinding } from '../../../bindings.mjs'
 import { loadLensRegistry } from '../../../lenses.mjs'
 import { createLinkDirs, inspectLinkCollisions, linkPath, linkSchemaErrors, writeLink } from '../../../link/config.mjs'
 import { ensureSelfId, isProjectKey, selfIdOf } from '../../../link/machine.mjs'
-import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, projectKeyHolders, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { lstat } from '../../../path-guard.mjs'
 import { assertContainedPath, atomicWrite, pathExists, safeRealpath, slash } from '../../../shared/fs.mjs'
 import { parseYaml } from '../../../shared/yaml.mjs'
@@ -109,14 +109,20 @@ export async function linkSetup(o, sub, project) {
   const setupRegistry = loadLensRegistry(selfRoot)
   // Another machine already linked this project to this same self (a synced portable link.yaml naming this self's
   // self_id): setup joins it on this machine, keeping its project_key, binding_salt and lens binding unless --force.
+  // A key that another project on this machine already holds (a copied folder) is not joined: writeLink gives this
+  // project a new key, and nothing of the other project (binding, salt) is inherited.
   const joined = o.force ? null : portableLinkFor(project, selfRoot)
   let joinedBinding = null
-  if (joined)
+  if (joined && !joined.taken)
     try {
       joinedBinding = resolveBinding(selfRoot, project, { registry: setupRegistry, projectKey: joined.projectKey })
     } catch {}
   const chosenDefaultLens = o.lens || joinedBinding?.default_lens || findings.suggested_lens
   const chosenSecondary = o.secondaryLenses || (o.lens ? null : joinedBinding?.secondary_lenses) || []
+  // Inherited lenses are always shown before confirmation; explicit --lens/--secondary-lenses win over them.
+  const joinNotice =
+    joinedBinding && !o.lens ? `joining existing project ${joined.projectKey}: lenses ${[chosenDefaultLens, ...chosenSecondary].join(', ')}` : null
+  if (joinNotice) console.log(joinNotice)
   const desired = {
     path: selfRoot,
     access: 'read',
@@ -154,7 +160,7 @@ export async function linkSetup(o, sub, project) {
     !(await askConfirm(
       o,
       `${collisions.length ? 'Replace link configuration while preserving existing README and artifacts' : 'Create and activate link'} ` +
-        `using ${self} and ${chosenDefaultLens} lens?`
+        `using ${self} and ${chosenDefaultLens} lens${joinNotice ? ` (${joinNotice})` : ''}?`
     ))
   ) {
     console.log('Cancelled.')
@@ -172,7 +178,7 @@ export async function linkSetup(o, sub, project) {
   let resolvedBindingSalt = null
   if (prevEntrySnapshot && typeof prevEntrySnapshot.binding_salt === 'string' && prevEntrySnapshot.binding_salt.length === 32 && !o.force) {
     resolvedBindingSalt = prevEntrySnapshot.binding_salt
-  } else if (joined?.bindingSalt) {
+  } else if (joined?.bindingSalt && !joined.taken) {
     resolvedBindingSalt = joined.bindingSalt
   } else {
     resolvedBindingSalt = randomBytes(16).toString('hex')
@@ -270,5 +276,10 @@ function portableLinkFor(project, selfRoot) {
   if (!selfId || parsed?.self_context?.self_id !== selfId || !isProjectKey(parsed?.project_key)) return null
   const salt = parsed.self_context.binding_salt
   const projectContext = parsed.project_context && typeof parsed.project_context === 'object' && !Array.isArray(parsed.project_context) ? parsed.project_context : null
-  return { projectKey: parsed.project_key, bindingSalt: typeof salt === 'string' && /^[0-9a-f]{32}$/.test(salt) ? salt : null, projectContext }
+  return {
+    projectKey: parsed.project_key,
+    bindingSalt: typeof salt === 'string' && /^[0-9a-f]{32}$/.test(salt) ? salt : null,
+    projectContext,
+    taken: projectKeyHolders(readRegistry(selfRoot).links, parsed.project_key, project).length > 0
+  }
 }

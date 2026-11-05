@@ -1,6 +1,7 @@
 // Unlinked client identity (`client:unlinked`, issue #99): client registry, `mcp --client` binding, per-call
 // attestation, self-only one-lens retrieval, ledger attribution, the opt-in proposal inbox with owner approval, and
 // host configuration print/apply safety. See docs/decisions/unlinked-client-identity.md.
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'

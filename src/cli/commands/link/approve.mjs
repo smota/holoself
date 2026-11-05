@@ -3,9 +3,17 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, lstatSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { isCanonicalSelf, linkPath, readLink, updateLinkBindingSaltInPlace } from '../../../link/config.mjs'
+import {
+  isCanonicalSelf,
+  linkPath,
+  linkProjectKey,
+  linkProjectKeyTaken,
+  readLink,
+  renewLinkProjectKeyInPlace,
+  updateLinkBindingSaltInPlace
+} from '../../../link/config.mjs'
 import { registerSelf } from '../../../link/machine.mjs'
-import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import { canonicalProjectPath, canonicalSpaceId, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { assertContainedPath, safeRealpath, slash } from '../../../shared/fs.mjs'
 
 export async function linkApprove(o, sub, project) {
@@ -33,11 +41,20 @@ export async function linkApprove(o, sub, project) {
   selfRoot = slash(safeRealpath(resolve(selfRoot)))
   const lPath = linkPath(project)
   const hasLink = existsSync(lPath)
-  let linkObj = null
+  let linkObj = null,
+    renewedKey = false
   const revokeMode = Boolean(o.revoke)
   if (hasLink) {
     assertContainedPath(project, lPath, 'project link file')
     if (lstatSync(lPath).isSymbolicLink()) throw new Error(`symlink detected at ${lPath}`)
+    // A copied folder carrying another project's project_key gets its own key before approval and inherits nothing.
+    if (!revokeMode && linkProjectKeyTaken(selfRoot, project)) {
+      const previous = linkProjectKey(project)
+      renewLinkProjectKeyInPlace(project)
+      renewedKey = true
+      console.warn(projectKeyReusedNotice(previous, project))
+      console.warn(`[note] bind its lens with: holoself lens bind --root <self-root> --project <dir> --lens <id> --yes`)
+    }
     try {
       // A portable link is approved only by the self it names (its self_id); revocation needs no match.
       linkObj = readLink(project, { tolerant: true, explicitSelf: revokeMode ? null : selfRoot })
@@ -81,7 +98,7 @@ export async function linkApprove(o, sub, project) {
         let allowedLenses = []
         if (o.lenses && o.lenses.length) {
           allowedLenses = o.lenses.filter(l => l !== 'private')
-        } else if (linkObj) {
+        } else if (linkObj && !renewedKey) {
           allowedLenses = [linkObj.default_lens, ...(linkObj.secondary_lenses || [])].filter(l => l !== 'private')
         } else {
           allowedLenses = ['general']
@@ -89,7 +106,7 @@ export async function linkApprove(o, sub, project) {
         let salt = null
         if (idx >= 0 && typeof links[idx].binding_salt === 'string' && links[idx].binding_salt.length === 32) {
           salt = links[idx].binding_salt
-        } else if (linkObj && typeof linkObj.binding_salt === 'string' && linkObj.binding_salt.length === 32) {
+        } else if (linkObj && !renewedKey && typeof linkObj.binding_salt === 'string' && linkObj.binding_salt.length === 32) {
           salt = linkObj.binding_salt
         } else {
           salt = randomBytes(16).toString('hex')

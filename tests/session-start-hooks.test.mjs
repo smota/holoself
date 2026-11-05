@@ -1,3 +1,4 @@
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
@@ -486,7 +487,8 @@ test('link remove always revokes even when local deactivation is refused', async
     assert.match(warned, /local activation was not fully removed/)
     assert.ok(!warned.includes(base), 'warning carries no absolute paths')
     assert.ok(json(readFileSync(join(self, '.holoself', 'links.json'), 'utf8')).links.every(entry => entry.status === 'revoked'))
-    assert.equal(Object.keys(json(readFileSync(join(self, 'lenses', 'bindings.json'), 'utf8')).bindings).length, 0)
+    // The shared project_key binding is kept for the project's other machines; no path-keyed entry remains.
+    assert.ok(Object.keys(json(readFileSync(join(self, 'lenses', 'bindings.json'), 'utf8')).bindings).every(key => key.startsWith('hs-proj-')))
     assert.equal(existsSync(join(project, '.holoself', 'link.yaml')), false)
     const hook = runBin(['context', '--session-start', '--budget', 'small', '--format', 'packet', '--hook', 'holoself-session-start'], {
       HOLOSELF_HOME: self,

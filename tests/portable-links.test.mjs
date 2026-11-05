@@ -1,6 +1,7 @@
 // Portable links across machines (issue #131, docs/decisions/portable-links.md): self_id and project_key in synced
 // files, the per-machine self map (selves.json), the resolution order, project_key-keyed bindings and migration.
 // Every test uses its own temporary directories and its own HOLOSELF_CONFIG_DIR; synthetic data only.
+import './helpers/isolated-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
@@ -8,10 +9,11 @@ import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readF
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readBindings, writeBinding } from '../src/bindings.mjs'
+import { bindingProjects, readBindings, resolveBinding, writeBinding } from '../src/bindings.mjs'
 import { linkProjectKey, readLink } from '../src/link/config.mjs'
-import { forgetSelf, readSelfMap, registerSelf, selfIdOf } from '../src/link/machine.mjs'
-import { readRegistry } from '../src/link/registry.mjs'
+import { breakStaleFileLock, forgetSelf, readFileLockState, readSelfMap, registerSelf, selfIdOf } from '../src/link/machine.mjs'
+import { readRegistry, writeRegistry } from '../src/link/registry.mjs'
+import { configureSpaceLink, spaceLinkConfiguration } from '../src/link/workbench.mjs'
 import { resolveLinkedSelf } from '../src/link/self-resolution.mjs'
 import { parseYaml } from '../src/shared/yaml.mjs'
 import { reconcileCatalog } from '../src/web/server-helpers.mjs'
@@ -343,8 +345,11 @@ test('a legacy link and path-keyed binding behave as before until link repair mi
   // lens bind/unbind and link remove act on the project_key entry.
   ok(m.cli(['lens', 'bind', '--root', m.self, '--project', m.project, '--lens', 'general', '--yes']), 'lens bind')
   assert.deepEqual(Object.keys(readBindings(m.self).bindings), [linkProjectKey(m.project)])
-  ok(m.cli(['link', 'remove', '--project', m.project, '--yes']), 'link remove')
-  assert.deepEqual(Object.keys(readBindings(m.self).bindings), [])
+  // link remove revokes this machine's attestation and keeps the shared project_key binding for other machines.
+  const removed = ok(m.cli(['link', 'remove', '--project', m.project, '--yes']), 'link remove')
+  assert.match(removed.stdout, /lens binding kept for other machines; run 'holoself lens unbind' to remove it everywhere/)
+  assert.deepEqual(Object.keys(readBindings(m.self).bindings), [migrated.project_key])
+  assert.equal(readRegistry(m.self).links[0].status, 'revoked')
 })
 
 test('a portable link refuses approval by another self and a repair with a mismatched --self', t => {
@@ -363,4 +368,174 @@ test('a portable link refuses approval by another self and a repair with a misma
   assert.notEqual(repair.status, 0)
   assert.match(repair.stderr, /does not match canonical link root/)
   assert.equal(linkText(m.project), before)
+})
+
+// ---- Review fixes (PR #132) ----
+
+const keyOf = project => parseYaml(linkText(project)).project_key
+const copyProject = (from, to) => cpSync(from, to, { recursive: true })
+
+test('a copied project folder gets a new project_key on setup and never touches the original binding', t => {
+  const base = sandbox(t),
+    m = machine(base, 'm'),
+    copy = join(m.root, 'code', 'project-copy')
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--lens', 'general', '--no-activate', '--yes']), 'setup original')
+  const originalKey = keyOf(m.project)
+  copyProject(m.project, copy)
+  const setup = ok(m.cli(['link', 'setup', '--project', copy, '--self', m.self, '--lens', 'professional', '--no-activate', '--yes']), 'setup copy')
+  assert.match(setup.stdout + setup.stderr, /already used by another project on this machine/)
+  assert.notEqual(keyOf(copy), originalKey)
+  assert.equal(JSON.parse(ok(m.cli(['context', '--project', m.project, '--json']), 'original').stdout).lens, 'general')
+  assert.equal(JSON.parse(ok(m.cli(['context', '--project', copy, '--json']), 'copy').stdout).lens, 'professional')
+  ok(m.cli(['link', 'remove', '--project', copy, '--yes']), 'remove copy')
+  assert.equal(JSON.parse(ok(m.cli(['context', '--project', m.project, '--json']), 'original after remove').stdout).lens, 'general')
+})
+
+test('setup --force on a copy, approve and backfill on a copy also mint a new project_key', t => {
+  const base = sandbox(t),
+    m = machine(base, 'm')
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--lens', 'general', '--no-activate', '--yes']), 'setup original')
+  const originalKey = keyOf(m.project),
+    originalBinding = bindingsOf(m.self)[originalKey]
+  const forced = join(m.root, 'code', 'forced-copy'),
+    approved = join(m.root, 'code', 'approved-copy'),
+    backfilled = join(m.root, 'code', 'backfilled-copy')
+  for (const dir of [forced, approved, backfilled]) copyProject(m.project, dir)
+  ok(m.cli(['link', 'setup', '--project', forced, '--self', m.self, '--lens', 'professional', '--force', '--no-activate', '--yes']), 'forced')
+  assert.notEqual(keyOf(forced), originalKey)
+  // A copy that was never set up cannot rebind the original's shared binding.
+  const rebind = m.cli(['lens', 'bind', '--root', m.self, '--project', approved, '--lens', 'professional', '--yes'])
+  assert.notEqual(rebind.status, 0)
+  assert.match(rebind.stderr, /already used by another project on this machine/)
+  const approval = ok(m.cli(['link', 'approve', '--project', approved, '--self', m.self]), 'approve copy')
+  assert.match(approval.stdout + approval.stderr, /already used by another project on this machine/)
+  assert.notEqual(keyOf(approved), originalKey)
+  ok(m.cli(['link', 'backfill', '--project', backfilled, '--self', m.self]), 'backfill copy')
+  assert.notEqual(keyOf(backfilled), originalKey)
+  const keys = readRegistry(m.self).links.map(entry => entry.project_key)
+  assert.equal(keys.length, 4)
+  assert.equal(new Set(keys).size, keys.length, 'every registry entry has its own project_key')
+  assert.deepEqual(bindingsOf(m.self)[originalKey], originalBinding)
+  assert.equal(JSON.parse(ok(m.cli(['context', '--project', m.project, '--json']), 'original').stdout).lens, 'general')
+})
+
+test('the Workbench configuration of a copied project does not inherit the original key, salt or binding', t => {
+  const base = sandbox(t),
+    m = machine(base, 'm'),
+    copy = join(m.root, 'code', 'workbench-copy'),
+    saved = process.env.HOLOSELF_CONFIG_DIR
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--lens', 'professional', '--no-activate', '--yes']), 'setup original')
+  copyProject(m.project, copy)
+  process.env.HOLOSELF_CONFIG_DIR = m.config
+  t.after(() => {
+    if (saved === undefined) delete process.env.HOLOSELF_CONFIG_DIR
+    else process.env.HOLOSELF_CONFIG_DIR = saved
+  })
+  const configuration = spaceLinkConfiguration(copy, realpathSync(m.self), { lens: 'general' })
+  assert.equal(configuration.link.default_lens, 'general')
+  assert.equal(configuration.binding_salt, null)
+  configureSpaceLink(copy, realpathSync(m.self), configuration)
+  assert.notEqual(keyOf(copy), keyOf(m.project))
+  assert.equal(bindingsOf(m.self)[keyOf(m.project)].default_lens, 'professional')
+})
+
+test('bindingProjects skips revoked entries and fails closed when two active entries share a project_key', t => {
+  const base = sandbox(t),
+    m = machine(base, 'm')
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--no-activate', '--yes']), 'setup')
+  const key = keyOf(m.project),
+    [entry] = readRegistry(m.self).links,
+    other = { ...entry, project_id: 'hs-space-0000000000000000', project_path: '/elsewhere/other' }
+  const bindings = readBindings(m.self).bindings
+  assert.deepEqual(bindingProjects(bindings, [{ ...other, status: 'revoked' }, entry]).map(item => item.project), [entry.project_path])
+  assert.deepEqual(bindingProjects(bindings, [other, entry]).map(item => item.project), [null])
+  writeRegistry(m.self, links => [...links, other])
+  assert.throws(() => resolveBinding(m.self, m.project, { projectKey: key }), error => error.code === 'PROJECT_KEY_CONFLICT')
+  assert.deepEqual(reconcileCatalog(m.self).discovered, [])
+})
+
+test('joining a synced link prints the inherited lenses, and explicit lenses win', t => {
+  const base = sandbox(t),
+    a = machine(base, 'a'),
+    b = machine(base, 'b'),
+    c = machine(base, 'c')
+  seedSelf(a)
+  ok(a.cli(['link', 'setup', '--project', a.project, '--self', a.self, '--lens', 'general', '--secondary-lenses', 'professional', '--no-activate', '--yes']), 'A')
+  for (const m of [b, c]) {
+    syncSelf(a.self, m.self)
+    syncProject(a.project, m.project)
+  }
+  const joined = ok(b.cli(['link', 'setup', '--project', b.project, '--self', b.self, '--no-activate', '--yes']), 'B')
+  assert.match(joined.stdout, new RegExp(`joining existing project ${keyOf(a.project)}: lenses general, professional`))
+  assert.deepEqual(readRegistry(b.self).links[0].allowed_lenses, ['general', 'professional'])
+  ok(c.cli(['link', 'setup', '--project', c.project, '--self', c.self, '--lens', 'leadership', '--no-activate', '--yes']), 'C')
+  assert.deepEqual(readRegistry(c.self).links[0].allowed_lenses, ['leadership'])
+})
+
+test('link repair grants lenses newly bound on another machine', t => {
+  const base = sandbox(t),
+    m = machine(base, 'm')
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--lens', 'general', '--no-activate', '--yes']), 'setup')
+  // Another machine ran lens bind; the synced binding now names a lens this machine never granted.
+  writeBinding(m.self, m.project, { default_lens: 'professional', secondary_lenses: [] }, { projectKey: keyOf(m.project) })
+  assert.notEqual(m.cli(['context', '--project', m.project, '--json']).status, 0)
+  const dry = ok(m.cli(['link', 'repair', '--project', m.project, '--dry-run', '--no-activate']), 'repair dry-run')
+  assert.match(dry.stdout, /grant_update/)
+  assert.deepEqual(readRegistry(m.self).links[0].allowed_lenses, ['general'])
+  ok(m.cli(['link', 'repair', '--project', m.project, '--yes', '--no-activate']), 'repair')
+  assert.deepEqual(readRegistry(m.self).links[0].allowed_lenses, ['professional'])
+  assert.equal(JSON.parse(ok(m.cli(['context', '--project', m.project, '--json']), 'context').stdout).lens, 'professional')
+})
+
+test('validate reports selectedContribs and self_id errors independently', t => {
+  const base = sandbox(t),
+    m = machine(base, 'm')
+  seedSelf(m)
+  const config = join(m.self, 'config.json'),
+    original = JSON.parse(readFileSync(config, 'utf8'))
+  writeFileSync(config, JSON.stringify({ ...original, selectedContribs: null }))
+  const nullContribs = m.cli(['validate', '--root', m.self])
+  assert.equal(nullContribs.status, 1)
+  assert.match(nullContribs.stdout + nullContribs.stderr, /selectedContribs must be an array/)
+  assert.doesNotMatch(nullContribs.stderr, /TypeError|not iterable/)
+  writeFileSync(config, JSON.stringify({ ...original, selectedContribs: ['no-such-contrib'], self_id: 'bad' }))
+  const both = m.cli(['validate', '--root', m.self])
+  assert.match(both.stdout + both.stderr, /unknown selected contrib: no-such-contrib/)
+  assert.match(both.stdout + both.stderr, /config self_id must be hs-self-/)
+})
+
+test('SELF_NOT_FOUND names an unusable self map in the CLI, never in hook output', t => {
+  const base = sandbox(t),
+    m = machine(base, 'm')
+  seedSelf(m)
+  ok(m.cli(['link', 'setup', '--project', m.project, '--self', m.self, '--no-activate', '--yes']), 'setup')
+  writeFileSync(join(m.config, 'selves.json'), '{ not json')
+  const refused = m.cli(['context', '--project', m.project, '--json'])
+  assert.match(refused.stderr, /has no checkout registered on this machine.*selves\.json is malformed/)
+  const hook = m.cli(['context', '--hook', 'holoself-session-start', '--project', m.project])
+  assert.deepEqual([hook.status, hook.stdout, hook.stderr], [0, '', ''])
+})
+
+test('breaking a stale lock never deletes a fresh lock taken by another waiter', t => {
+  const base = sandbox(t),
+    lock = join(base, 'selves.json.lock')
+  writeFileSync(lock, JSON.stringify({ pid: 999999999, hostname: 'another-host', created: Date.now() - 60000, nonce: 'old' }) + '\n')
+  // Two waiters judge the same lock stale.
+  const first = readFileLockState(lock),
+    second = readFileLockState(lock)
+  assert.equal(first.stale, true)
+  assert.equal(breakStaleFileLock(lock, first), true)
+  // The first waiter takes a fresh lock before the second waiter acts on its outdated judgement.
+  const fresh = JSON.stringify({ pid: process.pid, hostname: 'another-host', created: Date.now(), nonce: 'fresh' }) + '\n'
+  writeFileSync(lock, fresh, { flag: 'wx' })
+  assert.equal(breakStaleFileLock(lock, second), false)
+  assert.equal(readFileSync(lock, 'utf8'), fresh)
+  // A recent lock from another host is never judged stale by its PID.
+  writeFileSync(lock, JSON.stringify({ pid: 999999999, hostname: 'another-host', created: Date.now(), nonce: 'x' }) + '\n')
+  assert.equal(readFileLockState(lock).stale, false)
 })

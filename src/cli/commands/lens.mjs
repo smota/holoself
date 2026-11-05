@@ -2,7 +2,7 @@
 import { existsSync, lstatSync, readFileSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { bindingProjects, bindingsPath, readBindings, writeBinding } from '../../bindings.mjs'
-import { linkProjectKey } from '../../link/config.mjs'
+import { linkProjectKey, linkProjectKeyTaken, projectKeyTakenError } from '../../link/config.mjs'
 import { isProjectKey } from '../../link/machine.mjs'
 import { loadLensRegistry, resolveLens } from '../../lenses.mjs'
 import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../link/registry.mjs'
@@ -22,6 +22,8 @@ export async function runLens(o, sub) {
     const choice = sub === 'unbind' ? null : { default_lens: o.lens || 'general', secondary_lenses: o.secondaryLenses || [] },
       before = readBindings(root)
     if (o.bindingHash !== undefined && o.bindingHash !== before.hash) throw new Error('lens bindings changed on disk')
+    // The binding is shared by every project with this key; a copied folder must get its own key first.
+    if (linkProjectKeyTaken(root, o.project)) throw projectKeyTakenError(o.project)
     if (choice) {
       resolveLens(registry, choice.default_lens)
       for (const id of choice.secondary_lenses) resolveLens(registry, id)

@@ -15,6 +15,18 @@ export function canonicalProjectPath(projectDir) {
   const norm = slash(real).normalize('NFC')
   return process.platform === 'win32' ? norm.toLowerCase() : norm
 }
+// Active (non-revoked) entries in `links` that hold projectKey for a project other than `project` (docs/decisions/
+// portable-links.md: on one machine a project_key belongs to at most one project path, e.g. never to a copied folder).
+export function projectKeyHolders(links, projectKey, project = null) {
+  if (!projectKey) return []
+  const id = project ? canonicalSpaceId(project) : null,
+    path = project ? canonicalProjectPath(project) : null
+  return links.filter(
+    entry => entry?.project_key === projectKey && entry.status !== 'revoked' && (!project || (entry.project_id !== id && entry.project_path !== path))
+  )
+}
+export const projectKeyReusedNotice = (projectKey, project) =>
+  `[note] project_key ${projectKey} is already used by another project on this machine (a copied folder?); created a new project_key for ${project}`
 export function registryLockPath(selfRoot) {
   return join(selfRoot, '.holoself', 'links.json.lock')
 }

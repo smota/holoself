@@ -59,9 +59,13 @@ This applies everywhere `link.yaml` is read: `readLink`, caller resolution, hook
 
 `lenses/bindings.json` accepts `project_key` keys next to legacy absolute-path keys. Lookup for a project with a `project_key` tries the key first, then the legacy path match. Writing a binding for such a project writes the key and removes that project's path-keyed entry in the same atomic write. `link repair` and `link setup` migrate the current project's entry. Entries from other machines stay until those machines run `link repair`; `link doctor` and `holoself doctor` report the number of remaining path-keyed entries.
 
+A `project_key` binding is shared by every machine that has the project. `lens bind` and `lens unbind` therefore change it for all machines. `link remove` revokes only this machine's attestation and removes `link.yaml`; it keeps a `project_key` binding (and says so) and still removes a legacy path-keyed entry, which belongs to this machine alone. A machine whose attestation grant (`allowed_lenses`) lacks a lens bound elsewhere serves only the intersection until the owner runs `link repair` there, which previews the grant change (`grant_update`) and applies it after confirmation.
+
 ### 6. Attestation stays per machine
 
 The registry (`.holoself/links.json`) stays git-ignored and path-keyed (`project_id` remains the path hash). Entries additionally record `project_key` when known, so space discovery (Workbench, `lens bindings`) can join registry paths to key-keyed bindings. Each machine still attests each project once (`link setup` or `link approve`); a cloned project cannot attest itself, and committing `binding_salt` grants nothing without that machine's registry entry.
+
+On one machine a `project_key` belongs to at most one project path. When `link setup`, `link add`, `link approve`, `link backfill` or the Workbench meet a `link.yaml` whose `project_key` an active registry entry already holds for another project (a copied folder, or a crafted link naming another project's key), they never join it: the project gets a new `project_key`, a notice says so, and neither the other project's binding nor its `binding_salt` is inherited; `lens bind` refuses such a project until it has its own key. Space discovery ignores revoked entries and lists no project for a key that two active entries hold, and a binding lookup for such a key fails closed (`PROJECT_KEY_CONFLICT`). When `link setup` joins a synced link and inherits its binding, it prints `joining existing project <key>: lenses <default, secondary…>` before confirmation; `--lens` and `--secondary-lenses` take precedence over the inherited binding.
 
 ### 7. Migration and compatibility
 
@@ -75,3 +79,4 @@ The registry (`.holoself/links.json`) stays git-ignored and path-keyed (`project
 - A link's `self_id` only selects among selves already present on this machine; every candidate is verified against its own `config.json`, and attestation and lens authority are unchanged.
 - `HOLOSELF_HOME` or the map pointing at a different self cannot serve it to the project: the id must match, and that self's registry must attest the project.
 - `selves.json` is per-user, `0600`, symlink-refusing, and fails closed.
+- A committed `link.yaml` is not trusted to choose lenses on its own: a `project_key` already held by another project on this machine is never joined, and lenses inherited from a synced binding are shown before the owner confirms `link setup`. A link that names a key no project on this machine holds can still select that key's binding when the owner sets it up, so review the printed lenses when setting up a project you did not create.

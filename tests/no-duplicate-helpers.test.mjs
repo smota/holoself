@@ -1,3 +1,4 @@
+import './helpers/isolated-config.mjs'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'

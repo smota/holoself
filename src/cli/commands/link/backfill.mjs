@@ -3,8 +3,16 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, lstatSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { isCanonicalSelf, linkPath, readLink, updateLinkBindingSaltInPlace } from '../../../link/config.mjs'
-import { canonicalProjectPath, canonicalSpaceId, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
+import {
+  isCanonicalSelf,
+  linkPath,
+  linkProjectKey,
+  linkProjectKeyTaken,
+  readLink,
+  renewLinkProjectKeyInPlace,
+  updateLinkBindingSaltInPlace
+} from '../../../link/config.mjs'
+import { canonicalProjectPath, canonicalSpaceId, projectKeyReusedNotice, readRegistry, withRegistryLock, writeRegistry } from '../../../link/registry.mjs'
 import { assertContainedPath, safeRealpath, slash } from '../../../shared/fs.mjs'
 
 export async function linkBackfill(o, sub, project) {
@@ -43,6 +51,13 @@ export async function linkBackfill(o, sub, project) {
           if (!existsSync(lPath)) continue
           assertContainedPath(proj, lPath, 'project link file')
           if (lstatSync(lPath).isSymbolicLink()) throw new Error(`symlink detected at ${lPath}`)
+          // A copied folder carrying another project's project_key gets its own key and inherits nothing.
+          const renewedKey = linkProjectKeyTaken(selfRoot, proj, links)
+          if (renewedKey) {
+            const previous = linkProjectKey(proj)
+            renewLinkProjectKeyInPlace(proj)
+            console.warn(projectKeyReusedNotice(previous, proj))
+          }
           let linkObj
           try {
             linkObj = readLink(proj, { tolerant: true, explicitSelf: selfRoot })
@@ -51,10 +66,10 @@ export async function linkBackfill(o, sub, project) {
             if (error.code === 'SELF_ROOT_NOT_CANONICAL') continue
             throw error
           }
-          const allowedLenses = (o.lenses && o.lenses.length ? o.lenses : [linkObj.default_lens, ...(linkObj.secondary_lenses || [])]).filter(
-            l => l !== 'private'
-          )
-          let salt = linkObj.binding_salt
+          const allowedLenses = (
+            o.lenses && o.lenses.length ? o.lenses : renewedKey ? ['general'] : [linkObj.default_lens, ...(linkObj.secondary_lenses || [])]
+          ).filter(l => l !== 'private')
+          let salt = renewedKey ? null : linkObj.binding_salt
           if (!salt || typeof salt !== 'string' || salt.length !== 32) {
             salt = randomBytes(16).toString('hex')
             updateLinkBindingSaltInPlace(proj, salt)
