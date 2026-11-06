@@ -1,6 +1,6 @@
 # Privacy
 
-Holoself is local-first. CLI performs no network requests, creates no hosted account, and does not publish data.
+Holoself is local-first. CLI creates no hosted account and does not publish data. Optional [operation telemetry](docs/guides/telemetry.md) uses loopback HTTP only and stays off without a valid local consumer configuration.
 
 Private profile, context, lens definitions and project bindings, topics, reference material, proposals, and local contribs live under data root selected by `HOLOSELF_HOME` or `--data-dir` (`--root` remains compatibility alias). CLI option wins. Personal data is not included in package source.
 

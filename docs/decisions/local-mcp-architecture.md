@@ -10,7 +10,7 @@ MCP can make context discovery and retrieval typed and on demand. It must not be
 
 ## Decision
 
-`holoself mcp` is a dependency-free local STDIO subprocess. The agent client starts one process for one linked project. There is no listener, daemon, account, network request, or standalone service.
+`holoself mcp` is a dependency-free local STDIO subprocess. The agent client starts one process for one linked project. There is no listener, daemon, account, or standalone service. Optional [operation telemetry](../guides/telemetry.md) uses loopback HTTP only and stays off without a valid local consumer configuration.
 
 The server binds its project once at startup from explicit `--project`, Claude Code's trusted `CLAUDE_PROJECT_DIR`, or an unambiguous current directory. Every tool is path-free. A safe `.holoself/link.yaml` is mandatory and is revalidated by the shared domain functions.
 
