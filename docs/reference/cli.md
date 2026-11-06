@@ -22,7 +22,7 @@ holoself <command> [options]
 | `--version --json` | Print machine-readable product and version information |
 
 <!-- generated:start -->
-Generated from `holoself capabilities --json` (product `holoself`, version `0.12.0`, context schema `v1`, index schema `v5`, proposal schemas `v1, v2`) and the CLI flag contract:
+Generated from `holoself capabilities --json` (product `holoself`, version `0.12.1`, context schema `v1`, index schema `v5`, proposal schemas `v1, v2`) and the CLI flag contract:
 
 - Capability command groups (14): `doctor`, `context`, `ledger`, `search`, `propose`, `proposals`, `instructions`, `knowledge`, `link`, `machine`, `skill`, `mcp`, `client`, `coaching`
 - Coaching subcommands (7): `coaching start`, `coaching note`, `coaching action`, `coaching choose`, `coaching review`, `coaching material`, `coaching resume`
@@ -217,7 +217,7 @@ This is a filesystem symlink/junction mechanism, not metadata project link. It e
 - Unknown options fail.
 - Missing required values fail.
 - Interactive destructive/sensitive actions ask for typed confirmation; automation needs `--yes`.
-- CLI performs no network requests.
+- CLI network requests are limited to optional [operation telemetry](../guides/telemetry.md) over loopback HTTP, disabled without a valid local consumer configuration.
 - Paths resolve to absolute local paths.
 
 Verify the source checkout with `node bin/holoself.mjs --help`, or a PATH installation with `holoself --help`.

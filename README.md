@@ -47,7 +47,7 @@ flowchart LR
 - **Review before memory.** Projects propose; only explicit approval changes canonical self context.
 - **Inspectability.** Markdown is source of truth. Generated packets and indexes are disposable.
 - **Provenance.** Context and accepted claims identify their source files.
-- **Local by default.** CLI performs no network requests and requires no hosted account.
+- **Local by default.** No hosted account is required. Optional [operation telemetry](docs/guides/telemetry.md) uses loopback HTTP only and stays off without a valid local consumer configuration.
 
 ## Product status
 

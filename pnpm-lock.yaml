@@ -7,7 +7,7 @@ settings:
 importers:
 
   .:
-    optionalDependencies:
+    devDependencies:
       '@opentelemetry/api':
         specifier: 1.9.1
         version: 1.9.1
@@ -143,16 +143,13 @@ snapshots:
   '@opentelemetry/api-logs@0.53.0':
     dependencies:
       '@opentelemetry/api': 1.9.1
-    optional: true
 
-  '@opentelemetry/api@1.9.1':
-    optional: true
+  '@opentelemetry/api@1.9.1': {}
 
   '@opentelemetry/core@1.26.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/semantic-conventions': 1.27.0
-    optional: true
 
   '@opentelemetry/exporter-metrics-otlp-http@0.53.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -162,7 +159,6 @@ snapshots:
       '@opentelemetry/otlp-transformer': 0.53.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 1.26.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics': 1.26.0(@opentelemetry/api@1.9.1)
-    optional: true
 
   '@opentelemetry/exporter-trace-otlp-http@0.53.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -172,14 +168,12 @@ snapshots:
       '@opentelemetry/otlp-transformer': 0.53.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 1.26.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 1.26.0(@opentelemetry/api@1.9.1)
-    optional: true
 
   '@opentelemetry/otlp-exporter-base@0.53.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.26.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/otlp-transformer': 0.53.0(@opentelemetry/api@1.9.1)
-    optional: true
 
   '@opentelemetry/otlp-transformer@0.53.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -191,14 +185,12 @@ snapshots:
       '@opentelemetry/sdk-metrics': 1.26.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 1.26.0(@opentelemetry/api@1.9.1)
       protobufjs: 7.6.6
-    optional: true
 
   '@opentelemetry/resources@1.26.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.26.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.27.0
-    optional: true
 
   '@opentelemetry/sdk-logs@0.53.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -206,14 +198,12 @@ snapshots:
       '@opentelemetry/api-logs': 0.53.0
       '@opentelemetry/core': 1.26.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 1.26.0(@opentelemetry/api@1.9.1)
-    optional: true
 
   '@opentelemetry/sdk-metrics@1.26.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.26.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 1.26.0(@opentelemetry/api@1.9.1)
-    optional: true
 
   '@opentelemetry/sdk-trace-base@1.26.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -221,47 +211,34 @@ snapshots:
       '@opentelemetry/core': 1.26.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 1.26.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.27.0
-    optional: true
 
-  '@opentelemetry/semantic-conventions@1.27.0':
-    optional: true
+  '@opentelemetry/semantic-conventions@1.27.0': {}
 
-  '@protobufjs/aspromise@1.1.2':
-    optional: true
+  '@protobufjs/aspromise@1.1.2': {}
 
-  '@protobufjs/base64@1.1.2':
-    optional: true
+  '@protobufjs/base64@1.1.2': {}
 
-  '@protobufjs/codegen@2.0.5':
-    optional: true
+  '@protobufjs/codegen@2.0.5': {}
 
-  '@protobufjs/eventemitter@1.1.1':
-    optional: true
+  '@protobufjs/eventemitter@1.1.1': {}
 
   '@protobufjs/fetch@1.1.1':
     dependencies:
       '@protobufjs/aspromise': 1.1.2
-    optional: true
 
-  '@protobufjs/float@1.0.2':
-    optional: true
+  '@protobufjs/float@1.0.2': {}
 
-  '@protobufjs/path@1.1.2':
-    optional: true
+  '@protobufjs/path@1.1.2': {}
 
-  '@protobufjs/pool@1.1.0':
-    optional: true
+  '@protobufjs/pool@1.1.0': {}
 
-  '@protobufjs/utf8@1.1.2':
-    optional: true
+  '@protobufjs/utf8@1.1.2': {}
 
   '@types/node@26.6.6':
     dependencies:
       undici-types: 8.9.0
-    optional: true
 
-  long@5.3.2:
-    optional: true
+  long@5.3.2: {}
 
   protobufjs@7.6.6:
     dependencies:
@@ -276,7 +253,5 @@ snapshots:
       '@protobufjs/utf8': 1.1.2
       '@types/node': 26.6.6
       long: 5.3.2
-    optional: true
 
-  undici-types@8.9.0:
-    optional: true
+  undici-types@8.9.0: {}

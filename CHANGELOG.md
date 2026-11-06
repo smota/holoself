@@ -2,6 +2,10 @@
 
 All notable Holoself releases are documented here.
 
+## [0.12.1] — 2026-11-06
+
+The seven OpenTelemetry packages are now development tooling and are no longer installed with Holoself. The npm 0.12.0 package was built after the tag and also contains operation telemetry from #140, absent from the 0.12.0 release notes. This patch documents that optional loopback-only telemetry and corrects current network claims. The security fixes shipped in 0.12.0 are unchanged; 0.12.0 remains the patched version in GHSA-hrc3-wgqf-mvhq. See [release notes](docs/releases/0.12.1.md).
+
 ## [0.12.0] — 2026-11-05
 
 Portable links across machines, field and claim rules in the lens vocabulary, and corrections to heading rules and proposal previews that affect earlier releases. Upgrade every machine before running `link repair`; catalogs rebuild once. See [release notes](docs/releases/0.12.0.md).
