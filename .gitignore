@@ -29,3 +29,6 @@ scratch/
 
 # Owner-specific working notes (never commit)
 .local/
+
+# graphify knowledge-graph output (regenerated)
+graphify-out/
